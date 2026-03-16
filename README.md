@@ -1,181 +1,176 @@
-# 业余无线电点名记录工具 - Flutter版本
+# OpenLogTool - 业余无线电点名记录工具
 
-这是一个使用Flutter框架重构的业余无线电点名记录工具，支持跨平台运行（Windows、macOS、Linux、Android）。
+一个专为业余无线电爱好者设计的点名记录工具，支持跨平台运行。
 
-## 功能特性
+## ✨ 主要功能
 
-- 📝 **点名记录管理**：添加、编辑、删除、撤销点名记录
-- 📚 **智能词库**：设备、天线、呼号、QTH词典管理，支持自动补全
-- 🎨 **主题切换**：亮色/暗色模式，自动保存偏好设置
-- 📊 **数据表格**：清晰展示所有点名记录
-- 📁 **导入导出**：支持JSON格式导入导出，Excel导出（需安装excel包）
-- 💾 **本地存储**：所有数据自动保存在本地
-- 🌐 **跨平台**：支持Windows、macOS、Linux、Android
+### 📝 记录管理
+- **快速添加记录**: 支持主控呼号、点名呼号、设备、天线、功率、QTH、高度、时间、信号报告等字段
+- **智能表单**: 自动大写呼号，保留主控呼号不清空，支持词典自动补全
+- **编辑功能**: 支持修改和删除已有记录
+- **撤销操作**: 支持撤销上一条记录操作
+- **统计信息**: 显示总记录数、今日记录、最近7天记录
 
-## 项目结构
+### 📚 词典管理
+- **设备词典**: 管理常用设备名称，支持自动补全
+- **天线词典**: 管理常用天线名称，支持自动补全
+- **呼号词典**: 管理常用呼号，支持自动补全
+- **QTH词典**: 管理常用QTH位置，支持自动补全
+- **自动添加**: 输入新设备/天线/呼号/QTH时自动添加到词典
+- **导入导出**: 支持从文本文件导入词典
+
+### 📊 数据导入导出
+- **JSON导出**: 导出所有记录为JSON格式
+- **Excel导出**: 导出为Excel文件，使用index.html中的样式
+- **JSON导入**: 从JSON文件导入记录数据
+- **Excel导入**: 从Excel文件导入记录数据（开发中）
+- **PNG导出**: 导出表格为PNG图片（开发中）
+
+### 🎨 个性化设置
+- **主题颜色**: 支持自定义主题颜色，默认淡蓝色
+- **暗色模式**: 支持暗色/亮色主题切换
+- **宽屏布局**: 在窗口宽度足够时，将添加记录和已有记录并排显示
+- **表格对齐**: 支持表格表头左对齐、居中对齐、右对齐
+- **布局设置**: 可调整宽屏布局开关
+
+### 📱 跨平台支持
+- **Linux**: 原生支持Linux桌面应用
+- **Windows**: 支持Windows桌面应用（需构建）
+- **macOS**: 支持macOS桌面应用（需构建）
+- **移动端**: 支持Android和iOS（需构建）
+
+## 🚀 快速开始
+
+### 环境要求
+- Flutter SDK 3.0.0 或更高版本
+- Dart SDK 3.0.0 或更高版本
+- 支持的操作系统：Linux、Windows、macOS
+
+### 安装步骤
+
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/Mazha0309/BG5CRL-Log-tool.git
+   cd BG5CRL-Log-tool
+   ```
+
+2. **安装依赖**
+   ```bash
+   flutter pub get
+   ```
+
+3. **运行应用**
+   ```bash
+   # Linux
+   ./build_all.sh linux
+   ./build/linux/x64/release/bundle/openlogtool
+   
+   # 或直接运行
+   flutter run -d linux
+   ```
+
+### 构建应用
+
+```bash
+# Linux
+./build_all.sh linux
+
+# Windows (需要Windows环境)
+./build_all.sh windows
+
+# macOS (需要macOS环境)
+./build_all.sh macos
+```
+
+## 📁 项目结构
 
 ```
 openlogtool/
 ├── lib/
 │   ├── main.dart                    # 应用入口
-│   ├── models/
-│   │   └── log_entry.dart           # 数据模型
-│   ├── providers/
-│   │   ├── theme_provider.dart      # 主题管理
-│   │   ├── log_provider.dart        # 日志管理
-│   │   └── dictionary_provider.dart # 词典管理
 │   ├── screens/
 │   │   └── home_screen.dart         # 主界面
-│   └── widgets/
-│       ├── log_form.dart            # 表单组件
-│       ├── log_table.dart           # 表格组件
-│       ├── dictionary_manager.dart  # 词库管理器
-│       └── export_panel.dart        # 导出面板
-├── pubspec.yaml                     # 依赖配置
-└── README.md                        # 说明文档
+│   ├── widgets/
+│   │   ├── log_form.dart            # 记录表单
+│   │   ├── log_table.dart           # 记录表格
+│   │   ├── dictionary_manager.dart  # 词典管理
+│   │   ├── export_panel.dart        # 导入导出面板
+│   │   └── settings_panel.dart      # 设置面板
+│   ├── providers/
+│   │   ├── log_provider.dart        # 记录数据管理
+│   │   ├── dictionary_provider.dart # 词典数据管理
+│   │   └── settings_provider.dart   # 设置管理
+│   └── models/
+│       └── log_entry.dart           # 记录数据模型
+├── pubspec.yaml                     # 项目依赖配置
+├── build_all.sh                     # 构建脚本
+├── update_icons.sh                  # 图标更新脚本
+└── README.md                        # 项目说明文档
 ```
 
-## 安装和运行
+## 🔧 技术栈
 
-### 前提条件
+- **Flutter**: 跨平台UI框架
+- **Dart**: 编程语言
+- **Provider**: 状态管理
+- **SharedPreferences**: 本地数据存储
+- **Excel**: Excel文件操作
+- **FilePicker**: 文件选择器
+- **PathProvider**: 路径管理
+- **OpenFile**: 文件打开工具
 
-1. 安装 [Flutter SDK](https://flutter.dev/docs/get-started/install)
-2. 安装 [Dart SDK](https://dart.dev/get-dart)
-3. 配置开发环境（Android Studio / VS Code）
+## 🎯 使用说明
 
-### 安装步骤
+### 添加记录
+1. 在"添加记录"页面填写表单
+2. 主控呼号为必填项
+3. 其他字段可选，支持词典自动补全
+4. 点击"添加记录"按钮保存
 
-1. 克隆项目或下载源代码
-2. 进入项目目录：
-   ```bash
-   cd openlogtool
-   ```
+### 管理词典
+1. 在"导入导出"页面找到词典管理
+2. 点击展开相应词典
+3. 输入新项目并点击添加
+4. 或从文本文件导入（每行一个项目）
 
-3. 安装依赖：
-   ```bash
-   flutter pub get
-   ```
+### 导入导出数据
+1. 在"导入导出"页面选择相应功能
+2. 导出JSON：导出所有记录为JSON文件
+3. 导出Excel：导出为Excel文件，包含样式
+4. 导入JSON：从JSON文件导入记录
 
-4. 运行应用：
+### 个性化设置
+1. 在"设置"页面调整应用设置
+2. 选择主题颜色
+3. 切换暗色/亮色模式
+4. 调整布局和表格对齐方式
 
-   **桌面平台（Linux/macOS/Windows）：**
-   ```bash
-   flutter run -d linux   # Linux
-   flutter run -d macos   # macOS
-   flutter run -d windows # Windows
-   ```
+## 📄 许可证
 
-   **Android：**
-   ```bash
-   flutter run -d android
-   ```
+本项目采用 GPL-3.0 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-   **Web：**
-   ```bash
-   flutter run -d chrome
-   ```
+## 🤝 贡献
 
-## 编译打包
+欢迎提交Issue和Pull Request！
 
-### Android APK
-```bash
-flutter build apk --release
-```
-
-### Android App Bundle
-```bash
-flutter build appbundle --release
-```
-
-### Linux AppImage
-```bash
-flutter build linux --release
-# 生成的AppImage文件在 build/linux/x64/release/bundle/
-```
-
-### Windows
-```bash
-flutter build windows --release
-```
-
-### macOS
-```bash
-flutter build macos --release
-```
-
-## 依赖包
-
-- `provider`: 状态管理
-- `shared_preferences`: 本地存储
-- `file_picker`: 文件选择
-- `path_provider`: 路径获取
-- `open_file`: 打开文件
-- `excel`: Excel文件操作（可选）
-- `flutter_svg`: SVG图标支持
-- `intl`: 国际化支持
-
-## 开发说明
-
-### 添加新功能
-
-1. 在 `lib/models/` 中添加数据模型
-2. 在 `lib/providers/` 中添加状态管理
-3. 在 `lib/widgets/` 中添加UI组件
-4. 在 `lib/screens/` 中添加页面
-
-### 主题定制
-
-修改 `lib/providers/theme_provider.dart` 中的主题配置，或调整 `lib/main.dart` 中的主题定义。
-
-### 数据持久化
-
-所有数据使用 `shared_preferences` 存储在本地，支持跨会话保存。
-
-## 故障排除
-
-### 常见问题
-
-1. **Flutter命令找不到**
-   - 确保Flutter SDK已正确安装并添加到PATH
-   - 运行 `flutter doctor` 检查环境
-
-2. **依赖安装失败**
-   - 检查网络连接
-   - 尝试使用国内镜像源
-
-3. **编译错误**
-   - 运行 `flutter clean` 清理缓存
-   - 运行 `flutter pub get` 重新获取依赖
-
-### 调试
-
-- 使用 `flutter run --verbose` 查看详细日志
-- 使用 `flutter analyze` 检查代码问题
-- 使用 `flutter test` 运行测试
-
-## 贡献指南
-
-1. Fork 项目
+1. Fork 本仓库
 2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+5. 开启一个 Pull Request
 
-## 许可证
+## 📞 联系方式
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+- **作者**: BG5CRL (Mazha0309)
+- **GitHub**: [https://github.com/Mazha0309](https://github.com/Mazha0309)
 
-## 作者
 
-- **Mazha0309 / BG5CRL**
-- GitHub: [@Mazha0309](https://github.com/Mazha0309)
-- Gitee: [@Mazha0309](https://gitee.com/Mazha0309)
-- GitCode: [@Mazha0309](https://gitcode.com/Mazha0309)
-
-## 致谢
+## 🙏 致谢
 
 感谢所有业余无线电爱好者的支持和建议！
 
 ---
 
-**注意**：这是一个开源项目，欢迎任何形式的贡献和反馈。如果您在使用过程中遇到问题或有改进建议，请提交Issue或Pull Request。
+**版本**: 1.0.0  
+**最后更新**: 2026年3月16日  
+**© 2026 BG5CRL**

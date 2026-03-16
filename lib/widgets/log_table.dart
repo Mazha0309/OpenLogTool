@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 
 class LogTable extends StatelessWidget {
   const LogTable({super.key});
@@ -43,93 +44,193 @@ class LogTable extends StatelessWidget {
       );
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columnSpacing: 16,
-        horizontalMargin: 0,
-        headingRowHeight: 48,
-        dataRowHeight: 56,
-        headingTextStyle: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-        dataTextStyle: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-        columns: const [
-          DataColumn(label: Text('#')),
-          DataColumn(label: Text('时间')),
-          DataColumn(label: Text('点名主控')),
-          DataColumn(label: Text('呼号')),
-          DataColumn(label: Text('信号报告')),
-          DataColumn(label: Text('QTH')),
-          DataColumn(label: Text('设备')),
-          DataColumn(label: Text('功率')),
-          DataColumn(label: Text('天线')),
-          DataColumn(label: Text('高度')),
-          DataColumn(label: Text('操作')),
-        ],
-        rows: logProvider.logs.asMap().entries.map((entry) {
-          final index = entry.key;
-          final log = entry.value;
-          
-          return DataRow(
-            cells: [
-              DataCell(Text('${index + 1}')),
-              DataCell(Text(log.time)),
-              DataCell(Text(log.controller)),
-              DataCell(Text(log.callsign)),
-              DataCell(Text(log.report)),
-              DataCell(Text(log.qth)),
-              DataCell(Text(log.device)),
-              DataCell(Text(log.power)),
-              DataCell(Text(log.antenna)),
-              DataCell(Text(log.height)),
-              DataCell(
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit, size: 20),
-                      onPressed: () {
-                        logProvider.startEditing(index);
-                        // 滚动到顶部
-                        PrimaryScrollController.of(context)?.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      tooltip: '编辑记录',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withOpacity(0.1),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.delete, size: 20),
-                      onPressed: () => _showDeleteConfirmation(context, index),
-                      tooltip: '删除记录',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .error
-                            .withOpacity(0.1),
-                      ),
-                    ),
-                  ],
+    return Scrollbar(
+      thumbVisibility: true,
+      trackVisibility: true,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 16,
+          horizontalMargin: 16,
+          headingRowHeight: 48,
+          dataRowHeight: 56,
+          headingTextStyle: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+            fontSize: 14,
+          ),
+          dataTextStyle: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+            fontSize: 13,
+          ),
+          border: TableBorder.all(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          columns: [
+            DataColumn(
+              label: SizedBox(width: 60, child: Text('#')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 100, child: Text('时间')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 120, child: Text('点名主控')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 120, child: Text('呼号')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 100, child: Text('信号报告')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 150, child: Text('QTH')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 150, child: Text('设备')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 80, child: Text('功率')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 150, child: Text('天线')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 80, child: Text('高度')),
+            ),
+            DataColumn(
+              label: SizedBox(width: 120, child: Text('操作')),
+            ),
+          ],
+          rows: logProvider.logs.asMap().entries.map((entry) {
+            final index = entry.key;
+            final log = entry.value;
+            
+            return DataRow(
+              cells: [
+                DataCell(
+                  Container(
+                    width: 60,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('${index + 1}'),
+                  ),
                 ),
-              ),
-            ],
-          );
-        }).toList(),
+                DataCell(
+                  Container(
+                    width: 100,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.time),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 120,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.controller),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 120,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.callsign),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 100,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.report),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 150,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.qth),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 150,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.device),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 80,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.power),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 150,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.antenna),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 80,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(log.height),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 120,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, size: 20),
+                            onPressed: () {
+                              logProvider.startEditing(index);
+                              // 滚动到顶部
+                              PrimaryScrollController.of(context)?.animateTo(
+                                0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            tooltip: '编辑记录',
+                            style: IconButton.styleFrom(
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.1),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete, size: 20),
+                            onPressed: () => _showDeleteConfirmation(context, index),
+                            tooltip: '删除记录',
+                            style: IconButton.styleFrom(
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .error
+                                  .withOpacity(0.1),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
+
 
   void _showDeleteConfirmation(BuildContext context, int index) {
     showDialog(

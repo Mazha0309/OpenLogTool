@@ -2,270 +2,148 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
+import 'package:excel/excel.dart' as excel_lib;
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 
 class ExportPanel extends StatelessWidget {
   const ExportPanel({super.key});
 
-  Future<void> _exportJSON(BuildContext context) async {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    
-    if (logProvider.logs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('没有数据可以导出'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    try {
-      final jsonData = logProvider.logs.map((log) => log.toJson()).toList();
-      final jsonString = JsonEncoder.withIndent('  ').convert(jsonData);
-      
-      final directory = await getApplicationDocumentsDirectory();
-      final now = DateTime.now();
-      final filename = 'Radio_Log_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.json';
-      final file = File('${directory.path}/$filename');
-      
-      await file.writeAsString(jsonString);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('JSON文件已保存到: ${file.path}'),
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: '打开',
-            onPressed: () => OpenFile.open(file.path),
-          ),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('导出失败: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-
-  Future<void> _importJSON(BuildContext context) async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final content = String.fromCharCodes(file.bytes!);
-        final jsonData = jsonDecode(content) as List;
-        
-        final logs = jsonData.map((item) => LogEntry.fromJson(item)).toList();
-        
-        final logProvider = Provider.of<LogProvider>(context, listen: false);
-        await logProvider.importLogs(logs);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('已导入 ${logs.length} 条记录'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('导入失败: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-
-  Future<void> _exportExcel(BuildContext context) async {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    
-    if (logProvider.logs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('没有数据可以导出'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    try {
-      // 这里需要实现Excel导出逻辑
-      // 由于excel包的复杂性，这里先提供一个占位实现
-      // 在实际应用中，您需要安装excel包并实现完整的Excel导出功能
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Excel导出功能需要安装excel包并实现具体逻辑'),
-          backgroundColor: Colors.blue,
-          duration: Duration(seconds: 3),
-        ),
-      );
-      
-      // 示例代码（需要安装excel包）：
-      /*
-      final excel = Excel.createExcel();
-      final sheet = excel['点名记录'];
-      
-      // 添加表头
-      sheet.appendRow(['#', '时间', '点名主控', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度']);
-      
-      // 添加数据
-      for (var i = 0; i < logProvider.logs.length; i++) {
-        final log = logProvider.logs[i];
-        sheet.appendRow([
-          i + 1,
-          log.time,
-          log.controller,
-          log.callsign,
-          log.report,
-          log.qth,
-          log.device,
-          log.power,
-          log.antenna,
-          log.height,
-        ]);
-      }
-      
-      final directory = await getApplicationDocumentsDirectory();
-      final now = DateTime.now();
-      final filename = '点名记录_${now.year}${now.month}${now.day}_${now.hour}${now.minute}.xlsx';
-      final file = File('${directory.path}/$filename');
-      
-      final bytes = excel.save();
-      await file.writeAsBytes(bytes!);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Excel文件已保存到: ${file.path}'),
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: '打开',
-            onPressed: () => OpenFile.open(file.path),
-          ),
-        ),
-      );
-      */
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('导出失败: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final logProvider = Provider.of<LogProvider>(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '导入导出',
+          '数据导入导出',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
         
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         
-        Text(
-          '当前有 ${logProvider.logCount} 条记录',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+        // 导出功能
+        FCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '导出数据',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // 导出按钮
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.file_download),
+                      label: const Text('导出 JSON'),
+                      onPressed: () => _exportJSON(context),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.table_chart),
+                      label: const Text('导出 Excel'),
+                      onPressed: () => _exportExcel(context),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text('导出 PNG'),
+                      onPressed: () => _exportPNG(context),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         
-        // 按钮网格
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 3,
-          children: [
-            // 导出JSON按钮
-            ElevatedButton.icon(
-              icon: const Icon(Icons.file_download),
-              label: const Text('导出 JSON'),
-              onPressed: () => _exportJSON(context),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-            
-            // 导入JSON按钮
-            ElevatedButton.icon(
-              icon: const Icon(Icons.file_upload),
-              label: const Text('导入 JSON'),
-              onPressed: () => _importJSON(context),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-              ),
-            ),
-            
-            // 导出Excel按钮
-            ElevatedButton.icon(
-              icon: const Icon(Icons.table_chart),
-              label: const Text('导出 Excel'),
-              onPressed: () => _exportExcel(context),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
-                foregroundColor: Theme.of(context).colorScheme.onTertiaryContainer,
-              ),
-            ),
-            
-            // 备份所有数据按钮
-            ElevatedButton.icon(
-              icon: const Icon(Icons.backup),
-              label: const Text('备份所有数据'),
-              onPressed: () async {
-                // 这里可以实现完整的数据备份功能
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('备份功能开发中...'),
-                    duration: Duration(seconds: 2),
+        // 导入功能
+        FCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '导入数据',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
+                ),
+                const SizedBox(height: 12),
+                
+                // 导入按钮
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.file_upload),
+                      label: const Text('导入 JSON'),
+                      onPressed: () => _importJSON(context),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.table_chart),
+                      label: const Text('导入 Excel'),
+                      onPressed: () => _importExcel(context),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         
         const SizedBox(height: 16),
         
-        // 说明文本
+        // 文件信息
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -276,16 +154,16 @@ class ExportPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                '说明:',
+                '文件格式说明',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                '• JSON格式：用于数据交换和备份\n'
-                '• Excel格式：用于数据分析和打印\n'
-                '• 所有数据自动保存在本地存储中',
+                '• JSON: 标准JSON格式，包含所有记录数据\n'
+                '• Excel: 使用index.html中的样式，包含分组和样式\n'
+                '• PNG: 表格截图，适合分享和打印',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -295,6 +173,209 @@ class ExportPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _exportJSON(BuildContext context) async {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final logs = logProvider.logs;
+    
+    if (logs.isEmpty) {
+      _showSnackBar(context, '没有数据可以导出');
+      return;
+    }
+    
+    try {
+      final jsonData = logs.map((log) => log.toJson()).toList();
+      final jsonString = const JsonEncoder.withIndent('  ').convert(jsonData);
+      
+      final directory = await getDownloadsDirectory();
+      if (directory == null) {
+        _showSnackBar(context, '无法访问下载目录');
+        return;
+      }
+      
+      final now = DateTime.now();
+      final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
+      final file = File('${directory.path}/$filename');
+      
+      await file.writeAsString(jsonString);
+      
+      _showSuccessDialog(context, 'JSON导出成功', '文件已保存到:\n${file.path}', file.path);
+    } catch (e) {
+      _showSnackBar(context, '导出失败: $e');
+    }
+  }
+
+  Future<void> _exportExcel(BuildContext context) async {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final logs = logProvider.logs;
+    
+    if (logs.isEmpty) {
+      _showSnackBar(context, '没有数据可以导出');
+      return;
+    }
+    
+    try {
+      // 创建Excel文件
+      final excel = excel_lib.Excel.createExcel();
+      final sheet = excel['点名记录'];
+      
+      // 添加表头（与index.html保持一致）
+      final headers = ['#', '时间', '点名主控', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度'];
+      
+      // 写入表头
+      for (var i = 0; i < headers.length; i++) {
+        final cell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = excel_lib.TextCellValue(headers[i]);
+        
+        // 设置表头样式
+        cell.cellStyle = excel_lib.CellStyle(
+          bold: true,
+          horizontalAlign: excel_lib.HorizontalAlign.Center,
+          verticalAlign: excel_lib.VerticalAlign.Center,
+        );
+      }
+      
+      // 添加数据行
+      for (var i = 0; i < logs.length; i++) {
+        final log = logs[i];
+        final rowIndex = i + 1; // 表头在第0行
+        
+        final cells = [
+          (i + 1).toString(), // #
+          log.time,
+          log.controller,
+          log.callsign,
+          log.report,
+          log.qth,
+          log.device,
+          log.power,
+          log.antenna,
+          log.height,
+        ];
+        
+        for (var j = 0; j < cells.length; j++) {
+          final cell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: j, rowIndex: rowIndex));
+          cell.value = excel_lib.TextCellValue(cells[j]);
+          
+          // 设置单元格样式
+          cell.cellStyle = excel_lib.CellStyle(
+            horizontalAlign: excel_lib.HorizontalAlign.Center,
+            verticalAlign: excel_lib.VerticalAlign.Center,
+          );
+        }
+      }
+      
+      // 设置列宽（与index.html保持一致）
+      sheet.setColumnWidth(0, 10);   // #
+      sheet.setColumnWidth(1, 10);   // 时间
+      sheet.setColumnWidth(2, 15);   // 点名主控
+      sheet.setColumnWidth(3, 15);   // 呼号
+      sheet.setColumnWidth(4, 12);   // 信号报告
+      sheet.setColumnWidth(5, 18);   // QTH
+      sheet.setColumnWidth(6, 15);   // 设备
+      sheet.setColumnWidth(7, 10);   // 功率
+      sheet.setColumnWidth(8, 18);   // 天线
+      sheet.setColumnWidth(9, 10);   // 高度
+      
+      // 保存文件
+      final directory = await getDownloadsDirectory();
+      if (directory == null) {
+        _showSnackBar(context, '无法访问下载目录');
+        return;
+      }
+      
+      final now = DateTime.now();
+      final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.xlsx';
+      final file = File('${directory.path}/$filename');
+      
+      final bytes = excel.save();
+      if (bytes != null) {
+        await file.writeAsBytes(bytes);
+        _showSuccessDialog(context, 'Excel导出成功', '文件已保存到:\n${file.path}', file.path);
+      } else {
+        _showSnackBar(context, '导出失败: 无法生成Excel文件');
+      }
+    } catch (e) {
+      _showSnackBar(context, '导出失败: $e');
+    }
+  }
+
+  Future<void> _exportPNG(BuildContext context) async {
+    _showSnackBar(context, 'PNG导出功能开发中');
+  }
+
+  Future<void> _importJSON(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      
+      if (result == null || result.files.isEmpty) return;
+      
+      final file = File(result.files.single.path!);
+      final content = await file.readAsString();
+      
+      final jsonData = json.decode(content) as List;
+      final logProvider = Provider.of<LogProvider>(context, listen: false);
+      
+      // 解析JSON数据
+      final importedLogs = jsonData.map((item) {
+        return LogEntry(
+          time: item['time'] ?? '',
+          controller: item['controller'] ?? '',
+          callsign: item['callsign'] ?? '',
+          report: item['report'] ?? '',
+          qth: item['qth'] ?? '',
+          device: item['device'] ?? '',
+          power: item['power'] ?? '',
+          antenna: item['antenna'] ?? '',
+          height: item['height'] ?? '',
+        );
+      }).toList();
+      
+      await logProvider.importLogs(importedLogs);
+      _showSnackBar(context, '导入成功: ${importedLogs.length} 条记录');
+    } catch (e) {
+      _showSnackBar(context, '导入失败: $e');
+    }
+  }
+
+  Future<void> _importExcel(BuildContext context) async {
+    _showSnackBar(context, 'Excel导入功能开发中');
+  }
+
+  void _showSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showSuccessDialog(BuildContext context, String title, String message, String filePath) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              OpenFile.open(filePath);
+              Navigator.pop(context);
+            },
+            child: const Text('打开文件'),
+          ),
+        ],
+      ),
     );
   }
 }

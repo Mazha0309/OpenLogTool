@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openlogtool/models/log_entry.dart';
@@ -43,10 +44,13 @@ class LogProvider with ChangeNotifier {
     
     _logs = logsJson.map((json) {
       try {
-        final data = LogEntry.fromJson(Map<String, dynamic>.from(json as Map));
-        return data;
+        // 尝试解析JSON字符串
+        final decodedJson = jsonDecode(json);
+        if (decodedJson is Map<String, dynamic>) {
+          return LogEntry.fromJson(decodedJson);
+        }
       } catch (e) {
-        // 兼容旧格式
+        // JSON解析失败，尝试旧格式
         final parts = json.split(',');
         if (parts.length >= 9) {
           return LogEntry(
@@ -61,18 +65,19 @@ class LogProvider with ChangeNotifier {
             height: parts[8],
           );
         }
-        return LogEntry(
-          time: '',
-          controller: '',
-          callsign: '',
-          report: '',
-          qth: '',
-          device: '',
-          power: '',
-          antenna: '',
-          height: '',
-        );
       }
+      // 如果所有解析都失败，返回空记录
+      return LogEntry(
+        time: '',
+        controller: '',
+        callsign: '',
+        report: '',
+        qth: '',
+        device: '',
+        power: '',
+        antenna: '',
+        height: '',
+      );
     }).toList();
     
     notifyListeners();
@@ -80,7 +85,7 @@ class LogProvider with ChangeNotifier {
 
   Future<void> _saveLogs() async {
     final prefs = await SharedPreferences.getInstance();
-    final logsJson = _logs.map((log) => log.toJson().toString()).toList();
+    final logsJson = _logs.map((log) => jsonEncode(log.toJson())).toList();
     await prefs.setStringList('logData', logsJson);
   }
 

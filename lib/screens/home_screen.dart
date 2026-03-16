@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/log_provider.dart';
-import 'package:openlogtool/providers/dictionary_provider.dart';
-import 'package:openlogtool/providers/theme_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
+import 'package:openlogtool/widgets/settings_panel.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,23 +22,26 @@ class _HomeScreenState extends State<HomeScreen> {
   // 页面列表
   static const List<Widget> _pages = <Widget>[
     AddRecordPage(),
-    DictionaryPage(),
     ImportExportPage(),
+    SettingsPage(),
   ];
 
   // 底部导航栏项目
   static const List<BottomNavigationBarItem> _navItems = <BottomNavigationBarItem>[
     BottomNavigationBarItem(
-      icon: Icon(Icons.add_circle_outline),
+      icon: Icon(Icons.add_circle_outline, size: 24),
+      activeIcon: Icon(Icons.add_circle, size: 24),
       label: '添加记录',
     ),
     BottomNavigationBarItem(
-      icon: Icon(Icons.book),
-      label: '词库管理',
+      icon: Icon(Icons.import_export, size: 24),
+      activeIcon: Icon(Icons.import_export, size: 24),
+      label: '导入导出',
     ),
     BottomNavigationBarItem(
-      icon: Icon(Icons.import_export),
-      label: '导入导出',
+      icon: Icon(Icons.settings, size: 24),
+      activeIcon: Icon(Icons.settings, size: 24),
+      label: '设置',
     ),
   ];
 
@@ -49,21 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('业余无线电点名记录工具'),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: Icon(
-              themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-            ),
-            onPressed: () => themeProvider.toggleTheme(),
-            tooltip: themeProvider.isDarkMode ? '切换到亮色模式' : '切换到暗色模式',
-          ),
-        ],
       ),
       body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
@@ -79,90 +72,115 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// 添加记录页面（包含已有记录）
+// 添加记录页面（支持宽屏布局）
 class AddRecordPage extends StatelessWidget {
   const AddRecordPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final logProvider = Provider.of<LogProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
 
-    return Column(
-      children: [
-        // 顶部工具栏
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            border: Border(
-              bottom: BorderSide(
-                color: Theme.of(context).dividerColor,
-                width: 1,
-              ),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 800 && settingsProvider.wideLayoutEnabled;
+        
+        if (isWideScreen) {
+          // 宽屏布局：左侧添加表单，右侧表格
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '点名记录管理',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              // 左侧：添加记录表单
+              Expanded(
+                flex: 1,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        // 工具栏
+                        _buildToolbar(context, logProvider),
+                        const SizedBox(height: 16),
+                        
+                        // 添加记录表单卡片
+                        FCard(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '添加点名记录',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const LogForm(),
+                              ],
+                            ),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // 统计卡片
+                        _buildStatsCard(context, logProvider),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              Row(
-                children: [
-                  Chip(
-                    label: Text('${logProvider.logCount} 条记录'),
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withOpacity(0.1),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.undo),
-                    label: const Text('撤销'),
-                    onPressed: logProvider.canUndo
-                        ? () => _showUndoConfirmation(context)
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
+              
+              // 右侧：记录表格
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        FCard(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '已有记录',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const LogTable(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('清空所有'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      foregroundColor: Theme.of(context).colorScheme.onError,
-                    ),
-                    onPressed: logProvider.logCount > 0
-                        ? () => _showClearConfirmation(context)
-                        : null,
-                  ),
-                ],
+                ),
               ),
             ],
-          ),
-        ),
-
-        // 主要内容区域
-        Expanded(
-          child: SingleChildScrollView(
+          );
+        } else {
+          // 窄屏布局：垂直堆叠
+          return SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // 工具栏
+                  _buildToolbar(context, logProvider),
+                  const SizedBox(height: 16),
+                  
                   // 添加记录表单卡片
-                  Card(
-                    elevation: 4,
+                  FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -181,12 +199,11 @@ class AddRecordPage extends StatelessWidget {
                       ),
                     ),
                   ),
-
+                  
                   const SizedBox(height: 24),
-
+                  
                   // 记录表格卡片
-                  Card(
-                    elevation: 4,
+                  FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -205,58 +222,125 @@ class AddRecordPage extends StatelessWidget {
                       ),
                     ),
                   ),
-
+                  
                   const SizedBox(height: 24),
-
-                  // 快速统计卡片
-                  Card(
-                    elevation: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '统计信息',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _buildStatItem(
-                                context,
-                                '总记录数',
-                                '${logProvider.logCount}',
-                                Icons.format_list_numbered,
-                              ),
-                              _buildStatItem(
-                                context,
-                                '今日记录',
-                                '${logProvider.todayLogCount}',
-                                Icons.today,
-                              ),
-                              _buildStatItem(
-                                context,
-                                '最近7天',
-                                '${logProvider.last7DaysCount}',
-                                Icons.calendar_view_week,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  
+                  // 统计卡片
+                  _buildStatsCard(context, logProvider),
                 ],
               ),
             ),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildToolbar(BuildContext context, LogProvider logProvider) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1,
           ),
         ),
-      ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            '点名记录管理',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Row(
+            children: [
+              Chip(
+                label: Text('${logProvider.logCount} 条记录'),
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withOpacity(0.1),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.undo),
+                label: const Text('撤销'),
+                onPressed: logProvider.canUndo
+                    ? () => _showUndoConfirmation(context)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('清空所有'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                onPressed: logProvider.logCount > 0
+                    ? () => _showClearConfirmation(context)
+                    : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsCard(BuildContext context, LogProvider logProvider) {
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '统计信息',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem(
+                  context,
+                  '总记录数',
+                  '${logProvider.logCount}',
+                  Icons.format_list_numbered,
+                ),
+                _buildStatItem(
+                  context,
+                  '今日记录',
+                  '${logProvider.todayLogCount}',
+                  Icons.today,
+                ),
+                _buildStatItem(
+                  context,
+                  '最近7天',
+                  '${logProvider.last7DaysCount}',
+                  Icons.calendar_view_week,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -334,7 +418,7 @@ class AddRecordPage extends StatelessWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('已清空所有记录'),
-                  duration: Duration(seconds: 2),
+                  duration: const Duration(seconds: 2),
                 ),
               );
             },
@@ -350,41 +434,50 @@ class AddRecordPage extends StatelessWidget {
   }
 }
 
-// 词库管理页面
-class DictionaryPage extends StatelessWidget {
-  const DictionaryPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Card(
-          elevation: 4,
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: DictionaryManager(),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // 导入导出页面
 class ImportExportPage extends StatelessWidget {
   const ImportExportPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const SingleChildScrollView(
+    return SingleChildScrollView(
       child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Card(
-          elevation: 4,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            FCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ExportPanel(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: DictionaryManager(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 设置页面
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: FCard(
           child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: ExportPanel(),
+            padding: const EdgeInsets.all(16.0),
+            child: SettingsPanel(),
           ),
         ),
       ),

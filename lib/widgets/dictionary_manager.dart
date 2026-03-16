@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 
@@ -114,8 +115,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     required List<String> items,
     required Function(String) onAdd,
   }) {
-    return Card(
-      elevation: 2,
+    return FCard(
       child: ExpansionPanelList(
         elevation: 0,
         expandedHeaderPadding: EdgeInsets.zero,
