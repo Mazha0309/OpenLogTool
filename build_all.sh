@@ -38,6 +38,38 @@ check_flutter() {
     fi
     
     log_info "Flutter版本: $(flutter --version | head -1)"
+    
+    # 检查并添加缺失的平台
+    check_platforms
+}
+
+# 检查并添加缺失的平台
+check_platforms() {
+    log_info "检查平台支持..."
+    
+    # 检查web平台
+    if [ ! -d "web" ]; then
+        log_warning "Web平台未配置，添加中..."
+        flutter create . --platforms web 2>/dev/null || true
+    fi
+    
+    # 检查android平台
+    if [ ! -d "android" ]; then
+        log_warning "Android平台未配置，添加中..."
+        flutter create . --platforms android 2>/dev/null || true
+    fi
+    
+    # 检查macos平台
+    if [ ! -d "macos" ]; then
+        log_warning "macOS平台未配置，添加中..."
+        flutter create . --platforms macos 2>/dev/null || true
+    fi
+    
+    # 检查linux桌面
+    if ! flutter config | grep -q "enable-linux-desktop: true"; then
+        log_info "启用Linux桌面支持..."
+        flutter config --enable-linux-desktop 2>/dev/null || true
+    fi
 }
 
 # 清理项目
