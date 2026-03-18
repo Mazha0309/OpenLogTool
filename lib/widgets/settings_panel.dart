@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/providers/app_info_provider.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -9,6 +10,7 @@ class SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
+    final appInfoProvider = Provider.of<AppInfoProvider>(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,8 +184,11 @@ class SettingsPanel extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'OpenLogTool v1.0.0\n'
-                '© 2026 BG5CRL',
+                appInfoProvider.isLoaded 
+                    ? 'OpenLogTool v${appInfoProvider.version}+${appInfoProvider.buildNumber}\n'
+                      '© 2026 BG5CRL'
+                    : 'OpenLogTool v1.0.0\n'
+                      '© 2026 BG5CRL',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
