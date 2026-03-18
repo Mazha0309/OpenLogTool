@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="业余无线电点名记录工具"
+        android:label="OpenLogTool"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

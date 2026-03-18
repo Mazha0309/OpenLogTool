@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 业余无线电点名记录工具 - 跨平台编译脚本
+# OpenLogTool - 跨平台编译脚本
 # 作者: Mazha0309 / BG5CRL
 
 set -e
@@ -260,7 +260,7 @@ EOF
 
 # 显示帮助信息
 show_help() {
-    echo "业余无线电点名记录工具 - 跨平台编译脚本"
+    echo "OpenLogTool - 跨平台编译脚本"
     echo ""
     echo "用法: $0 [选项]"
     echo ""
@@ -284,7 +284,7 @@ show_help() {
 
 # 主函数
 main() {
-    log_info "开始构建业余无线电点名记录工具..."
+    log_info "开始构建 OpenLogTool..."
     log_info "当前目录: $(pwd)"
     
     # 检查Flutter
