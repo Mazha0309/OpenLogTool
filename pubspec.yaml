@@ -1,5 +1,5 @@
 name: openlogtool
-description: OpenLogTool - 业余无线电点名记录工具
+description: OpenLogTool
 publish_to: 'none'
 version: 1.0.0+1
 license: GPL-3.0-or-later
