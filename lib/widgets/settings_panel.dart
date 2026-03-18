@@ -542,6 +542,8 @@ class SettingsPanel extends StatelessWidget {
   }
 
   void _showAboutDialog(BuildContext context) {
+    final appInfoProvider = Provider.of<AppInfoProvider>(context, listen: false);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -550,30 +552,30 @@ class SettingsPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
-            children: const [
+            children: [
               Text(
-                '版本: 1.0.0 (Flutter重构版)',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                '版本: ${appInfoProvider.isLoaded ? "${appInfoProvider.version}+${appInfoProvider.buildNumber}" : "1.0.0"} (Flutter重构版)',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 8),
-              Text(
+              const SizedBox(height: 8),
+              const Text(
                 '一个专为业余无线电爱好者设计的点名记录工具。'
                 '支持快速记录通联信息，管理设备、天线、呼号词典，'
                 '以及数据导入导出功能。',
               ),
-              SizedBox(height: 12),
-              Text(
+              const SizedBox(height: 12),
+              const Text(
                 '主要功能:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              Text('• 快速添加点名记录'),
-              Text('• 设备、天线、呼号、QTH词典管理'),
-              Text('• 数据导入导出 (JSON, CSV, Excel)'),
-              Text('• 暗色/亮色主题切换'),
-              Text('• 宽屏平行布局'),
-              Text('• 自定义主题颜色'),
-              SizedBox(height: 12),
-              Text(
+              const Text('• 快速添加点名记录'),
+              const Text('• 设备、天线、呼号、QTH词典管理'),
+              const Text('• 数据导入导出 (JSON, CSV, Excel)'),
+              const Text('• 暗色/亮色主题切换'),
+              const Text('• 宽屏平行布局'),
+              const Text('• 自定义主题颜色'),
+              const SizedBox(height: 12),
+              const Text(
                 '开发者: BG5CRL',
                 style: TextStyle(fontStyle: FontStyle.italic),
               ),
