@@ -4,12 +4,14 @@ import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 
 void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => LogProvider()),
         ChangeNotifierProvider(create: (_) => DictionaryProvider()),
