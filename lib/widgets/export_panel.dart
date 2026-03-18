@@ -15,164 +15,191 @@ class ExportPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '数据导入导出',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 根据可用宽度判断是否使用横向排列
+        final isWideScreen = constraints.maxWidth > 600;
         
-        const SizedBox(height: 24),
-        
-        // 导出功能
-        FCard(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '数据导入导出',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // 根据屏幕宽度选择横向或纵向排列
+            if (isWideScreen)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _buildExportCard(context)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildImportCard(context)),
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildExportCard(context),
+                  const SizedBox(height: 16),
+                  _buildImportCard(context),
+                ],
+              ),
+            
+            const SizedBox(height: 16),
+            
+            // 文件信息
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '文件格式说明',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '• JSON: 标准JSON格式，包含所有记录数据\n'
+                    '• Excel: 使用index.html中的样式，包含分组和样式\n'
+                    '• PNG: 表格截图，适合分享和打印',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildExportCard(BuildContext context) {
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '导出数据',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // 导出按钮
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                const Text(
-                  '导出数据',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.file_download),
+                  label: const Text('导出 JSON'),
+                  onPressed: () => _exportJSON(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                
-                // 导出按钮
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.file_download),
-                      label: const Text('导出 JSON'),
-                      onPressed: () => _exportJSON(context),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                      ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.table_chart),
+                  label: const Text('导出 Excel'),
+                  onPressed: () => _exportExcel(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
                     ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.table_chart),
-                      label: const Text('导出 Excel'),
-                      onPressed: () => _exportExcel(context),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                      ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.image),
+                  label: const Text('导出 PNG'),
+                  onPressed: () => _exportPNG(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
                     ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.image),
-                      label: const Text('导出 PNG'),
-                      onPressed: () => _exportPNG(context),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-        
-        const SizedBox(height: 16),
-        
-        // 导入功能
-        FCard(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+    );
+  }
+
+  Widget _buildImportCard(BuildContext context) {
+    return FCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '导入数据',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // 导入按钮
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                const Text(
-                  '导入数据',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.file_upload),
+                  label: const Text('导入 JSON'),
+                  onPressed: () => _importJSON(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                
-                // 导入按钮
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.file_upload),
-                      label: const Text('导入 JSON'),
-                      onPressed: () => _importJSON(context),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                      ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.table_chart),
+                  label: const Text('导入 Excel'),
+                  onPressed: () => _importExcel(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
                     ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.table_chart),
-                      label: const Text('导入 Excel'),
-                      onPressed: () => _importExcel(context),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-        
-        const SizedBox(height: 16),
-        
-        // 文件信息
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '文件格式说明',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '• JSON: 标准JSON格式，包含所有记录数据\n'
-                '• Excel: 使用index.html中的样式，包含分组和样式\n'
-                '• PNG: 表格截图，适合分享和打印',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 
