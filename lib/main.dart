@@ -49,7 +49,7 @@ class MyApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: '业余无线电点名记录工具',
+      title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
       // 同时设置Material主题，确保与forui风格一致
       theme: ThemeData(

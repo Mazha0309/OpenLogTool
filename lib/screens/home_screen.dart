@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
@@ -55,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('业余无线电点名记录工具'),
+        title: const Text('OpenLogTool'),
         centerTitle: true,
       ),
       body: _pages[_selectedIndex],
@@ -97,8 +98,7 @@ class AddRecordPage extends StatelessWidget {
                 flex: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Card(
-                    margin: EdgeInsets.zero,
+                  child: FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -126,44 +126,34 @@ class AddRecordPage extends StatelessWidget {
                 flex: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Card(
-                    margin: EdgeInsets.zero,
+                  child: FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Chip(
-                                label: Text('${logProvider.logCount} 条记录'),
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.1),
-                              ),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.undo),
-                                label: const Text('撤销'),
-                                onPressed: logProvider.canUndo
-                                    ? () => _showUndoConfirmation(context)
-                                    : null,
-                              ),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.delete_outline),
-                                label: const Text('清空所有'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      Theme.of(context).colorScheme.error,
-                                  foregroundColor:
-                                      Theme.of(context).colorScheme.onError,
-                                ),
-                                onPressed: logProvider.logCount > 0
-                                    ? () => _showClearConfirmation(context)
-                                    : null,
+                              Chip(label: Text('${logProvider.logCount} 条记录')),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FButton(
+                                    onPress: logProvider.canUndo
+                                        ? () => _showUndoConfirmation(context)
+                                        : null,
+                                    label: '撤销',
+                                  ),
+                                  const SizedBox(width: 8),
+                                  FButton(
+                                    style: FButtonStyle.destructive,
+                                    onPress: logProvider.logCount > 0
+                                        ? () => _showClearConfirmation(context)
+                                        : null,
+                                    label: '清空',
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -192,12 +182,12 @@ class AddRecordPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Card(
-                  margin: EdgeInsets.zero,
+                FCard(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
                           '添加点名记录',
@@ -213,44 +203,35 @@ class AddRecordPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Card(
-                  margin: EdgeInsets.zero,
+                FCard(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Chip(
-                              label: Text('${logProvider.logCount} 条记录'),
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.1),
-                            ),
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.undo),
-                              label: const Text('撤销'),
-                              onPressed: logProvider.canUndo
-                                  ? () => _showUndoConfirmation(context)
-                                  : null,
-                            ),
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.delete_outline),
-                              label: const Text('清空所有'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.error,
-                                foregroundColor:
-                                    Theme.of(context).colorScheme.onError,
-                              ),
-                              onPressed: logProvider.logCount > 0
-                                  ? () => _showClearConfirmation(context)
-                                  : null,
+                            Chip(label: Text('${logProvider.logCount} 条记录')),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FButton(
+                                  onPress: logProvider.canUndo
+                                      ? () => _showUndoConfirmation(context)
+                                      : null,
+                                  label: '撤销',
+                                ),
+                                const SizedBox(width: 8),
+                                FButton(
+                                  style: FButtonStyle.destructive,
+                                  onPress: logProvider.logCount > 0
+                                      ? () => _showClearConfirmation(context)
+                                      : null,
+                                  label: '清空',
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -280,16 +261,16 @@ class AddRecordPage extends StatelessWidget {
   void _showUndoConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认撤销'),
-        content: const Text('您确定要撤销上一条记录吗？'),
+      builder: (context) => FDialog(
+        title: '确认撤销',
+        body: '您确定要撤销上一条记录吗？',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+          FButton(
+            onPress: () => Navigator.pop(context),
+            label: '取消',
           ),
-          ElevatedButton(
-            onPressed: () {
+          FButton(
+            onPress: () {
               Provider.of<LogProvider>(context, listen: false).undoLastLog();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -299,7 +280,7 @@ class AddRecordPage extends StatelessWidget {
                 ),
               );
             },
-            child: const Text('确认撤销'),
+            label: '确认撤销',
           ),
         ],
       ),
@@ -309,16 +290,17 @@ class AddRecordPage extends StatelessWidget {
   void _showClearConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认清空记录'),
-        content: const Text('您确定要清空所有点名记录吗？此操作不可撤销！'),
+      builder: (context) => FDialog(
+        title: '确认清空记录',
+        body: '您确定要清空所有点名记录吗？此操作不可撤销！',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+          FButton(
+            onPress: () => Navigator.pop(context),
+            label: '取消',
           ),
-          ElevatedButton(
-            onPressed: () {
+          FButton(
+            style: FButtonStyle.destructive,
+            onPress: () {
               Provider.of<LogProvider>(context, listen: false).clearAllLogs();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -328,11 +310,7 @@ class AddRecordPage extends StatelessWidget {
                 ),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            child: const Text('确认清空'),
+            label: '确认清空',
           ),
         ],
       ),
@@ -345,27 +323,65 @@ class ImportExportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ExportPanel(),
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen =
+            constraints.maxWidth > 900 && settingsProvider.wideLayoutEnabled;
+
+        if (isWideScreen) {
+          // 宽屏布局：左右分栏
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: FCard(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ExportPanel(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: FCard(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: DictionaryManager(),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: DictionaryManager(),
+          );
+        } else {
+          // 窄屏布局：垂直堆叠
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ExportPanel(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: DictionaryManager(),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
+          );
+        }
+      },
     );
   }
 }
@@ -377,12 +393,16 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SettingsPanel(),
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SettingsPanel(),
+            ),
+          ),
+        ],
       ),
     );
   }

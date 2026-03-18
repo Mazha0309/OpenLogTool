@@ -166,143 +166,156 @@ class _LogFormState extends State<LogForm> {
     final logProvider = Provider.of<LogProvider>(context);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
 
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 使用 Wrap 实现响应式自动换行布局
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 200,
-                child: _buildMaterialTextField(
-                  controller: _controllerController,
-                  label: '主控呼号 *',
-                  hintText: '输入主控呼号',
-                  error: _controllerError,
-                  onChanged: (value) {
-                    if (_controllerError != null) {
-                      setState(() => _controllerError = null);
-                    }
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildAutocompleteField(
-                  controller: _callsignController,
-                  label: '点名呼号',
-                  hintText: '输入呼号',
-                  options: dictionaryProvider.callsignDict,
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildAutocompleteField(
-                  controller: _deviceController,
-                  label: '设备',
-                  hintText: '输入设备名称',
-                  options: dictionaryProvider.deviceDict,
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildAutocompleteField(
-                  controller: _antennaController,
-                  label: '天线',
-                  hintText: '输入天线名称',
-                  options: dictionaryProvider.antennaDict,
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildMaterialTextField(
-                  controller: _powerController,
-                  label: '功率',
-                  hintText: '输入功率',
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildAutocompleteField(
-                  controller: _qthController,
-                  label: 'QTH',
-                  hintText: '输入QTH',
-                  options: dictionaryProvider.qthDict,
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildMaterialTextField(
-                  controller: _heightController,
-                  label: '高度',
-                  hintText: '输入高度',
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildMaterialTextField(
-                  controller: _timeController,
-                  label: '时间',
-                  hintText: 'HH:mm (留空使用当前时间)',
-                ),
-              ),
-              SizedBox(
-                width: 200,
-                child: _buildMaterialTextField(
-                  controller: _reportController,
-                  label: '信号报告',
-                  hintText: '输入信号报告',
-                  error: _reportError,
-                  onChanged: (value) {
-                    if (_reportError != null) {
-                      setState(() => _reportError = null);
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 根据可用宽度计算每行显示几个字段
+        final availableWidth = constraints.maxWidth;
+        final fieldWidth = 200.0;
+        final spacing = 12.0;
+        final fieldsPerRow = ((availableWidth + spacing) / (fieldWidth + spacing)).floor().clamp(1, 5);
+        final calculatedFieldWidth = (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
 
-          const SizedBox(height: 16),
-
-          // 操作按钮 - 占满宽度
-          Row(
+        return Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _submitForm,
-                  icon: Icon(logProvider.isEditing ? Icons.save : Icons.add),
-                  label: Text(logProvider.isEditing ? '更新记录' : '添加记录'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-              if (logProvider.isEditing) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _cancelEditing,
-                    icon: const Icon(Icons.cancel),
-                    label: const Text('取消编辑'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      foregroundColor: Theme.of(context).colorScheme.onError,
+              // 使用 Wrap 实现响应式自动换行布局，输入框会根据可用空间自动调整宽度
+              Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                alignment: WrapAlignment.start,
+                children: [
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _controllerController,
+                      label: '主控呼号 *',
+                      hintText: '输入主控呼号',
+                      error: _controllerError,
+                      onChanged: (value) {
+                        if (_controllerError != null) {
+                          setState(() => _controllerError = null);
+                        }
+                      },
                     ),
                   ),
-                ),
-              ],
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildAutocompleteField(
+                      controller: _callsignController,
+                      label: '点名呼号',
+                      hintText: '输入呼号',
+                      options: dictionaryProvider.callsignDict,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildAutocompleteField(
+                      controller: _deviceController,
+                      label: '设备',
+                      hintText: '输入设备名称',
+                      options: dictionaryProvider.deviceDict,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildAutocompleteField(
+                      controller: _antennaController,
+                      label: '天线',
+                      hintText: '输入天线名称',
+                      options: dictionaryProvider.antennaDict,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _powerController,
+                      label: '功率',
+                      hintText: '输入功率',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildAutocompleteField(
+                      controller: _qthController,
+                      label: 'QTH',
+                      hintText: '输入QTH',
+                      options: dictionaryProvider.qthDict,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _heightController,
+                      label: '高度',
+                      hintText: '输入高度',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _timeController,
+                      label: '时间',
+                      hintText: 'HH:mm (留空使用当前时间)',
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _reportController,
+                      label: '信号报告',
+                      hintText: '输入信号报告',
+                      error: _reportError,
+                      onChanged: (value) {
+                        if (_reportError != null) {
+                          setState(() => _reportError = null);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // 操作按钮 - 占满宽度
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _submitForm,
+                      icon: Icon(logProvider.isEditing ? Icons.save : Icons.add),
+                      label: Text(logProvider.isEditing ? '更新记录' : '添加记录'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  if (logProvider.isEditing) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _cancelEditing,
+                        icon: const Icon(Icons.cancel),
+                        label: const Text('取消编辑'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          backgroundColor: Theme.of(context).colorScheme.error,
+                          foregroundColor: Theme.of(context).colorScheme.onError,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
