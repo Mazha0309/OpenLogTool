@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=业余无线电点名记录工具
+Comment=业余无线电点名记录工具 - Flutter版本
+Exec=openlogtool
+Icon=icon
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=radio;ham;log;记录;
