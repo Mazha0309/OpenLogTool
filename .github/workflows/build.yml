@@ -125,13 +125,32 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+
       - name: Build Windows
         run: flutter build windows --release
 
-      - name: Upload Windows
+      - name: Update Installer Version
+        run: |
+          $version = "${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}"
+          (Get-Content windows/installer.iss) -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`"" | Set-Content windows/installer.iss
+          Get-Content windows/installer.iss | Select-String "MyAppVersion"
+
+      - name: Build Installer
+        run: iscc windows/installer.iss
+
+      - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
-          name: openlogtool-windows
+          name: openlogtool-windows-installer
+          path: windows/installer/OpenLogTool-Setup-*.exe
+
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlogtool-windows-build
           path: build/windows/runner/Release
 
   # 构建 macOS
@@ -189,7 +208,8 @@ jobs:
           files: |
             artifacts/openlogtool-android-apk/*.apk
             artifacts/openlogtool-linux/*.tar.gz
-            artifacts/openlogtool-windows/*.exe
-            artifacts/openlogtool-macos/*.app
+            artifacts/openlogtool-windows-installer/*.exe
+            artifacts/openlogtool-windows-build/**/*
+            artifacts/openlogtool-macos/Release/*.app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
