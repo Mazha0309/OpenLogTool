@@ -116,11 +116,6 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
-      - name: Fix Windows icon
-        run: |
-          # 删除损坏的ICO文件，Flutter会使用默认图标
-          rm -f windows/runner/resources/app_icon.ico
-
       - name: Add Windows desktop support
         run: flutter create . --platforms=windows
 
