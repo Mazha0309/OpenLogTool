@@ -332,7 +332,7 @@ class ImportExportPage extends StatelessWidget {
 
         if (isWideScreen) {
           // 宽屏布局：左右分栏
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
