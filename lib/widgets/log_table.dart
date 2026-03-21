@@ -29,6 +29,8 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _startEditing(int index, LogEntry log) {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    logProvider.startEditing(index);
     setState(() {
       _editingIndex = index;
       _controllers = {
@@ -46,6 +48,8 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _cancelEditing() {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    logProvider.cancelEditing();
     setState(() {
       _editingIndex = null;
       for (var controller in _controllers.values) {
@@ -68,7 +72,7 @@ class _LogTableState extends State<LogTable> {
       antenna: _controllers['antenna']!.text,
       height: _controllers['height']!.text,
     );
-    await logProvider.updateLog(index, updatedLog);
+    logProvider.updateLog(index, updatedLog);
     _cancelEditing();
   }
 

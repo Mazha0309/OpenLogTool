@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
@@ -126,7 +127,7 @@ class _LogFormState extends State<LogForm> {
     );
 
     final isEditing = logProvider.isEditing;
-    await logProvider.addLog(log);
+    logProvider.addLog(log);
     _resetForm();
 
     if (context.mounted) {
@@ -217,6 +218,7 @@ class _LogFormState extends State<LogForm> {
                       label: '设备',
                       hintText: '输入设备名称',
                       options: dictionaryProvider.deviceDict,
+                      upperCase: false,
                     ),
                   ),
                   SizedBox(
@@ -226,6 +228,7 @@ class _LogFormState extends State<LogForm> {
                       label: '天线',
                       hintText: '输入天线名称',
                       options: dictionaryProvider.antennaDict,
+                      upperCase: false,
                     ),
                   ),
                   SizedBox(
@@ -235,6 +238,7 @@ class _LogFormState extends State<LogForm> {
                       label: '功率',
                       hintText: '输入功率',
                       keyboardType: TextInputType.number,
+                      upperCase: false,
                     ),
                   ),
                   SizedBox(
@@ -244,6 +248,7 @@ class _LogFormState extends State<LogForm> {
                       label: 'QTH',
                       hintText: '输入QTH',
                       options: dictionaryProvider.qthDict,
+                      upperCase: false,
                     ),
                   ),
                   SizedBox(
@@ -253,6 +258,7 @@ class _LogFormState extends State<LogForm> {
                       label: '高度',
                       hintText: '输入高度',
                       keyboardType: TextInputType.number,
+                      upperCase: false,
                     ),
                   ),
                   SizedBox(
@@ -261,6 +267,7 @@ class _LogFormState extends State<LogForm> {
                       controller: _timeController,
                       label: '时间',
                       hintText: 'HH:mm (留空使用当前时间)',
+                      upperCase: false,
                     ),
                   ),
                   SizedBox(
@@ -275,6 +282,7 @@ class _LogFormState extends State<LogForm> {
                           setState(() => _reportError = null);
                         }
                       },
+                      upperCase: false,
                     ),
                   ),
                 ],
@@ -326,6 +334,7 @@ class _LogFormState extends State<LogForm> {
     TextInputType? keyboardType,
     String? error,
     void Function(String)? onChanged,
+    bool upperCase = true,
   }) {
     return TextFormField(
       controller: controller,
@@ -339,7 +348,8 @@ class _LogFormState extends State<LogForm> {
       ),
       keyboardType: keyboardType,
       onChanged: onChanged,
-      textCapitalization: TextCapitalization.characters,
+      textCapitalization: upperCase ? TextCapitalization.characters : TextCapitalization.none,
+      inputFormatters: upperCase ? [UpperCaseTextFormatter()] : [],
     );
   }
 
@@ -349,7 +359,11 @@ class _LogFormState extends State<LogForm> {
     required String hintText,
     required List<String> options,
     void Function(String)? onChanged,
+    bool upperCase = true,
   }) {
+    final textCapitalization = upperCase ? TextCapitalization.characters : TextCapitalization.none;
+    final inputFormatters = upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
+
     return Autocomplete<String>(
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
@@ -367,6 +381,11 @@ class _LogFormState extends State<LogForm> {
         FocusNode fieldFocusNode,
         VoidCallback onFieldSubmitted,
       ) {
+        controller.addListener(() {
+          if (fieldController.text != controller.text) {
+            fieldController.text = controller.text;
+          }
+        });
         return TextFormField(
           controller: fieldController,
           focusNode: fieldFocusNode,
@@ -377,8 +396,12 @@ class _LogFormState extends State<LogForm> {
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           ),
-          onChanged: onChanged,
-          textCapitalization: TextCapitalization.characters,
+          onChanged: (value) {
+            controller.text = upperCase ? value.toUpperCase() : value;
+            onChanged?.call(value);
+          },
+          textCapitalization: textCapitalization,
+          inputFormatters: inputFormatters,
         );
       },
       optionsViewBuilder: (
@@ -409,6 +432,19 @@ class _LogFormState extends State<LogForm> {
           ),
         );
       },
+    );
+  }
+}
+
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

@@ -396,7 +396,7 @@ class ExportPanel extends StatelessWidget {
         );
       }).toList();
       
-      await logProvider.importLogs(importedLogs);
+      logProvider.importLogs(importedLogs);
       _showSnackBar(context, '导入成功: ${importedLogs.length} 条记录');
     } catch (e) {
       _showSnackBar(context, '导入失败: $e');
