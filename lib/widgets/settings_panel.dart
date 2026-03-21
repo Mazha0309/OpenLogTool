@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/dictionary_provider.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -143,7 +145,37 @@ class SettingsPanel extends StatelessWidget {
         ),
         
         const SizedBox(height: 16),
-        
+
+        // 数据操作
+        FCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '数据操作',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FButton(
+                    label: '清空所有数据',
+                    style: FButtonStyle.destructive,
+                    onPress: () => _showClearDataConfirmation(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
         // 操作按钮
         Row(
           children: [
@@ -531,6 +563,42 @@ class SettingsPanel extends StatelessWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('已恢复默认设置'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearDataConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => FDialog(
+        title: '清空所有数据',
+        body: '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n\n确定要继续吗？',
+        actions: [
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
+          ),
+          FButton(
+            label: '确认清空',
+            style: FButtonStyle.destructive,
+            onPress: () {
+              final logProvider = Provider.of<LogProvider>(context, listen: false);
+              final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
+              logProvider.clearAllLogs();
+              dictionaryProvider.clearCallsignDict();
+              dictionaryProvider.clearDeviceDict();
+              dictionaryProvider.clearAntennaDict();
+              dictionaryProvider.clearQthDict();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('已清空所有数据'),
                   duration: Duration(seconds: 2),
                 ),
               );
