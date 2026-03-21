@@ -14,7 +14,7 @@ class LogForm extends StatefulWidget {
   State<LogForm> createState() => _LogFormState();
 }
 
-class _LogFormState extends State<LogForm> {
+class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
   final _controllerController = TextEditingController();
   final _callsignController = TextEditingController();
@@ -28,6 +28,9 @@ class _LogFormState extends State<LogForm> {
 
   String? _controllerError;
   String? _reportError;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
