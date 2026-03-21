@@ -9,8 +9,6 @@ import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
 
-/// 主屏幕组件
-/// 包含底部导航栏，用于在"添加记录"、"导入导出"、"设置"三个页面之间切换
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -55,20 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              floating: true,
-              pinned: true,
-              title: const Text('OpenLogTool'),
-              centerTitle: true,
-              forceElevated: innerBoxIsScrolled,
-            ),
-          ];
-        },
-        body: _pages[_selectedIndex],
+      appBar: AppBar(
+        title: const Text('OpenLogTool'),
+        centerTitle: true,
       ),
+      body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: _navItems,
         currentIndex: _selectedIndex,
@@ -83,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// 添加记录页面
 class AddRecordPage extends StatelessWidget {
   const AddRecordPage({super.key});
 
@@ -98,13 +86,11 @@ class AddRecordPage extends StatelessWidget {
             constraints.maxWidth > 1200 && settingsProvider.wideLayoutEnabled;
 
         if (isWideScreen) {
-          // 宽屏布局：左右分栏
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 左侧：表单
                 Flexible(
                   flex: 2,
                   child: FCard(
@@ -128,10 +114,7 @@ class AddRecordPage extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 16),
-
-                // 右侧：表格
                 Flexible(
                   flex: 2,
                   child: FCard(
@@ -175,7 +158,7 @@ class AddRecordPage extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Expanded(child: LogTable()),
+                          const LogTable(),
                         ],
                       ),
                     ),
@@ -185,7 +168,6 @@ class AddRecordPage extends StatelessWidget {
             ),
           );
         } else {
-          // 窄屏布局：垂直堆叠
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -340,7 +322,6 @@ class ImportExportPage extends StatelessWidget {
             constraints.maxWidth > 900 && settingsProvider.wideLayoutEnabled;
 
         if (isWideScreen) {
-          // 宽屏布局：左右分栏
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -367,7 +348,6 @@ class ImportExportPage extends StatelessWidget {
             ),
           );
         } else {
-          // 窄屏布局：垂直堆叠
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
