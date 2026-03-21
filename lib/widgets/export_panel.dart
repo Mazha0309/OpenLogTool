@@ -237,86 +237,78 @@ class ExportPanel extends StatelessWidget {
   Future<void> _exportExcel(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final logs = logProvider.logs;
-    
+
     if (logs.isEmpty) {
       _showSnackBar(context, '没有数据可以导出');
       return;
     }
-    
+
     try {
-      // 创建Excel文件
       final excel = excel_lib.Excel.createExcel();
       final sheet = excel['点名记录'];
-      
-      // 添加表头（与index.html保持一致）
-      final headers = ['#', '时间', '点名主控', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度'];
-      
-      // 写入表头
-      for (var i = 0; i < headers.length; i++) {
-        final cell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
-        cell.value = excel_lib.TextCellValue(headers[i]);
-        
-        // 设置表头样式
-        cell.cellStyle = excel_lib.CellStyle(
-          bold: true,
-          horizontalAlign: excel_lib.HorizontalAlign.Center,
-          verticalAlign: excel_lib.VerticalAlign.Center,
-        );
+
+      final defaultSheet = excel.getDefaultSheet();
+      if (defaultSheet != null && defaultSheet != '点名记录') {
+        excel.delete(defaultSheet);
       }
-      
-      // 添加数据行
-      for (var i = 0; i < logs.length; i++) {
-        final log = logs[i];
-        final rowIndex = i + 1; // 表头在第0行
-        
-        final cells = [
-          (i + 1).toString(), // #
-          log.time,
-          log.controller,
-          log.callsign,
-          log.report,
-          log.qth,
-          log.device,
-          log.power,
-          log.antenna,
-          log.height,
-        ];
-        
-        for (var j = 0; j < cells.length; j++) {
-          final cell = sheet.cell(excel_lib.CellIndex.indexByColumnRow(columnIndex: j, rowIndex: rowIndex));
-          cell.value = excel_lib.TextCellValue(cells[j]);
-          
-          // 设置单元格样式
-          cell.cellStyle = excel_lib.CellStyle(
-            horizontalAlign: excel_lib.HorizontalAlign.Center,
-            verticalAlign: excel_lib.VerticalAlign.Center,
-          );
+
+      final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+
+      sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 0);
+
+      final grouped = <String, List<LogEntry>>{};
+      for (final log in logs) {
+        final controller = log.controller;
+        grouped.putIfAbsent(controller, () => []).add(log);
+      }
+
+      int globalIndex = 1;
+      int currentRow = 1;
+
+      for (final controller in grouped.keys) {
+        final controllerLogs = grouped[controller]!;
+
+        final firstTime = controllerLogs.isNotEmpty ? controllerLogs.first.time : '';
+        final controllerTime = _calculateControllerTime(firstTime);
+
+        final controllerRow = <String>['点名主控:', controllerTime, controller, '', '', '', '', '', '', ''];
+        sheet.insertRowIterables(controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(), currentRow);
+        currentRow++;
+
+        for (final log in controllerLogs) {
+          final rowData = [
+            excel_lib.TextCellValue(globalIndex.toString()),
+            excel_lib.TextCellValue(log.time),
+            excel_lib.TextCellValue(log.callsign),
+            excel_lib.TextCellValue(log.report),
+            excel_lib.TextCellValue(log.qth),
+            excel_lib.TextCellValue(log.device),
+            excel_lib.TextCellValue(log.power),
+            excel_lib.TextCellValue(log.antenna),
+            excel_lib.TextCellValue(log.height),
+            excel_lib.TextCellValue(''),
+          ];
+          sheet.insertRowIterables(rowData, currentRow);
+          globalIndex++;
+          currentRow++;
         }
       }
-      
-      // 设置列宽（与index.html保持一致）
-      sheet.setColumnWidth(0, 10);   // #
-      sheet.setColumnWidth(1, 10);   // 时间
-      sheet.setColumnWidth(2, 15);   // 点名主控
-      sheet.setColumnWidth(3, 15);   // 呼号
-      sheet.setColumnWidth(4, 12);   // 信号报告
-      sheet.setColumnWidth(5, 18);   // QTH
-      sheet.setColumnWidth(6, 15);   // 设备
-      sheet.setColumnWidth(7, 10);   // 功率
-      sheet.setColumnWidth(8, 18);   // 天线
-      sheet.setColumnWidth(9, 10);   // 高度
-      
-      // 保存文件
+
+      final colWidths = <double>[10, 10, 15, 12, 18, 15, 10, 18, 10, 10];
+      for (var i = 0; i < colWidths.length; i++) {
+        sheet.setColumnWidth(i, colWidths[i]);
+      }
+
       final directory = await getDownloadsDirectory();
       if (directory == null) {
         _showSnackBar(context, '无法访问下载目录');
         return;
       }
-      
+
       final now = DateTime.now();
       final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.xlsx';
       final file = File('${directory.path}/$filename');
-      
+
       final bytes = excel.save();
       if (bytes != null) {
         await file.writeAsBytes(bytes);
@@ -327,6 +319,47 @@ class ExportPanel extends StatelessWidget {
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
     }
+  }
+
+  String _calculateControllerTime(String timeStr) {
+    if (timeStr.isEmpty) return '';
+
+    final parts = timeStr.split(':');
+    if (parts.length < 2) return timeStr;
+
+    var hours = int.tryParse(parts[0]) ?? 0;
+    var minutes = int.tryParse(parts[1]) ?? 0;
+
+    minutes -= 1;
+    if (minutes < 0) {
+      minutes = 59;
+      hours = (hours - 1) % 24;
+    }
+
+    if (minutes % 5 == 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+    }
+
+    final nearestFive = (minutes / 5).round() * 5;
+    final nearestTen = (minutes / 10).round() * 10;
+
+    final diffToFive = (minutes - nearestFive).abs();
+    final diffToTen = (minutes - nearestTen).abs();
+
+    if (diffToTen == 1 || nearestTen == 60) {
+      minutes = nearestTen == 60 ? 0 : nearestTen;
+      if (nearestTen == 60) {
+        hours = (hours + 1) % 24;
+      }
+    } else if (diffToFive == 1) {
+      minutes = nearestFive % 60;
+      if (nearestFive == 60) {
+        hours = (hours + 1) % 24;
+        minutes = 0;
+      }
+    }
+
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
   }
 
   Future<void> _exportPNG(BuildContext context) async {

@@ -90,19 +90,20 @@ class AddRecordPage extends StatelessWidget {
 
         if (isWideScreen) {
           // 宽屏布局：左右分栏
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 左侧：表单（可滚动）
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 左侧：表单
+                Flexible(
+                  flex: 2,
                   child: FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Text(
                             '添加点名记录',
@@ -112,25 +113,24 @@ class AddRecordPage extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          // 表单不需要限制宽度，让它占满可用空间
                           const LogForm(),
                         ],
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              // 右侧：表格（可滚动）
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                const SizedBox(width: 16),
+
+                // 右侧：表格
+                Flexible(
+                  flex: 2,
                   child: FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -172,8 +172,8 @@ class AddRecordPage extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         } else {
           // 窄屏布局：垂直堆叠
@@ -337,7 +337,7 @@ class ImportExportPage extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
+                Flexible(
                   child: FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -346,7 +346,7 @@ class ImportExportPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Expanded(
+                Flexible(
                   child: FCard(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
