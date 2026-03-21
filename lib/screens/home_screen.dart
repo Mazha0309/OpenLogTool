@@ -55,11 +55,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('OpenLogTool'),
-        centerTitle: true,
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverAppBar(
+              floating: true,
+              pinned: true,
+              title: const Text('OpenLogTool'),
+              centerTitle: true,
+              forceElevated: innerBoxIsScrolled,
+            ),
+          ];
+        },
+        body: _pages[_selectedIndex],
       ),
-      body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: _navItems,
         currentIndex: _selectedIndex,
