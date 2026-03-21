@@ -119,6 +119,14 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
+      - name: Ensure Windows desktop project exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path "windows/runner/CMakeLists.txt")) {
+            Write-Host "Windows desktop scaffolding missing, generating with flutter create..."
+            flutter create . --platforms=windows
+          }
+
       - name: Get dependencies
         run: flutter pub get
 
@@ -148,7 +156,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-windows-build
-          path: build/windows/runner/Release
+          path: |
+            build/windows/x64/runner/Release
+            build/windows/runner/Release
 
   # 构建 macOS
   build-macos:
