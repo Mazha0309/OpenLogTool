@@ -46,13 +46,19 @@ class LogTable extends StatelessWidget {
     }
 
     // 使用 Scrollbar 包裹实现横向滚动条
-    return Scrollbar(
-      thumbVisibility: true,
-      trackVisibility: true,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+    final horizontalController = ScrollController();
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) => true,
+      child: Scrollbar(
+        controller: horizontalController,
+        thumbVisibility: true,
+        trackVisibility: true,
         child: SingleChildScrollView(
-          child: DataTable(
+          scrollDirection: Axis.horizontal,
+          controller: horizontalController,
+          child: SingleChildScrollView(
+            child: DataTable(
             columnSpacing: 16,
             horizontalMargin: 16,
             headingRowHeight: 48,
@@ -219,6 +225,7 @@ class LogTable extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 
