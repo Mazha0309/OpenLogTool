@@ -71,11 +71,15 @@ jobs:
             --build-name="${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}" \
             --build-number="${{ needs.get-version.outputs.build_number }}"
 
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/OpenLogTool-${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}.apk"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/OpenLogTool-${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}.apk
 
   # 构建 Linux
   build-linux:
@@ -192,7 +196,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-macos
-          path: build/macos/Build/Products/Release
+          path: build/macos/Build/Products/Release/
 
   # 创建 Release（仅在 main 分支推送时）
   release:
@@ -220,6 +224,6 @@ jobs:
             artifacts/openlogtool-linux/*.tar.gz
             artifacts/openlogtool-windows-installer/*.exe
             artifacts/openlogtool-windows-build/**/*
-            artifacts/openlogtool-macos/Release/*.app
+            artifacts/openlogtool-macos/**/*.app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
