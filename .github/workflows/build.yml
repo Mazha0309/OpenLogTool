@@ -152,17 +152,6 @@ jobs:
           name: openlogtool-windows-installer
           path: windows/installer/OpenLogTool-Setup-*.exe
 
-      - name: Remove SVG files
-        run: |
-          Get-ChildItem "build/windows" -Include "*.svg" -Recurse | Remove-Item -Force
-
-      - name: Upload Windows Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: openlogtool-windows-build
-          path: |
-            build/windows/x64/runner/Release
-            build/windows/runner/Release
 
   # 构建 macOS
   build-macos:
