@@ -30,14 +30,20 @@ android {
         versionName = flutter.versionName
     }
 
+    val keystoreProperties = java.util.Properties()
+    val keystorePropertiesFile = rootProject.file("android/app/keystore.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(keystorePropertiesFile.inputStream())
+    }
+
     buildTypes {
         release {
             signingConfigs {
                 create("release") {
                     storeFile = file("keystore.jks")
-                    storePassword = System.getenv("KEYSTORE_STORE_PASSWORD") ?: ""
-                    keyAlias = System.getenv("KEYSTORE_KEY_ALIAS") ?: ""
-                    keyPassword = System.getenv("KEYSTORE_KEY_PASSWORD") ?: ""
+                    storePassword = keystoreProperties.getProperty("storePassword", "")
+                    keyAlias = keystoreProperties.getProperty("keyAlias", "")
+                    keyPassword = keystoreProperties.getProperty("keyPassword", "")
                 }
             }
             signingConfig = signingConfigs.getByName("release")

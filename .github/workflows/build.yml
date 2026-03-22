@@ -51,15 +51,15 @@ jobs:
 
       - name: Create keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '\n' | base64 -d > android/app/keystore.jks
 
       - name: Create keystore properties
         run: |
-          cat > keystore.properties << EOF
+          cat > android/app/keystore.properties << EOF
           storePassword=${{ secrets.KEYSTORE_STORE_PASSWORD }}
           keyPassword=${{ secrets.KEYSTORE_KEY_PASSWORD }}
           keyAlias=${{ secrets.KEYSTORE_KEY_ALIAS }}
-          storeFile=key.jks
+          storeFile=keystore.jks
           EOF
 
       - name: Get dependencies
