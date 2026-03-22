@@ -51,7 +51,7 @@ jobs:
 
       - name: Create keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > key.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
 
       - name: Create keystore properties
         run: |
