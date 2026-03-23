@@ -1,0 +1,442 @@
+[
+  {
+    "raw": "滨江区",
+    "pinyin": "binjiangqu",
+    "abbreviation": "bjq"
+  },
+  {
+    "raw": "上城区",
+    "pinyin": "shangchengqu",
+    "abbreviation": "scq"
+  },
+  {
+    "raw": "滨江区区政府",
+    "pinyin": "binjiangququzhengfu",
+    "abbreviation": "bjqqzf"
+  },
+  {
+    "raw": "滨江浦沿",
+    "pinyin": "binjiangpuyan",
+    "abbreviation": "bjpy"
+  },
+  {
+    "raw": "滨江火炬大道",
+    "pinyin": "binjianghuojudadao",
+    "abbreviation": "bjhjdd"
+  },
+  {
+    "raw": "创景路地铁站",
+    "pinyin": "chuangjingluditiezhan",
+    "abbreviation": "cjldtz"
+  },
+  {
+    "raw": "德清新市古镇",
+    "pinyin": "deqingxinshiguzhen",
+    "abbreviation": "dqxsgz"
+  },
+  {
+    "raw": "拱宸桥",
+    "pinyin": "gongchenqiao",
+    "abbreviation": "gcq"
+  },
+  {
+    "raw": "拱墅区大悦城",
+    "pinyin": "gongshuqudayuecheng",
+    "abbreviation": "gsqdyc"
+  },
+  {
+    "raw": "拱墅万达",
+    "pinyin": "gongshuwanda",
+    "abbreviation": "gswd"
+  },
+  {
+    "raw": "拱墅香积寺",
+    "pinyin": "gongshuxiangjisi",
+    "abbreviation": "gsxjs"
+  },
+  {
+    "raw": "拱墅和睦",
+    "pinyin": "gongshuhemu",
+    "abbreviation": "gshm"
+  },
+  {
+    "raw": "拱墅新天地",
+    "pinyin": "gongshuxintiandi",
+    "abbreviation": "gsxtd"
+  },
+  {
+    "raw": "杭州东站",
+    "pinyin": "hangzhoudongzhan",
+    "abbreviation": "hzdz"
+  },
+  {
+    "raw": "杭州东站(站台)",
+    "pinyin": "hangzhoudongzhan(zhantai)",
+    "abbreviation": "hzdzzt()"
+  },
+  {
+    "raw": "杭州良渚",
+    "pinyin": "hangzhouliangzhu",
+    "abbreviation": "hzlz"
+  },
+  {
+    "raw": "湖州",
+    "pinyin": "huzhou",
+    "abbreviation": "hz"
+  },
+  {
+    "raw": "湖州新市古镇",
+    "pinyin": "huzhouxinshiguzhen",
+    "abbreviation": "hzxsgz"
+  },
+  {
+    "raw": "湖州织里",
+    "pinyin": "huzhouzhili",
+    "abbreviation": "hzzl"
+  },
+  {
+    "raw": "湖州长兴",
+    "pinyin": "huzhouzhangxing",
+    "abbreviation": "hzzx"
+  },
+  {
+    "raw": "江东大桥",
+    "pinyin": "jiangdongdaqiao",
+    "abbreviation": "jddq"
+  },
+  {
+    "raw": "江苏无锡",
+    "pinyin": "jiangsuwuxi",
+    "abbreviation": "jswx"
+  },
+  {
+    "raw": "嘉兴",
+    "pinyin": "jiaxing",
+    "abbreviation": "jx"
+  },
+  {
+    "raw": "嘉兴嘉善",
+    "pinyin": "jiaxingjiashan",
+    "abbreviation": "jxjs"
+  },
+  {
+    "raw": "嘉兴海宁",
+    "pinyin": "jiaxinghaining",
+    "abbreviation": "jxhn"
+  },
+  {
+    "raw": "嘉兴海宁市区",
+    "pinyin": "jiaxinghainingshiqu",
+    "abbreviation": "jxhnsq"
+  },
+  {
+    "raw": "嘉兴桐乡",
+    "pinyin": "jiaxingtongxiang",
+    "abbreviation": "jxtx"
+  },
+  {
+    "raw": "临安",
+    "pinyin": "linan",
+    "abbreviation": "la"
+  },
+  {
+    "raw": "临安太子尖顶",
+    "pinyin": "linantaizijianding",
+    "abbreviation": "latzjd"
+  },
+  {
+    "raw": "临平华元欢乐城",
+    "pinyin": "linpinghuayuanhuanlecheng",
+    "abbreviation": "lphyhlc"
+  },
+  {
+    "raw": "马家坞观景台",
+    "pinyin": "majiawuguanjingtai",
+    "abbreviation": "mjwgjt"
+  },
+  {
+    "raw": "宁波慈溪",
+    "pinyin": "ningbocixi",
+    "abbreviation": "nbcx"
+  },
+  {
+    "raw": "宁波余姚",
+    "pinyin": "ningboyuyao",
+    "abbreviation": "nbyy"
+  },
+  {
+    "raw": "彭埠大桥",
+    "pinyin": "pengbudaqiao",
+    "abbreviation": "pbdq"
+  },
+  {
+    "raw": "钱江二桥",
+    "pinyin": "qianjiangerqiao",
+    "abbreviation": "qjeq"
+  },
+  {
+    "raw": "钱江三桥",
+    "pinyin": "qianjiangsanqiao",
+    "abbreviation": "qjsq"
+  },
+  {
+    "raw": "钱江世纪城",
+    "pinyin": "qianjiangshijicheng",
+    "abbreviation": "qjsjc"
+  },
+  {
+    "raw": "萧山",
+    "pinyin": "xiaoshan",
+    "abbreviation": "xs"
+  },
+  {
+    "raw": "萧山北干山南",
+    "pinyin": "xiaoshanbeiganshannan",
+    "abbreviation": "xsbgsn"
+  },
+  {
+    "raw": "萧山广泽小区",
+    "pinyin": "xiaoshanguangzexiaoqu",
+    "abbreviation": "xsgzxq"
+  },
+  {
+    "raw": "萧山金惠路",
+    "pinyin": "xiaoshanjinhuilu",
+    "abbreviation": "xsjhl"
+  },
+  {
+    "raw": "萧山钱江世纪城",
+    "pinyin": "xiaoshanqianjiangshijicheng",
+    "abbreviation": "xsqjsjc"
+  },
+  {
+    "raw": "萧山闻堰码头",
+    "pinyin": "xiaoshanwenyanmatou",
+    "abbreviation": "xswymt"
+  },
+  {
+    "raw": "萧山育才北路",
+    "pinyin": "xiaoshanyucaibeilu",
+    "abbreviation": "xsycbl"
+  },
+  {
+    "raw": "上海金山",
+    "pinyin": "shanghaijinshan",
+    "abbreviation": "shjs"
+  },
+  {
+    "raw": "上海闵行",
+    "pinyin": "shanghaiminxing",
+    "abbreviation": "shmx"
+  },
+  {
+    "raw": "上海浦东",
+    "pinyin": "shanghaipudong",
+    "abbreviation": "shpd"
+  },
+  {
+    "raw": "绍兴上虞",
+    "pinyin": "shaoxingshangyu",
+    "abbreviation": "sxsy"
+  },
+  {
+    "raw": "绍兴柯桥",
+    "pinyin": "shaoxingkeqiao",
+    "abbreviation": "sxkq"
+  },
+  {
+    "raw": "沈塘桥",
+    "pinyin": "shentangqiao",
+    "abbreviation": "stq"
+  },
+  {
+    "raw": "胜利河美食街",
+    "pinyin": "shenglihemeishijie",
+    "abbreviation": "slhmsj"
+  },
+  {
+    "raw": "苏州工业新区",
+    "pinyin": "suzhougongyexinqu",
+    "abbreviation": "szgyxq"
+  },
+  {
+    "raw": "苏州新区",
+    "pinyin": "suzhouxinqu",
+    "abbreviation": "szxq"
+  },
+  {
+    "raw": "转塘",
+    "pinyin": "zhuantang",
+    "abbreviation": "zt"
+  },
+  {
+    "raw": "闻堰码头",
+    "pinyin": "wenyanmatou",
+    "abbreviation": "wymt"
+  },
+  {
+    "raw": "西溪湿地",
+    "pinyin": "xixishidi",
+    "abbreviation": "xxsd"
+  },
+  {
+    "raw": "下宁桥地铁A口",
+    "pinyin": "xianingqiaoditieAkou",
+    "abbreviation": "xnqdtaka"
+  },
+  {
+    "raw": "下沙金沙湖",
+    "pinyin": "xiashajinshahu",
+    "abbreviation": "xsjsh"
+  },
+  {
+    "raw": "香积寺",
+    "pinyin": "xiangjisi",
+    "abbreviation": "xjs"
+  },
+  {
+    "raw": "香积寺附近",
+    "pinyin": "xiangjisifujin",
+    "abbreviation": "xjsfj"
+  },
+  {
+    "raw": "星民地铁站",
+    "pinyin": "xingminditiezhan",
+    "abbreviation": "xmdtz"
+  },
+  {
+    "raw": "午潮山",
+    "pinyin": "wuchaoshan",
+    "abbreviation": "wcs"
+  },
+  {
+    "raw": "紫荆港",
+    "pinyin": "zijinggang",
+    "abbreviation": "zjg"
+  },
+  {
+    "raw": "良渚勾庄",
+    "pinyin": "liangzhugouzhuang",
+    "abbreviation": "lzgz"
+  },
+  {
+    "raw": "老余杭",
+    "pinyin": "laoyuhang",
+    "abbreviation": "lyh"
+  },
+  {
+    "raw": "南宋御街",
+    "pinyin": "nansongyujie",
+    "abbreviation": "nsyj"
+  },
+  {
+    "raw": "三墩",
+    "pinyin": "sandun",
+    "abbreviation": "sd"
+  },
+  {
+    "raw": "安顶山",
+    "pinyin": "andingshan",
+    "abbreviation": "ads"
+  },
+  {
+    "raw": "寺坞岭",
+    "pinyin": "siwuling",
+    "abbreviation": "swl"
+  },
+  {
+    "raw": "半山",
+    "pinyin": "banshan",
+    "abbreviation": "bs"
+  },
+  {
+    "raw": "大悦城",
+    "pinyin": "dayuecheng",
+    "abbreviation": "dyc"
+  },
+  {
+    "raw": "丁桥",
+    "pinyin": "dingqiao",
+    "abbreviation": "dq"
+  },
+  {
+    "raw": "西兴古镇",
+    "pinyin": "xixingguzhen",
+    "abbreviation": "xxgz"
+  },
+  {
+    "raw": "西湖",
+    "pinyin": "xihu",
+    "abbreviation": "xh"
+  },
+  {
+    "raw": "湖滨银泰",
+    "pinyin": "hubinyintai",
+    "abbreviation": "hbyt"
+  },
+  {
+    "raw": "新天地",
+    "pinyin": "xintiandi",
+    "abbreviation": "xtd"
+  },
+  {
+    "raw": "西溪湿地北",
+    "pinyin": "xixishidibei",
+    "abbreviation": "xxsdb"
+  },
+  {
+    "raw": "良渚白洋",
+    "pinyin": "liangzhubaiyang",
+    "abbreviation": "lzby"
+  },
+  {
+    "raw": "一桥南",
+    "pinyin": "yiqiaonan",
+    "abbreviation": "yqn"
+  },
+  {
+    "raw": "萧山振宁路",
+    "pinyin": "xiaoshanzhenninglu",
+    "abbreviation": "xsznl"
+  },
+  {
+    "raw": "江苏宜兴",
+    "pinyin": "jiangsuyixing",
+    "abbreviation": "jsyx"
+  },
+  {
+    "raw": "余杭闲林",
+    "pinyin": "yuhangxianlin",
+    "abbreviation": "yhxl"
+  },
+  {
+    "raw": "孤山",
+    "pinyin": "gushan",
+    "abbreviation": "gs"
+  },
+  {
+    "raw": "断桥",
+    "pinyin": "duanqiao",
+    "abbreviation": "dq"
+  },
+  {
+    "raw": "白堤",
+    "pinyin": "baidi",
+    "abbreviation": "bd"
+  },
+  {
+    "raw": "宝石山",
+    "pinyin": "baoshishan",
+    "abbreviation": "bss"
+  },
+  {
+    "raw": "湘湖",
+    "pinyin": "xianghu",
+    "abbreviation": "xh"
+  },
+  {
+    "raw": "古荡",
+    "pinyin": "gudang",
+    "abbreviation": "gd"
+  }
+]

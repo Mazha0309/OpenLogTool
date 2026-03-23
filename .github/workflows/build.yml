@@ -2,9 +2,9 @@ name: Build OpenLogTool
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 env:
   FLUTTER_VERSION: '3.41.4'
