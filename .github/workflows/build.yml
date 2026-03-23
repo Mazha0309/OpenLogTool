@@ -233,6 +233,6 @@ jobs:
             artifacts/openlogtool-linux/*.tar.gz
             artifacts/openlogtool-windows-installer/*.exe
             artifacts/openlogtool-windows-build/**/*
-            artifacts/openlogtool-macos/*
+            artifacts/openlogtool-macos/**/*.app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
