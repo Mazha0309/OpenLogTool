@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/database/database_helper.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -158,6 +160,14 @@ class SettingsPanel extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FButton(
+                    label: '查看数据库日志',
+                    onPress: () => _showDatabaseLogDialog(context),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -587,26 +597,115 @@ class SettingsPanel extends StatelessWidget {
           FButton(
             label: '确认清空',
             style: FButtonStyle.destructive,
-            onPress: () {
-              final logProvider = Provider.of<LogProvider>(context, listen: false);
-              final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
-              logProvider.clearAllLogs();
-              dictionaryProvider.clearCallsignDict();
-              dictionaryProvider.clearDeviceDict();
-              dictionaryProvider.clearAntennaDict();
-              dictionaryProvider.clearQthDict();
+            onPress: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('已清空所有数据'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              try {
+                final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
+                await dictionaryProvider.resetAllData();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('已清空所有数据'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('清空失败: $e'),
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              }
             },
           ),
         ],
       ),
     );
+  }
+
+  void _showDatabaseLogDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('数据库状态'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: FutureBuilder(
+            future: _buildDatabaseStatus(dialogContext),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return SingleChildScrollView(
+                  child: SelectableText(
+                    '错误: ${snapshot.error}',
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.red),
+                  ),
+                );
+              }
+              return SingleChildScrollView(
+                child: SelectableText(
+                  snapshot.data ?? '无数据',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String> _buildDatabaseStatus(BuildContext ctx) async {
+    final StringBuffer info = StringBuffer();
+    info.writeln('=== 应用状态 ===');
+
+    try {
+      final logProvider = Provider.of<LogProvider>(ctx, listen: false);
+      final dictProvider = Provider.of<DictionaryProvider>(ctx, listen: false);
+
+      info.writeln('点名记录数: ${logProvider.logs.length}');
+      info.writeln('设备词典数: ${dictProvider.deviceDict.length}');
+      info.writeln('天线词典数: ${dictProvider.antennaDict.length}');
+      info.writeln('QTH词典数: ${dictProvider.qthDict.length}');
+      info.writeln('呼号词典数: ${dictProvider.callsignDict.length}');
+
+      final db = DatabaseHelper();
+      final database = await db.database;
+      final tables = await database.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+      );
+      info.writeln('');
+      info.writeln('=== 数据库表 ===');
+      for (final table in tables) {
+        final name = table['name'] as String;
+        info.writeln('表: $name');
+        try {
+          final count = await database.rawQuery('SELECT COUNT(*) as c FROM "$name"');
+          info.writeln('  行数: ${count.first['c']}');
+        } catch (_) {
+          info.writeln('  无法读取行数');
+        }
+      }
+    } catch (e) {
+      info.writeln('');
+      info.writeln('=== 错误 ===');
+      info.writeln('$e');
+    }
+
+    return info.toString();
   }
 
   void _showAboutDialog(BuildContext context) {

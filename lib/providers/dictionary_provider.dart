@@ -22,6 +22,14 @@ class DictionaryProvider with ChangeNotifier {
     _antennaDict = await db.getDictionaryRaw('antenna_dictionary');
     _callsignDict = await db.getDictionaryRaw('callsign_dictionary');
     _qthDict = await db.getDictionaryRaw('qth_dictionary');
+
+    if (_deviceDict.isEmpty && _antennaDict.isEmpty && _qthDict.isEmpty) {
+      await db.loadInitialDictionaries();
+      _deviceDict = await db.getDictionaryRaw('device_dictionary');
+      _antennaDict = await db.getDictionaryRaw('antenna_dictionary');
+      _qthDict = await db.getDictionaryRaw('qth_dictionary');
+    }
+
     notifyListeners();
   }
 
@@ -136,6 +144,12 @@ class DictionaryProvider with ChangeNotifier {
   Future<void> resetDictionaries() async {
     final db = DatabaseHelper();
     await db.resetDictionaries();
+    await _loadDictionaries();
+  }
+
+  Future<void> resetAllData() async {
+    final db = DatabaseHelper();
+    await db.resetAllData();
     await _loadDictionaries();
   }
 }
