@@ -622,7 +622,7 @@ class SettingsPanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '版本: ${appInfoProvider.isLoaded ? "${appInfoProvider.version}+${appInfoProvider.buildNumber}" : "1.0.0"} (Flutter重构版)',
+                '版本: ${appInfoProvider.isLoaded ? "${appInfoProvider.version}+${appInfoProvider.buildNumber}" : "1.0.0"}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -638,13 +638,14 @@ class SettingsPanel extends StatelessWidget {
               ),
               const Text('• 快速添加点名记录'),
               const Text('• 设备、天线、呼号、QTH词典管理'),
-              const Text('• 数据导入导出 (JSON, CSV, Excel)'),
+              const Text('• 数据导入导出 (JSON, Excel)'),
               const Text('• 暗色/亮色主题切换'),
               const Text('• 宽屏平行布局'),
               const Text('• 自定义主题颜色'),
+              const Text('• 一键清除数据库'),
               const SizedBox(height: 12),
               const Text(
-                '开发者: BG5CRL',
+                '© 2026 Mazha0309.',
                 style: TextStyle(fontStyle: FontStyle.italic),
               ),
             ],

@@ -133,10 +133,6 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                     fontSize: 16,
                   ),
                 ),
-                trailing: Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
               );
             },
             body: Padding(

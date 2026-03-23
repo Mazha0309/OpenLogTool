@@ -119,17 +119,29 @@ class _LogTableState extends State<LogTable> {
 
     final horizontalController = ScrollController();
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) => true,
-      child: Scrollbar(
-        controller: horizontalController,
-        thumbVisibility: true,
-        trackVisibility: true,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          controller: horizontalController,
-          child: SingleChildScrollView(
-            child: DataTable(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 16, bottom: 8),
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.history, size: 18),
+            label: const Text('历史记录'),
+            onPressed: () => _showHistoryDialog(context),
+          ),
+        ),
+        Expanded(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) => true,
+            child: Scrollbar(
+              controller: horizontalController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                controller: horizontalController,
+                child: SingleChildScrollView(
+                  child: DataTable(
               columnSpacing: 16,
               horizontalMargin: 16,
               headingRowHeight: 48,
@@ -400,6 +412,84 @@ class _LogTableState extends State<LogTable> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showHistoryDialog(BuildContext context) async {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final history = await logProvider.getHistory();
+
+    if (history.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('暂无历史记录')),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('历史记录'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: history.length,
+            itemBuilder: (context, index) {
+              final item = history[index];
+              final id = item['id'] as int;
+              final name = item['name'] as String;
+              final count = item['log_count'] as int;
+              final createdAt = DateTime.parse(item['created_at'] as String);
+              final formattedDate = '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+
+              return ListTile(
+                title: Text(name),
+                subtitle: Text('$formattedDate · $count 条记录'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.restore),
+                      tooltip: '恢复',
+                      onPressed: () async {
+                        await logProvider.restoreFromHistory(id);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已恢复历史记录')),
+                          );
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      tooltip: '删除',
+                      onPressed: () async {
+                        await logProvider.deleteHistoryRecord(id);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          _showHistoryDialog(context);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
   }

@@ -24,6 +24,7 @@ dependencies:
   intl: ^0.20.2
   open_file: ^3.3.3
   forui: ^0.1.0
+  sqflite: ^2.4.0
 
 dev_dependencies:
   flutter_test:
@@ -35,6 +36,7 @@ dev_dependencies:
 flutter:
   assets:
     - icon.png
+    - assets/dictionaries/
   uses-material-design: true
 
 flutter_launcher_icons:
