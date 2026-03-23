@@ -61,6 +61,13 @@ jobs:
           keyAlias=${{ secrets.KEYSTORE_KEY_ALIAS }}
           storeFile=keystore.jks
           EOF
+          echo "=== keystore.properties content (without passwords) ==="
+          cat android/app/keystore.properties | sed 's/password=.*/password=***/g'
+
+      - name: Verify keystore
+        run: |
+          ls -la android/app/keystore.jks
+          keytool -list -v -keystore android/app/keystore.jks -storepass "${{ secrets.KEYSTORE_STORE_PASSWORD }}" -alias "${{ secrets.KEYSTORE_KEY_ALIAS }}"
 
       - name: Get dependencies
         run: flutter pub get
