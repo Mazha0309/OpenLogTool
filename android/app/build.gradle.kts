@@ -33,7 +33,7 @@ android {
     }
 
     val keystoreProperties = Properties()
-    val keystorePropertiesFile = rootProject.file("android/app/keystore.properties")
+    val keystorePropertiesFile = file("keystore.properties")
     if (keystorePropertiesFile.exists()) {
         keystoreProperties.load(keystorePropertiesFile.inputStream())
     }
