@@ -55,14 +55,12 @@ jobs:
 
       - name: Create keystore properties
         run: |
-          cat > android/app/keystore.properties << EOF
-          storePassword=${{ secrets.KEYSTORE_STORE_PASSWORD }}
-          keyPassword=${{ secrets.KEYSTORE_KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEYSTORE_KEY_ALIAS }}
-          storeFile=keystore.jks
-          EOF
-          echo "=== keystore.properties content (without passwords) ==="
-          cat android/app/keystore.properties | sed 's/password=.*/password=***/g'
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=keystore.jks\n' \
+            "${{ secrets.KEYSTORE_STORE_PASSWORD }}" \
+            "${{ secrets.KEYSTORE_KEY_PASSWORD }}" \
+            "${{ secrets.KEYSTORE_KEY_ALIAS }}" > android/app/keystore.properties
+          echo "=== keystore.properties content ==="
+          cat android/app/keystore.properties
 
       - name: Verify keystore
         run: |
