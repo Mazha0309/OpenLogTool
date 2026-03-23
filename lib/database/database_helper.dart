@@ -28,7 +28,97 @@ class DatabaseHelper {
       path,
       version: 1,
       onCreate: _onCreate,
+      onOpen: _onOpen,
     );
+  }
+
+  Future<void> _onOpen(Database db) async {
+    await _ensureDictionaryTablesExist(db);
+    await _ensureHistoryTableExists(db);
+    await _ensureLogsTableExists(db);
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM device_dictionary'));
+    if (count == null || count == 0) {
+      await _loadInitialDictionaries(db);
+    }
+  }
+
+  Future<void> _ensureLogsTableExists(Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          time TEXT NOT NULL,
+          controller TEXT NOT NULL,
+          callsign TEXT NOT NULL,
+          report TEXT,
+          qth TEXT,
+          device TEXT,
+          power TEXT,
+          antenna TEXT,
+          height TEXT
+        )
+      ''');
+    } catch (_) {}
+  }
+
+  Future<void> _ensureDictionaryTablesExist(Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS device_dictionary (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          raw TEXT NOT NULL UNIQUE,
+          pinyin TEXT,
+          abbreviation TEXT
+        )
+      ''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS antenna_dictionary (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          raw TEXT NOT NULL UNIQUE,
+          pinyin TEXT,
+          abbreviation TEXT
+        )
+      ''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS qth_dictionary (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          raw TEXT NOT NULL UNIQUE,
+          pinyin TEXT,
+          abbreviation TEXT
+        )
+      ''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS callsign_dictionary (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          raw TEXT NOT NULL UNIQUE,
+          pinyin TEXT,
+          abbreviation TEXT
+        )
+      ''');
+    } catch (_) {}
+  }
+
+  Future<void> _ensureHistoryTableExists(Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          logs_data TEXT NOT NULL,
+          log_count INTEGER NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    } catch (_) {}
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -100,6 +190,11 @@ class DatabaseHelper {
     await _loadDictionaryFromAsset(db, 'assets/dictionaries/antenna.json', 'antenna_dictionary');
     await _loadDictionaryFromAsset(db, 'assets/dictionaries/device.json', 'device_dictionary');
     await _loadDictionaryFromAsset(db, 'assets/dictionaries/qth.json', 'qth_dictionary');
+  }
+
+  Future<void> loadInitialDictionaries() async {
+    final db = await database;
+    await _loadInitialDictionaries(db);
   }
 
   Future<void> _loadDictionaryFromAsset(Database db, String assetPath, String tableName) async {
@@ -224,6 +319,19 @@ class DatabaseHelper {
     await db.delete('device_dictionary');
     await db.delete('qth_dictionary');
     await _loadInitialDictionaries(db);
+  }
+
+  Future<void> resetAllData() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final path = join(documentsDirectory.path, 'openlogtool.db');
+    final dbFile = File(path);
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+    }
   }
 
   // History operations
