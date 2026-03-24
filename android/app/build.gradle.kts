@@ -1,15 +1,14 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 import java.util.Properties
 
-val versionNameBase = System.getenv("VERSION_NAME") ?: "1.0.0"
-val commitHash = System.getenv("CI_COMMIT_SHA")?.take(7) ?: "local"
-val buildNumber = System.getenv("CI_BUILD_NUMBER") ?: "0"
+val versionNameBase = project.findProperty("VERSION_NAME") as String? ?: "1.0.0"
+val commitHash = project.findProperty("CI_COMMIT_SHA")?.toString()?.take(7) ?: "local"
+val buildNumber = project.findProperty("CI_BUILD_NUMBER")?.toString() ?: "0"
 val versionName = "$versionNameBase-$commitHash-$buildNumber"
 
 android {
