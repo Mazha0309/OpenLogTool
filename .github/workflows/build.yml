@@ -84,13 +84,11 @@ jobs:
           CI_COMMIT_SHA: ${{ github.sha }}
           CI_BUILD_NUMBER: ${{ github.run_number }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
+          GRADLE_OPTS: "-Dorg.gradle.project.VERSION_NAME=${{ env.VERSION_NAME }} -Dorg.gradle.project.CI_COMMIT_SHA=${{ github.sha }} -Dorg.gradle.project.CI_BUILD_NUMBER=${{ github.run_number }}"
         run: |
           flutter build apk --release \
             --build-name="${{ env.VERSION_NAME }}.${{ needs.get-version.outputs.short_sha }}" \
-            --build-number="${{ needs.get-version.outputs.build_number }}" \
-            -PVERSION_NAME=${{ env.VERSION_NAME }} \
-            -PCI_COMMIT_SHA=${{ github.sha }} \
-            -PCI_BUILD_NUMBER=${{ github.run_number }}
+            --build-number="${{ needs.get-version.outputs.build_number }}"
 
       - name: Rename APK
         run: |
