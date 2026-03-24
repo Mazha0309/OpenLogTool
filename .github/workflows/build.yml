@@ -120,6 +120,13 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
+      - name: Set Gradle version
+        run: |
+          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}/' android/app/build.gradle.kts
+          sed -i 's/COMMIT_PLACEHOLDER/${{ needs.get-version.outputs.short_sha }}/' android/app/build.gradle.kts
+          sed -i 's/BUILD_PLACEHOLDER/${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
+          head -15 android/app/build.gradle.kts
+
       - name: Setup Linux dependencies
         run: |
           sudo apt-get update
