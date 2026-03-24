@@ -163,21 +163,19 @@ class SettingsPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FButton(
-                    label: '查看数据库日志',
-                    onPress: () => _showDatabaseLogDialog(context),
-                  ),
+                _buildSettingsListTile(
+                  icon: Icons.storage,
+                  title: '数据库状态',
+                  subtitle: '查看数据库详细信息和日志',
+                  onTap: () => _showDatabaseLogDialog(context),
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FButton(
-                    label: '清空所有数据',
-                    style: FButtonStyle.destructive,
-                    onPress: () => _showClearDataConfirmation(context),
-                  ),
+                const Divider(),
+                _buildSettingsListTile(
+                  icon: Icons.delete_forever,
+                  title: '清空所有数据',
+                  subtitle: '删除所有点名记录和词典数据',
+                  textColor: Colors.red,
+                  onTap: () => _showClearDataConfirmation(context),
                 ),
               ],
             ),
@@ -240,6 +238,51 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSettingsListTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Color? textColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Icon(icon, color: textColor ?? Colors.grey[700]),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: textColor,
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textColor ?? Colors.grey,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
+          ],
+        ),
+      ),
     );
   }
 
@@ -627,41 +670,26 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  void _showDatabaseLogDialog(BuildContext context) {
+  void _showDatabaseLogDialog(BuildContext context) async {
+    final status = await _buildDatabaseStatus(context);
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('数据库状态'),
         content: SizedBox(
           width: double.maxFinite,
-          height: 400,
-          child: FutureBuilder(
-            future: _buildDatabaseStatus(dialogContext),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return SingleChildScrollView(
-                  child: SelectableText(
-                    '错误: ${snapshot.error}',
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.red),
-                  ),
-                );
-              }
-              return SingleChildScrollView(
-                child: SelectableText(
-                  snapshot.data ?? '无数据',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                ),
-              );
-            },
+          child: SingleChildScrollView(
+            child: SelectableText(
+              status,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('关闭'),
+          FButton(
+            label: '关闭',
+            onPress: () => Navigator.pop(dialogContext),
           ),
         ],
       ),
@@ -751,9 +779,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+          FButton(
+            label: '关闭',
+            onPress: () => Navigator.pop(context),
           ),
         ],
       ),

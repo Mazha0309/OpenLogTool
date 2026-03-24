@@ -305,9 +305,9 @@ class AddRecordPage extends StatelessWidget {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+          FButton(
+            label: '关闭',
+            onPress: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -317,23 +317,24 @@ class AddRecordPage extends StatelessWidget {
   void _showClearConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认清空记录'),
-        content: const Text('您确定要清空所有点名记录吗？此操作不可撤销！'),
+      builder: (context) => FDialog(
+        title: '确认清空记录',
+        body: '您确定要清空所有点名记录吗？此操作不可撤销！',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
           ),
-          TextButton(
-            onPressed: () {
+          FButton(
+            label: '确认清空',
+            style: FButtonStyle.destructive,
+            onPress: () {
               Provider.of<LogProvider>(context, listen: false).clearAllLogs();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('已清空所有记录')),
               );
             },
-            child: const Text('确认清空'),
           ),
         ],
       ),
@@ -343,20 +344,20 @@ class AddRecordPage extends StatelessWidget {
   void _showUndoConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认撤销'),
-        content: const Text('您确定要撤销上一条记录吗？'),
+      builder: (context) => FDialog(
+        title: '确认撤销',
+        body: '您确定要撤销上一条记录吗？',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
           ),
-          TextButton(
-            onPressed: () {
+          FButton(
+            label: '确认撤销',
+            onPress: () {
               Provider.of<LogProvider>(context, listen: false).undoLastLog();
               Navigator.pop(context);
             },
-            child: const Text('确认撤销'),
           ),
         ],
       ),
@@ -366,16 +367,18 @@ class AddRecordPage extends StatelessWidget {
   void _showDeleteHistoryConfirmation(BuildContext context, LogProvider logProvider, int id) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: const Text('确定要删除这条历史记录吗？'),
+      builder: (context) => FDialog(
+        title: '确认删除',
+        body: '确定要删除这条历史记录吗？',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
           ),
-          TextButton(
-            onPressed: () async {
+          FButton(
+            label: '确认删除',
+            style: FButtonStyle.destructive,
+            onPress: () async {
               await logProvider.deleteHistoryRecord(id);
               Navigator.pop(context);
               if (context.mounted) {
@@ -383,7 +386,6 @@ class AddRecordPage extends StatelessWidget {
                 _showHistoryDialog(context);
               }
             },
-            child: const Text('确认删除', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
