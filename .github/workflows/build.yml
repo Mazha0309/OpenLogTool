@@ -87,6 +87,12 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Clean Gradle cache
+        run: |
+          rm -rf android/.gradle
+          rm -rf android/app/build
+          rm -rf build
+
       - name: Build APK with version
         env:
           CI_COMMIT_SHA: ${{ github.sha }}
