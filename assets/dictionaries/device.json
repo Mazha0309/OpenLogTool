@@ -1,4 +1,14 @@
 [
+ {
+    "raw": "泉盛 UV-K5",
+    "pinyin": "quansheng UV-K5",
+    "abbreviation": "qsuvk5"
+  },
+  {
+    "raw": "泉盛 UV-K6",
+    "pinyin": "quansheng UV-K6",
+    "abbreviation": "qsuvk6"
+  },
   {
     "raw": "宝锋 UV-5R",
     "pinyin": "baofeng UV-5R",
@@ -123,16 +133,6 @@
     "raw": "宝锋 UV-21PRO",
     "pinyin": "baofeng UV-21PRO",
     "abbreviation": "bfuv21pro"
-  },
-  {
-    "raw": "泉盛 UV-K5",
-    "pinyin": "quansheng UV-K5",
-    "abbreviation": "qsuvk5"
-  },
-  {
-    "raw": "泉盛 UV-K6",
-    "pinyin": "quansheng UV-K6",
-    "abbreviation": "qsuvk6"
   },
   {
     "raw": "泉盛 TK11",
