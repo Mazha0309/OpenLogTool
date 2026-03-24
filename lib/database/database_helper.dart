@@ -5,6 +5,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/models/dictionary_item.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -275,6 +276,12 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(tableName, orderBy: 'raw ASC');
     return maps.map((m) => m['raw'] as String).toList();
+  }
+
+  Future<List<DictionaryItem>> getDictionaryItems(String tableName) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(tableName, orderBy: 'raw ASC');
+    return maps.map((m) => DictionaryItem.fromMap(m)).toList();
   }
 
   Future<int> insertDictionaryItem(String tableName, Map<String, dynamic> item) async {
