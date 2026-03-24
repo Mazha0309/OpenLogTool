@@ -56,6 +56,9 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Generate version file
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ needs.get-version.outputs.build_number }}
         run: dart tool/gen_version.dart
 
       - name: Create keystore
