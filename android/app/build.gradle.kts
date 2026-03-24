@@ -6,9 +6,9 @@ plugins {
 
 import java.util.Properties
 
-val versionNameBase = project.findProperty("VERSION_NAME") as String? ?: "1.0.0"
-val commitHash = project.findProperty("CI_COMMIT_SHA")?.toString()?.take(7) ?: "local"
-val buildNumber = project.findProperty("CI_BUILD_NUMBER")?.toString() ?: "0"
+val versionNameBase = "VERSION_PLACEHOLDER"
+val commitHash = "COMMIT_PLACEHOLDER"
+val buildNumber = "BUILD_PLACEHOLDER"
 val versionName = "$versionNameBase-$commitHash-$buildNumber"
 
 android {
