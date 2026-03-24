@@ -49,7 +49,7 @@ class SettingsPanel extends StatelessWidget {
                 Row(
                   children: [
                     const Text('主题颜色:'),
-                    const SizedBox(width: 12),
+                    const Spacer(),
                     Container(
                       width: 32,
                       height: 32,
@@ -224,11 +224,8 @@ class SettingsPanel extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                appInfoProvider.isLoaded 
-                    ? 'OpenLogTool v${appInfoProvider.version}+${appInfoProvider.buildNumber}\n'
-                      '© 2026 BG5CRL'
-                    : 'OpenLogTool v1.0.0\n'
-                      '© 2026 BG5CRL',
+                'OpenLogTool v${appInfoProvider.fullVersion}\n'
+                '© 2026 BG5CRL',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -749,7 +746,7 @@ class SettingsPanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '版本: ${appInfoProvider.isLoaded ? "${appInfoProvider.version}+${appInfoProvider.buildNumber}" : "1.0.0"}',
+                '版本: ${appInfoProvider.fullVersion}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),

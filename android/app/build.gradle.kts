@@ -7,6 +7,11 @@ plugins {
 
 import java.util.Properties
 
+val versionNameBase = System.getenv("VERSION_NAME") ?: "1.0.0"
+val commitHash = System.getenv("CI_COMMIT_SHA")?.take(7) ?: "local"
+val buildNumber = System.getenv("CI_BUILD_NUMBER") ?: "0"
+val versionName = "$versionNameBase-$commitHash-$buildNumber"
+
 android {
     namespace = "com.mazha0309.openlogtool"
     compileSdk = 36
@@ -22,14 +27,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.mazha0309.openlogtool"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionName = versionName
     }
 
     val keystoreProperties = Properties()
