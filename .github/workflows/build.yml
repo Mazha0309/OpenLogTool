@@ -87,7 +87,10 @@ jobs:
         run: |
           flutter build apk --release \
             --build-name="${{ env.VERSION_NAME }}.${{ needs.get-version.outputs.short_sha }}" \
-            --build-number="${{ needs.get-version.outputs.build_number }}"
+            --build-number="${{ needs.get-version.outputs.build_number }}" \
+            -PVERSION_NAME=${{ env.VERSION_NAME }} \
+            -PCI_COMMIT_SHA=${{ github.sha }} \
+            -PCI_BUILD_NUMBER=${{ github.run_number }}
 
       - name: Rename APK
         run: |
