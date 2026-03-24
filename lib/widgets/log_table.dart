@@ -122,14 +122,6 @@ class _LogTableState extends State<LogTable> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 16, bottom: 8),
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.history, size: 18),
-            label: const Text('历史记录'),
-            onPressed: () => _showHistoryDialog(context),
-          ),
-        ),
         Expanded(
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) => true,
