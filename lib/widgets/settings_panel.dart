@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/database/database_helper.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -47,7 +49,7 @@ class SettingsPanel extends StatelessWidget {
                 Row(
                   children: [
                     const Text('主题颜色:'),
-                    const SizedBox(width: 12),
+                    const Spacer(),
                     Container(
                       width: 32,
                       height: 32,
@@ -87,6 +89,32 @@ class SettingsPanel extends StatelessWidget {
                     Switch(
                       value: settingsProvider.isDarkMode,
                       onChanged: (value) => settingsProvider.setDarkMode(value),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // 字体选择
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('字体'),
+                          SizedBox(height: 2),
+                          Text(
+                            '选择应用字体',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FButton(
+                      label: settingsProvider.fontFamily ?? '系统默认',
+                      onPress: () => _showFontPicker(context),
                     ),
                   ],
                 ),
@@ -161,13 +189,19 @@ class SettingsPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FButton(
-                    label: '清空所有数据',
-                    style: FButtonStyle.destructive,
-                    onPress: () => _showClearDataConfirmation(context),
-                  ),
+                _buildSettingsListTile(
+                  icon: Icons.storage,
+                  title: '数据库状态',
+                  subtitle: '查看数据库详细信息和日志',
+                  onTap: () => _showDatabaseLogDialog(context),
+                ),
+                const Divider(),
+                _buildSettingsListTile(
+                  icon: Icons.delete_forever,
+                  title: '清空所有数据',
+                  subtitle: '删除所有点名记录和词典数据',
+                  textColor: Colors.red,
+                  onTap: () => _showClearDataConfirmation(context),
                 ),
               ],
             ),
@@ -216,11 +250,8 @@ class SettingsPanel extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                appInfoProvider.isLoaded 
-                    ? 'OpenLogTool v${appInfoProvider.version}+${appInfoProvider.buildNumber}\n'
-                      '© 2026 BG5CRL'
-                    : 'OpenLogTool v1.0.0\n'
-                      '© 2026 BG5CRL',
+                'OpenLogTool v${appInfoProvider.fullVersion}\n'
+                '© 2026 BG5CRL',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -230,6 +261,51 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSettingsListTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Color? textColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Icon(icon, color: textColor ?? Colors.grey[700]),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: textColor,
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textColor ?? Colors.grey,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
+          ],
+        ),
+      ),
     );
   }
 
@@ -587,26 +663,100 @@ class SettingsPanel extends StatelessWidget {
           FButton(
             label: '确认清空',
             style: FButtonStyle.destructive,
-            onPress: () {
-              final logProvider = Provider.of<LogProvider>(context, listen: false);
-              final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
-              logProvider.clearAllLogs();
-              dictionaryProvider.clearCallsignDict();
-              dictionaryProvider.clearDeviceDict();
-              dictionaryProvider.clearAntennaDict();
-              dictionaryProvider.clearQthDict();
+            onPress: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('已清空所有数据'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              try {
+                final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
+                await dictionaryProvider.resetAllData();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('已清空所有数据'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('清空失败: $e'),
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              }
             },
           ),
         ],
       ),
     );
+  }
+
+  void _showDatabaseLogDialog(BuildContext context) async {
+    final status = await _buildDatabaseStatus(context);
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('数据库状态'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              status,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ),
+        ),
+        actions: [
+          FButton(
+            label: '关闭',
+            onPress: () => Navigator.pop(dialogContext),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String> _buildDatabaseStatus(BuildContext ctx) async {
+    final StringBuffer info = StringBuffer();
+    info.writeln('=== 应用状态 ===');
+
+    try {
+      final logProvider = Provider.of<LogProvider>(ctx, listen: false);
+      final dictProvider = Provider.of<DictionaryProvider>(ctx, listen: false);
+
+      info.writeln('点名记录数: ${logProvider.logs.length}');
+      info.writeln('设备词典数: ${dictProvider.deviceDict.length}');
+      info.writeln('天线词典数: ${dictProvider.antennaDict.length}');
+      info.writeln('QTH词典数: ${dictProvider.qthDict.length}');
+      info.writeln('呼号词典数: ${dictProvider.callsignDict.length}');
+
+      final db = DatabaseHelper();
+      final database = await db.database;
+      final tables = await database.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+      );
+      info.writeln('');
+      info.writeln('=== 数据库表 ===');
+      for (final table in tables) {
+        final name = table['name'] as String;
+        info.writeln('表: $name');
+        try {
+          final count = await database.rawQuery('SELECT COUNT(*) as c FROM "$name"');
+          info.writeln('  行数: ${count.first['c']}');
+        } catch (_) {
+          info.writeln('  无法读取行数');
+        }
+      }
+    } catch (e) {
+      info.writeln('');
+      info.writeln('=== 错误 ===');
+      info.writeln('$e');
+    }
+
+    return info.toString();
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -622,7 +772,7 @@ class SettingsPanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '版本: ${appInfoProvider.isLoaded ? "${appInfoProvider.version}+${appInfoProvider.buildNumber}" : "1.0.0"} (Flutter重构版)',
+                '版本: ${appInfoProvider.fullVersion}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -638,22 +788,79 @@ class SettingsPanel extends StatelessWidget {
               ),
               const Text('• 快速添加点名记录'),
               const Text('• 设备、天线、呼号、QTH词典管理'),
-              const Text('• 数据导入导出 (JSON, CSV, Excel)'),
+              const Text('• 数据导入导出 (JSON, Excel)'),
               const Text('• 暗色/亮色主题切换'),
               const Text('• 宽屏平行布局'),
               const Text('• 自定义主题颜色'),
+              const Text('• 一键清除数据库'),
               const SizedBox(height: 12),
               const Text(
-                '开发者: BG5CRL',
+                '© 2026 Mazha0309.',
                 style: TextStyle(fontStyle: FontStyle.italic),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+          FButton(
+            label: '关闭',
+            onPress: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFontPicker(BuildContext context) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择字体'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: settingsProvider.availableFonts.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                final isSelected = settingsProvider.fontFamily == null || settingsProvider.fontFamily!.isEmpty;
+                return ListTile(
+                  title: const Text('系统默认'),
+                  trailing: isSelected
+                      ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
+                      : null,
+                  selected: isSelected,
+                  onTap: () {
+                    settingsProvider.setFontFamily(null);
+                    Navigator.pop(context);
+                  },
+                );
+              }
+              
+              final font = settingsProvider.availableFonts[index - 1];
+              final isSelected = font == settingsProvider.fontFamily;
+              
+              return ListTile(
+                title: Text(font, style: TextStyle(fontFamily: font)),
+                trailing: isSelected
+                    ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
+                    : null,
+                selected: isSelected,
+                onTap: () {
+                  settingsProvider.setFontFamily(font);
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
           ),
         ],
       ),

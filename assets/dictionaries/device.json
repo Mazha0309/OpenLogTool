@@ -1,0 +1,812 @@
+[
+ {
+    "raw": "泉盛 UV-K5",
+    "pinyin": "quansheng UV-K5",
+    "abbreviation": "qsuvk5"
+  },
+  {
+    "raw": "泉盛 UV-K6",
+    "pinyin": "quansheng UV-K6",
+    "abbreviation": "qsuvk6"
+  },
+  {
+    "raw": "宝锋 UV-5R",
+    "pinyin": "baofeng UV-5R",
+    "abbreviation": "bfuv5r"
+  },
+  {
+    "raw": "宝锋 BF-5RH",
+    "pinyin": "baofeng BF-5RH",
+    "abbreviation": "bfbf5rh"
+  },
+  {
+    "raw": "宝锋 BF-5RH Pro",
+    "pinyin": "baofeng BF-5RH Pro",
+    "abbreviation": "bfbf5rhpro"
+  },
+  {
+    "raw": "宝锋 UV-5R mini",
+    "pinyin": "baofeng UV-5R mini",
+    "abbreviation": "bfuv5rmini"
+  },
+  {
+    "raw": "宝锋 BF-5R Ham版",
+    "pinyin": "baofeng BF-5R Hamban",
+    "abbreviation": "bfbbf5rham"
+  },
+  {
+    "raw": "宝锋 BF-K5Plus",
+    "pinyin": "baofeng BF-K5Plus",
+    "abbreviation": "bfbfk5plus"
+  },
+  {
+    "raw": "宝锋 BF-888s",
+    "pinyin": "baofeng BF-888s",
+    "abbreviation": "bfbf888s"
+  },
+  {
+    "raw": "宝锋 UV-32",
+    "pinyin": "baofeng UV-32",
+    "abbreviation": "bfuv32"
+  },
+  {
+    "raw": "宝锋 DM-32UV",
+    "pinyin": "baofeng DM-32UV",
+    "abbreviation": "bfdm32uv"
+  },
+  {
+    "raw": "宝锋 BF-K66",
+    "pinyin": "baofeng BF-K66",
+    "abbreviation": "bfbfk66"
+  },
+  {
+    "raw": "宝锋 BF-888Smax",
+    "pinyin": "baofeng BF-888Smax",
+    "abbreviation": "bfbf888smax"
+  },
+  {
+    "raw": "宝锋 BF-UV18L",
+    "pinyin": "baofeng BF-UV18L",
+    "abbreviation": "bfbfuv18l"
+  },
+  {
+    "raw": "宝锋 UV-9R",
+    "pinyin": "baofeng UV-9R",
+    "abbreviation": "bfuv9r"
+  },
+  {
+    "raw": "宝锋 UV-25LM",
+    "pinyin": "baofeng UV-25LM",
+    "abbreviation": "bfuv25lm"
+  },
+  {
+    "raw": "宝锋 BF-K61",
+    "pinyin": "baofeng BF-K61",
+    "abbreviation": "bfbfk61"
+  },
+  {
+    "raw": "宝锋 UV-17",
+    "pinyin": "baofeng UV-17",
+    "abbreviation": "bfuv17"
+  },
+  {
+    "raw": "宝锋 M-13PRO",
+    "pinyin": "baofeng M-13PRO",
+    "abbreviation": "bfm13pro"
+  },
+  {
+    "raw": "宝锋 UV-16",
+    "pinyin": "baofeng UV-16",
+    "abbreviation": "bfuv16"
+  },
+  {
+    "raw": "宝锋 BF-UV10R",
+    "pinyin": "baofeng BF-UV10R",
+    "abbreviation": "bfbfuv10r"
+  },
+  {
+    "raw": "宝锋 UV-26",
+    "pinyin": "baofeng UV-26",
+    "abbreviation": "bfuv26"
+  },
+  {
+    "raw": "宝锋 UV-K67PRO",
+    "pinyin": "baofeng UV-K67PRO",
+    "abbreviation": "bfuvk67pro"
+  },
+  {
+    "raw": "宝锋 UV-16M",
+    "pinyin": "baofeng UV-16M",
+    "abbreviation": "bfuv16m"
+  },
+  {
+    "raw": "宝锋 UV-19",
+    "pinyin": "baofeng UV-19",
+    "abbreviation": "bfuv19"
+  },
+  {
+    "raw": "宝锋 BF-K61PRO",
+    "pinyin": "baofeng BF-K61PRO",
+    "abbreviation": "bfbfk61pro"
+  },
+  {
+    "raw": "宝锋 UV-21PRO",
+    "pinyin": "baofeng UV-21PRO",
+    "abbreviation": "bfuv21pro"
+  },
+  {
+    "raw": "泉盛 TK11",
+    "pinyin": "quansheng TK11",
+    "abbreviation": "qstk11"
+  },
+  {
+    "raw": "泉盛 TK11(8)",
+    "pinyin": "quansheng TK11(8)",
+    "abbreviation": "qstk11(8)"
+  },
+  {
+    "raw": "泉盛 UV-K99",
+    "pinyin": "quansheng UV-K99",
+    "abbreviation": "qsuvk99"
+  },
+  {
+    "raw": "泉盛 TG-A99",
+    "pinyin": "quansheng TG-A99",
+    "abbreviation": "qstga99"
+  },
+  {
+    "raw": "泉盛 UV-R50",
+    "pinyin": "quansheng UV-R50",
+    "abbreviation": "qsuvr50"
+  },
+  {
+    "raw": "泉盛 TG-K10",
+    "pinyin": "quansheng TG-K10",
+    "abbreviation": "qstgk10"
+  },
+  {
+    "raw": "泉盛 UV2PLUS",
+    "pinyin": "quansheng UV2PLUS",
+    "abbreviation": "qsuv2plus"
+  },
+  {
+    "raw": "泉盛 E99",
+    "pinyin": "quansheng E99",
+    "abbreviation": "qse99"
+  },
+  {
+    "raw": "泉盛 TG-A1",
+    "pinyin": "quansheng TG-A1",
+    "abbreviation": "qstga1"
+  },
+  {
+    "raw": "泉盛 TG-UV2PLUS",
+    "pinyin": "quansheng TG-UV2PLUS",
+    "abbreviation": "qstguv2plus"
+  },
+  {
+    "raw": "森海克斯 6600",
+    "pinyin": "senhaikesi 6600",
+    "abbreviation": "shks6600"
+  },
+  {
+    "raw": "森海克斯 6600Pro",
+    "pinyin": "senhaikesi 6600Pro",
+    "abbreviation": "shks6600pro"
+  },
+  {
+    "raw": "森海克斯 8800",
+    "pinyin": "senhaikesi 8800",
+    "abbreviation": "shks8800"
+  },
+  {
+    "raw": "森海克斯 8800Pro",
+    "pinyin": "senhaikesi 8800Pro",
+    "abbreviation": "shks8800pro"
+  },
+  {
+    "raw": "森海克斯 GT12Pro",
+    "pinyin": "senhaikesi GT12Pro",
+    "abbreviation": "shksgt12pro"
+  },
+  {
+    "raw": "森海克斯 8900Pro",
+    "pinyin": "senhaikesi 8900Pro",
+    "abbreviation": "shks8900pro"
+  },
+  {
+    "raw": "森海克斯 5510",
+    "pinyin": "senhaikesi 5510",
+    "abbreviation": "shks5510"
+  },
+  {
+    "raw": "森海克斯 9600",
+    "pinyin": "senhaikesi 9600",
+    "abbreviation": "shks9600"
+  },
+  {
+    "raw": "威诺 VR-N7500",
+    "pinyin": "weinuo VR-N7500",
+    "abbreviation": "wnvrn7500"
+  },
+  {
+    "raw": "威诺 VR-N7600",
+    "pinyin": "weinuo VR-N7600",
+    "abbreviation": "wnvrn7600"
+  },
+  {
+    "raw": "威诺 VR-N75",
+    "pinyin": "weinuo VR-N75",
+    "abbreviation": "wnvrn75"
+  },
+  {
+    "raw": "威诺 VR-N76",
+    "pinyin": "weinuo VR-N76",
+    "abbreviation": "wnvrn76"
+  },
+  {
+    "raw": "威诺 VR-6600PRO",
+    "pinyin": "weinuo VR-6600PRO",
+    "abbreviation": "wnvr6600pro"
+  },
+  {
+    "raw": "即时通 D9000",
+    "pinyin": "jishitong D9000",
+    "abbreviation": "jstd9000"
+  },
+  {
+    "raw": "即时通 M9",
+    "pinyin": "jishitong M9",
+    "abbreviation": "jstm9"
+  },
+  {
+    "raw": "即时通 D500",
+    "pinyin": "jishitong D500",
+    "abbreviation": "jstd500"
+  },
+  {
+    "raw": "即时通 M10",
+    "pinyin": "jishitong M10",
+    "abbreviation": "jstm10"
+  },
+  {
+    "raw": "本视 AP-2",
+    "pinyin": "benshi AP-2",
+    "abbreviation": "bsap2"
+  },
+  {
+    "raw": "艾迪欧 UV-2520",
+    "pinyin": "aidiou UV-2520",
+    "abbreviation": "adouv2520"
+  },
+  {
+    "raw": "艾迪欧 UV-88",
+    "pinyin": "aidiou UV-88",
+    "abbreviation": "adouv88"
+  },
+  {
+    "raw": "艾迪欧 UV-98Plus",
+    "pinyin": "aidiou UV-98Plus",
+    "abbreviation": "adouv98plus"
+  },
+  {
+    "raw": "艾迪欧 UV-99",
+    "pinyin": "aidiou UV-99",
+    "abbreviation": "adouv99"
+  },
+  {
+    "raw": "艾迪欧 UV-4R",
+    "pinyin": "aidiou UV-4R",
+    "abbreviation": "adouv4r"
+  },
+  {
+    "raw": "艾迪欧 UV-83",
+    "pinyin": "aidiou UV-83",
+    "abbreviation": "adouv83"
+  },
+  {
+    "raw": "艾迪欧 UV-5118Plus",
+    "pinyin": "aidiou UV-5118Plus",
+    "abbreviation": "adouv5118plus"
+  },
+  {
+    "raw": "鸿凯德 DM9100",
+    "pinyin": "hongkaide DM9100",
+    "abbreviation": "hkddm9100"
+  },
+  {
+    "raw": "鸿凯德 HTM689",
+    "pinyin": "hongkaide HTM689",
+    "abbreviation": "hkdhtm689"
+  },
+  {
+    "raw": "鸿凯德 HTM688",
+    "pinyin": "hongkaide HTM688",
+    "abbreviation": "hkdhtm688"
+  },
+  {
+    "raw": "鸿凯德 HK-7000",
+    "pinyin": "hongkaide HK-7000",
+    "abbreviation": "hkdhk7000"
+  },
+  {
+    "raw": "冠星 GX-8500",
+    "pinyin": "guanxing GX-8500",
+    "abbreviation": "gxgx8500"
+  },
+  {
+    "raw": "冠星 GX-860",
+    "pinyin": "guanxing GX-860",
+    "abbreviation": "gxgx860"
+  },
+  {
+    "raw": "冠星 GX-528",
+    "pinyin": "guanxing GX-528",
+    "abbreviation": "gxgx528"
+  },
+  {
+    "raw": "冠星 GX-8200",
+    "pinyin": "guanxing GX-8200",
+    "abbreviation": "gxgx8200"
+  },
+  {
+    "raw": "冠星 GX-V8",
+    "pinyin": "guanxing GX-V8",
+    "abbreviation": "gxgxv8"
+  },
+  {
+    "raw": "冠星 T70",
+    "pinyin": "guanxing T70",
+    "abbreviation": "gxt70"
+  },
+  {
+    "raw": "宾特 BT-8000",
+    "pinyin": "binte BT-8000",
+    "abbreviation": "btbt8000"
+  },
+  {
+    "raw": "宾特 BT-7800",
+    "pinyin": "binte BT-7800",
+    "abbreviation": "btbt7800"
+  },
+  {
+    "raw": "ICOM IC-710",
+    "pinyin": "ICOM IC-710",
+    "abbreviation": "iicomic710"
+  },
+  {
+    "raw": "ICOM IC-905",
+    "pinyin": "ICOM IC-905",
+    "abbreviation": "iicomic905"
+  },
+  {
+    "raw": "ICOM IC-7100",
+    "pinyin": "ICOM IC-7100",
+    "abbreviation": "iicomic7100"
+  },
+  {
+    "raw": "ICOM IC-7300",
+    "pinyin": "ICOM IC-7300",
+    "abbreviation": "iicomic7300"
+  },
+  {
+    "raw": "ICOM IC-9100",
+    "pinyin": "ICOM IC-9100",
+    "abbreviation": "iicomic9100"
+  },
+  {
+    "raw": "ICOM IC-9700",
+    "pinyin": "ICOM IC-9700",
+    "abbreviation": "iicomic9700"
+  },
+  {
+    "raw": "ICOM IC-M25",
+    "pinyin": "ICOM IC-M25",
+    "abbreviation": "iicomicm25"
+  },
+  {
+    "raw": "ICOM A25N",
+    "pinyin": "ICOM A25N",
+    "abbreviation": "iicoma25n"
+  },
+  {
+    "raw": "ICOM IC-M330",
+    "pinyin": "ICOM IC-M330",
+    "abbreviation": "iicomicm330"
+  },
+  {
+    "raw": "ICOM IC-V3500",
+    "pinyin": "ICOM IC-V3500",
+    "abbreviation": "iicomicv3500"
+  },
+  {
+    "raw": "ICOM IC-V80",
+    "pinyin": "ICOM IC-V80",
+    "abbreviation": "iicomicv80"
+  },
+  {
+    "raw": "ICOM IC-V86",
+    "pinyin": "ICOM IC-V86",
+    "abbreviation": "iicomicv86"
+  },
+  {
+    "raw": "ICOM IC-T10",
+    "pinyin": "ICOM IC-T10",
+    "abbreviation": "iicomict10"
+  },
+  {
+    "raw": "ICOM IC-T70A",
+    "pinyin": "ICOM IC-T70A",
+    "abbreviation": "iicomict70a"
+  },
+  {
+    "raw": "ICOM IC-W32E",
+    "pinyin": "ICOM IC-W32E",
+    "abbreviation": "iicomicw32e"
+  },
+  {
+    "raw": "ICOM IC-2720H",
+    "pinyin": "ICOM IC-2720H",
+    "abbreviation": "iicomic2720h"
+  },
+  {
+    "raw": "ICOM IC-2820H",
+    "pinyin": "ICOM IC-2820H",
+    "abbreviation": "iicomic2820h"
+  },
+  {
+    "raw": "ICOM IC-2730A",
+    "pinyin": "ICOM IC-2730A",
+    "abbreviation": "iicomic2730a"
+  },
+  {
+    "raw": "ICOM IC-208H",
+    "pinyin": "ICOM IC-208H",
+    "abbreviation": "iicomic208h"
+  },
+  {
+    "raw": "ICOM IC-2300H",
+    "pinyin": "ICOM IC-2300H",
+    "abbreviation": "iicomic2300h"
+  },
+  {
+    "raw": "ICOM IC-2200H",
+    "pinyin": "ICOM IC-2200H",
+    "abbreviation": "iicomic2200h"
+  },
+  {
+    "raw": "ICOM ID-5100A",
+    "pinyin": "ICOM ID-5100A",
+    "abbreviation": "iicomid5100a"
+  },
+  {
+    "raw": "YAESU FTM-6000R",
+    "pinyin": "YAESU FTM-6000R",
+    "abbreviation": "yyaesuftm6000r"
+  },
+  {
+    "raw": "YAESU TF-4XR",
+    "pinyin": "YAESU TF-4XR",
+    "abbreviation": "yyaesutf4xr"
+  },
+  {
+    "raw": "YAESU VX-6R",
+    "pinyin": "YAESU VX-6R",
+    "abbreviation": "yyaesuvx6r"
+  },
+  {
+    "raw": "YAESU FT-7900",
+    "pinyin": "YAESU FT-7900",
+    "abbreviation": "yyaesuft7900"
+  },
+  {
+    "raw": "YAESU FTM-510DR",
+    "pinyin": "YAESU FTM-510DR",
+    "abbreviation": "yyaesuftm510dr"
+  },
+  {
+    "raw": "YAESU FT-5DR",
+    "pinyin": "YAESU FT-5DR",
+    "abbreviation": "yyaesuft5dr"
+  },
+  {
+    "raw": "YAESU FTM-150R",
+    "pinyin": "YAESU FTM-150R",
+    "abbreviation": "yyaesuftm150r"
+  },
+  {
+    "raw": "YAESU FT-710",
+    "pinyin": "YAESU FT-710",
+    "abbreviation": "yyaesuft710"
+  },
+  {
+    "raw": "YAESU FT-891",
+    "pinyin": "YAESU FT-891",
+    "abbreviation": "yyaesuft891"
+  },
+  {
+    "raw": "YAESU FTM-500DR",
+    "pinyin": "YAESU FTM-500DR",
+    "abbreviation": "yyaesuftm500dr"
+  },
+  {
+    "raw": "自由通 AT-778UV",
+    "pinyin": "ziyoutong AT-778UV",
+    "abbreviation": "zytat778uv"
+  },
+  {
+    "raw": "自由通 AT-5555N",
+    "pinyin": "ziyoutong AT-5555N",
+    "abbreviation": "zytat5555n"
+  },
+  {
+    "raw": "自由通 AT-D878",
+    "pinyin": "ziyoutong AT-D878",
+    "abbreviation": "zytatd878"
+  },
+  {
+    "raw": "TYT TH-UV88",
+    "pinyin": "TYT TH-UV88",
+    "abbreviation": "ttytthuv88"
+  },
+  {
+    "raw": "TYT TH-UV8000D",
+    "pinyin": "TYT TH-UV8000D",
+    "abbreviation": "ttytthuv8000d"
+  },
+  {
+    "raw": "TYT TH-UV98",
+    "pinyin": "TYT TH-UV98",
+    "abbreviation": "ttytthuv98"
+  },
+  {
+    "raw": "TYT TH-F8",
+    "pinyin": "TYT TH-F8",
+    "abbreviation": "ttytthf8"
+  },
+  {
+    "raw": "TYT TH-UVF9",
+    "pinyin": "TYT TH-UVF9",
+    "abbreviation": "ttytthuvf9"
+  },
+  {
+    "raw": "泉益通 KT-8900",
+    "pinyin": "quanyitong KT-8900",
+    "abbreviation": "qytkt8900"
+  },
+  {
+    "raw": "泉益通 KT-980",
+    "pinyin": "quanyitong KT-980",
+    "abbreviation": "qytkt980"
+  },
+  {
+    "raw": "泉益通 KT-UV6D",
+    "pinyin": "quanyitong KT-UV6D",
+    "abbreviation": "qytktuv6d"
+  },
+  {
+    "raw": "泉益通 KT-UVF8D",
+    "pinyin": "quanyitong KT-UVF8D",
+    "abbreviation": "qytktuvf8d"
+  },
+  {
+    "raw": "泉益通 KT-7900D",
+    "pinyin": "quanyitong KT-7900D",
+    "abbreviation": "qytkt7900d"
+  },
+  {
+    "raw": "泉益通 KT-8900D",
+    "pinyin": "quanyitong KT-8900D",
+    "abbreviation": "qytkt8900d"
+  },
+  {
+    "raw": "泉益通 KT-UV6R",
+    "pinyin": "quanyitong KT-UV6R",
+    "abbreviation": "qytktuv6r"
+  },
+  {
+    "raw": "泉益通 KT-UVF9D",
+    "pinyin": "quanyitong KT-UVF9D",
+    "abbreviation": "qytktuvf9d"
+  },
+  {
+    "raw": "摩托罗拉 GP328",
+    "pinyin": "motuoluola GP328",
+    "abbreviation": "mtllgp328"
+  },
+  {
+    "raw": "摩托罗拉 GP338",
+    "pinyin": "motuoluola GP338",
+    "abbreviation": "mtllgp338"
+  },
+  {
+    "raw": "摩托罗拉 GP328Plus",
+    "pinyin": "motuoluola GP328Plus",
+    "abbreviation": "mtllgp328plus"
+  },
+  {
+    "raw": "摩托罗拉 GP88",
+    "pinyin": "motuoluola GP88",
+    "abbreviation": "mtllgp88"
+  },
+  {
+    "raw": "摩托罗拉 GP2000",
+    "pinyin": "motuoluola GP2000",
+    "abbreviation": "mtllgp2000"
+  },
+  {
+    "raw": "摩托罗拉 GP2100",
+    "pinyin": "motuoluola GP2100",
+    "abbreviation": "mtllgp2100"
+  },
+  {
+    "raw": "摩托罗拉 CP1300",
+    "pinyin": "motuoluola CP1300",
+    "abbreviation": "mtllcp1300"
+  },
+  {
+    "raw": "摩托罗拉 CP1660",
+    "pinyin": "motuoluola CP1660",
+    "abbreviation": "mtllcp1660"
+  },
+  {
+    "raw": "摩托罗拉 CP040",
+    "pinyin": "motuoluola CP040",
+    "abbreviation": "mtllcp040"
+  },
+  {
+    "raw": "摩托罗拉 Mag One A8",
+    "pinyin": "motuoluola Mag One A8",
+    "abbreviation": "mtllmagonea8"
+  },
+  {
+    "raw": "摩托罗拉 Mag One BPR40",
+    "pinyin": "motuoluola Mag One BPR40",
+    "abbreviation": "mtllmagonebpr40"
+  },
+  {
+    "raw": "摩托罗拉 EP350",
+    "pinyin": "motuoluola EP350",
+    "abbreviation": "mtllep350"
+  },
+  {
+    "raw": "摩托罗拉 P040",
+    "pinyin": "motuoluola P040",
+    "abbreviation": "mtllp040"
+  },
+  {
+    "raw": "摩托罗拉 APX1000",
+    "pinyin": "motuoluola APX1000",
+    "abbreviation": "mtllapx1000"
+  },
+  {
+    "raw": "摩托罗拉 APX2000",
+    "pinyin": "motuoluola APX2000",
+    "abbreviation": "mtllapx2000"
+  },
+  {
+    "raw": "摩托罗拉 APX4000",
+    "pinyin": "motuoluola APX4000",
+    "abbreviation": "mtllapx4000"
+  },
+  {
+    "raw": "摩托罗拉 APX6000",
+    "pinyin": "motuoluola APX6000",
+    "abbreviation": "mtllapx6000"
+  },
+  {
+    "raw": "摩托罗拉 APX7000",
+    "pinyin": "motuoluola APX7000",
+    "abbreviation": "mtllapx7000"
+  },
+  {
+    "raw": "摩托罗拉 APX8000",
+    "pinyin": "motuoluola APX8000",
+    "abbreviation": "mtllapx8000"
+  },
+  {
+    "raw": "好易通 TC-268",
+    "pinyin": "haoyitong TC-268",
+    "abbreviation": "hyttc268"
+  },
+  {
+    "raw": "好易通 TC-270",
+    "pinyin": "haoyitong TC-270",
+    "abbreviation": "hyttc270"
+  },
+  {
+    "raw": "好易通 TC-500",
+    "pinyin": "haoyitong TC-500",
+    "abbreviation": "hyttc500"
+  },
+  {
+    "raw": "好易通 TC-508",
+    "pinyin": "haoyitong TC-508",
+    "abbreviation": "hyttc508"
+  },
+  {
+    "raw": "好易通 TC-580",
+    "pinyin": "haoyitong TC-580",
+    "abbreviation": "hyttc580"
+  },
+  {
+    "raw": "好易通 TC-585",
+    "pinyin": "haoyitong TC-585",
+    "abbreviation": "hyttc585"
+  },
+  {
+    "raw": "好易通 TC-610",
+    "pinyin": "haoyitong TC-610",
+    "abbreviation": "hyttc610"
+  },
+  {
+    "raw": "好易通 TC-620",
+    "pinyin": "haoyitong TC-620",
+    "abbreviation": "hyttc620"
+  },
+  {
+    "raw": "好易通 TC-700",
+    "pinyin": "haoyitong TC-700",
+    "abbreviation": "hyttc700"
+  },
+  {
+    "raw": "好易通 TC-780",
+    "pinyin": "haoyitong TC-780",
+    "abbreviation": "hyttc780"
+  },
+  {
+    "raw": "好易通 TC-446S",
+    "pinyin": "haoyitong TC-446S",
+    "abbreviation": "hyttc446s"
+  },
+  {
+    "raw": "拓朋 A36",
+    "pinyin": "tuopeng A36",
+    "abbreviation": "tpa36"
+  },
+  {
+    "raw": "拓朋 A36PLUS",
+    "pinyin": "tuopeng A36PLUS",
+    "abbreviation": "tpa36plus"
+  },
+  {
+    "raw": "小米对讲机 2S",
+    "pinyin": "xiaomiduijiangji 2S",
+    "abbreviation": "xmdjj2s"
+  },
+  {
+    "raw": "小米对讲机 3",
+    "pinyin": "xiaomiduijiangji 3",
+    "abbreviation": "xmdjj3"
+  },
+  {
+    "raw": "小米对讲机 3 Lite",
+    "pinyin": "xiaomiduijiangji 3 Lite",
+    "abbreviation": "xmdjj3lite"
+  },
+  {
+    "raw": "小米对讲机 1",
+    "pinyin": "xiaomiduijiangji 1",
+    "abbreviation": "xmdjj1"
+  },
+  {
+    "raw": "小米对讲机 1S",
+    "pinyin": "xiaomiduijiangji 1S",
+    "abbreviation": "xmdjj1s"
+  },
+  {
+    "raw": "小米对讲机 2",
+    "pinyin": "xiaomiduijiangji 2",
+    "abbreviation": "xmdjj2"
+  },
+  {
+    "raw": "国赫 PMR-171",
+    "pinyin": "guohe PMR-171",
+    "abbreviation": "ghpmr171"
+  },
+  {
+    "raw": "易信 AR-55A",
+    "pinyin": "yixin AR-55A",
+    "abbreviation": "yxar55a"
+  }
+]

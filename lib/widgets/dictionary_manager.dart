@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/models/dictionary_item.dart';
 
 class DictionaryManager extends StatefulWidget {
   const DictionaryManager({super.key});
@@ -112,7 +113,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
   Widget _buildDictionaryCard({
     required String type,
     required String title,
-    required List<String> items,
+    required List<DictionaryItem> items,
     required Function(String) onAdd,
   }) {
     return FCard(
@@ -132,10 +133,6 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
-                ),
-                trailing: Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Theme.of(context).colorScheme.primary,
                 ),
               );
             },
@@ -211,8 +208,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                         shrinkWrap: true,
                         itemCount: items.length,
                         itemBuilder: (context, index) {
+                          final item = items[index];
                           return ListTile(
-                            title: Text(items[index]),
+                            title: Text(item.raw),
                             dense: true,
                             visualDensity: VisualDensity.compact,
                           );

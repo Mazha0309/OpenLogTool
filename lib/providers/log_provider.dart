@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/database/database_helper.dart';
 
 class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
@@ -26,47 +26,88 @@ class LogProvider with ChangeNotifier {
     _loadLogs();
   }
 
-  void _loadLogs() {
+  Future<void> _loadLogs() async {
+    final db = DatabaseHelper();
+    _logs = await db.getAllLogs();
     _isInitialized = true;
     notifyListeners();
   }
 
-  void addLog(LogEntry log) {
+  Future<void> addLog(LogEntry log) async {
+    final db = DatabaseHelper();
     if (isEditing) {
+      final existingLog = _logs[_editIndex];
+      await db.updateLog(_editIndex, log);
       _logs[_editIndex] = log;
       _editIndex = -1;
     } else {
+      final id = await db.insertLog(log);
       _logs.add(log);
     }
     notifyListeners();
   }
 
-  void updateLog(int index, LogEntry log) {
+  Future<void> updateLog(int index, LogEntry log) async {
     if (index >= 0 && index < _logs.length) {
+      final db = DatabaseHelper();
+      await db.updateLog(index, log);
       _logs[index] = log;
       notifyListeners();
     }
   }
 
-  void deleteLog(int index) {
+  Future<void> deleteLog(int index) async {
     if (index >= 0 && index < _logs.length) {
+      final db = DatabaseHelper();
+      await db.deleteLog(index);
       _undoStack.add(_logs[index]);
       _logs.removeAt(index);
       notifyListeners();
     }
   }
 
-  void undoLastLog() {
+  Future<void> undoLastLog() async {
     if (_logs.isNotEmpty) {
+      final db = DatabaseHelper();
+      await db.deleteLog(_logs.length - 1);
       _undoStack.add(_logs.last);
       _logs.removeLast();
       notifyListeners();
     }
   }
 
-  void clearAllLogs() {
+  Future<void> clearAllLogs() async {
+    if (_logs.isEmpty) return;
     _undoStack = List.from(_logs);
+    final db = DatabaseHelper();
+    final now = DateTime.now();
+    final historyName = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} (${_logs.length}条记录)';
+    await db.insertHistory(historyName, _logs);
+    await db.deleteAllLogs();
     _logs.clear();
+    notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>> getHistory() async {
+    final db = DatabaseHelper();
+    return await db.getAllHistory();
+  }
+
+  Future<void> restoreFromHistory(int historyId) async {
+    final db = DatabaseHelper();
+    final historyLogs = await db.getHistoryLogs(historyId);
+    await db.deleteAllLogs();
+    _logs.clear();
+    for (final log in historyLogs) {
+      await db.insertLog(log);
+      _logs.add(log);
+    }
+    notifyListeners();
+  }
+
+  Future<void> deleteHistoryRecord(int historyId) async {
+    final db = DatabaseHelper();
+    await db.deleteHistory(historyId);
     notifyListeners();
   }
 
@@ -84,7 +125,9 @@ class LogProvider with ChangeNotifier {
     return isEditing && _editIndex < _logs.length ? _logs[_editIndex] : null;
   }
 
-  void importLogs(List<LogEntry> importedLogs) {
+  Future<void> importLogs(List<LogEntry> importedLogs) async {
+    final db = DatabaseHelper();
+    await db.importLogs(importedLogs);
     _logs.addAll(importedLogs);
     notifyListeners();
   }

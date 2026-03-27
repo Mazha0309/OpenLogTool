@@ -86,192 +86,228 @@ class AddRecordPage extends StatelessWidget {
             constraints.maxWidth > 1200 && settingsProvider.wideLayoutEnabled;
 
         if (isWideScreen) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  flex: 2,
-                  child: FCard(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            '添加点名记录',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          LogForm(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Flexible(
-                  flex: 2,
-                  child: FCard(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Chip(label: Text('${logProvider.logCount} 条记录')),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  FButton(
-                                    onPress: logProvider.canUndo
-                                        ? () => _showUndoConfirmation(context)
-                                        : null,
-                                    label: '撤销',
-                                  ),
-                                  const SizedBox(width: 8),
-                                  FButton(
-                                    style: FButtonStyle.destructive,
-                                    onPress: logProvider.logCount > 0
-                                        ? () => _showClearConfirmation(context)
-                                        : null,
-                                    label: '清空',
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            '已有记录',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const LogTable(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
+          return _buildWideLayout(context, logProvider);
         } else {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                FCard(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          '添加点名记录',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        LogForm(),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                FCard(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Chip(label: Text('${logProvider.logCount} 条记录')),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                FButton(
-                                  onPress: logProvider.canUndo
-                                      ? () => _showUndoConfirmation(context)
-                                      : null,
-                                  label: '撤销',
-                                ),
-                                const SizedBox(width: 8),
-                                FButton(
-                                  style: FButtonStyle.destructive,
-                                  onPress: logProvider.logCount > 0
-                                      ? () => _showClearConfirmation(context)
-                                      : null,
-                                  label: '清空',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          '已有记录',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const LogTable(),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          );
+          return _buildNarrowLayout(context, logProvider);
         }
       },
     );
   }
 
-  void _showUndoConfirmation(BuildContext context) {
+  Widget _buildWideLayout(BuildContext context, LogProvider logProvider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Flexible(
+            flex: 2,
+            child: FCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '添加点名记录',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const LogForm(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Flexible(
+            flex: 2,
+            child: FCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildLogHeader(context, logProvider),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '已有记录',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const LogTable(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNarrowLayout(BuildContext context, LogProvider logProvider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '添加点名记录',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const LogForm(),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildLogHeader(context, logProvider),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '已有记录',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const LogTable(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogHeader(BuildContext context, LogProvider logProvider) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Chip(label: Text('${logProvider.logCount} 条记录')),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FButton(
+              onPress: logProvider.canUndo
+                  ? () => _showUndoConfirmation(context)
+                  : null,
+              label: '撤销',
+            ),
+            const SizedBox(width: 8),
+            FButton(
+              style: FButtonStyle.destructive,
+              onPress: logProvider.logCount > 0
+                  ? () => _showClearConfirmation(context)
+                  : null,
+              label: '清空',
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: '历史记录',
+              onPressed: () => _showHistoryDialog(context),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showHistoryDialog(BuildContext context) async {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final history = await logProvider.getHistory();
+
+    if (history.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('暂无历史记录')),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '确认撤销',
-        body: '您确定要撤销上一条记录吗？',
-        actions: [
-          FButton(
-            onPress: () => Navigator.pop(context),
-            label: '取消',
-          ),
-          FButton(
-            onPress: () {
-              Provider.of<LogProvider>(context, listen: false).undoLastLog();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('已撤销上一条记录'),
-                  duration: Duration(seconds: 2),
+      builder: (context) => AlertDialog(
+        title: const Text('历史记录'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: history.length,
+            itemBuilder: (context, index) {
+              final item = history[index];
+              final id = item['id'] as int;
+              final name = item['name'] as String;
+              final count = item['log_count'] as int;
+              final createdAt = DateTime.parse(item['created_at'] as String);
+              final formattedDate = '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+
+              return ListTile(
+                title: Text(name),
+                subtitle: Text('$formattedDate · $count 条记录'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.restore),
+                      tooltip: '恢复',
+                      onPressed: () async {
+                        await logProvider.restoreFromHistory(id);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已恢复历史记录')),
+                          );
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      tooltip: '删除',
+                      onPressed: () => _showDeleteHistoryConfirmation(context, logProvider, id),
+                    ),
+                  ],
                 ),
               );
             },
-            label: '确认撤销',
+          ),
+        ),
+        actions: [
+          FButton(
+            label: '关闭',
+            onPress: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -286,22 +322,70 @@ class AddRecordPage extends StatelessWidget {
         body: '您确定要清空所有点名记录吗？此操作不可撤销！',
         actions: [
           FButton(
-            onPress: () => Navigator.pop(context),
             label: '取消',
+            onPress: () => Navigator.pop(context),
           ),
           FButton(
+            label: '确认清空',
             style: FButtonStyle.destructive,
             onPress: () {
               Provider.of<LogProvider>(context, listen: false).clearAllLogs();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('已清空所有记录'),
-                  duration: Duration(seconds: 2),
-                ),
+                const SnackBar(content: Text('已清空所有记录')),
               );
             },
-            label: '确认清空',
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUndoConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => FDialog(
+        title: '确认撤销',
+        body: '您确定要撤销上一条记录吗？',
+        actions: [
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
+          ),
+          FButton(
+            label: '确认撤销',
+            onPress: () {
+              Provider.of<LogProvider>(context, listen: false).undoLastLog();
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteHistoryConfirmation(BuildContext context, LogProvider logProvider, int id) {
+    showDialog(
+      context: context,
+      builder: (context) => FDialog(
+        title: '确认删除',
+        body: '确定要删除这条历史记录吗？',
+        actions: [
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(context),
+          ),
+          FButton(
+            label: '确认删除',
+            style: FButtonStyle.destructive,
+            onPress: () async {
+              await logProvider.deleteHistoryRecord(id);
+              Navigator.pop(context);
+              if (context.mounted) {
+                Navigator.pop(context);
+                _showHistoryDialog(context);
+              }
+            },
           ),
         ],
       ),

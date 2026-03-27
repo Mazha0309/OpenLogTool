@@ -35,6 +35,20 @@ class LogEntry {
     };
   }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'time': time,
+      'controller': controller,
+      'callsign': callsign,
+      'report': report,
+      'qth': qth,
+      'device': device,
+      'power': power,
+      'antenna': antenna,
+      'height': height,
+    };
+  }
+
   factory LogEntry.fromJson(Map<String, dynamic> json) {
     return LogEntry(
       time: json['time'] ?? '',
@@ -46,6 +60,20 @@ class LogEntry {
       power: json['power'] ?? '',
       antenna: json['antenna'] ?? '',
       height: json['height'] ?? '',
+    );
+  }
+
+  factory LogEntry.fromMap(Map<String, dynamic> map) {
+    return LogEntry(
+      time: map['time'] ?? '',
+      controller: map['controller'] ?? '',
+      callsign: map['callsign'] ?? '',
+      report: map['report'] ?? '',
+      qth: map['qth'] ?? '',
+      device: map['device'] ?? '',
+      power: map['power'] ?? '',
+      antenna: map['antenna'] ?? '',
+      height: map['height'] ?? '',
     );
   }
 

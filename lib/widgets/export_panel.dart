@@ -74,8 +74,7 @@ class ExportPanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     '• JSON: 标准JSON格式，包含所有记录数据\n'
-                    '• Excel: 使用index.html中的样式，包含分组和样式\n'
-                    '• PNG: 表格截图，适合分享和打印',
+                    '• Excel: 使用Excel格式，包含分组和样式',
                     style: TextStyle(
                       fontSize: 14,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -126,17 +125,6 @@ class ExportPanel extends StatelessWidget {
                   icon: const Icon(Icons.table_chart),
                   label: const Text('导出 Excel'),
                   onPressed: () => _exportExcel(context),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                  ),
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.image),
-                  label: const Text('导出 PNG'),
-                  onPressed: () => _exportPNG(context),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       vertical: 12,
@@ -360,10 +348,6 @@ class ExportPanel extends StatelessWidget {
     }
 
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _exportPNG(BuildContext context) async {
-    _showSnackBar(context, 'PNG导出功能开发中');
   }
 
   Future<void> _importJSON(BuildContext context) async {

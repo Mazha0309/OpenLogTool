@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/models/dictionary_item.dart';
 
 /// 日志表单组件
 /// 用于添加和编辑点名记录
@@ -360,23 +361,23 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     required TextEditingController controller,
     required String label,
     required String hintText,
-    required List<String> options,
+    required List<DictionaryItem> options,
     void Function(String)? onChanged,
     bool upperCase = true,
   }) {
     final textCapitalization = upperCase ? TextCapitalization.characters : TextCapitalization.none;
     final inputFormatters = upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
 
-    return Autocomplete<String>(
+    return Autocomplete<DictionaryItem>(
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
-          return const Iterable<String>.empty();
+          return const Iterable<DictionaryItem>.empty();
         }
         return options.where((option) =>
-            option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+            option.matches(textEditingValue.text));
       },
-      onSelected: (String selection) {
-        controller.text = selection;
+      onSelected: (DictionaryItem selection) {
+        controller.text = selection.raw;
       },
       fieldViewBuilder: (
         BuildContext context,
@@ -409,25 +410,26 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       },
       optionsViewBuilder: (
         BuildContext context,
-        AutocompleteOnSelected<String> onSelected,
-        Iterable<String> options,
+        AutocompleteOnSelected<DictionaryItem> onSelected,
+        Iterable<DictionaryItem> options,
       ) {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
             elevation: 4.0,
             borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              height: 200.0,
-              width: 200,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
               child: ListView.builder(
                 padding: EdgeInsets.zero,
+                shrinkWrap: true,
                 itemCount: options.length,
                 itemBuilder: (BuildContext context, int index) {
-                  final String option = options.elementAt(index);
+                  final DictionaryItem item = options.elementAt(index);
                   return ListTile(
-                    title: Text(option),
-                    onTap: () => onSelected(option),
+                    title: Text(item.raw),
+                    dense: true,
+                    onTap: () => onSelected(item),
                   );
                 },
               ),

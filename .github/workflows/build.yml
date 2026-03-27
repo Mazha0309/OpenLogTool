@@ -2,9 +2,9 @@ name: Build OpenLogTool
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 env:
   FLUTTER_VERSION: '3.41.4'
@@ -44,10 +44,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Get pubspec version
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Generate version file
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ needs.get-version.outputs.build_number }}
+        run: dart tool/gen_version.dart
 
       - name: Create keystore
         run: |
@@ -67,24 +78,46 @@ jobs:
           ls -la android/app/keystore.jks
           keytool -list -v -keystore android/app/keystore.jks -storepass "${{ secrets.KEYSTORE_STORE_PASSWORD }}" -alias "${{ secrets.KEYSTORE_KEY_ALIAS }}"
 
+      - name: Set Gradle version
+        run: |
+          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}-${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
+          echo "=== After sed replacement ==="
+          grep "appVersionName" android/app/build.gradle.kts
+
+      - name: Debug gradle config
+        run: |
+          echo "=== Full gradle content ==="
+          head -35 android/app/build.gradle.kts
+
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Clean Gradle cache
+        run: |
+          rm -rf android/.gradle
+          rm -rf android/app/build
+          rm -rf build
+
       - name: Build APK with version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+          GRADLE_OPTS: "-Dorg.gradle.project.VERSION_NAME=${{ env.VERSION_NAME }} -Dorg.gradle.project.CI_COMMIT_SHA=${{ github.sha }} -Dorg.gradle.project.CI_BUILD_NUMBER=${{ github.run_number }}"
         run: |
           flutter build apk --release \
-            --build-name="${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}" \
+            --build-name="${{ env.VERSION_NAME }}.${{ needs.get-version.outputs.short_sha }}" \
             --build-number="${{ needs.get-version.outputs.build_number }}"
 
       - name: Rename APK
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/OpenLogTool-${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}.apk"
+          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/OpenLogTool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-android-apk
-          path: build/app/outputs/flutter-apk/OpenLogTool-${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}.apk
+          path: build/app/outputs/flutter-apk/OpenLogTool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}.apk
 
   # 构建 Linux
   build-linux:
@@ -94,15 +127,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Linux dependencies
+      - name: Get pubspec version
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Set Gradle version
+        run: |
+          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}/' android/app/build.gradle.kts
+          sed -i 's/COMMIT_PLACEHOLDER/${{ needs.get-version.outputs.short_sha }}/' android/app/build.gradle.kts
+          sed -i 's/BUILD_PLACEHOLDER/${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
+          head -15 android/app/build.gradle.kts
+
+      - name: Setup Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
 
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
@@ -115,15 +160,14 @@ jobs:
 
       - name: Package as tar.gz
         run: |
-          # 打包 Linux 应用为 tar.gz
           cd build/linux/x64/release
-          tar -czvf openlogtool-${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}-linux-x86_64.tar.gz bundle/
+          tar -czvf openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz bundle/
 
       - name: Upload Linux
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-linux
-          path: build/linux/x64/release/openlogtool-${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}-linux-x86_64.tar.gz
+          path: build/linux/x64/release/openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz
 
   # 构建 Windows
   build-windows:
@@ -132,6 +176,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Get pubspec version
+        shell: pwsh
+        run: |
+          $line = Select-String -Path "pubspec.yaml" -Pattern "^version:"
+          $version = $line.Line -replace "^version:\s*", "" -replace "\+.*", ""
+          echo "VERSION_NAME=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -161,7 +212,7 @@ jobs:
 
       - name: Update Installer Version
         run: |
-          $version = "${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}"
+          $version = "${{ env.VERSION_NAME }}.${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}"
           (Get-Content windows/installer.iss) -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`"" | Set-Content windows/installer.iss
           Get-Content windows/installer.iss | Select-String "MyAppVersion"
 
@@ -182,6 +233,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Get pubspec version
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -223,8 +279,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}
-          name: OpenLogTool v${{ needs.get-version.outputs.version }}.${{ needs.get-version.outputs.short_sha }}
+          tag_name: v${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}
+          name: OpenLogTool v${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}
           draft: false
           prerelease: false
           generate_release_notes: true
