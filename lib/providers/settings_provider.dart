@@ -1,24 +1,29 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openlogtool/config/app_config.dart';
+import 'package:openlogtool/models/export_settings.dart';
 
 class SettingsProvider with ChangeNotifier {
   static const String _wideLayoutKey = 'wideLayoutEnabled';
   static const String _themeColorKey = 'themeColor';
   static const String _isDarkModeKey = 'isDarkMode';
   static const String _fontFamilyKey = 'fontFamily';
+  static const String _exportSettingsKey = 'exportSettings';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
   bool _isDarkMode = false;
   String _fontFamily = '';
   List<String> _availableFonts = [];
+  ExportSettings _exportSettings = ExportSettings();
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
   bool get isDarkMode => _isDarkMode;
   String? get fontFamily => _fontFamily.isEmpty ? null : _fontFamily;
   List<String> get availableFonts => _availableFonts;
+  ExportSettings get exportSettings => _exportSettings;
 
   SettingsProvider() {
     _loadSettings();
@@ -36,6 +41,15 @@ class SettingsProvider with ChangeNotifier {
     final colorValue = prefs.getInt(_themeColorKey);
     if (colorValue != null) {
       _themeColor = Color(colorValue);
+    }
+
+    final exportSettingsJson = prefs.getString(_exportSettingsKey);
+    if (exportSettingsJson != null) {
+      try {
+        _exportSettings = ExportSettings.fromJson(json.decode(exportSettingsJson));
+      } catch (_) {
+        _exportSettings = ExportSettings();
+      }
     }
     
     notifyListeners();
@@ -77,6 +91,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateExportSettings(ExportSettings settings) async {
+    _exportSettings = settings;
+    await _saveSetting(_exportSettingsKey, json.encode(settings.toJson()));
+    notifyListeners();
+  }
+
   Future<void> _saveSetting(String key, dynamic value) async {
     final prefs = await SharedPreferences.getInstance();
     
@@ -96,12 +116,14 @@ class SettingsProvider with ChangeNotifier {
     _themeColor = const Color(0xFF2196F3);
     _isDarkMode = false;
     _fontFamily = '';
+    _exportSettings = ExportSettings();
     
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_wideLayoutKey);
     await prefs.remove(_themeColorKey);
     await prefs.remove(_isDarkModeKey);
     await prefs.remove(_fontFamilyKey);
+    await prefs.remove(_exportSettingsKey);
     
     notifyListeners();
   }

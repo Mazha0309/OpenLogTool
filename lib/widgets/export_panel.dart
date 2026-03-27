@@ -5,10 +5,11 @@ import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/models/export_settings.dart';
 
 class ExportPanel extends StatelessWidget {
   const ExportPanel({super.key});
@@ -17,7 +18,6 @@ class ExportPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 根据可用宽度判断是否使用横向排列
         final isWideScreen = constraints.maxWidth > 600;
         
         return Column(
@@ -33,7 +33,6 @@ class ExportPanel extends StatelessWidget {
             
             const SizedBox(height: 24),
             
-            // 根据屏幕宽度选择横向或纵向排列
             if (isWideScreen)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,11 +54,10 @@ class ExportPanel extends StatelessWidget {
             
             const SizedBox(height: 16),
             
-            // 文件信息
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -96,16 +94,25 @@ class ExportPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '导出数据',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '导出数据',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => _showExportSettingsDialog(context),
+                  tooltip: 'Excel导出设置',
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             
-            // 导出按钮
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -156,7 +163,6 @@ class ExportPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             
-            // 导入按钮
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -188,6 +194,326 @@ class ExportPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showExportSettingsDialog(BuildContext context) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    ExportSettings settings = settingsProvider.exportSettings;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Excel导出设置'),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('抬头文字'),
+                    TextField(
+                      controller: TextEditingController(text: settings.headerText),
+                      decoration: const InputDecoration(
+                        hintText: '如: BR5AI{yyyy-MM-dd}日点名记录',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setState(() => settings.headerText = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    const Text('抬头背景色'),
+                    Row(
+                      children: [
+                        _buildColorButton(settings.headerBackgroundColor, () async {
+                          final color = await _showColorPickerDialog(
+                            context,
+                            '选择抬头背景色',
+                            settings.headerBackgroundColor,
+                          );
+                          if (color != null) {
+                            setState(() => settings.headerBackgroundColor = color);
+                          }
+                        }),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${settings.headerBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    const Text('主控栏背景色'),
+                    Row(
+                      children: [
+                        _buildColorButton(settings.controllerBackgroundColor, () async {
+                          final color = await _showColorPickerDialog(
+                            context,
+                            '选择主控栏背景色',
+                            settings.controllerBackgroundColor,
+                          );
+                          if (color != null) {
+                            setState(() => settings.controllerBackgroundColor = color);
+                          }
+                        }),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${settings.controllerBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    Row(
+                      children: [
+                        const Text('双色交替'),
+                        const Spacer(),
+                        Switch(
+                          value: settings.useAlternateColors,
+                          onChanged: (value) {
+                            setState(() => settings.useAlternateColors = value);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    const Text('普通背景色'),
+                    Row(
+                      children: [
+                        _buildColorButton(settings.tableBackgroundColor, () async {
+                          final color = await _showColorPickerDialog(
+                            context,
+                            '选择普通背景色',
+                            settings.tableBackgroundColor,
+                          );
+                          if (color != null) {
+                            setState(() => settings.tableBackgroundColor = color);
+                          }
+                        }),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${settings.tableBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    if (settings.useAlternateColors) ...[
+                      const SizedBox(height: 16),
+                      const Text('交替行颜色'),
+                      Row(
+                        children: [
+                          _buildColorButton(settings.alternateRowColor, () async {
+                            final color = await _showColorPickerDialog(
+                              context,
+                              '选择交替行颜色',
+                              settings.alternateRowColor,
+                            );
+                            if (color != null) {
+                              setState(() => settings.alternateRowColor = color);
+                            }
+                          }),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'HEX: #${settings.alternateRowColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    
+                    const Text('表格字体'),
+                    DropdownButton<String>(
+                      value: settings.fontFamily.isEmpty ? 'Roboto' : settings.fontFamily,
+                      isExpanded: true,
+                      items: Provider.of<SettingsProvider>(context, listen: false)
+                          .availableFonts
+                          .map((font) => DropdownMenuItem(
+                                value: font,
+                                child: Text(font),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => settings.fontFamily = value);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  settingsProvider.updateExportSettings(settings);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('设置已保存')),
+                  );
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildColorButton(Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade400, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Icon(Icons.colorize, size: 20, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Future<Color?> _showColorPickerDialog(
+    BuildContext context,
+    String title,
+    Color initialColor,
+  ) async {
+    int red = initialColor.r.toInt();
+    int green = initialColor.g.toInt();
+    int blue = initialColor.b.toInt();
+    
+    return showDialog<Color>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(title),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Color.fromARGB(255, red, green, blue),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade400, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildColorSlider(
+                      label: '红色',
+                      value: red.toDouble(),
+                      color: Colors.red,
+                      onChanged: (value) {
+                        setState(() => red = value.toInt());
+                      },
+                    ),
+                    _buildColorSlider(
+                      label: '绿色',
+                      value: green.toDouble(),
+                      color: Colors.green,
+                      onChanged: (value) {
+                        setState(() => green = value.toInt());
+                      },
+                    ),
+                    _buildColorSlider(
+                      label: '蓝色',
+                      value: blue.toDouble(),
+                      color: Colors.blue,
+                      onChanged: (value) {
+                        setState(() => blue = value.toInt());
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'HEX: #${red.toRadixString(16).padLeft(2, '0')}${green.toRadixString(16).padLeft(2, '0')}${blue.toRadixString(16).padLeft(2, '0')}'.toUpperCase(),
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context, Color.fromARGB(255, red, green, blue));
+                  },
+                  child: const Text('确定'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildColorSlider({
+    required String label,
+    required double value,
+    required Color color,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$label: ${value.toInt()}'),
+        Slider(
+          value: value,
+          min: 0,
+          max: 255,
+          activeColor: color,
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 
@@ -224,6 +550,8 @@ class ExportPanel extends StatelessWidget {
 
   Future<void> _exportExcel(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = settingsProvider.exportSettings;
     final logs = logProvider.logs;
 
     if (logs.isEmpty) {
@@ -240,9 +568,57 @@ class ExportPanel extends StatelessWidget {
         excel.delete(defaultSheet);
       }
 
-      final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+      final now = DateTime.now();
+      String headerText = settings.headerText;
+      headerText = headerText.replaceAll('{yyyy}', now.year.toString());
+      headerText = headerText.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
+      headerText = headerText.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
+      headerText = headerText.replaceAll('{yyyy-MM-dd}', '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}');
 
-      sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 0);
+      final headerColor = excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
+      final controllerColor = excel_lib.ExcelColor.fromInt(settings.controllerBackgroundColor.toARGB32());
+      final alternateColor = excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
+      const whiteColor = excel_lib.ExcelColor.white;
+
+      final borderStyle = excel_lib.Border(
+        borderStyle: excel_lib.BorderStyle.Thin,
+        borderColorHex: excel_lib.ExcelColor.black,
+      );
+
+      sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
+      sheet.merge(excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 0), customValue: excel_lib.TextCellValue(headerText));
+      sheet.row(0).forEach((cell) {
+        if (cell != null) {
+          cell.cellStyle = excel_lib.CellStyle(
+            backgroundColorHex: headerColor,
+            fontSize: 14,
+            bold: true,
+            horizontalAlign: excel_lib.HorizontalAlign.Center,
+            textWrapping: excel_lib.TextWrapping.WrapText,
+            topBorder: borderStyle,
+            bottomBorder: borderStyle,
+            leftBorder: borderStyle,
+            rightBorder: borderStyle,
+          );
+        }
+      });
+
+      final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+      sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 1);
+      sheet.row(1).forEach((cell) {
+        if (cell != null) {
+          cell.cellStyle = excel_lib.CellStyle(
+            backgroundColorHex: headerColor,
+            fontSize: 12,
+            bold: true,
+            horizontalAlign: excel_lib.HorizontalAlign.Center,
+            topBorder: borderStyle,
+            bottomBorder: borderStyle,
+            leftBorder: borderStyle,
+            rightBorder: borderStyle,
+          );
+        }
+      });
 
       final grouped = <String, List<LogEntry>>{};
       for (final log in logs) {
@@ -251,7 +627,7 @@ class ExportPanel extends StatelessWidget {
       }
 
       int globalIndex = 1;
-      int currentRow = 1;
+      int currentRow = 2;
 
       for (final controller in grouped.keys) {
         final controllerLogs = grouped[controller]!;
@@ -261,9 +637,31 @@ class ExportPanel extends StatelessWidget {
 
         final controllerRow = <String>['点名主控:', controllerTime, controller, '', '', '', '', '', '', ''];
         sheet.insertRowIterables(controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(), currentRow);
+        sheet.row(currentRow).forEach((cell) {
+          if (cell != null) {
+            cell.cellStyle = excel_lib.CellStyle(
+              backgroundColorHex: controllerColor,
+              fontSize: 11,
+              bold: true,
+              topBorder: borderStyle,
+              bottomBorder: borderStyle,
+              leftBorder: borderStyle,
+              rightBorder: borderStyle,
+            );
+          }
+        });
         currentRow++;
 
-        for (final log in controllerLogs) {
+        for (int i = 0; i < controllerLogs.length; i++) {
+          final log = controllerLogs[i];
+          excel_lib.ExcelColor rowColor;
+          
+          if (settings.useAlternateColors) {
+            rowColor = i % 2 == 0 ? whiteColor : alternateColor;
+          } else {
+            rowColor = whiteColor;
+          }
+          
           final rowData = [
             excel_lib.TextCellValue(globalIndex.toString()),
             excel_lib.TextCellValue(log.time),
@@ -277,6 +675,18 @@ class ExportPanel extends StatelessWidget {
             excel_lib.TextCellValue(''),
           ];
           sheet.insertRowIterables(rowData, currentRow);
+          sheet.row(currentRow).forEach((cell) {
+            if (cell != null) {
+              cell.cellStyle = excel_lib.CellStyle(
+                backgroundColorHex: rowColor,
+                fontSize: 10,
+                topBorder: borderStyle,
+                bottomBorder: borderStyle,
+                leftBorder: borderStyle,
+                rightBorder: borderStyle,
+              );
+            }
+          });
           globalIndex++;
           currentRow++;
         }
@@ -293,7 +703,6 @@ class ExportPanel extends StatelessWidget {
         return;
       }
 
-      final now = DateTime.now();
       final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.xlsx';
       final file = File('${directory.path}/$filename');
 
@@ -365,7 +774,6 @@ class ExportPanel extends StatelessWidget {
       final jsonData = json.decode(content) as List;
       final logProvider = Provider.of<LogProvider>(context, listen: false);
       
-      // 解析JSON数据
       final importedLogs = jsonData.map((item) {
         return LogEntry(
           time: item['time'] ?? '',
@@ -400,23 +808,46 @@ class ExportPanel extends StatelessWidget {
     );
   }
 
-  void _showSuccessDialog(BuildContext context, String title, String message, String filePath) {
+  void _showSuccessDialog(BuildContext context, String title, String message, String path) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: Text(message),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(message),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    path,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 20),
+                  onPressed: () {
+                    // 复制到剪贴板功能
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('路径已复制')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('关闭'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              OpenFile.open(filePath);
-              Navigator.pop(context);
-            },
-            child: const Text('打开文件'),
           ),
         ],
       ),
