@@ -46,11 +46,8 @@ jobs:
 
       - name: Get pubspec version
         run: |
-          echo "=== Extracting version from pubspec.yaml ==="
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
-          echo "VERSION_NAME: [$VERSION_NAME]"
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
-          echo "=== Set VERSION_NAME in GITHUB_ENV ==="
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -61,7 +58,6 @@ jobs:
         env:
           CI_COMMIT_SHA: ${{ github.sha }}
           CI_BUILD_NUMBER: ${{ needs.get-version.outputs.build_number }}
-          VERSION_NAME: ${{ env.VERSION_NAME }}
         run: dart tool/gen_version.dart
 
       - name: Create keystore
@@ -84,11 +80,9 @@ jobs:
 
       - name: Set Gradle version
         run: |
-          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}/' android/app/build.gradle.kts
-          sed -i 's/COMMIT_PLACEHOLDER/${{ needs.get-version.outputs.short_sha }}/' android/app/build.gradle.kts
-          sed -i 's/BUILD_PLACEHOLDER/${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
+          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}-${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
           echo "=== After sed replacement ==="
-          grep -A3 "val versionName" android/app/build.gradle.kts
+          grep "val versionName" android/app/build.gradle.kts
 
       - name: Get dependencies
         run: flutter pub get

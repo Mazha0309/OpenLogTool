@@ -6,10 +6,7 @@ plugins {
 
 import java.util.Properties
 
-val versionNameBase = System.getProperty("VERSION_NAME") ?: "VERSION_PLACEHOLDER"
-val commitHash = System.getProperty("CI_COMMIT_SHA")?.take(7) ?: "COMMIT_PLACEHOLDER"
-val buildNumber = System.getProperty("CI_BUILD_NUMBER") ?: "BUILD_PLACEHOLDER"
-val versionName = "$versionNameBase-$commitHash-$buildNumber"
+val versionName = "VERSION_PLACEHOLDER"
 
 android {
     namespace = "com.mazha0309.openlogtool"
