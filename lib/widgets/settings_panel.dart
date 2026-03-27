@@ -92,6 +92,32 @@ class SettingsPanel extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 12),
+
+                // 字体选择
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('字体'),
+                          SizedBox(height: 2),
+                          Text(
+                            '选择应用字体',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FButton(
+                      label: settingsProvider.fontFamily ?? '系统默认',
+                      onPress: () => _showFontPicker(context),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -778,6 +804,62 @@ class SettingsPanel extends StatelessWidget {
         actions: [
           FButton(
             label: '关闭',
+            onPress: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFontPicker(BuildContext context) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择字体'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: settingsProvider.availableFonts.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                final isSelected = settingsProvider.fontFamily == null || settingsProvider.fontFamily!.isEmpty;
+                return ListTile(
+                  title: const Text('系统默认'),
+                  trailing: isSelected
+                      ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
+                      : null,
+                  selected: isSelected,
+                  onTap: () {
+                    settingsProvider.setFontFamily(null);
+                    Navigator.pop(context);
+                  },
+                );
+              }
+              
+              final font = settingsProvider.availableFonts[index - 1];
+              final isSelected = font == settingsProvider.fontFamily;
+              
+              return ListTile(
+                title: Text(font, style: TextStyle(fontFamily: font)),
+                trailing: isSelected
+                    ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
+                    : null,
+                selected: isSelected,
+                onTap: () {
+                  settingsProvider.setFontFamily(font);
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          FButton(
+            label: '取消',
             onPress: () => Navigator.pop(context),
           ),
         ],

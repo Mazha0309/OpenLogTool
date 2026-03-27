@@ -36,8 +36,8 @@ class MyApp extends StatelessWidget {
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final isDark = settingsProvider.isDarkMode;
     final themeColor = settingsProvider.themeColor;
+    final fontFamily = settingsProvider.fontFamily;
 
-    // 创建自定义forui主题，使用用户选择的主题色
     final foruiTheme = FThemeData.inherit(
       colorScheme: FColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,
@@ -60,15 +60,13 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
-      // 同时设置Material主题，确保与forui风格一致
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: themeColor,
           brightness: Brightness.light,
         ),
-        fontFamily: 'Roboto',
-        // 统一样式
+        fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -92,7 +90,7 @@ class MyApp extends StatelessWidget {
           seedColor: themeColor,
           brightness: Brightness.dark,
         ),
-        fontFamily: 'Roboto',
+        fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(

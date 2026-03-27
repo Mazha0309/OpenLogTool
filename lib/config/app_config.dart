@@ -36,4 +36,58 @@ class AppConfig {
     } catch (_) {}
     return 'local';
   }
+
+  static List<String> getSystemFonts() {
+    final List<String> fonts = [];
+    
+    try {
+      if (Platform.isLinux) {
+        final result = Process.runSync('fc-list', ['--format=%{family}\n']);
+        if (result.exitCode == 0) {
+          final output = (result.stdout as String).trim();
+          final lines = output.split('\n');
+          for (final line in lines) {
+            final font = line.trim();
+            if (font.isNotEmpty && !fonts.contains(font)) {
+              fonts.add(font);
+            }
+          }
+        }
+      } else if (Platform.isMacOS) {
+        final result = Process.runSync('system_profiler', ['SPFontsDataType']);
+        if (result.exitCode == 0) {
+          final regex = RegExp(r'^\s*(.+?):\s*$', multiLine: true);
+          final matches = regex.allMatches(result.stdout as String);
+          for (final match in matches) {
+            final font = match.group(1)?.trim();
+            if (font != null && font.isNotEmpty && !fonts.contains(font)) {
+              fonts.add(font);
+            }
+          }
+        }
+      } else if (Platform.isWindows) {
+        final regResult = Process.runSync(
+          'reg',
+          ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'],
+        );
+        if (regResult.exitCode == 0) {
+          final regex = RegExp(r'^\s*(.+?)\s+\(.*\)\s*=');
+          final matches = regex.allMatches(regResult.stdout as String);
+          for (final match in matches) {
+            final font = match.group(1)?.trim();
+            if (font != null && font.isNotEmpty && !fonts.contains(font)) {
+              fonts.add(font);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (fonts.isEmpty) {
+      fonts.addAll(['Roboto', 'Arial', 'sans-serif']);
+    }
+
+    fonts.sort();
+    return fonts;
+  }
 }
