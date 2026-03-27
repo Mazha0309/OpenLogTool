@@ -82,7 +82,12 @@ jobs:
         run: |
           sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}-${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
           echo "=== After sed replacement ==="
-          grep "val versionName" android/app/build.gradle.kts
+          grep "appVersionName" android/app/build.gradle.kts
+
+      - name: Debug gradle config
+        run: |
+          echo "=== Full gradle content ==="
+          head -35 android/app/build.gradle.kts
 
       - name: Get dependencies
         run: flutter pub get

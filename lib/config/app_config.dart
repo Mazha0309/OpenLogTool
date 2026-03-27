@@ -22,10 +22,28 @@ class AppConfig {
     return '0';
   }
 
-  static String get versionName => appVersion;
-  static String get commitHash => _commitHash;
-  static String get buildNumber => _buildNumber;
-  static String get fullVersion => '$versionName-$commitHash-$buildNumber';
+  static String get versionName {
+    final parts = appVersion.split('-');
+    return parts.isNotEmpty ? parts[0] : appVersion;
+  }
+  
+  static String get commitHash {
+    final parts = appVersion.split('-');
+    if (parts.length >= 2) {
+      return parts[1];
+    }
+    return _commitHash;
+  }
+  
+  static String get buildNumber {
+    final parts = appVersion.split('-');
+    if (parts.length >= 3) {
+      return parts[2];
+    }
+    return _buildNumber;
+  }
+  
+  static String get fullVersion => appVersion;
 
   static String _getGitHash() {
     try {

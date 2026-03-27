@@ -6,7 +6,7 @@ plugins {
 
 import java.util.Properties
 
-val versionName = "VERSION_PLACEHOLDER"
+val appVersionName = "VERSION_PLACEHOLDER"
 
 android {
     namespace = "com.mazha0309.openlogtool"
@@ -27,7 +27,7 @@ android {
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = flutter.versionCode
-        versionName = versionName
+        versionName = appVersionName
     }
 
     val keystoreProperties = Properties()
