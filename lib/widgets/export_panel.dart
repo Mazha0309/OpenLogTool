@@ -74,7 +74,7 @@ class ExportPanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     '• JSON: 标准JSON格式，包含所有记录数据\n'
-                    '• Excel: 使用index.html中的样式，包含分组和样式',
+                    '• Excel: 使用Excel格式，包含分组和样式',
                     style: TextStyle(
                       fontSize: 14,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
