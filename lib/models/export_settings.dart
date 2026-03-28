@@ -12,13 +12,13 @@ class ExportSettings {
   String fontFamily;
 
   ExportSettings({
-    this.headerText = 'BR5AI{yyyy-MM-dd}日点名记录',
+    this.headerText = '{yyyy-MM-dd}日点名记录',
     this.headerDateFormat = 'yyyy-MM-dd',
-    this.headerBackgroundColor = const Color(0xFF2196F3),
-    this.headerRowBackgroundColor = const Color(0xFF1976D2),
-    this.controllerBackgroundColor = const Color(0xFFFFFF00),
+    this.headerBackgroundColor = const Color(0xFFC0E5F2),
+    this.headerRowBackgroundColor = const Color(0xFF1D85EE),
+    this.controllerBackgroundColor = const Color(0xFFFFFF64),
     this.tableBackgroundColor = Colors.white,
-    this.alternateRowColor = const Color(0xFFADD8E6),
+    this.alternateRowColor = const Color(0xFFC0E5F2),
     this.useAlternateColors = true,
     this.fontFamily = 'Roboto',
   });
