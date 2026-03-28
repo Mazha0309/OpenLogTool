@@ -565,13 +565,13 @@ class ExportPanel extends StatelessWidget {
 
                                 _buildExampleItem(
                                   context,
-                                  '文件名: 点名记录_{yyyy-MM-dd}',
+                                  '文件名: 点名记录_{yyyy}-{MM}-{dd}',
                                   '点名记录_2024-03-28.xlsx',
                                 ),
                                 _buildExampleItem(
                                   context,
-                                  '文件名: 通联_{yyyyMMdd}_{HHmmss}',
-                                  '通联_20240328_143045.xlsx',
+                                  '文件名: 通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}',
+                                  '通联_2024-03-28_143045.xlsx',
                                 ),
                                 _buildExampleItem(
                                   context,
