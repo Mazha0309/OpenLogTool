@@ -461,7 +461,7 @@ class ExportPanel extends StatelessWidget {
                           label: const Text('恢复默认颜色'),
                           onPressed: () {
                             setState(() {
-                              settings.headerBackgroundColor = const Color(0xFFC0E5F2);
+                              settings.headerBackgroundColor = const Color(0xFF1E84D2);
                               settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
                               settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
                               settings.tableBackgroundColor = Colors.white;

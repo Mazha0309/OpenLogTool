@@ -15,7 +15,7 @@ class ExportSettings {
   ExportSettings({
     this.headerText = '{yyyy-MM-dd}日点名记录',
     this.headerDateFormat = 'yyyy-MM-dd',
-    this.headerBackgroundColor = const Color(0xFFC0E5F2),
+    this.headerBackgroundColor = const Color(0xFF1E84D2),
     this.headerRowBackgroundColor = const Color(0xFFCFE7FF),
     this.controllerBackgroundColor = const Color(0xFFFFFFC3),
     this.tableBackgroundColor = Colors.white,

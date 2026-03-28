@@ -115,21 +115,29 @@ class _LogTableState extends State<LogTable> {
 
     final horizontalController = ScrollController();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) => true,
-            child: Scrollbar(
-              controller: horizontalController,
-              thumbVisibility: true,
-              trackVisibility: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                controller: horizontalController,
-                child: SingleChildScrollView(
-                  child: DataTable(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 如果高度无限，使用一个默认高度
+        final maxHeight = constraints.maxHeight.isFinite 
+            ? constraints.maxHeight 
+            : 400.0;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            SizedBox(
+              height: maxHeight,
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) => true,
+                child: Scrollbar(
+                  controller: horizontalController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: horizontalController,
+                    child: SingleChildScrollView(
+                      child: DataTable(
                     columnSpacing: 16,
                     horizontalMargin: 16,
                     headingRowHeight: 48,
@@ -397,13 +405,15 @@ class _LogTableState extends State<LogTable> {
                         ],
                       );
                     }).toList(),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
