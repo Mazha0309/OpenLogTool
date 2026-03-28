@@ -5,14 +5,11 @@ import 'package:openlogtool/database/database_helper.dart';
 class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
   List<LogEntry> _undoStack = [];
-  int _editIndex = -1;
   bool _isInitialized = false;
 
   List<LogEntry> get logs => _logs;
   int get logCount => _logs.length;
   bool get canUndo => _logs.isNotEmpty;
-  int get editIndex => _editIndex;
-  bool get isEditing => _editIndex >= 0;
 
   int get todayLogCount {
     return _logs.length;
@@ -35,15 +32,8 @@ class LogProvider with ChangeNotifier {
 
   Future<void> addLog(LogEntry log) async {
     final db = DatabaseHelper();
-    if (isEditing) {
-      final existingLog = _logs[_editIndex];
-      await db.updateLog(_editIndex, log);
-      _logs[_editIndex] = log;
-      _editIndex = -1;
-    } else {
-      final id = await db.insertLog(log);
-      _logs.add(log);
-    }
+    await db.insertLog(log);
+    _logs.add(log);
     notifyListeners();
   }
 
@@ -109,20 +99,6 @@ class LogProvider with ChangeNotifier {
     final db = DatabaseHelper();
     await db.deleteHistory(historyId);
     notifyListeners();
-  }
-
-  void startEditing(int index) {
-    _editIndex = index;
-    notifyListeners();
-  }
-
-  void cancelEditing() {
-    _editIndex = -1;
-    notifyListeners();
-  }
-
-  LogEntry? getLogForEditing() {
-    return isEditing && _editIndex < _logs.length ? _logs[_editIndex] : null;
   }
 
   Future<void> importLogs(List<LogEntry> importedLogs) async {

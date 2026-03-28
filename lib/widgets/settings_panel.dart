@@ -401,7 +401,7 @@ class SettingsPanel extends StatelessWidget {
                   _buildColorOption(context, const Color(0xFFF44336), '红色', settingsProvider),
                   _buildColorOption(context, const Color(0xFFFF9800), '橙色', settingsProvider),
                   _buildColorOption(context, const Color(0xFF9C27B0), '紫色', settingsProvider),
-                  _buildColorOption(context, const Color(0xFF607D8B), '灰色', settingsProvider),
+                  _buildColorOption(context, const Color(0xFFFF93B7), '粉色', settingsProvider),
                 ],
               ),
               const SizedBox(height: 16),
