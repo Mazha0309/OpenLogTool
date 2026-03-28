@@ -215,6 +215,7 @@ jobs:
         run: |
           cd appimage-temp
           export VERSION="${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}"
+          export ARCH=x86_64
           ./appimagetool-x86_64.AppImage ../AppDir ../build/linux/x64/release/OpenLogTool-"$VERSION".${{ needs.get-version.outputs.build_number }}-linux-x86_64.AppImage
           
           ls -la ../build/linux/x64/release/*.AppImage 2>/dev/null || echo "No AppImage generated"
