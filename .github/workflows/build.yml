@@ -158,16 +158,82 @@ jobs:
       - name: Build Linux
         run: flutter build linux --release
 
+      - name: Install AppImage tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget fuse libfuse2
+
+      - name: Download linuxdeploy and AppImageKit
+        run: |
+          mkdir -p appimage-temp
+          cd appimage-temp
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-x86_64
+          chmod +x linuxdeploy-x86_64.AppImage AppRun-x86_64
+          cd ..
+
+      - name: Create AppDir structure
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy Flutter bundle
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+          
+          # Create desktop file
+          cat > AppDir/OpenLogTool.desktop << EOF
+          [Desktop Entry]
+          Name=OpenLogTool
+          Comment=点名记录工具
+          Exec=OpenLogTool
+          Icon=OpenLogTool
+          Terminal=false
+          Type=Application
+          Categories=Utility;
+          EOF
+          
+          cp AppDir/OpenLogTool.desktop AppDir/usr/share/applications/
+          
+          # Create icon placeholder (using a simple approach)
+          touch AppDir/OpenLogTool.png
+          cp AppDir/OpenLogTool.png AppDir/usr/share/icons/hicolor/256x256/apps/OpenLogTool.png
+
+      - name: Build AppImage
+        run: |
+          cd appimage-temp
+          export VERSION="${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}"
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir=../AppDir \
+            --output=appimage \
+            --deploy-plugin-flutter \
+            -e OpenLogTool
+          
+          # Find and rename the generated AppImage
+          cd ../build/linux/x64/release
+          for f in *.AppImage; do
+            if [ -f "$f" ]; then
+              echo "Found AppImage: $f"
+              TARGET_NAME="OpenLogTool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.AppImage"
+              mv "$f" "$TARGET_NAME"
+              echo "Renamed to: $TARGET_NAME"
+            fi
+          done
+          
+          ls -la *.AppImage 2>/dev/null || echo "No AppImage generated"
+
       - name: Package as tar.gz
         run: |
           cd build/linux/x64/release
           tar -czvf openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz bundle/
 
-      - name: Upload Linux
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-linux
-          path: build/linux/x64/release/openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz
+          path: |
+            build/linux/x64/release/*.tar.gz
+            build/linux/x64/release/*.AppImage
 
   # 构建 Windows
   build-windows:
