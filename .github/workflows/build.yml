@@ -161,28 +161,39 @@ jobs:
       - name: Install AppImage tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget fuse libfuse2
+          sudo apt-get install -y wget fuse libfuse2 file
 
-      - name: Download linuxdeploy and AppImageKit
+      - name: Download AppImageKit
         run: |
           mkdir -p appimage-temp
           cd appimage-temp
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-x86_64
-          chmod +x linuxdeploy-x86_64.AppImage AppRun-x86_64
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
           cd ..
 
       - name: Create AppDir structure
         run: |
           mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/lib
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           
           # Copy Flutter bundle
-          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/
+          
+          # Create AppRun script
+          cat > AppDir/AppRun << 'APPRUN_EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/OpenLogTool" "$@"
+          APPRUN_EOF
+          chmod +x AppDir/AppRun
           
           # Create desktop file
-          cat > AppDir/OpenLogTool.desktop << EOF
+          cat > AppDir/OpenLogTool.desktop << 'DESKTOP_EOF'
           [Desktop Entry]
           Name=OpenLogTool
           Comment=点名记录工具
@@ -191,36 +202,22 @@ jobs:
           Terminal=false
           Type=Application
           Categories=Utility;
-          EOF
+          DESKTOP_EOF
           
           cp AppDir/OpenLogTool.desktop AppDir/usr/share/applications/
           
-          # Create icon placeholder (using a simple approach)
+          # Create icon placeholder
           touch AppDir/OpenLogTool.png
           cp AppDir/OpenLogTool.png AppDir/usr/share/icons/hicolor/256x256/apps/OpenLogTool.png
+          cp AppDir/AppRun AppDir/.DirIcon
 
       - name: Build AppImage
         run: |
           cd appimage-temp
           export VERSION="${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}"
-          ./linuxdeploy-x86_64.AppImage \
-            --appdir=../AppDir \
-            --output=appimage \
-            --deploy-plugin-flutter \
-            -e OpenLogTool
+          ./appimagetool-x86_64.AppImage ../AppDir ../build/linux/x64/release/OpenLogTool-"$VERSION".${{ needs.get-version.outputs.build_number }}-linux-x86_64.AppImage
           
-          # Find and rename the generated AppImage
-          cd ../build/linux/x64/release
-          for f in *.AppImage; do
-            if [ -f "$f" ]; then
-              echo "Found AppImage: $f"
-              TARGET_NAME="OpenLogTool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.AppImage"
-              mv "$f" "$TARGET_NAME"
-              echo "Renamed to: $TARGET_NAME"
-            fi
-          done
-          
-          ls -la *.AppImage 2>/dev/null || echo "No AppImage generated"
+          ls -la ../build/linux/x64/release/*.AppImage 2>/dev/null || echo "No AppImage generated"
 
       - name: Package as tar.gz
         run: |
