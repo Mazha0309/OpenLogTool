@@ -1048,9 +1048,13 @@ class SettingsPanel extends StatelessWidget {
               
               final font = settingsProvider.availableFonts[index - 1];
               final isSelected = font == settingsProvider.fontFamily;
+              final isBuiltin = font == 'SarasaGothicSC';
               
               return ListTile(
-                title: Text(font, style: TextStyle(fontFamily: font)),
+                title: Text(
+                  isBuiltin ? '$font (内置)' : font, 
+                  style: TextStyle(fontFamily: font),
+                ),
                 trailing: isSelected
                     ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
                     : null,

@@ -532,6 +532,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _focusNode = FocusNode();
+  bool _isSelectingHistory = false; // 标志：是否正在选择历史记录
 
   @override
   void initState() {
@@ -575,8 +576,11 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
     } else {
       // 当输入框失去焦点时，延迟隐藏历史记录
       // 延迟是为了允许点击历史记录下拉框中的项目
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (!_focusNode.hasFocus && _overlayEntry != null) {
+      // 手机端需要更长的延迟
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!_focusNode.hasFocus && 
+            _overlayEntry != null && 
+            !_isSelectingHistory) {
           _hideOverlay();
         }
       });
@@ -705,8 +709,13 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                         return Material(
                           color: Colors.transparent,
                           child: InkWell(
+                            onTapDown: (_) {
+                              // 标记正在选择历史记录，防止失去焦点时关闭
+                              _isSelectingHistory = true;
+                            },
                             onTap: () {
                               widget.controller.text = qth;
+                              _isSelectingHistory = false;
                               _hideOverlay();
                             },
                             child: Container(

@@ -492,15 +492,22 @@ class ExportPanel extends StatelessWidget {
                                 const Text('表格字体', style: dialogFont),
                                 const SizedBox(height: 8),
                                 DropdownButton<String>(
-                                  value: settings.fontFamily.isEmpty ? 'Roboto' : settings.fontFamily,
+                                  value: settings.fontFamily.isEmpty ? 'SarasaGothicSC' : settings.fontFamily,
                                   isExpanded: true,
-                                  items: Provider.of<SettingsProvider>(context, listen: false)
-                                      .availableFonts
-                                      .map((font) => DropdownMenuItem(
-                                            value: font,
-                                            child: Text(font),
-                                          ))
-                                      .toList(),
+                                  items: [
+                                    // 系统默认选项
+                                    const DropdownMenuItem(
+                                      value: '',
+                                      child: Text('系统默认'),
+                                    ),
+                                    // 可用字体列表
+                                    ...Provider.of<SettingsProvider>(context, listen: false)
+                                        .availableFonts
+                                        .map((font) => DropdownMenuItem(
+                                              value: font,
+                                              child: Text(font == 'SarasaGothicSC' ? '$font (内置)' : font),
+                                            )),
+                                  ],
                                   onChanged: (value) {
                                     if (value != null) {
                                       setState(() => settings.fontFamily = value);

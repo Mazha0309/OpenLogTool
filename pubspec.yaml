@@ -38,6 +38,11 @@ flutter:
   assets:
     - icon.png
     - assets/dictionaries/
+    - assets/fonts/
+  fonts:
+    - family: SarasaGothicSC
+      fonts:
+        - asset: assets/fonts/SarasaGothicSC-Regular.ttf
   uses-material-design: true
 
 flutter_launcher_icons:
