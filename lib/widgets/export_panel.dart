@@ -269,226 +269,344 @@ class ExportPanel extends StatelessWidget {
 
   void _showExportSettingsDialog(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    ExportSettings settings = settingsProvider.exportSettings;
+    // 创建设置的副本，避免直接修改原设置
+    ExportSettings settings = ExportSettings.fromJson(settingsProvider.exportSettings.toJson());
     
+    // 创建持久的文本控制器
+    final exportPathController = TextEditingController(text: settings.exportPath);
+    final fileNameController = TextEditingController(text: settings.fileNameTemplate);
+    final headerTextController = TextEditingController(text: settings.headerText);
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           const dialogFont = TextStyle(fontSize: 14);
-          
+
           return AlertDialog(
             title: const Text('Excel导出设置', style: dialogFont),
             content: SizedBox(
-              width: 400,
-              child: SingleChildScrollView(
+              width: 500,
+              height: 600,
+              child: DefaultTabController(
+                length: 3,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('抬头文字', style: dialogFont),
-                    TextField(
-                      controller: TextEditingController(text: settings.headerText),
-                      decoration: const InputDecoration(
-                        hintText: '如: BR5AI{yyyy-MM-dd}日点名记录',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        setState(() => settings.headerText = value);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    const Text('抬头背景色', style: dialogFont),
-                    Row(
-                      children: [
-                        _buildColorButton(settings.headerBackgroundColor, () async {
-                          final color = await _showColorPickerDialog(
-                            context,
-                            '选择抬头背景色',
-                            settings.headerBackgroundColor,
-                            settings.fontFamily,
-                          );
-                          if (color != null) {
-                            setState(() => settings.headerBackgroundColor = color);
-                          }
-                        }),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${settings.headerBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
-                          ),
-                        ),
+                    const TabBar(
+                      tabs: [
+                        Tab(text: '文件设置'),
+                        Tab(text: '样式设置'),
+                        Tab(text: '模板说明'),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    
-                    const Text('表头背景色', style: dialogFont),
-                    Row(
-                      children: [
-                        _buildColorButton(settings.headerRowBackgroundColor, () async {
-                          final color = await _showColorPickerDialog(
-                            context,
-                            '选择表头背景色',
-                            settings.headerRowBackgroundColor,
-                            settings.fontFamily,
-                          );
-                          if (color != null) {
-                            setState(() => settings.headerRowBackgroundColor = color);
-                          }
-                        }),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${settings.headerRowBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    const Text('主控栏背景色', style: dialogFont),
-                    Row(
-                      children: [
-                        _buildColorButton(settings.controllerBackgroundColor, () async {
-                          final color = await _showColorPickerDialog(
-                            context,
-                            '选择主控栏背景色',
-                            settings.controllerBackgroundColor,
-                            settings.fontFamily,
-                          );
-                          if (color != null) {
-                            setState(() => settings.controllerBackgroundColor = color);
-                          }
-                        }),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${settings.controllerBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    Row(
-                      children: [
-                        const Text('双色交替', style: dialogFont),
-                        const Spacer(),
-                        Switch(
-                          value: settings.useAlternateColors,
-                          onChanged: (value) {
-                            setState(() => settings.useAlternateColors = value);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    Row(
-                      children: [
-                        const Text('底部信息', style: dialogFont),
-                        const Spacer(),
-                        Switch(
-                          value: settings.showFooter,
-                          onChanged: (value) {
-                            setState(() => settings.showFooter = value);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    const Text('普通背景色', style: dialogFont),
-                    Row(
-                      children: [
-                        _buildColorButton(settings.tableBackgroundColor, () async {
-                          final color = await _showColorPickerDialog(
-                            context,
-                            '选择普通背景色',
-                            settings.tableBackgroundColor,
-                            settings.fontFamily,
-                          );
-                          if (color != null) {
-                            setState(() => settings.tableBackgroundColor = color);
-                          }
-                        }),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${settings.tableBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    if (settings.useAlternateColors) ...[
-                      const SizedBox(height: 16),
-                      const Text('交替行颜色', style: dialogFont),
-                      Row(
+                    Expanded(
+                      child: TabBarView(
                         children: [
-                          _buildColorButton(settings.alternateRowColor, () async {
-                            final color = await _showColorPickerDialog(
-                              context,
-                              '选择交替行颜色',
-                              settings.alternateRowColor,
-                              settings.fontFamily,
-                            );
-                            if (color != null) {
-                              setState(() => settings.alternateRowColor = color);
-                            }
-                          }),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'HEX: #${settings.alternateRowColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                              style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
+                          // 文件设置
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 导出路径
+                                const Text('导出路径', style: dialogFont),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: exportPathController,
+                                        decoration: InputDecoration(
+                                          hintText: '默认使用下载文件夹',
+                                          border: const OutlineInputBorder(),
+                                          suffixIcon: exportPathController.text.isNotEmpty
+                                            ? IconButton(
+                                                icon: const Icon(Icons.clear, size: 18),
+                                                onPressed: () {
+                                                  exportPathController.text = '';
+                                                  settings.exportPath = '';
+                                                  setState(() {});
+                                                },
+                                              )
+                                            : null,
+                                        ),
+                                        readOnly: true,
+                                        onTap: null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FButton(
+                                      label: '选择',
+                                      onPress: () async {
+                                        final result = await FilePicker.platform.getDirectoryPath();
+                                        if (result != null) {
+                                          exportPathController.text = result;
+                                          settings.exportPath = result;
+                                          setState(() {});
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 24),
+
+                                // 文件名模板
+                                const Text('文件名模板', style: dialogFont),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: fileNameController,
+                                  decoration: const InputDecoration(
+                                    hintText: '如: 点名记录_{yyyy}-{MM}-{dd}',
+                                    border: OutlineInputBorder(),
+                                    helperText: '使用模板变量自动生成文件名',
+                                  ),
+                                  onChanged: (value) {
+                                    settings.fileNameTemplate = value;
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+
+                                // 抬头文字
+                                const Text('Excel抬头文字', style: dialogFont),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: headerTextController,
+                                  decoration: const InputDecoration(
+                                    hintText: '如: {yyyy}-{MM}-{dd}日点名记录',
+                                    border: OutlineInputBorder(),
+                                    helperText: '支持模板变量',
+                                  ),
+                                  onChanged: (value) {
+                                    settings.headerText = value;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // 样式设置
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 颜色设置
+                                _buildColorSetting(
+                                  context,
+                                  '抬头背景色',
+                                  settings.headerBackgroundColor,
+                                  (color) => setState(() => settings.headerBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildColorSetting(
+                                  context,
+                                  '表头背景色',
+                                  settings.headerRowBackgroundColor,
+                                  (color) => setState(() => settings.headerRowBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildColorSetting(
+                                  context,
+                                  '主控栏背景色',
+                                  settings.controllerBackgroundColor,
+                                  (color) => setState(() => settings.controllerBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildColorSetting(
+                                  context,
+                                  '普通背景色',
+                                  settings.tableBackgroundColor,
+                                  (color) => setState(() => settings.tableBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+
+                                if (settings.useAlternateColors) ...[
+                                  const SizedBox(height: 16),
+                                  _buildColorSetting(
+                                    context,
+                                    '交替行颜色',
+                                    settings.alternateRowColor,
+                                    (color) => setState(() => settings.alternateRowColor = color),
+                                    settings.fontFamily,
+                                  ),
+                                ],
+
+                                const SizedBox(height: 16),
+
+                                // 开关设置
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('双色交替', style: dialogFont),
+                                          Text(
+                                            '启用交替行颜色',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: settings.useAlternateColors,
+                                      onChanged: (value) {
+                                        setState(() => settings.useAlternateColors = value);
+                                      },
+                                    ),
+                                  ],
+                                ),
+
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('底部信息', style: dialogFont),
+                                          Text(
+                                            '在表格底部显示导出信息',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: settings.showFooter,
+                                      onChanged: (value) {
+                                        setState(() => settings.showFooter = value);
+                                      },
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // 字体选择
+                                const Text('表格字体', style: dialogFont),
+                                const SizedBox(height: 8),
+                                DropdownButton<String>(
+                                  value: settings.fontFamily.isEmpty ? 'Roboto' : settings.fontFamily,
+                                  isExpanded: true,
+                                  items: Provider.of<SettingsProvider>(context, listen: false)
+                                      .availableFonts
+                                      .map((font) => DropdownMenuItem(
+                                            value: font,
+                                            child: Text(font),
+                                          ))
+                                      .toList(),
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => settings.fontFamily = value);
+                                    }
+                                  },
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // 恢复默认颜色
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.restore, size: 18),
+                                  label: const Text('恢复默认颜色'),
+                                  onPressed: () {
+                                    setState(() {
+                                      settings.headerBackgroundColor = const Color(0xFF1E84D2);
+                                      settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
+                                      settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
+                                      settings.tableBackgroundColor = Colors.white;
+                                      settings.alternateRowColor = const Color(0xFFC0E5F2);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // 模板说明
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '模板变量说明',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildTemplateHelpItem(context, '{yyyy}', '四位年份，如: 2024'),
+                                _buildTemplateHelpItem(context, '{MM}', '两位月份，如: 01, 12'),
+                                _buildTemplateHelpItem(context, '{dd}', '两位日期，如: 01, 31'),
+                                _buildTemplateHelpItem(context, '{HH}', '两位小时(24h)，如: 14'),
+                                _buildTemplateHelpItem(context, '{mm}', '两位分钟，如: 30'),
+                                _buildTemplateHelpItem(context, '{ss}', '两位秒数，如: 45'),
+
+                                const SizedBox(height: 16),
+                                const Divider(),
+                                const SizedBox(height: 16),
+
+                                const Text(
+                                  '使用示例',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+
+                                _buildExampleItem(
+                                  context,
+                                  '文件名: 点名记录_{yyyy-MM-dd}',
+                                  '点名记录_2024-03-28.xlsx',
+                                ),
+                                _buildExampleItem(
+                                  context,
+                                  '文件名: 通联_{yyyyMMdd}_{HHmmss}',
+                                  '通联_20240328_143045.xlsx',
+                                ),
+                                _buildExampleItem(
+                                  context,
+                                  '抬头: {yyyy}年{MM}月{dd}日点名记录',
+                                  '2024年03月28日点名记录',
+                                ),
+
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primaryContainer.withAlpha(128),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: Text(
+                                          '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    
-                    Row(
-                      children: [
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.restore, size: 18),
-                          label: const Text('恢复默认颜色'),
-                          onPressed: () {
-                            setState(() {
-                              settings.headerBackgroundColor = const Color(0xFF1E84D2);
-                              settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
-                              settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
-                              settings.tableBackgroundColor = Colors.white;
-                              settings.alternateRowColor = const Color(0xFFC0E5F2);
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    const Text('表格字体', style: dialogFont),
-                    DropdownButton<String>(
-                      value: settings.fontFamily.isEmpty ? 'Roboto' : settings.fontFamily,
-                      isExpanded: true,
-                      items: Provider.of<SettingsProvider>(context, listen: false)
-                          .availableFonts
-                          .map((font) => DropdownMenuItem(
-                                value: font,
-                                child: Text(font),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => settings.fontFamily = value);
-                        }
-                      },
                     ),
                   ],
                 ),
@@ -501,6 +619,10 @@ class ExportPanel extends StatelessWidget {
               ),
               ElevatedButton(
                 onPressed: () {
+                  // 从控制器获取最新值，确保所有更改都被保存
+                  settings.exportPath = exportPathController.text;
+                  settings.fileNameTemplate = fileNameController.text;
+                  settings.headerText = headerTextController.text;
                   settingsProvider.updateExportSettings(settings);
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -512,6 +634,132 @@ class ExportPanel extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildColorSetting(
+    BuildContext context,
+    String label,
+    Color color,
+    Function(Color) onColorChanged,
+    String fontFamily,
+  ) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(label, style: const TextStyle(fontSize: 14)),
+        ),
+        _buildColorButton(color, () async {
+          final newColor = await _showColorPickerDialog(
+            context,
+            '选择$label',
+            color,
+            fontFamily,
+          );
+          if (newColor != null) {
+            onColorChanged(newColor);
+          }
+        }),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+            style: TextStyle(
+              fontSize: 12,
+              fontFamily: fontFamily.isEmpty ? 'monospace' : fontFamily,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplateHelpItem(BuildContext context, String variable, String description) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: theme.colorScheme.outline.withAlpha(128),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              variable,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              description,
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExampleItem(BuildContext context, String template, String result) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(180),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withAlpha(100),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            template,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurfaceVariant,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.arrow_forward, size: 14, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  result,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -833,10 +1081,7 @@ class ExportPanel extends StatelessWidget {
 
       final now = DateTime.now();
       String headerText = settings.headerText;
-      headerText = headerText.replaceAll('{yyyy}', now.year.toString());
-      headerText = headerText.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
-      headerText = headerText.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
-      headerText = headerText.replaceAll('{yyyy-MM-dd}', '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}');
+      headerText = _generateFileName(headerText, now);
 
       final headerColor = excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
       final headerRowColor = excel_lib.ExcelColor.fromInt(settings.headerRowBackgroundColor.toARGB32());
@@ -1019,14 +1264,26 @@ class ExportPanel extends StatelessWidget {
         sheet.setColumnWidth(i, colWidths[i]);
       }
 
-      final directory = await getDownloadsDirectory();
-      if (directory == null) {
-        _showSnackBar(context, '无法访问下载目录');
-        return;
+      // 确定导出路径
+      String exportPath;
+      if (settings.exportPath.isNotEmpty) {
+        exportPath = settings.exportPath;
+      } else {
+        final directory = await getDownloadsDirectory();
+        if (directory == null) {
+          _showSnackBar(context, '无法访问下载目录');
+          return;
+        }
+        exportPath = directory.path;
       }
 
-      final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.xlsx';
-      final file = File('${directory.path}/$filename');
+      // 生成文件名
+      String filename = _generateFileName(settings.fileNameTemplate, now);
+      if (!filename.endsWith('.xlsx')) {
+        filename += '.xlsx';
+      }
+
+      final file = File('$exportPath/$filename');
 
       final bytes = excel.save();
       if (bytes != null) {
@@ -1038,6 +1295,18 @@ class ExportPanel extends StatelessWidget {
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
     }
+  }
+
+  String _generateFileName(String template, DateTime now) {
+    String filename = template;
+    // 按照长度从长到短的顺序替换，避免部分替换问题
+    filename = filename.replaceAll('{yyyy}', now.year.toString());
+    filename = filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{HH}', now.hour.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
+    return filename;
   }
 
   String _calculateControllerTime(String timeStr) {
