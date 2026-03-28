@@ -423,6 +423,7 @@ class DatabaseHelper {
     final qthDict = await db.query('qth_dictionary');
     final callsignDict = await db.query('callsign_dictionary');
     final history = await db.query('history');
+    final callsignQthHistory = await db.query('callsign_qth_history');
 
     final exportData = {
       'version': 1,
@@ -433,6 +434,7 @@ class DatabaseHelper {
       'qth_dictionary': qthDict,
       'callsign_dictionary': callsignDict,
       'history': history,
+      'callsign_qth_history': callsignQthHistory,
     };
 
     return json.encode(exportData);
@@ -454,6 +456,7 @@ class DatabaseHelper {
       await txn.delete('qth_dictionary');
       await txn.delete('callsign_dictionary');
       await txn.delete('history');
+      await txn.delete('callsign_qth_history');
 
       if (data['logs'] != null) {
         for (final log in data['logs'] as List) {
@@ -490,6 +493,12 @@ class DatabaseHelper {
           await txn.insert('history', Map<String, dynamic>.from(item));
         }
       }
+
+      if (data['callsign_qth_history'] != null) {
+        for (final item in data['callsign_qth_history'] as List) {
+          await txn.insert('callsign_qth_history', Map<String, dynamic>.from(item));
+        }
+      }
     });
   }
 
@@ -502,6 +511,7 @@ class DatabaseHelper {
     final qthCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM qth_dictionary')) ?? 0;
     final callsignCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM callsign_dictionary')) ?? 0;
     final historyCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM history')) ?? 0;
+    final callsignQthHistoryCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM callsign_qth_history')) ?? 0;
 
     return {
       'logs': logsCount,
@@ -510,6 +520,7 @@ class DatabaseHelper {
       'qth_dictionary': qthCount,
       'callsign_dictionary': callsignCount,
       'history': historyCount,
+      'callsign_qth_history': callsignQthHistoryCount,
     };
   }
 
