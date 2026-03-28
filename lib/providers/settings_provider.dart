@@ -11,6 +11,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _fontFamilyKey = 'fontFamily';
   static const String _exportSettingsKey = 'exportSettings';
   static const String _callSignQthLinkKey = 'callSignQthLinkEnabled';
+  static const String _paginationEnabledKey = 'paginationEnabled';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
@@ -19,6 +20,7 @@ class SettingsProvider with ChangeNotifier {
   List<String> _availableFonts = [];
   ExportSettings _exportSettings = ExportSettings();
   bool _callSignQthLinkEnabled = true;
+  bool _paginationEnabled = false;
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
@@ -27,6 +29,7 @@ class SettingsProvider with ChangeNotifier {
   List<String> get availableFonts => _availableFonts;
   ExportSettings get exportSettings => _exportSettings;
   bool get callSignQthLinkEnabled => _callSignQthLinkEnabled;
+  bool get paginationEnabled => _paginationEnabled;
 
   SettingsProvider() {
     _loadSettings();
@@ -56,6 +59,7 @@ class SettingsProvider with ChangeNotifier {
     }
 
     _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
+    _paginationEnabled = prefs.getBool(_paginationEnabledKey) ?? false;
     
     notifyListeners();
   }
@@ -99,6 +103,12 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setCallSignQthLink(bool enabled) async {
     _callSignQthLinkEnabled = enabled;
     await _saveSetting(_callSignQthLinkKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setPaginationEnabled(bool enabled) async {
+    _paginationEnabled = enabled;
+    await _saveSetting(_paginationEnabledKey, enabled);
     notifyListeners();
   }
 

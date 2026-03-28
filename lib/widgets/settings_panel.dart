@@ -237,9 +237,33 @@ class SettingsPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                
+
                 const Divider(),
-                
+
+                // 分页显示开关
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('分页显示记录'),
+                          SizedBox(height: 2),
+                          Text(
+                            '每5条记录分为一页显示',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: settingsProvider.paginationEnabled,
+                      onChanged: (value) => settingsProvider.setPaginationEnabled(value),
+                    ),
+                  ],
+                ),
+
               ],
             ),
           ),
@@ -735,7 +759,7 @@ class SettingsPanel extends StatelessWidget {
       context: context,
       builder: (context) => FDialog(
         title: '清空所有数据',
-        body: '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n\n确定要继续吗？',
+        body: '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？',
         actions: [
           FButton(
             label: '取消',
