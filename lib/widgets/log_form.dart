@@ -532,6 +532,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _focusNode = FocusNode();
+  bool _isSelectingHistory = false; // 标志：是否正在选择历史记录
 
   @override
   void initState() {
@@ -572,9 +573,18 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
           _overlayEntry == null) {
         _showOverlay();
       }
+    } else {
+      // 当输入框失去焦点时，延迟隐藏历史记录
+      // 延迟是为了允许点击历史记录下拉框中的项目
+      // 手机端需要更长的延迟
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!_focusNode.hasFocus && 
+            _overlayEntry != null && 
+            !_isSelectingHistory) {
+          _hideOverlay();
+        }
+      });
     }
-    // 移除失去焦点时隐藏的逻辑
-    // 隐藏只在 TapRegion 的 onTapOutside 中触发
   }
 
   Future<void> _loadHistory() async {
@@ -698,12 +708,24 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
 
                         return Material(
                           color: Colors.transparent,
-                          child: GestureDetector(
+                          child: Listener(
                             behavior: HitTestBehavior.opaque,
-                            onTapUp: (_) {
+                            onPointerDown: (_) {
+                              // 标记正在选择历史记录，防止失去焦点时关闭
+                              _isSelectingHistory = true;
+                            },
+                            onPointerUp: (_) {
                               widget.controller.text = qth;
+                              _isSelectingHistory = false;
                               _hideOverlay();
                             },
+                            child: InkWell(
+                              onTap: () {
+                                // 备用：如果 Listener 没触发，这里也处理
+                                widget.controller.text = qth;
+                                _isSelectingHistory = false;
+                                _hideOverlay();
+                              },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
@@ -749,6 +771,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                                   ),
                                 ],
                               ),
+                            ),
                             ),
                           ),
                         );
