@@ -37,6 +37,7 @@ class DatabaseHelper {
     await _ensureDictionaryTablesExist(db);
     await _ensureHistoryTableExists(db);
     await _ensureLogsTableExists(db);
+    await _ensureCallsignQthHistoryTableExists(db);
     final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM device_dictionary'));
     if (count == null || count == 0) {
       await _loadInitialDictionaries(db);
@@ -122,6 +123,22 @@ class DatabaseHelper {
     } catch (_) {}
   }
 
+  Future<void> _ensureCallsignQthHistoryTableExists(Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS callsign_qth_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          callsign TEXT NOT NULL,
+          qth TEXT NOT NULL,
+          recorded_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_callsign_qth_callsign ON callsign_qth_history(callsign)
+      ''');
+    } catch (_) {}
+  }
+
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE logs (
@@ -182,6 +199,19 @@ class DatabaseHelper {
         log_count INTEGER NOT NULL,
         created_at TEXT NOT NULL
       )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE callsign_qth_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        callsign TEXT NOT NULL,
+        qth TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_callsign_qth_callsign ON callsign_qth_history(callsign)
     ''');
 
     await _loadInitialDictionaries(db);
@@ -382,5 +412,146 @@ class DatabaseHelper {
   Future<void> clearAllHistory() async {
     final db = await database;
     await db.delete('history');
+  }
+
+  Future<String> exportDatabase() async {
+    final db = await database;
+
+    final logs = await db.query('logs');
+    final deviceDict = await db.query('device_dictionary');
+    final antennaDict = await db.query('antenna_dictionary');
+    final qthDict = await db.query('qth_dictionary');
+    final callsignDict = await db.query('callsign_dictionary');
+    final history = await db.query('history');
+
+    final exportData = {
+      'version': 1,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'logs': logs,
+      'device_dictionary': deviceDict,
+      'antenna_dictionary': antennaDict,
+      'qth_dictionary': qthDict,
+      'callsign_dictionary': callsignDict,
+      'history': history,
+    };
+
+    return json.encode(exportData);
+  }
+
+  Future<void> importDatabase(String jsonData) async {
+    final data = json.decode(jsonData) as Map<String, dynamic>;
+
+    if (data['version'] != 1) {
+      throw Exception('不支持的数据库版本');
+    }
+
+    final db = await database;
+
+    await db.transaction((txn) async {
+      await txn.delete('logs');
+      await txn.delete('device_dictionary');
+      await txn.delete('antenna_dictionary');
+      await txn.delete('qth_dictionary');
+      await txn.delete('callsign_dictionary');
+      await txn.delete('history');
+
+      if (data['logs'] != null) {
+        for (final log in data['logs'] as List) {
+          await txn.insert('logs', Map<String, dynamic>.from(log));
+        }
+      }
+
+      if (data['device_dictionary'] != null) {
+        for (final item in data['device_dictionary'] as List) {
+          await txn.insert('device_dictionary', Map<String, dynamic>.from(item));
+        }
+      }
+
+      if (data['antenna_dictionary'] != null) {
+        for (final item in data['antenna_dictionary'] as List) {
+          await txn.insert('antenna_dictionary', Map<String, dynamic>.from(item));
+        }
+      }
+
+      if (data['qth_dictionary'] != null) {
+        for (final item in data['qth_dictionary'] as List) {
+          await txn.insert('qth_dictionary', Map<String, dynamic>.from(item));
+        }
+      }
+
+      if (data['callsign_dictionary'] != null) {
+        for (final item in data['callsign_dictionary'] as List) {
+          await txn.insert('callsign_dictionary', Map<String, dynamic>.from(item));
+        }
+      }
+
+      if (data['history'] != null) {
+        for (final item in data['history'] as List) {
+          await txn.insert('history', Map<String, dynamic>.from(item));
+        }
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> getDatabaseStats() async {
+    final db = await database;
+
+    final logsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM logs')) ?? 0;
+    final deviceCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM device_dictionary')) ?? 0;
+    final antennaCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM antenna_dictionary')) ?? 0;
+    final qthCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM qth_dictionary')) ?? 0;
+    final callsignCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM callsign_dictionary')) ?? 0;
+    final historyCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM history')) ?? 0;
+
+    return {
+      'logs': logsCount,
+      'device_dictionary': deviceCount,
+      'antenna_dictionary': antennaCount,
+      'qth_dictionary': qthCount,
+      'callsign_dictionary': callsignCount,
+      'history': historyCount,
+    };
+  }
+
+  Future<void> addCallsignQthRecord(String callsign, String qth) async {
+    if (callsign.isEmpty || qth.isEmpty) return;
+    final db = await database;
+    await db.insert('callsign_qth_history', {
+      'callsign': callsign.toUpperCase(),
+      'qth': qth,
+      'recorded_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getCallsignQthHistory(String callsign, {int limit = 3}) async {
+    if (callsign.isEmpty) return [];
+    final db = await database;
+    final results = await db.query(
+      'callsign_qth_history',
+      where: 'callsign = ?',
+      whereArgs: [callsign.toUpperCase()],
+      orderBy: 'recorded_at DESC',
+      limit: limit,
+    );
+    return results;
+  }
+
+  Future<String?> getLastRecordedTime(String callsign, String qth) async {
+    if (callsign.isEmpty || qth.isEmpty) return null;
+    final db = await database;
+    final results = await db.query(
+      'callsign_qth_history',
+      where: 'callsign = ? AND qth = ?',
+      whereArgs: [callsign.toUpperCase(), qth],
+      orderBy: 'recorded_at DESC',
+      limit: 1,
+    );
+    if (results.isEmpty) return null;
+    return results.first['recorded_at'] as String;
+  }
+
+  Future<void> clearCallsignQthHistory() async {
+    final db = await database;
+    await db.delete('callsign_qth_history');
   }
 }
