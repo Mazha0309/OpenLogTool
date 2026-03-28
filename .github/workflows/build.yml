@@ -366,6 +366,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Get pubspec version
         run: |
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
