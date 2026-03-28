@@ -8,6 +8,76 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/database/database_helper.dart';
 
+class _HSVSaturationValuePainter extends CustomPainter {
+  final double hue;
+  final double saturation;
+  final double value;
+
+  _HSVSaturationValuePainter(this.hue, this.saturation, this.value);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    final saturationGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [
+        Colors.white,
+        HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
+      ],
+    );
+    canvas.drawRect(rect, Paint()..shader = saturationGradient.createShader(rect));
+
+    final valueGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Colors.transparent,
+        Colors.black,
+      ],
+    );
+    canvas.drawRect(rect, Paint()..shader = valueGradient.createShader(rect));
+
+    final circleX = saturation * size.width;
+    final circleY = (1.0 - value) * size.height;
+    final circleColor = HSVColor.fromAHSV(1.0, hue, saturation, value).toColor();
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      8,
+      Paint()
+        ..color = circleColor
+        ..style = PaintingStyle.fill,
+    );
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      8,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      10,
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HSVSaturationValuePainter oldDelegate) {
+    return oldDelegate.hue != hue || 
+           oldDelegate.saturation != saturation || 
+           oldDelegate.value != value;
+  }
+}
+
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
 
@@ -381,16 +451,15 @@ class SettingsPanel extends StatelessWidget {
 
   void _showCustomColorPicker(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    Color selectedColor = settingsProvider.themeColor;
-    int red = selectedColor.red;
-    int green = selectedColor.green;
-    int blue = selectedColor.blue;
+    HSVColor hsvColor = HSVColor.fromColor(settingsProvider.themeColor);
     
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            Color currentColor = hsvColor.toColor();
+            
             return AlertDialog(
               title: const Text('自定义颜色'),
               content: SizedBox(
@@ -398,150 +467,175 @@ class SettingsPanel extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 颜色预览
                     Container(
-                      width: 120,
-                      height: 120,
+                      width: 280,
+                      height: 150,
                       decoration: BoxDecoration(
-                        color: Color.fromARGB(255, red, green, blue),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade400, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade400, width: 1),
                       ),
-                      child: Center(
-                        child: Text(
-                          'RGB: $red, $green, $blue',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: GestureDetector(
+                          onPanStart: (details) {
+                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor, setState, (newHsv) {
+                              hsvColor = newHsv;
+                              currentColor = hsvColor.toColor();
+                            });
+                          },
+                          onPanUpdate: (details) {
+                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor, setState, (newHsv) {
+                              hsvColor = newHsv;
+                              currentColor = hsvColor.toColor();
+                            });
+                          },
+                          child: CustomPaint(
+                            size: const Size(280, 150),
+                            painter: _HSVSaturationValuePainter(
+                              hsvColor.hue,
+                              hsvColor.saturation,
+                              hsvColor.value,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // RGB滑块
-                    _buildColorSlider(
-                      label: '红色 (R)',
-                      value: red.toDouble(),
-                      color: Colors.red,
-                      onChanged: (value) {
-                        setState(() {
-                          red = value.toInt();
-                        });
-                      },
-                    ),
-                    
-                    _buildColorSlider(
-                      label: '绿色 (G)',
-                      value: green.toDouble(),
-                      color: Colors.green,
-                      onChanged: (value) {
-                        setState(() {
-                          green = value.toInt();
-                        });
-                      },
-                    ),
-                    
-                    _buildColorSlider(
-                      label: '蓝色 (B)',
-                      value: blue.toDouble(),
-                      color: Colors.blue,
-                      onChanged: (value) {
-                        setState(() {
-                          blue = value.toInt();
-                        });
-                      },
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // 颜色值显示
+                    const SizedBox(height: 8),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('RGB: $red, $green, $blue'),
-                        Text('HEX: #${red.toRadixString(16).padLeft(2, '0')}${green.toRadixString(16).padLeft(2, '0')}${blue.toRadixString(16).padLeft(2, '0')}'),
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: currentColor,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade400, width: 2),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+                          ),
+                        ),
                       ],
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // 快速颜色选择
-                    const Text('快速选择:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('色相:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              Container(
+                                height: 20,
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF0000),
+                                      Color(0xFFFFFF00),
+                                      Color(0xFF00FF00),
+                                      Color(0xFF00FFFF),
+                                      Color(0xFF0000FF),
+                                      Color(0xFFFF00FF),
+                                      Color(0xFFFF0000),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              SliderTheme(
+                                data: SliderThemeData(
+                                  trackHeight: 20,
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                  overlayShape: SliderComponentShape.noOverlay,
+                                  activeTrackColor: Colors.transparent,
+                                  inactiveTrackColor: Colors.transparent,
+                                ),
+                                child: Slider(
+                                  value: hsvColor.hue,
+                                  min: 0,
+                                  max: 360,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      hsvColor = hsvColor.withHue(value);
+                                      currentColor = hsvColor.toColor();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('透明度:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Slider(
+                            value: hsvColor.alpha,
+                            min: 0,
+                            max: 1,
+                            activeColor: currentColor,
+                            inactiveColor: Colors.grey.shade300,
+                            onChanged: (value) {
+                              setState(() {
+                                hsvColor = hsvColor.withAlpha(value);
+                                currentColor = hsvColor.toColor();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _buildQuickColorOption(
-                          context,
-                          const Color(0xFF2196F3),
-                          setState,
-                          () {
-                            red = 33;
-                            green = 150;
-                            blue = 243;
-                          },
-                        ),
-                        _buildQuickColorOption(
-                          context,
-                          const Color(0xFF4CAF50),
-                          setState,
-                          () {
-                            red = 76;
-                            green = 175;
-                            blue = 80;
-                          },
-                        ),
-                        _buildQuickColorOption(
-                          context,
-                          const Color(0xFFF44336),
-                          setState,
-                          () {
-                            red = 244;
-                            green = 67;
-                            blue = 54;
-                          },
-                        ),
-                        _buildQuickColorOption(
-                          context,
-                          const Color(0xFFFF9800),
-                          setState,
-                          () {
-                            red = 255;
-                            green = 152;
-                            blue = 0;
-                          },
-                        ),
-                        _buildQuickColorOption(
-                          context,
-                          const Color(0xFF9C27B0),
-                          setState,
-                          () {
-                            red = 156;
-                            green = 39;
-                            blue = 176;
-                          },
-                        ),
-                        _buildQuickColorOption(
-                          context,
-                          const Color(0xFF607D8B),
-                          setState,
-                          () {
-                            red = 96;
-                            green = 125;
-                            blue = 139;
-                          },
-                        ),
+                        _buildQuickColorButton(const Color(0xFF2196F3), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF2196F3));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF4CAF50), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF4CAF50));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFFF44336), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFFF44336));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFFFF9800), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFFFF9800));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF9C27B0), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF9C27B0));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF607D8B), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF607D8B));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
                       ],
                     ),
                   ],
@@ -554,7 +648,7 @@ class SettingsPanel extends StatelessWidget {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    settingsProvider.setThemeColor(Color.fromARGB(255, red, green, blue));
+                    settingsProvider.setThemeColor(currentColor);
                     Navigator.pop(context);
                   },
                   child: const Text('应用颜色'),
@@ -567,53 +661,24 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildColorSlider({
-    required String label,
-    required double value,
-    required Color color,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text(value.toInt().toString()),
-          ],
-        ),
-        Slider(
-          value: value,
-          min: 0,
-          max: 255,
-          divisions: 255,
-          activeColor: color,
-          inactiveColor: color.withValues(alpha: 0.3),
-          onChanged: onChanged,
-        ),
-      ],
-    );
+  void _updateHsvFromTap(Offset position, Size size, HSVColor hsvColor, StateSetter setState, Function(HSVColor) onUpdate) {
+    double saturation = (position.dx / size.width).clamp(0.0, 1.0);
+    double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
+    final newHsv = HSVColor.fromAHSV(hsvColor.alpha, hsvColor.hue, saturation, value);
+    setState(() {});
+    onUpdate(newHsv);
   }
 
-  Widget _buildQuickColorOption(
-    BuildContext context,
-    Color color,
-    StateSetter setState,
-    VoidCallback onTap,
-  ) {
+  Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
     return GestureDetector(
-      onTap: () {
-        onTap();
-        setState(() {});
-      },
+      onTap: onTap,
       child: Container(
         width: 32,
         height: 32,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade400, width: 1),
         ),
       ),
     );

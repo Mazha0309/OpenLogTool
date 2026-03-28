@@ -751,29 +751,6 @@ class ExportPanel extends StatelessWidget {
     onUpdate(newHsv);
   }
 
-  Widget _buildColorSlider({
-    required String label,
-    required double value,
-    required Color color,
-    required ValueChanged<double> onChanged,
-  }) {
-    const dialogFont = TextStyle(fontSize: 14);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$label: ${value.toInt()}', style: dialogFont),
-        Slider(
-          value: value,
-          min: 0,
-          max: 255,
-          activeColor: color,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-
   Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -858,6 +835,8 @@ class ExportPanel extends StatelessWidget {
         borderColorHex: excel_lib.ExcelColor.black,
       );
 
+      final String? excelFontFamily = settings.fontFamily.isEmpty ? null : settings.fontFamily;
+
       sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
       sheet.merge(excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 0), customValue: excel_lib.TextCellValue(headerText));
       sheet.row(0).forEach((cell) {
@@ -866,6 +845,7 @@ class ExportPanel extends StatelessWidget {
             backgroundColorHex: headerColor,
             fontSize: 14,
             bold: true,
+            fontFamily: excelFontFamily,
             horizontalAlign: excel_lib.HorizontalAlign.Center,
             textWrapping: excel_lib.TextWrapping.WrapText,
             topBorder: borderStyle,
@@ -884,6 +864,7 @@ class ExportPanel extends StatelessWidget {
             backgroundColorHex: headerRowColor,
             fontSize: 12,
             bold: true,
+            fontFamily: excelFontFamily,
             horizontalAlign: excel_lib.HorizontalAlign.Center,
             topBorder: borderStyle,
             bottomBorder: borderStyle,
@@ -916,6 +897,7 @@ class ExportPanel extends StatelessWidget {
               backgroundColorHex: controllerColor,
               fontSize: 11,
               bold: true,
+              fontFamily: excelFontFamily,
               topBorder: borderStyle,
               bottomBorder: borderStyle,
               leftBorder: borderStyle,
@@ -953,6 +935,7 @@ class ExportPanel extends StatelessWidget {
               cell.cellStyle = excel_lib.CellStyle(
                 backgroundColorHex: rowColor,
                 fontSize: 11,
+                fontFamily: excelFontFamily,
                 topBorder: borderStyle,
                 bottomBorder: borderStyle,
                 leftBorder: borderStyle,
