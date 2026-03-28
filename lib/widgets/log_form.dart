@@ -34,36 +34,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
 
   @override
-  void initState() {
-    super.initState();
-    _loadEditingData();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadEditingData();
-  }
-
-  void _loadEditingData() {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    if (logProvider.isEditing) {
-      final log = logProvider.getLogForEditing();
-      if (log != null) {
-        _controllerController.text = log.controller;
-        _callsignController.text = log.callsign;
-        _deviceController.text = log.device;
-        _antennaController.text = log.antenna;
-        _powerController.text = log.power;
-        _qthController.text = log.qth;
-        _heightController.text = log.height;
-        _timeController.text = log.time;
-        _reportController.text = log.report;
-      }
-    }
-  }
-
-  @override
   void dispose() {
     _controllerController.dispose();
     _callsignController.dispose();
@@ -130,15 +100,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       height: _heightController.text,
     );
 
-    final isEditing = logProvider.isEditing;
     logProvider.addLog(log);
     _resetForm();
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isEditing ? '记录已更新' : '记录已添加'),
-          duration: const Duration(seconds: 2),
+        const SnackBar(
+          content: Text('记录已添加'),
+          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -160,15 +129,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     FocusScope.of(context).requestFocus(FocusNode());
   }
 
-  void _cancelEditing() {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    logProvider.cancelEditing();
-    _resetForm();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final logProvider = Provider.of<LogProvider>(context);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
 
     return LayoutBuilder(
@@ -300,28 +262,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _submitForm,
-                      icon: Icon(logProvider.isEditing ? Icons.save : Icons.add),
-                      label: Text(logProvider.isEditing ? '更新记录' : '添加记录'),
+                      icon: const Icon(Icons.add),
+                      label: const Text('添加记录'),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
                   ),
-                  if (logProvider.isEditing) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _cancelEditing,
-                        icon: const Icon(Icons.cancel),
-                        label: const Text('取消编辑'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: Theme.of(context).colorScheme.error,
-                          foregroundColor: Theme.of(context).colorScheme.onError,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ],
