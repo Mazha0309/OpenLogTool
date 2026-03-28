@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -532,7 +533,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _focusNode = FocusNode();
-  bool _isSelectingHistory = false; // 标志：是否正在选择历史记录
+  Timer? _hideTimer; // 用于延迟隐藏历史记录的计时器
 
   @override
   void initState() {
@@ -548,6 +549,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
 
   @override
   void dispose() {
+    _hideTimer?.cancel();
     _hideOverlay();
     widget.callsignController.removeListener(_onCallsignChanged);
     _focusNode.removeListener(_onFocusChanged);
@@ -576,11 +578,9 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
     } else {
       // 当输入框失去焦点时，延迟隐藏历史记录
       // 延迟是为了允许点击历史记录下拉框中的项目
-      // 手机端需要更长的延迟
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!_focusNode.hasFocus && 
-            _overlayEntry != null && 
-            !_isSelectingHistory) {
+      _hideTimer?.cancel();
+      _hideTimer = Timer(const Duration(milliseconds: 500), () {
+        if (!_focusNode.hasFocus && _overlayEntry != null) {
           _hideOverlay();
         }
       });
@@ -711,17 +711,12 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTapDown: (_) {
-                              // 标记正在选择历史记录，防止失去焦点时关闭
-                              _isSelectingHistory = true;
+                              // 取消待处理的隐藏操作
+                              _hideTimer?.cancel();
                             },
                             onTapUp: (_) {
                               widget.controller.text = qth;
-                              _isSelectingHistory = false;
                               _hideOverlay();
-                            },
-                            onTapCancel: () {
-                              // 触摸取消时重置标志
-                              _isSelectingHistory = false;
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
