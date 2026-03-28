@@ -719,6 +719,10 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                               _isSelectingHistory = false;
                               _hideOverlay();
                             },
+                            onTapCancel: () {
+                              // 触摸取消时重置标志
+                              _isSelectingHistory = false;
+                            },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
