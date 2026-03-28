@@ -577,7 +577,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
       // 当输入框失去焦点时，延迟隐藏历史记录
       // 延迟是为了允许点击历史记录下拉框中的项目
       // 手机端需要更长的延迟
-      Future.delayed(const Duration(milliseconds: 300), () {
+      Future.delayed(const Duration(milliseconds: 500), () {
         if (!_focusNode.hasFocus && 
             _overlayEntry != null && 
             !_isSelectingHistory) {
@@ -708,12 +708,13 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
 
                         return Material(
                           color: Colors.transparent,
-                          child: InkWell(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
                             onTapDown: (_) {
                               // 标记正在选择历史记录，防止失去焦点时关闭
                               _isSelectingHistory = true;
                             },
-                            onTap: () {
+                            onTapUp: (_) {
                               widget.controller.text = qth;
                               _isSelectingHistory = false;
                               _hideOverlay();

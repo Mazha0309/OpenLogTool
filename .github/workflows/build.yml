@@ -173,13 +173,16 @@ jobs:
 
       - name: Create AppDir structure
         run: |
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/lib
+          # Flutter bundle structure: executable uses RUNPATH=$ORIGIN/lib
+          # So we need to keep the same structure: bin/openlogtool and bin/lib/
+          mkdir -p AppDir/usr/bin/lib
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           
-          # Copy Flutter bundle
-          cp -r build/linux/x64/release/bundle/* AppDir/usr/
+          # Copy Flutter bundle - keep original structure
+          cp build/linux/x64/release/bundle/openlogtool AppDir/usr/bin/
+          cp -r build/linux/x64/release/bundle/lib/* AppDir/usr/bin/lib/
+          cp -r build/linux/x64/release/bundle/data AppDir/usr/bin/
           
           # Create AppRun script
           cat > AppDir/AppRun << 'APPRUN_EOF'
@@ -187,7 +190,7 @@ jobs:
           SELF=$(readlink -f "$0")
           HERE=${SELF%/*}
           export PATH="${HERE}/usr/bin:${PATH}"
-          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          # LD_LIBRARY_PATH not needed - binary uses RUNPATH=$ORIGIN/lib
           exec "${HERE}/usr/bin/openlogtool" "$@"
           APPRUN_EOF
           chmod +x AppDir/AppRun
