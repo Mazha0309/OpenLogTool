@@ -188,28 +188,28 @@ jobs:
           HERE=${SELF%/*}
           export PATH="${HERE}/usr/bin:${PATH}"
           export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
-          exec "${HERE}/usr/bin/OpenLogTool" "$@"
+          exec "${HERE}/usr/bin/openlogtool" "$@"
           APPRUN_EOF
           chmod +x AppDir/AppRun
           
           # Create desktop file
-          cat > AppDir/OpenLogTool.desktop << 'DESKTOP_EOF'
+          cat > AppDir/openlogtool.desktop << 'DESKTOP_EOF'
           [Desktop Entry]
           Name=OpenLogTool
           Comment=点名记录工具
-          Exec=OpenLogTool
-          Icon=OpenLogTool
+          Exec=openlogtool
+          Icon=openlogtool
           Terminal=false
           Type=Application
           Categories=Utility;
           DESKTOP_EOF
           
-          cp AppDir/OpenLogTool.desktop AppDir/usr/share/applications/
+          cp AppDir/openlogtool.desktop AppDir/usr/share/applications/
           
-          # Create icon placeholder
-          touch AppDir/OpenLogTool.png
-          cp AppDir/OpenLogTool.png AppDir/usr/share/icons/hicolor/256x256/apps/OpenLogTool.png
-          cp AppDir/AppRun AppDir/.DirIcon
+          # Copy actual icon file
+          cp icon.png AppDir/openlogtool.png
+          cp AppDir/openlogtool.png AppDir/usr/share/icons/hicolor/256x256/apps/openlogtool.png
+          cp AppDir/openlogtool.png AppDir/.DirIcon
 
       - name: Build AppImage
         run: |
