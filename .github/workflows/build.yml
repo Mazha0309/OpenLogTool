@@ -323,12 +323,40 @@ jobs:
           echo "=== Build output ==="
           ls -la build/macos/Build/Products/Release/
           find build/macos/Build/Products/Release/ -name "*.app" -type d
+          
+      - name: Package macOS app
+        run: |
+          cd build/macos/Build/Products/Release/
+          # 检查生成的 .app 目录
+          ls -la *.app/
+          
+          # 创建 DMG 文件
+          # 使用 create-dmg 工具创建美观的 DMG
+          brew install create-dmg || true
+          
+          # 创建 DMG
+          create-dmg \
+            --volname "OpenLogTool Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --app-drop-link 600 185 \
+            --icon "openlogtool.app" 200 185 \
+            "openlogtool-macos-${{ env.VERSION_NAME }}.dmg" \
+            "openlogtool.app" || {
+              # 如果 create-dmg 失败，使用 hdiutil 创建基本 DMG
+              echo "create-dmg failed, using hdiutil..."
+              hdiutil create -volname "OpenLogTool" -srcfolder "openlogtool.app" -ov -format UDZO "openlogtool-macos-${{ env.VERSION_NAME }}.dmg"
+            }
+          
+          echo "=== Packaged file ==="
+          ls -la *.dmg
 
       - name: Upload macOS
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-macos
-          path: build/macos/Build/Products/Release/
+          path: build/macos/Build/Products/Release/*.dmg
 
   # 创建 Release（仅在 main 分支推送时）
   release:
@@ -359,8 +387,8 @@ jobs:
           files: |
             artifacts/openlogtool-android-apk/*.apk
             artifacts/openlogtool-linux/*.tar.gz
+            artifacts/openlogtool-linux/*.AppImage
             artifacts/openlogtool-windows-installer/*.exe
-            artifacts/openlogtool-windows-build/**/*
-            artifacts/openlogtool-macos/**/*.app
+            artifacts/openlogtool-macos/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
