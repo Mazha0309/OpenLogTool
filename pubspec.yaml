@@ -1,11 +1,11 @@
 name: openlogtool
 description: OpenLogTool
 publish_to: 'none'
-version: 0.0.3
+version: 0.3.0+1
 license: GPL-3.0-or-later
-homepage: https://github.com/Mazha0309/openlogtool
-repository: https://github.com/Mazha0309/openlogtool.git
-issue_tracker: https://github.com/Mazha0309/openlogtool/issues
+homepage: https://github.com/Mazha0309/OpenLogTool
+repository: https://github.com/Mazha0309/OpenLogTool.git
+issue_tracker: https://github.com/Mazha0309/OpenLogTool/issues
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -38,6 +38,11 @@ flutter:
   assets:
     - icon.png
     - assets/dictionaries/
+    - assets/fonts/
+  fonts:
+    - family: SarasaGothicSC
+      fonts:
+        - asset: assets/fonts/SarasaGothicSC-Regular.ttf
   uses-material-design: true
 
 flutter_launcher_icons:
