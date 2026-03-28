@@ -5,10 +5,81 @@ import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/models/export_settings.dart';
+
+class _HSVSaturationValuePainter extends CustomPainter {
+  final double hue;
+  final double saturation;
+  final double value;
+
+  _HSVSaturationValuePainter(this.hue, this.saturation, this.value);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    final saturationGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [
+        Colors.white,
+        HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
+      ],
+    );
+    canvas.drawRect(rect, Paint()..shader = saturationGradient.createShader(rect));
+
+    final valueGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Colors.transparent,
+        Colors.black,
+      ],
+    );
+    canvas.drawRect(rect, Paint()..shader = valueGradient.createShader(rect));
+
+    final circleX = saturation * size.width;
+    final circleY = (1.0 - value) * size.height;
+    final circleColor = HSVColor.fromAHSV(1.0, hue, saturation, value).toColor();
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      8,
+      Paint()
+        ..color = circleColor
+        ..style = PaintingStyle.fill,
+    );
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      8,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      10,
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HSVSaturationValuePainter oldDelegate) {
+    return oldDelegate.hue != hue || 
+           oldDelegate.saturation != saturation || 
+           oldDelegate.value != value;
+  }
+}
 
 class ExportPanel extends StatelessWidget {
   const ExportPanel({super.key});
@@ -17,7 +88,6 @@ class ExportPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 根据可用宽度判断是否使用横向排列
         final isWideScreen = constraints.maxWidth > 600;
         
         return Column(
@@ -33,7 +103,6 @@ class ExportPanel extends StatelessWidget {
             
             const SizedBox(height: 24),
             
-            // 根据屏幕宽度选择横向或纵向排列
             if (isWideScreen)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,11 +124,10 @@ class ExportPanel extends StatelessWidget {
             
             const SizedBox(height: 16),
             
-            // 文件信息
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -96,16 +164,25 @@ class ExportPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '导出数据',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '导出数据',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => _showExportSettingsDialog(context),
+                  tooltip: 'Excel导出设置',
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             
-            // 导出按钮
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -156,7 +233,6 @@ class ExportPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             
-            // 导入按钮
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -186,6 +262,774 @@ class ExportPanel extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showExportSettingsDialog(BuildContext context) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    // 创建设置的副本，避免直接修改原设置
+    ExportSettings settings = ExportSettings.fromJson(settingsProvider.exportSettings.toJson());
+    
+    // 创建持久的文本控制器
+    final exportPathController = TextEditingController(text: settings.exportPath);
+    final fileNameController = TextEditingController(text: settings.fileNameTemplate);
+    final headerTextController = TextEditingController(text: settings.headerText);
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          const dialogFont = TextStyle(fontSize: 14);
+
+          return AlertDialog(
+            title: const Text('Excel导出设置', style: dialogFont),
+            content: SizedBox(
+              width: 500,
+              height: 600,
+              child: DefaultTabController(
+                length: 3,
+                child: Column(
+                  children: [
+                    const TabBar(
+                      tabs: [
+                        Tab(text: '文件设置'),
+                        Tab(text: '样式设置'),
+                        Tab(text: '模板说明'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          // 文件设置
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 导出路径
+                                const Text('导出路径', style: dialogFont),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: exportPathController,
+                                        decoration: InputDecoration(
+                                          hintText: '默认使用下载文件夹',
+                                          border: const OutlineInputBorder(),
+                                          suffixIcon: exportPathController.text.isNotEmpty
+                                            ? IconButton(
+                                                icon: const Icon(Icons.clear, size: 18),
+                                                onPressed: () {
+                                                  exportPathController.text = '';
+                                                  settings.exportPath = '';
+                                                  setState(() {});
+                                                },
+                                              )
+                                            : null,
+                                        ),
+                                        readOnly: true,
+                                        onTap: null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FButton(
+                                      label: '选择',
+                                      onPress: () async {
+                                        final result = await FilePicker.platform.getDirectoryPath();
+                                        if (result != null) {
+                                          exportPathController.text = result;
+                                          settings.exportPath = result;
+                                          setState(() {});
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 24),
+
+                                // 文件名模板
+                                const Text('文件名模板', style: dialogFont),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: fileNameController,
+                                  decoration: const InputDecoration(
+                                    hintText: '如: 点名记录_{yyyy}-{MM}-{dd}',
+                                    border: OutlineInputBorder(),
+                                    helperText: '使用模板变量自动生成文件名',
+                                  ),
+                                  onChanged: (value) {
+                                    settings.fileNameTemplate = value;
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+
+                                // 抬头文字
+                                const Text('Excel抬头文字', style: dialogFont),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: headerTextController,
+                                  decoration: const InputDecoration(
+                                    hintText: '如: {yyyy}-{MM}-{dd}日点名记录',
+                                    border: OutlineInputBorder(),
+                                    helperText: '支持模板变量',
+                                  ),
+                                  onChanged: (value) {
+                                    settings.headerText = value;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // 样式设置
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 颜色设置
+                                _buildColorSetting(
+                                  context,
+                                  '抬头背景色',
+                                  settings.headerBackgroundColor,
+                                  (color) => setState(() => settings.headerBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildColorSetting(
+                                  context,
+                                  '表头背景色',
+                                  settings.headerRowBackgroundColor,
+                                  (color) => setState(() => settings.headerRowBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildColorSetting(
+                                  context,
+                                  '主控栏背景色',
+                                  settings.controllerBackgroundColor,
+                                  (color) => setState(() => settings.controllerBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildColorSetting(
+                                  context,
+                                  '普通背景色',
+                                  settings.tableBackgroundColor,
+                                  (color) => setState(() => settings.tableBackgroundColor = color),
+                                  settings.fontFamily,
+                                ),
+
+                                if (settings.useAlternateColors) ...[
+                                  const SizedBox(height: 16),
+                                  _buildColorSetting(
+                                    context,
+                                    '交替行颜色',
+                                    settings.alternateRowColor,
+                                    (color) => setState(() => settings.alternateRowColor = color),
+                                    settings.fontFamily,
+                                  ),
+                                ],
+
+                                const SizedBox(height: 16),
+
+                                // 开关设置
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('双色交替', style: dialogFont),
+                                          Text(
+                                            '启用交替行颜色',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: settings.useAlternateColors,
+                                      onChanged: (value) {
+                                        setState(() => settings.useAlternateColors = value);
+                                      },
+                                    ),
+                                  ],
+                                ),
+
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('底部信息', style: dialogFont),
+                                          Text(
+                                            '在表格底部显示导出信息',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: settings.showFooter,
+                                      onChanged: (value) {
+                                        setState(() => settings.showFooter = value);
+                                      },
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // 字体选择
+                                const Text('表格字体', style: dialogFont),
+                                const SizedBox(height: 8),
+                                DropdownButton<String>(
+                                  value: settings.fontFamily.isEmpty ? 'SarasaGothicSC' : settings.fontFamily,
+                                  isExpanded: true,
+                                  items: [
+                                    // 系统默认选项
+                                    const DropdownMenuItem(
+                                      value: '',
+                                      child: Text('系统默认'),
+                                    ),
+                                    // 可用字体列表
+                                    ...Provider.of<SettingsProvider>(context, listen: false)
+                                        .availableFonts
+                                        .map((font) => DropdownMenuItem(
+                                              value: font,
+                                              child: Text(font == 'SarasaGothicSC' ? '$font (内置)' : font),
+                                            )),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => settings.fontFamily = value);
+                                    }
+                                  },
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // 恢复默认颜色
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.restore, size: 18),
+                                  label: const Text('恢复默认颜色'),
+                                  onPressed: () {
+                                    setState(() {
+                                      settings.headerBackgroundColor = const Color(0xFF1E84D2);
+                                      settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
+                                      settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
+                                      settings.tableBackgroundColor = Colors.white;
+                                      settings.alternateRowColor = const Color(0xFFC0E5F2);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // 模板说明
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '模板变量说明',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                _buildTemplateHelpItem(context, '{yyyy}', '四位年份，如: 2024'),
+                                _buildTemplateHelpItem(context, '{MM}', '两位月份，如: 01, 12'),
+                                _buildTemplateHelpItem(context, '{dd}', '两位日期，如: 01, 31'),
+                                _buildTemplateHelpItem(context, '{HH}', '两位小时(24h)，如: 14'),
+                                _buildTemplateHelpItem(context, '{mm}', '两位分钟，如: 30'),
+                                _buildTemplateHelpItem(context, '{ss}', '两位秒数，如: 45'),
+
+                                const SizedBox(height: 16),
+                                const Divider(),
+                                const SizedBox(height: 16),
+
+                                const Text(
+                                  '使用示例',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+
+                                _buildExampleItem(
+                                  context,
+                                  '文件名: 点名记录_{yyyy}-{MM}-{dd}',
+                                  '点名记录_2024-03-28.xlsx',
+                                ),
+                                _buildExampleItem(
+                                  context,
+                                  '文件名: 通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}',
+                                  '通联_2024-03-28_143045.xlsx',
+                                ),
+                                _buildExampleItem(
+                                  context,
+                                  '抬头: {yyyy}年{MM}月{dd}日点名记录',
+                                  '2024年03月28日点名记录',
+                                ),
+
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primaryContainer.withAlpha(128),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: Text(
+                                          '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  // 从控制器获取最新值，确保所有更改都被保存
+                  settings.exportPath = exportPathController.text;
+                  settings.fileNameTemplate = fileNameController.text;
+                  settings.headerText = headerTextController.text;
+                  settingsProvider.updateExportSettings(settings);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('设置已保存')),
+                  );
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildColorSetting(
+    BuildContext context,
+    String label,
+    Color color,
+    Function(Color) onColorChanged,
+    String fontFamily,
+  ) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(label, style: const TextStyle(fontSize: 14)),
+        ),
+        _buildColorButton(color, () async {
+          final newColor = await _showColorPickerDialog(
+            context,
+            '选择$label',
+            color,
+            fontFamily,
+          );
+          if (newColor != null) {
+            onColorChanged(newColor);
+          }
+        }),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+            style: TextStyle(
+              fontSize: 12,
+              fontFamily: fontFamily.isEmpty ? 'monospace' : fontFamily,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplateHelpItem(BuildContext context, String variable, String description) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: theme.colorScheme.outline.withAlpha(128),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              variable,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              description,
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExampleItem(BuildContext context, String template, String result) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(180),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withAlpha(100),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            template,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurfaceVariant,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.arrow_forward, size: 14, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  result,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorButton(Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade400, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Icon(Icons.colorize, size: 20, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Future<Color?> _showColorPickerDialog(
+    BuildContext context,
+    String title,
+    Color initialColor,
+    String fontFamily,
+  ) async {
+    HSVColor hsvColor = HSVColor.fromColor(initialColor);
+    
+    return showDialog<Color>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            const dialogFont = TextStyle(fontSize: 14);
+            Color currentColor = hsvColor.toColor();
+            
+            return AlertDialog(
+              title: Text(title, style: dialogFont),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 280,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade400, width: 1),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: GestureDetector(
+                          onPanStart: (details) {
+                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor.hue, setState, (newHsv) {
+                              hsvColor = newHsv;
+                              currentColor = hsvColor.toColor();
+                            });
+                          },
+                          onPanUpdate: (details) {
+                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor.hue, setState, (newHsv) {
+                              hsvColor = newHsv;
+                              currentColor = hsvColor.toColor();
+                            });
+                          },
+                          child: CustomPaint(
+                            size: const Size(280, 150),
+                            painter: _HSVSaturationValuePainter(
+                              hsvColor.hue,
+                              hsvColor.saturation,
+                              hsvColor.value,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: currentColor,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade400, width: 2),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: TextStyle(fontSize: 14, fontFamily: fontFamily.isEmpty ? null : fontFamily),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('色相:', style: dialogFont),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              Container(
+                                height: 20,
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF0000),
+                                      Color(0xFFFFFF00),
+                                      Color(0xFF00FF00),
+                                      Color(0xFF00FFFF),
+                                      Color(0xFF0000FF),
+                                      Color(0xFFFF00FF),
+                                      Color(0xFFFF0000),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              SliderTheme(
+                                 data: SliderThemeData(
+                                   trackHeight: 20,
+                                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                   overlayShape: SliderComponentShape.noOverlay,
+                                   activeTrackColor: Colors.transparent,
+                                   inactiveTrackColor: Colors.transparent,
+                                 ),
+                                child: Slider(
+                                  value: hsvColor.hue,
+                                  min: 0,
+                                  max: 360,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      hsvColor = hsvColor.withHue(value);
+                                      currentColor = hsvColor.toColor();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('透明度:', style: dialogFont),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Slider(
+                            value: hsvColor.alpha,
+                            min: 0,
+                            max: 1,
+                            activeColor: currentColor,
+                            inactiveColor: Colors.grey.shade300,
+                            onChanged: (value) {
+                              setState(() {
+                                hsvColor = hsvColor.withAlpha(value);
+                                currentColor = hsvColor.toColor();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildQuickColorButton(const Color(0xFF2196F3), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF2196F3));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF4CAF50), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF4CAF50));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFFF44336), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFFF44336));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFFFF9800), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFFFF9800));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF9C27B0), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF9C27B0));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF607D8B), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF607D8B));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context, currentColor);
+                  },
+                  child: const Text('确定'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _updateHsvFromTap(Offset position, Size size, double hue, StateSetter setState, Function(HSVColor) onUpdate) {
+    double saturation = (position.dx / size.width).clamp(0.0, 1.0);
+    double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
+    final newHsv = HSVColor.fromAHSV(1.0, hue, saturation, value);
+    setState(() {});
+    onUpdate(newHsv);
+  }
+
+  Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade400, width: 1),
         ),
       ),
     );
@@ -224,6 +1068,8 @@ class ExportPanel extends StatelessWidget {
 
   Future<void> _exportExcel(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = settingsProvider.exportSettings;
     final logs = logProvider.logs;
 
     if (logs.isEmpty) {
@@ -240,9 +1086,63 @@ class ExportPanel extends StatelessWidget {
         excel.delete(defaultSheet);
       }
 
-      final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+      final now = DateTime.now();
+      String headerText = settings.headerText;
+      headerText = _generateFileName(headerText, now);
 
-      sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 0);
+      final headerColor = excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
+      final headerRowColor = excel_lib.ExcelColor.fromInt(settings.headerRowBackgroundColor.toARGB32());
+      final controllerColor = excel_lib.ExcelColor.fromInt(settings.controllerBackgroundColor.toARGB32());
+      final alternateColor = excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
+      const whiteColor = excel_lib.ExcelColor.white;
+
+      final borderStyle = excel_lib.Border(
+        borderStyle: excel_lib.BorderStyle.Thin,
+        borderColorHex: excel_lib.ExcelColor.grey,
+      );
+
+      final String? excelFontFamily = settings.fontFamily.isEmpty ? null : settings.fontFamily;
+
+      sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
+      sheet.merge(excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 0), customValue: excel_lib.TextCellValue(headerText));
+      sheet.row(0).forEach((cell) {
+        if (cell != null) {
+          cell.cellStyle = excel_lib.CellStyle(
+            backgroundColorHex: headerColor,
+            fontSize: 14,
+            bold: true,
+            fontFamily: excelFontFamily,
+            horizontalAlign: excel_lib.HorizontalAlign.Center,
+            verticalAlign: excel_lib.VerticalAlign.Center,
+            textWrapping: excel_lib.TextWrapping.WrapText,
+            topBorder: borderStyle,
+            bottomBorder: borderStyle,
+            leftBorder: borderStyle,
+            rightBorder: borderStyle,
+          );
+        }
+      });
+      sheet.setRowHeight(0, 30);
+
+      final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+      sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 1);
+      sheet.row(1).forEach((cell) {
+        if (cell != null) {
+          cell.cellStyle = excel_lib.CellStyle(
+            backgroundColorHex: headerRowColor,
+            fontSize: 12,
+            bold: true,
+            fontFamily: excelFontFamily,
+            horizontalAlign: excel_lib.HorizontalAlign.Center,
+            verticalAlign: excel_lib.VerticalAlign.Center,
+            topBorder: borderStyle,
+            bottomBorder: borderStyle,
+            leftBorder: borderStyle,
+            rightBorder: borderStyle,
+          );
+        }
+      });
+      sheet.setRowHeight(1, 25);
 
       final grouped = <String, List<LogEntry>>{};
       for (final log in logs) {
@@ -251,7 +1151,7 @@ class ExportPanel extends StatelessWidget {
       }
 
       int globalIndex = 1;
-      int currentRow = 1;
+      int currentRow = 2;
 
       for (final controller in grouped.keys) {
         final controllerLogs = grouped[controller]!;
@@ -261,9 +1161,35 @@ class ExportPanel extends StatelessWidget {
 
         final controllerRow = <String>['点名主控:', controllerTime, controller, '', '', '', '', '', '', ''];
         sheet.insertRowIterables(controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(), currentRow);
+        sheet.row(currentRow).forEach((cell) {
+          if (cell != null) {
+            cell.cellStyle = excel_lib.CellStyle(
+              backgroundColorHex: controllerColor,
+              fontSize: 11,
+              bold: true,
+              fontFamily: excelFontFamily,
+              horizontalAlign: excel_lib.HorizontalAlign.Center,
+              verticalAlign: excel_lib.VerticalAlign.Center,
+              topBorder: borderStyle,
+              bottomBorder: borderStyle,
+              leftBorder: borderStyle,
+              rightBorder: borderStyle,
+            );
+          }
+        });
+        sheet.setRowHeight(currentRow, 20);
         currentRow++;
 
-        for (final log in controllerLogs) {
+        for (int i = 0; i < controllerLogs.length; i++) {
+          final log = controllerLogs[i];
+          excel_lib.ExcelColor rowColor;
+          
+          if (settings.useAlternateColors) {
+            rowColor = i % 2 == 0 ? whiteColor : alternateColor;
+          } else {
+            rowColor = whiteColor;
+          }
+          
           final rowData = [
             excel_lib.TextCellValue(globalIndex.toString()),
             excel_lib.TextCellValue(log.time),
@@ -277,7 +1203,65 @@ class ExportPanel extends StatelessWidget {
             excel_lib.TextCellValue(''),
           ];
           sheet.insertRowIterables(rowData, currentRow);
+          sheet.row(currentRow).forEach((cell) {
+            if (cell != null) {
+              cell.cellStyle = excel_lib.CellStyle(
+                backgroundColorHex: rowColor,
+                fontSize: 11,
+                fontFamily: excelFontFamily,
+                horizontalAlign: excel_lib.HorizontalAlign.Center,
+                verticalAlign: excel_lib.VerticalAlign.Center,
+                topBorder: borderStyle,
+                bottomBorder: borderStyle,
+                leftBorder: borderStyle,
+                rightBorder: borderStyle,
+              );
+            }
+          });
+          sheet.setRowHeight(currentRow, 20);
           globalIndex++;
+          currentRow++;
+        }
+      }
+
+      if (settings.showFooter) {
+        currentRow += 2;
+
+        const footerBgColor = excel_lib.ExcelColor.white;
+        const footerTextColor = excel_lib.ExcelColor.grey;
+        final lightGreyBorder = excel_lib.Border(
+          borderStyle: excel_lib.BorderStyle.Thin,
+          borderColorHex: excel_lib.ExcelColor.grey,
+        );
+
+        final footerTexts = [
+          '此表格由 OpenLogTool 生成导出，本项目使用开源协议: GNU General Public License V3',
+          '项目仓库地址: https://github.com/Mazha0309/OpenLogTool',
+          '分享点名记录时无须携带本条说明',
+        ];
+
+        for (int i = 0; i < footerTexts.length; i++) {
+          sheet.insertRowIterables([excel_lib.TextCellValue(footerTexts[i])], currentRow);
+          sheet.merge(
+            excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: currentRow),
+            excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: currentRow),
+            customValue: excel_lib.TextCellValue(footerTexts[i]),
+          );
+          sheet.row(currentRow).forEach((cell) {
+            if (cell != null) {
+              cell.cellStyle = excel_lib.CellStyle(
+                backgroundColorHex: footerBgColor,
+                fontColorHex: footerTextColor,
+                fontSize: 10,
+                fontFamily: excelFontFamily,
+                horizontalAlign: excel_lib.HorizontalAlign.Center,
+                verticalAlign: excel_lib.VerticalAlign.Center,
+                leftBorder: lightGreyBorder,
+                rightBorder: lightGreyBorder,
+              );
+            }
+          });
+          sheet.setRowHeight(currentRow, 22);
           currentRow++;
         }
       }
@@ -287,15 +1271,26 @@ class ExportPanel extends StatelessWidget {
         sheet.setColumnWidth(i, colWidths[i]);
       }
 
-      final directory = await getDownloadsDirectory();
-      if (directory == null) {
-        _showSnackBar(context, '无法访问下载目录');
-        return;
+      // 确定导出路径
+      String exportPath;
+      if (settings.exportPath.isNotEmpty) {
+        exportPath = settings.exportPath;
+      } else {
+        final directory = await getDownloadsDirectory();
+        if (directory == null) {
+          _showSnackBar(context, '无法访问下载目录');
+          return;
+        }
+        exportPath = directory.path;
       }
 
-      final now = DateTime.now();
-      final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.xlsx';
-      final file = File('${directory.path}/$filename');
+      // 生成文件名
+      String filename = _generateFileName(settings.fileNameTemplate, now);
+      if (!filename.endsWith('.xlsx')) {
+        filename += '.xlsx';
+      }
+
+      final file = File('$exportPath/$filename');
 
       final bytes = excel.save();
       if (bytes != null) {
@@ -307,6 +1302,18 @@ class ExportPanel extends StatelessWidget {
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
     }
+  }
+
+  String _generateFileName(String template, DateTime now) {
+    String filename = template;
+    // 按照长度从长到短的顺序替换，避免部分替换问题
+    filename = filename.replaceAll('{yyyy}', now.year.toString());
+    filename = filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{HH}', now.hour.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
+    filename = filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
+    return filename;
   }
 
   String _calculateControllerTime(String timeStr) {
@@ -365,7 +1372,6 @@ class ExportPanel extends StatelessWidget {
       final jsonData = json.decode(content) as List;
       final logProvider = Provider.of<LogProvider>(context, listen: false);
       
-      // 解析JSON数据
       final importedLogs = jsonData.map((item) {
         return LogEntry(
           time: item['time'] ?? '',
@@ -400,23 +1406,46 @@ class ExportPanel extends StatelessWidget {
     );
   }
 
-  void _showSuccessDialog(BuildContext context, String title, String message, String filePath) {
+  void _showSuccessDialog(BuildContext context, String title, String message, String path) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: Text(message),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(message),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    path,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 20),
+                  onPressed: () {
+                    // 复制到剪贴板功能
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('路径已复制')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('关闭'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              OpenFile.open(filePath);
-              Navigator.pop(context);
-            },
-            child: const Text('打开文件'),
           ),
         ],
       ),

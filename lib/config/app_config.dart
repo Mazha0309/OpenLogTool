@@ -101,11 +101,19 @@ class AppConfig {
       }
     } catch (_) {}
 
+    // 添加内置更纱黑体作为默认选项
+    if (!fonts.contains('SarasaGothicSC')) {
+      fonts.insert(0, 'SarasaGothicSC');
+    }
+
     if (fonts.isEmpty) {
-      fonts.addAll(['Roboto', 'Arial', 'sans-serif']);
+      fonts.addAll(['SarasaGothicSC', 'Roboto', 'Arial', 'sans-serif']);
     }
 
     fonts.sort();
+    // 将更纱黑体和系统默认移到最前面
+    fonts.remove('SarasaGothicSC');
+    fonts.insert(0, 'SarasaGothicSC');
     return fonts;
   }
 }

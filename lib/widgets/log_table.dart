@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 
 class LogTable extends StatefulWidget {
@@ -13,6 +14,8 @@ class LogTable extends StatefulWidget {
 class _LogTableState extends State<LogTable> {
   int? _editingIndex;
   late Map<String, TextEditingController> _controllers;
+  int _currentPage = 0;
+  static const int _itemsPerPage = 5;
 
   @override
   void initState() {
@@ -29,8 +32,6 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _startEditing(int index, LogEntry log) {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    logProvider.startEditing(index);
     setState(() {
       _editingIndex = index;
       _controllers = {
@@ -48,8 +49,6 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _cancelEditing() {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    logProvider.cancelEditing();
     setState(() {
       _editingIndex = null;
       for (var controller in _controllers.values) {
@@ -79,6 +78,7 @@ class _LogTableState extends State<LogTable> {
   @override
   Widget build(BuildContext context) {
     final logProvider = Provider.of<LogProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
 
     if (logProvider.logs.isEmpty) {
       return Container(
@@ -119,21 +119,29 @@ class _LogTableState extends State<LogTable> {
 
     final horizontalController = ScrollController();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) => true,
-            child: Scrollbar(
-              controller: horizontalController,
-              thumbVisibility: true,
-              trackVisibility: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                controller: horizontalController,
-                child: SingleChildScrollView(
-                  child: DataTable(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 如果高度无限，使用一个默认高度
+        final maxHeight = constraints.maxHeight.isFinite 
+            ? constraints.maxHeight 
+            : 400.0;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            SizedBox(
+              height: maxHeight,
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) => true,
+                child: Scrollbar(
+                  controller: horizontalController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: horizontalController,
+                    child: SingleChildScrollView(
+                      child: DataTable(
                     columnSpacing: 16,
                     horizontalMargin: 16,
                     headingRowHeight: 48,
@@ -188,226 +196,281 @@ class _LogTableState extends State<LogTable> {
                         label: SizedBox(width: 120, child: Text('操作')),
                       ),
                     ],
-                    rows: logProvider.logs.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final log = entry.value;
-                      final isEditing = _editingIndex == index;
-
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            SizedBox(
-                              width: 60,
-                              child: Text('${index + 1}'),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 100,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['time'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.time),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 120,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['controller'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.controller),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 120,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['callsign'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.callsign),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 100,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['report'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.report),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 150,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['qth'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.qth),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 150,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['device'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.device),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 80,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['power'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.power),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 150,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['antenna'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.antenna),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 80,
-                              child: isEditing
-                                  ? TextField(
-                                      controller: _controllers['height'],
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: const InputDecoration(
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(log.height),
-                            ),
-                          ),
-                          DataCell(
-                            SizedBox(
-                              width: 120,
-                              child: isEditing
-                                  ? Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.check, size: 20),
-                                          onPressed: () => _saveEditing(index),
-                                          tooltip: '保存',
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withValues(alpha: 0.1),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        IconButton(
-                                          icon: const Icon(Icons.close, size: 20),
-                                          onPressed: _cancelEditing,
-                                          tooltip: '取消',
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: Theme.of(context)
-                                                .colorScheme
-                                                .error
-                                                .withValues(alpha: 0.1),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit, size: 20),
-                                          onPressed: () => _startEditing(index, log),
-                                          tooltip: '编辑记录',
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withValues(alpha: 0.1),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete, size: 20),
-                                          onPressed: () => _showDeleteConfirmation(context, index),
-                                          tooltip: '删除记录',
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: Theme.of(context)
-                                                .colorScheme
-                                                .error
-                                                .withValues(alpha: 0.1),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                    rows: _buildTableRows(context, logProvider, settingsProvider),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
+            // 分页控件
+            if (settingsProvider.paginationEnabled && logProvider.logs.length > _itemsPerPage)
+              _buildPaginationControls(logProvider.logs.length),
+          ],
+        );
+      },
+    );
+  }
+
+  List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider, SettingsProvider settingsProvider) {
+    final logs = logProvider.logs;
+    
+    // 如果启用分页，只显示当前页的数据
+    List<LogEntry> displayLogs;
+    if (settingsProvider.paginationEnabled) {
+      final startIndex = _currentPage * _itemsPerPage;
+      final endIndex = (startIndex + _itemsPerPage).clamp(0, logs.length);
+      displayLogs = logs.sublist(startIndex, endIndex);
+    } else {
+      displayLogs = logs;
+    }
+    
+    return displayLogs.asMap().entries.map((entry) {
+      final displayIndex = entry.key;
+      final log = entry.value;
+      // 计算原始索引（用于编辑和删除）
+      final originalIndex = settingsProvider.paginationEnabled 
+          ? _currentPage * _itemsPerPage + displayIndex
+          : displayIndex;
+      final isEditing = _editingIndex == originalIndex;
+      // 倒序序号：总记录数 - 原始索引
+      final reverseIndex = logs.length - originalIndex;
+
+      return DataRow(
+        cells: [
+          DataCell(
+            SizedBox(
+              width: 60,
+              child: Text('$reverseIndex'),
+            ),
           ),
-        ),
-      ],
+          DataCell(
+            SizedBox(
+              width: 100,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['time'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.time),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 120,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['controller'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.controller),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 120,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['callsign'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.callsign),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 100,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['report'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.report),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 150,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['qth'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.qth),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 150,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['device'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.device),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 80,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['power'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.power),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 150,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['antenna'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.antenna),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 80,
+              child: isEditing
+                  ? TextField(
+                      controller: _controllers['height'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                    )
+                  : Text(log.height),
+            ),
+          ),
+          DataCell(
+            SizedBox(
+              width: 120,
+              child: isEditing
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.check, size: 20),
+                          onPressed: () => _saveEditing(originalIndex),
+                          tooltip: '保存',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.1),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: _cancelEditing,
+                          tooltip: '取消',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .error
+                                .withValues(alpha: 0.1),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 20),
+                          onPressed: () => _startEditing(originalIndex, log),
+                          tooltip: '编辑记录',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.1),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.delete, size: 20),
+                          onPressed: () => _showDeleteConfirmation(context, originalIndex),
+                          tooltip: '删除记录',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .error
+                                .withValues(alpha: 0.1),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      );
+    }).toList();
+  }
+
+  Widget _buildPaginationControls(int totalItems) {
+    final totalPages = (totalItems / _itemsPerPage).ceil();
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: _currentPage > 0
+                ? () => setState(() => _currentPage--)
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Text('${_currentPage + 1} / $totalPages'),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: _currentPage < totalPages - 1
+                ? () => setState(() => _currentPage++)
+                : null,
+          ),
+        ],
+      ),
     );
   }
 

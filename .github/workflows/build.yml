@@ -158,16 +158,83 @@ jobs:
       - name: Build Linux
         run: flutter build linux --release
 
+      - name: Install AppImage tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget fuse libfuse2 file
+
+      - name: Download AppImageKit
+        run: |
+          mkdir -p appimage-temp
+          cd appimage-temp
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          cd ..
+
+      - name: Create AppDir structure
+        run: |
+          # Flutter bundle structure: executable uses RUNPATH=$ORIGIN/lib
+          # So we need to keep the same structure: bin/openlogtool and bin/lib/
+          mkdir -p AppDir/usr/bin/lib
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy Flutter bundle - keep original structure
+          cp build/linux/x64/release/bundle/openlogtool AppDir/usr/bin/
+          cp -r build/linux/x64/release/bundle/lib/* AppDir/usr/bin/lib/
+          cp -r build/linux/x64/release/bundle/data AppDir/usr/bin/
+          
+          # Create AppRun script
+          cat > AppDir/AppRun << 'APPRUN_EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          # LD_LIBRARY_PATH not needed - binary uses RUNPATH=$ORIGIN/lib
+          exec "${HERE}/usr/bin/openlogtool" "$@"
+          APPRUN_EOF
+          chmod +x AppDir/AppRun
+          
+          # Create desktop file
+          cat > AppDir/openlogtool.desktop << 'DESKTOP_EOF'
+          [Desktop Entry]
+          Name=OpenLogTool
+          Comment=点名记录工具
+          Exec=openlogtool
+          Icon=openlogtool
+          Terminal=false
+          Type=Application
+          Categories=Utility;
+          DESKTOP_EOF
+          
+          cp AppDir/openlogtool.desktop AppDir/usr/share/applications/
+          
+          # Copy actual icon file
+          cp icon.png AppDir/openlogtool.png
+          cp AppDir/openlogtool.png AppDir/usr/share/icons/hicolor/256x256/apps/openlogtool.png
+          cp AppDir/openlogtool.png AppDir/.DirIcon
+
+      - name: Build AppImage
+        run: |
+          cd appimage-temp
+          export VERSION="${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}"
+          export ARCH=x86_64
+          ./appimagetool-x86_64.AppImage ../AppDir ../build/linux/x64/release/OpenLogTool-"$VERSION".${{ needs.get-version.outputs.build_number }}-linux-x86_64.AppImage
+          
+          ls -la ../build/linux/x64/release/*.AppImage 2>/dev/null || echo "No AppImage generated"
+
       - name: Package as tar.gz
         run: |
           cd build/linux/x64/release
           tar -czvf openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz bundle/
 
-      - name: Upload Linux
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-linux
-          path: build/linux/x64/release/openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz
+          path: |
+            build/linux/x64/release/*.tar.gz
+            build/linux/x64/release/*.AppImage
 
   # 构建 Windows
   build-windows:
@@ -256,12 +323,40 @@ jobs:
           echo "=== Build output ==="
           ls -la build/macos/Build/Products/Release/
           find build/macos/Build/Products/Release/ -name "*.app" -type d
+          
+      - name: Package macOS app
+        run: |
+          cd build/macos/Build/Products/Release/
+          # 检查生成的 .app 目录
+          ls -la *.app/
+          
+          # 创建 DMG 文件
+          # 使用 create-dmg 工具创建美观的 DMG
+          brew install create-dmg || true
+          
+          # 创建 DMG
+          create-dmg \
+            --volname "OpenLogTool Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --app-drop-link 600 185 \
+            --icon "openlogtool.app" 200 185 \
+            "openlogtool-macos-${{ env.VERSION_NAME }}.dmg" \
+            "openlogtool.app" || {
+              # 如果 create-dmg 失败，使用 hdiutil 创建基本 DMG
+              echo "create-dmg failed, using hdiutil..."
+              hdiutil create -volname "OpenLogTool" -srcfolder "openlogtool.app" -ov -format UDZO "openlogtool-macos-${{ env.VERSION_NAME }}.dmg"
+            }
+          
+          echo "=== Packaged file ==="
+          ls -la *.dmg
 
       - name: Upload macOS
         uses: actions/upload-artifact@v4
         with:
           name: openlogtool-macos
-          path: build/macos/Build/Products/Release/
+          path: build/macos/Build/Products/Release/*.dmg
 
   # 创建 Release（仅在 main 分支推送时）
   release:
@@ -271,6 +366,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Get pubspec version
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -287,8 +387,8 @@ jobs:
           files: |
             artifacts/openlogtool-android-apk/*.apk
             artifacts/openlogtool-linux/*.tar.gz
+            artifacts/openlogtool-linux/*.AppImage
             artifacts/openlogtool-windows-installer/*.exe
-            artifacts/openlogtool-windows-build/**/*
-            artifacts/openlogtool-macos/**/*.app
+            artifacts/openlogtool-macos/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

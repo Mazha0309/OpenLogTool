@@ -20,7 +20,6 @@
 ### 数据导入导出
 - JSON导出/导入
 - Excel导出（开发中）
-- PNG导出（开发中）
 
 ### 主题设置
 - 自定义主题颜色
@@ -28,10 +27,10 @@
 - 宽屏布局开关
 
 ### 跨平台
-- Linux（已支持）
-- Windows（需构建）
-- macOS（需构建）
-- Android（需构建）
+- Linux
+- Windows
+- macOS
+- Android
 
 ## 开始使用
 
@@ -46,6 +45,9 @@ git clone https://github.com/Mazha0309/OpenLogTool.git
 cd OpenLogTool
 flutter pub get
 flutter build linux
+flutter build windows
+flutter build macos
+flutter build android
 ```
 
 ### 项目结构
@@ -79,7 +81,3 @@ lib/
 ## License
 
 GPL-3.0
-
-## 联系方式
-
-GitHub: https://github.com/Mazha0309
