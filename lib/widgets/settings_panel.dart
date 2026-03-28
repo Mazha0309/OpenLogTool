@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -264,6 +267,19 @@ class SettingsPanel extends StatelessWidget {
                   title: '数据库状态',
                   subtitle: '查看数据库详细信息和日志',
                   onTap: () => _showDatabaseLogDialog(context),
+                ),
+                _buildSettingsListTile(
+                  icon: Icons.upload,
+                  title: '导出数据库',
+                  subtitle: '将数据库导出为JSON文件',
+                  onTap: () => _exportDatabase(context),
+                ),
+                _buildSettingsListTile(
+                  icon: Icons.download,
+                  title: '导入数据库',
+                  subtitle: '从JSON文件导入数据库',
+                  textColor: Colors.orange,
+                  onTap: () => _showImportDatabaseDialog(context),
                 ),
                 const Divider(),
                 _buildSettingsListTile(
@@ -756,6 +772,107 @@ class SettingsPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _exportDatabase(BuildContext context) async {
+    try {
+      final db = DatabaseHelper();
+      final jsonData = await db.exportDatabase();
+      final stats = await db.getDatabaseStats();
+
+      final now = DateTime.now();
+      final fileName = 'openlogtool_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
+
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: '保存数据库备份',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: utf8.encode(jsonData),
+      );
+
+      if (result != null) {
+        final file = File(result);
+        await file.writeAsString(jsonData);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('数据库已导出！\n记录: ${stats['logs']} 条\n设备: ${stats['device_dictionary']} 个\n天线: ${stats['antenna_dictionary']} 个\nQTH: ${stats['qth_dictionary']} 个\n呼号: ${stats['callsign_dictionary']} 个\n历史: ${stats['history']} 条'),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showImportDatabaseDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('导入数据库'),
+        content: const Text('⚠️ 警告：导入将覆盖所有现有数据！\n\n此操作不可恢复，建议先导出当前数据库。\n\n确定要继续吗？'),
+        actions: [
+          FButton(
+            label: '取消',
+            onPress: () => Navigator.pop(dialogContext),
+          ),
+          FButton(
+            label: '继续导入',
+            style: FButtonStyle.destructive,
+            onPress: () async {
+              Navigator.pop(dialogContext);
+              await _importDatabase(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importDatabase(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: '选择数据库备份文件',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        withData: true,
+      );
+
+      if (result != null && result.files.single.bytes != null) {
+        final jsonData = utf8.decode(result.files.single.bytes!);
+        final db = DatabaseHelper();
+        await db.importDatabase(jsonData);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('数据库导入成功！'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入失败: $e'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   void _showDatabaseLogDialog(BuildContext context) async {

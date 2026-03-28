@@ -10,6 +10,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _isDarkModeKey = 'isDarkMode';
   static const String _fontFamilyKey = 'fontFamily';
   static const String _exportSettingsKey = 'exportSettings';
+  static const String _callSignQthLinkKey = 'callSignQthLinkEnabled';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
@@ -17,6 +18,7 @@ class SettingsProvider with ChangeNotifier {
   String _fontFamily = '';
   List<String> _availableFonts = [];
   ExportSettings _exportSettings = ExportSettings();
+  bool _callSignQthLinkEnabled = true;
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
@@ -24,6 +26,7 @@ class SettingsProvider with ChangeNotifier {
   String? get fontFamily => _fontFamily.isEmpty ? null : _fontFamily;
   List<String> get availableFonts => _availableFonts;
   ExportSettings get exportSettings => _exportSettings;
+  bool get callSignQthLinkEnabled => _callSignQthLinkEnabled;
 
   SettingsProvider() {
     _loadSettings();
@@ -51,6 +54,8 @@ class SettingsProvider with ChangeNotifier {
         _exportSettings = ExportSettings();
       }
     }
+
+    _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
     
     notifyListeners();
   }
@@ -88,6 +93,12 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setFontFamily(String? fontFamily) async {
     _fontFamily = fontFamily ?? '';
     await _saveSetting(_fontFamilyKey, _fontFamily);
+    notifyListeners();
+  }
+
+  Future<void> setCallSignQthLink(bool enabled) async {
+    _callSignQthLinkEnabled = enabled;
+    await _saveSetting(_callSignQthLinkKey, enabled);
     notifyListeners();
   }
 
