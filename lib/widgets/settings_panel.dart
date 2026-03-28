@@ -264,6 +264,32 @@ class SettingsPanel extends StatelessWidget {
                   ],
                 ),
 
+                const Divider(),
+
+                // QTH联动开关
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('呼号-QTH联动'),
+                          SizedBox(height: 2),
+                          Text(
+                            '自动关联呼号和QTH，输入呼号时显示历史QTH',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: settingsProvider.callSignQthLinkEnabled,
+                      onChanged: (value) => settingsProvider.setCallSignQthLink(value),
+                    ),
+                  ],
+                ),
+
               ],
             ),
           ),

@@ -434,37 +434,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             hintText: hintText,
             border: const OutlineInputBorder(),
             isDense: true,
-            contentPadding: const EdgeInsets.only(left: 12, right: 4, top: 14, bottom: 14),
-            suffixIcon: Consumer<SettingsProvider>(
-              builder: (context, settings, child) {
-                final isEnabled = settings.callSignQthLinkEnabled;
-                return IconButton(
-                  onPressed: () {
-                    settings.setCallSignQthLink(!isEnabled);
-                  },
-                  icon: Container(
-                    width: 32,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      color: isEnabled 
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.grey.shade400,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      'QTH',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                  tooltip: 'QTH联动',
-                );
-              },
-            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           ),
           onChanged: (value) {
             controller.text = value.toUpperCase();
