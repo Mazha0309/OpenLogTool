@@ -10,17 +10,19 @@ class ExportSettings {
   Color alternateRowColor;
   bool useAlternateColors;
   String fontFamily;
+  bool showFooter;
 
   ExportSettings({
     this.headerText = '{yyyy-MM-dd}日点名记录',
     this.headerDateFormat = 'yyyy-MM-dd',
     this.headerBackgroundColor = const Color(0xFFC0E5F2),
-    this.headerRowBackgroundColor = const Color(0xFF1D85EE),
-    this.controllerBackgroundColor = const Color(0xFFFFFF64),
+    this.headerRowBackgroundColor = const Color(0xFFCFE7FF),
+    this.controllerBackgroundColor = const Color(0xFFFFFFC3),
     this.tableBackgroundColor = Colors.white,
     this.alternateRowColor = const Color(0xFFC0E5F2),
     this.useAlternateColors = true,
     this.fontFamily = 'Roboto',
+    this.showFooter = true,
   });
 
   Map<String, dynamic> toJson() {
@@ -34,6 +36,7 @@ class ExportSettings {
       'alternateRowColor': alternateRowColor.toARGB32(),
       'useAlternateColors': useAlternateColors,
       'fontFamily': fontFamily,
+      'showFooter': showFooter,
     };
   }
 
@@ -48,6 +51,7 @@ class ExportSettings {
       alternateRowColor: Color(json['alternateRowColor'] ?? 0xFFADD8E6),
       useAlternateColors: json['useAlternateColors'] ?? true,
       fontFamily: json['fontFamily'] ?? 'Roboto',
+      showFooter: json['showFooter'] ?? true,
     );
   }
 
@@ -61,6 +65,7 @@ class ExportSettings {
     Color? alternateRowColor,
     bool? useAlternateColors,
     String? fontFamily,
+    bool? showFooter,
   }) {
     return ExportSettings(
       headerText: headerText ?? this.headerText,
@@ -72,6 +77,7 @@ class ExportSettings {
       alternateRowColor: alternateRowColor ?? this.alternateRowColor,
       useAlternateColors: useAlternateColors ?? this.useAlternateColors,
       fontFamily: fontFamily ?? this.fontFamily,
+      showFooter: showFooter ?? this.showFooter,
     );
   }
 }
