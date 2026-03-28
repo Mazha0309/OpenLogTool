@@ -11,6 +11,76 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/export_settings.dart';
 
+class _HSVSaturationValuePainter extends CustomPainter {
+  final double hue;
+  final double saturation;
+  final double value;
+
+  _HSVSaturationValuePainter(this.hue, this.saturation, this.value);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    final saturationGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [
+        Colors.white,
+        HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
+      ],
+    );
+    canvas.drawRect(rect, Paint()..shader = saturationGradient.createShader(rect));
+
+    final valueGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Colors.transparent,
+        Colors.black,
+      ],
+    );
+    canvas.drawRect(rect, Paint()..shader = valueGradient.createShader(rect));
+
+    final circleX = saturation * size.width;
+    final circleY = (1.0 - value) * size.height;
+    final circleColor = HSVColor.fromAHSV(1.0, hue, saturation, value).toColor();
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      8,
+      Paint()
+        ..color = circleColor
+        ..style = PaintingStyle.fill,
+    );
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      8,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    
+    canvas.drawCircle(
+      Offset(circleX, circleY),
+      10,
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HSVSaturationValuePainter oldDelegate) {
+    return oldDelegate.hue != hue || 
+           oldDelegate.saturation != saturation || 
+           oldDelegate.value != value;
+  }
+}
+
 class ExportPanel extends StatelessWidget {
   const ExportPanel({super.key});
 
@@ -205,8 +275,10 @@ class ExportPanel extends StatelessWidget {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
+          const dialogFont = TextStyle(fontSize: 14);
+          
           return AlertDialog(
-            title: const Text('Excel导出设置'),
+            title: const Text('Excel导出设置', style: dialogFont),
             content: SizedBox(
               width: 400,
               child: SingleChildScrollView(
@@ -214,7 +286,7 @@ class ExportPanel extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('抬头文字'),
+                    const Text('抬头文字', style: dialogFont),
                     TextField(
                       controller: TextEditingController(text: settings.headerText),
                       decoration: const InputDecoration(
@@ -227,7 +299,7 @@ class ExportPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     
-                    const Text('抬头背景色'),
+                    const Text('抬头背景色', style: dialogFont),
                     Row(
                       children: [
                         _buildColorButton(settings.headerBackgroundColor, () async {
@@ -235,6 +307,7 @@ class ExportPanel extends StatelessWidget {
                             context,
                             '选择抬头背景色',
                             settings.headerBackgroundColor,
+                            settings.fontFamily,
                           );
                           if (color != null) {
                             setState(() => settings.headerBackgroundColor = color);
@@ -244,14 +317,39 @@ class ExportPanel extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'HEX: #${settings.headerBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     
-                    const Text('主控栏背景色'),
+                    const Text('表头背景色', style: dialogFont),
+                    Row(
+                      children: [
+                        _buildColorButton(settings.headerRowBackgroundColor, () async {
+                          final color = await _showColorPickerDialog(
+                            context,
+                            '选择表头背景色',
+                            settings.headerRowBackgroundColor,
+                            settings.fontFamily,
+                          );
+                          if (color != null) {
+                            setState(() => settings.headerRowBackgroundColor = color);
+                          }
+                        }),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${settings.headerRowBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    const Text('主控栏背景色', style: dialogFont),
                     Row(
                       children: [
                         _buildColorButton(settings.controllerBackgroundColor, () async {
@@ -259,6 +357,7 @@ class ExportPanel extends StatelessWidget {
                             context,
                             '选择主控栏背景色',
                             settings.controllerBackgroundColor,
+                            settings.fontFamily,
                           );
                           if (color != null) {
                             setState(() => settings.controllerBackgroundColor = color);
@@ -268,7 +367,7 @@ class ExportPanel extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'HEX: #${settings.controllerBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
                           ),
                         ),
                       ],
@@ -277,7 +376,7 @@ class ExportPanel extends StatelessWidget {
                     
                     Row(
                       children: [
-                        const Text('双色交替'),
+                        const Text('双色交替', style: dialogFont),
                         const Spacer(),
                         Switch(
                           value: settings.useAlternateColors,
@@ -289,7 +388,7 @@ class ExportPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     
-                    const Text('普通背景色'),
+                    const Text('普通背景色', style: dialogFont),
                     Row(
                       children: [
                         _buildColorButton(settings.tableBackgroundColor, () async {
@@ -297,6 +396,7 @@ class ExportPanel extends StatelessWidget {
                             context,
                             '选择普通背景色',
                             settings.tableBackgroundColor,
+                            settings.fontFamily,
                           );
                           if (color != null) {
                             setState(() => settings.tableBackgroundColor = color);
@@ -306,7 +406,7 @@ class ExportPanel extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'HEX: #${settings.tableBackgroundColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                            style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
                           ),
                         ),
                       ],
@@ -314,7 +414,7 @@ class ExportPanel extends StatelessWidget {
                     
                     if (settings.useAlternateColors) ...[
                       const SizedBox(height: 16),
-                      const Text('交替行颜色'),
+                      const Text('交替行颜色', style: dialogFont),
                       Row(
                         children: [
                           _buildColorButton(settings.alternateRowColor, () async {
@@ -322,6 +422,7 @@ class ExportPanel extends StatelessWidget {
                               context,
                               '选择交替行颜色',
                               settings.alternateRowColor,
+                              settings.fontFamily,
                             );
                             if (color != null) {
                               setState(() => settings.alternateRowColor = color);
@@ -331,7 +432,7 @@ class ExportPanel extends StatelessWidget {
                           Expanded(
                             child: Text(
                               'HEX: #${settings.alternateRowColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                              style: TextStyle(fontSize: 12, fontFamily: settings.fontFamily.isEmpty ? 'monospace' : settings.fontFamily),
                             ),
                           ),
                         ],
@@ -339,7 +440,26 @@ class ExportPanel extends StatelessWidget {
                     ],
                     const SizedBox(height: 16),
                     
-                    const Text('表格字体'),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.restore, size: 18),
+                          label: const Text('恢复默认颜色'),
+                          onPressed: () {
+                            setState(() {
+                              settings.headerBackgroundColor = const Color(0xFF2196F3);
+                              settings.headerRowBackgroundColor = const Color(0xFF1976D2);
+                              settings.controllerBackgroundColor = const Color(0xFFFFFF00);
+                              settings.tableBackgroundColor = Colors.white;
+                              settings.alternateRowColor = const Color(0xFFADD8E6);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    const Text('表格字体', style: dialogFont),
                     DropdownButton<String>(
                       value: settings.fontFamily.isEmpty ? 'Roboto' : settings.fontFamily,
                       isExpanded: true,
@@ -411,68 +531,195 @@ class ExportPanel extends StatelessWidget {
     BuildContext context,
     String title,
     Color initialColor,
+    String fontFamily,
   ) async {
-    int red = initialColor.r.toInt();
-    int green = initialColor.g.toInt();
-    int blue = initialColor.b.toInt();
+    HSVColor hsvColor = HSVColor.fromColor(initialColor);
     
     return showDialog<Color>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            const dialogFont = TextStyle(fontSize: 14);
+            Color currentColor = hsvColor.toColor();
+            
             return AlertDialog(
-              title: Text(title),
+              title: Text(title, style: dialogFont),
               content: SizedBox(
                 width: 320,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 100,
-                      height: 100,
+                      width: 280,
+                      height: 150,
                       decoration: BoxDecoration(
-                        color: Color.fromARGB(255, red, green, blue),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade400, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade400, width: 1),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: GestureDetector(
+                          onPanStart: (details) {
+                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor.hue, setState, (newHsv) {
+                              hsvColor = newHsv;
+                              currentColor = hsvColor.toColor();
+                            });
+                          },
+                          onPanUpdate: (details) {
+                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor.hue, setState, (newHsv) {
+                              hsvColor = newHsv;
+                              currentColor = hsvColor.toColor();
+                            });
+                          },
+                          child: CustomPaint(
+                            size: const Size(280, 150),
+                            painter: _HSVSaturationValuePainter(
+                              hsvColor.hue,
+                              hsvColor.saturation,
+                              hsvColor.value,
+                            ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildColorSlider(
-                      label: '红色',
-                      value: red.toDouble(),
-                      color: Colors.red,
-                      onChanged: (value) {
-                        setState(() => red = value.toInt());
-                      },
-                    ),
-                    _buildColorSlider(
-                      label: '绿色',
-                      value: green.toDouble(),
-                      color: Colors.green,
-                      onChanged: (value) {
-                        setState(() => green = value.toInt());
-                      },
-                    ),
-                    _buildColorSlider(
-                      label: '蓝色',
-                      value: blue.toDouble(),
-                      color: Colors.blue,
-                      onChanged: (value) {
-                        setState(() => blue = value.toInt());
-                      },
-                    ),
                     const SizedBox(height: 8),
-                    Text(
-                      'HEX: #${red.toRadixString(16).padLeft(2, '0')}${green.toRadixString(16).padLeft(2, '0')}${blue.toRadixString(16).padLeft(2, '0')}'.toUpperCase(),
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: currentColor,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade400, width: 2),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                            style: TextStyle(fontSize: 14, fontFamily: fontFamily.isEmpty ? null : fontFamily),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('色相:', style: dialogFont),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              Container(
+                                height: 20,
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF0000),
+                                      Color(0xFFFFFF00),
+                                      Color(0xFF00FF00),
+                                      Color(0xFF00FFFF),
+                                      Color(0xFF0000FF),
+                                      Color(0xFFFF00FF),
+                                      Color(0xFFFF0000),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              SliderTheme(
+                                 data: SliderThemeData(
+                                   trackHeight: 20,
+                                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                   overlayShape: SliderComponentShape.noOverlay,
+                                   activeTrackColor: Colors.transparent,
+                                   inactiveTrackColor: Colors.transparent,
+                                 ),
+                                child: Slider(
+                                  value: hsvColor.hue,
+                                  min: 0,
+                                  max: 360,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      hsvColor = hsvColor.withHue(value);
+                                      currentColor = hsvColor.toColor();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('透明度:', style: dialogFont),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Slider(
+                            value: hsvColor.alpha,
+                            min: 0,
+                            max: 1,
+                            activeColor: currentColor,
+                            inactiveColor: Colors.grey.shade300,
+                            onChanged: (value) {
+                              setState(() {
+                                hsvColor = hsvColor.withAlpha(value);
+                                currentColor = hsvColor.toColor();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildQuickColorButton(const Color(0xFF2196F3), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF2196F3));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF4CAF50), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF4CAF50));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFFF44336), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFFF44336));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFFFF9800), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFFFF9800));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF9C27B0), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF9C27B0));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                        _buildQuickColorButton(const Color(0xFF607D8B), () {
+                          setState(() {
+                            hsvColor = HSVColor.fromColor(const Color(0xFF607D8B));
+                            currentColor = hsvColor.toColor();
+                          });
+                        }),
+                      ],
                     ),
                   ],
                 ),
@@ -484,7 +731,7 @@ class ExportPanel extends StatelessWidget {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context, Color.fromARGB(255, red, green, blue));
+                    Navigator.pop(context, currentColor);
                   },
                   child: const Text('确定'),
                 ),
@@ -496,16 +743,26 @@ class ExportPanel extends StatelessWidget {
     );
   }
 
+  void _updateHsvFromTap(Offset position, Size size, double hue, StateSetter setState, Function(HSVColor) onUpdate) {
+    double saturation = (position.dx / size.width).clamp(0.0, 1.0);
+    double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
+    final newHsv = HSVColor.fromAHSV(1.0, hue, saturation, value);
+    setState(() {});
+    onUpdate(newHsv);
+  }
+
   Widget _buildColorSlider({
     required String label,
     required double value,
     required Color color,
     required ValueChanged<double> onChanged,
   }) {
+    const dialogFont = TextStyle(fontSize: 14);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$label: ${value.toInt()}'),
+        Text('$label: ${value.toInt()}', style: dialogFont),
         Slider(
           value: value,
           min: 0,
@@ -514,6 +771,21 @@ class ExportPanel extends StatelessWidget {
           onChanged: onChanged,
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade400, width: 1),
+        ),
+      ),
     );
   }
 
@@ -576,6 +848,7 @@ class ExportPanel extends StatelessWidget {
       headerText = headerText.replaceAll('{yyyy-MM-dd}', '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}');
 
       final headerColor = excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
+      final headerRowColor = excel_lib.ExcelColor.fromInt(settings.headerRowBackgroundColor.toARGB32());
       final controllerColor = excel_lib.ExcelColor.fromInt(settings.controllerBackgroundColor.toARGB32());
       final alternateColor = excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
       const whiteColor = excel_lib.ExcelColor.white;
@@ -608,7 +881,7 @@ class ExportPanel extends StatelessWidget {
       sheet.row(1).forEach((cell) {
         if (cell != null) {
           cell.cellStyle = excel_lib.CellStyle(
-            backgroundColorHex: headerColor,
+            backgroundColorHex: headerRowColor,
             fontSize: 12,
             bold: true,
             horizontalAlign: excel_lib.HorizontalAlign.Center,
@@ -679,7 +952,7 @@ class ExportPanel extends StatelessWidget {
             if (cell != null) {
               cell.cellStyle = excel_lib.CellStyle(
                 backgroundColorHex: rowColor,
-                fontSize: 10,
+                fontSize: 11,
                 topBorder: borderStyle,
                 bottomBorder: borderStyle,
                 leftBorder: borderStyle,
