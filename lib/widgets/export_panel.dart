@@ -387,6 +387,20 @@ class ExportPanel extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
+
+                    Row(
+                      children: [
+                        const Text('底部信息', style: dialogFont),
+                        const Spacer(),
+                        Switch(
+                          value: settings.showFooter,
+                          onChanged: (value) {
+                            setState(() => settings.showFooter = value);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     
                     const Text('普通背景色', style: dialogFont),
                     Row(
@@ -448,8 +462,8 @@ class ExportPanel extends StatelessWidget {
                           onPressed: () {
                             setState(() {
                               settings.headerBackgroundColor = const Color(0xFFC0E5F2);
-                              settings.headerRowBackgroundColor = const Color(0xFF1D85EE);
-                              settings.controllerBackgroundColor = const Color(0xFFFFFF64);
+                              settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
+                              settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
                               settings.tableBackgroundColor = Colors.white;
                               settings.alternateRowColor = const Color(0xFFC0E5F2);
                             });
@@ -832,7 +846,7 @@ class ExportPanel extends StatelessWidget {
 
       final borderStyle = excel_lib.Border(
         borderStyle: excel_lib.BorderStyle.Thin,
-        borderColorHex: excel_lib.ExcelColor.black,
+        borderColorHex: excel_lib.ExcelColor.grey,
       );
 
       final String? excelFontFamily = settings.fontFamily.isEmpty ? null : settings.fontFamily;
@@ -847,6 +861,7 @@ class ExportPanel extends StatelessWidget {
             bold: true,
             fontFamily: excelFontFamily,
             horizontalAlign: excel_lib.HorizontalAlign.Center,
+            verticalAlign: excel_lib.VerticalAlign.Center,
             textWrapping: excel_lib.TextWrapping.WrapText,
             topBorder: borderStyle,
             bottomBorder: borderStyle,
@@ -855,6 +870,7 @@ class ExportPanel extends StatelessWidget {
           );
         }
       });
+      sheet.setRowHeight(0, 30);
 
       final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
       sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 1);
@@ -866,6 +882,7 @@ class ExportPanel extends StatelessWidget {
             bold: true,
             fontFamily: excelFontFamily,
             horizontalAlign: excel_lib.HorizontalAlign.Center,
+            verticalAlign: excel_lib.VerticalAlign.Center,
             topBorder: borderStyle,
             bottomBorder: borderStyle,
             leftBorder: borderStyle,
@@ -873,6 +890,7 @@ class ExportPanel extends StatelessWidget {
           );
         }
       });
+      sheet.setRowHeight(1, 25);
 
       final grouped = <String, List<LogEntry>>{};
       for (final log in logs) {
@@ -898,6 +916,8 @@ class ExportPanel extends StatelessWidget {
               fontSize: 11,
               bold: true,
               fontFamily: excelFontFamily,
+              horizontalAlign: excel_lib.HorizontalAlign.Center,
+              verticalAlign: excel_lib.VerticalAlign.Center,
               topBorder: borderStyle,
               bottomBorder: borderStyle,
               leftBorder: borderStyle,
@@ -905,6 +925,7 @@ class ExportPanel extends StatelessWidget {
             );
           }
         });
+        sheet.setRowHeight(currentRow, 20);
         currentRow++;
 
         for (int i = 0; i < controllerLogs.length; i++) {
@@ -936,6 +957,8 @@ class ExportPanel extends StatelessWidget {
                 backgroundColorHex: rowColor,
                 fontSize: 11,
                 fontFamily: excelFontFamily,
+                horizontalAlign: excel_lib.HorizontalAlign.Center,
+                verticalAlign: excel_lib.VerticalAlign.Center,
                 topBorder: borderStyle,
                 bottomBorder: borderStyle,
                 leftBorder: borderStyle,
@@ -943,7 +966,50 @@ class ExportPanel extends StatelessWidget {
               );
             }
           });
+          sheet.setRowHeight(currentRow, 20);
           globalIndex++;
+          currentRow++;
+        }
+      }
+
+      if (settings.showFooter) {
+        currentRow += 2;
+
+        const footerBgColor = excel_lib.ExcelColor.white;
+        const footerTextColor = excel_lib.ExcelColor.grey;
+        final lightGreyBorder = excel_lib.Border(
+          borderStyle: excel_lib.BorderStyle.Thin,
+          borderColorHex: excel_lib.ExcelColor.grey,
+        );
+
+        final footerTexts = [
+          '此表格由 OpenLogTool 生成导出，本项目使用开源协议: GNU General Public License V3',
+          '项目仓库地址: https://github.com/Mazha0309/OpenLogTool',
+          '分享点名记录时无须携带本条说明',
+        ];
+
+        for (int i = 0; i < footerTexts.length; i++) {
+          sheet.insertRowIterables([excel_lib.TextCellValue(footerTexts[i])], currentRow);
+          sheet.merge(
+            excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: currentRow),
+            excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: currentRow),
+            customValue: excel_lib.TextCellValue(footerTexts[i]),
+          );
+          sheet.row(currentRow).forEach((cell) {
+            if (cell != null) {
+              cell.cellStyle = excel_lib.CellStyle(
+                backgroundColorHex: footerBgColor,
+                fontColorHex: footerTextColor,
+                fontSize: 10,
+                fontFamily: excelFontFamily,
+                horizontalAlign: excel_lib.HorizontalAlign.Center,
+                verticalAlign: excel_lib.VerticalAlign.Center,
+                leftBorder: lightGreyBorder,
+                rightBorder: lightGreyBorder,
+              );
+            }
+          });
+          sheet.setRowHeight(currentRow, 22);
           currentRow++;
         }
       }
