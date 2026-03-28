@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -533,7 +532,6 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _focusNode = FocusNode();
-  Timer? _hideTimer; // 用于延迟隐藏历史记录的计时器
 
   @override
   void initState() {
@@ -549,7 +547,6 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
 
   @override
   void dispose() {
-    _hideTimer?.cancel();
     _hideOverlay();
     widget.callsignController.removeListener(_onCallsignChanged);
     _focusNode.removeListener(_onFocusChanged);
@@ -575,16 +572,9 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
           _overlayEntry == null) {
         _showOverlay();
       }
-    } else {
-      // 当输入框失去焦点时，延迟隐藏历史记录
-      // 延迟是为了允许点击历史记录下拉框中的项目
-      _hideTimer?.cancel();
-      _hideTimer = Timer(const Duration(milliseconds: 500), () {
-        if (!_focusNode.hasFocus && _overlayEntry != null) {
-          _hideOverlay();
-        }
-      });
     }
+    // 移除失去焦点时隐藏的逻辑
+    // 隐藏只在 TapRegion 的 onTapOutside 中触发
   }
 
   Future<void> _loadHistory() async {
@@ -710,10 +700,6 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                           color: Colors.transparent,
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTapDown: (_) {
-                              // 取消待处理的隐藏操作
-                              _hideTimer?.cancel();
-                            },
                             onTapUp: (_) {
                               widget.controller.text = qth;
                               _hideOverlay();
