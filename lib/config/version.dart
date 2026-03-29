@@ -1,1 +1,1 @@
-const String appVersion = '0.3.1+1';
+const String appVersion = '0.3.2+1';
