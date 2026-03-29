@@ -50,27 +50,6 @@ flutter build macos
 flutter build android
 ```
 
-### 项目结构
-
-```
-lib/
-├── main.dart                    # 入口
-├── screens/
-│   └── home_screen.dart         # 主界面
-├── widgets/
-│   ├── log_form.dart            # 记录表单
-│   ├── log_table.dart           # 记录表格
-│   ├── dictionary_manager.dart  # 词典管理
-│   ├── export_panel.dart        # 导入导出
-│   └── settings_panel.dart      # 设置
-├── providers/
-│   ├── log_provider.dart        # 记录数据
-│   ├── dictionary_provider.dart # 词典数据
-│   └── settings_provider.dart   # 设置
-└── models/
-    └── log_entry.dart           # 记录模型
-```
-
 ## 技术栈
 
 - Flutter
@@ -80,4 +59,4 @@ lib/
 
 ## License
 
-GPL-3.0
+GNU Affero General Public License V3
