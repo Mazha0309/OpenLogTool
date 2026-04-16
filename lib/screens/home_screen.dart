@@ -57,7 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('OpenLogTool'),
         centerTitle: true,
       ),
-      body: _pages[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         items: _navItems,
         currentIndex: _selectedIndex,
@@ -272,7 +275,8 @@ class AddRecordPage extends StatelessWidget {
               final name = item['name'] as String;
               final count = item['log_count'] as int;
               final createdAt = DateTime.parse(item['created_at'] as String);
-              final formattedDate = '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+              final formattedDate =
+                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
 
               return ListTile(
                 title: Text(name),
@@ -296,7 +300,8 @@ class AddRecordPage extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
                       tooltip: '删除',
-                      onPressed: () => _showDeleteHistoryConfirmation(context, logProvider, id),
+                      onPressed: () => _showDeleteHistoryConfirmation(
+                          context, logProvider, id),
                     ),
                   ],
                 ),
@@ -364,7 +369,8 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  void _showDeleteHistoryConfirmation(BuildContext context, LogProvider logProvider, int id) {
+  void _showDeleteHistoryConfirmation(
+      BuildContext context, LogProvider logProvider, int id) {
     showDialog(
       context: context,
       builder: (context) => FDialog(
