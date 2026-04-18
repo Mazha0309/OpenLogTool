@@ -269,7 +269,8 @@ class SyncProvider with ChangeNotifier {
   }
 
   Future<Map<String, dynamic>?> pushSync(List<Map<String, dynamic>> logs,
-      {List<Map<String, dynamic>>? dictionaries}) async {
+      {List<Map<String, dynamic>>? dictionaries,
+      List<Map<String, dynamic>>? callsignQthHistory}) async {
     if (!isConfigured) return null;
 
     _isSyncing = true;
@@ -291,6 +292,7 @@ class SyncProvider with ChangeNotifier {
         body: json.encode({
           'logs': logs,
           'dictionaries': dictionaries,
+          'callsignQthHistory': callsignQthHistory,
           'deviceId': _settings.deviceId,
         }),
       );
