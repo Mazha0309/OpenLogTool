@@ -1330,7 +1330,18 @@ class SettingsPanel extends StatelessWidget {
     final qthDicts = dictProvider.qthDict.map((d) => d.toMap()).toList();
     final callsignDicts =
         dictProvider.callsignDict.map((d) => d.toMap()).toList();
-    final callsignQthHistory = await db.getAllCallsignQthHistory();
+
+    List<Map<String, dynamic>> callsignQthHistory = [];
+    try {
+      callsignQthHistory = await db.getAllCallsignQthHistory();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('获取QTH历史记录失败: $e')),
+        );
+      }
+      return;
+    }
 
     final allDicts = <Map<String, dynamic>>[
       ...deviceDicts
