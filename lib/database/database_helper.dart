@@ -547,6 +547,15 @@ class DatabaseHelper {
     return results;
   }
 
+  Future<List<Map<String, dynamic>>> getAllCallsignQthHistory() async {
+    final db = await database;
+    final results = await db.query(
+      'callsign_qth_history',
+      orderBy: 'recorded_at DESC',
+    );
+    return results;
+  }
+
   Future<String?> getLastRecordedTime(String callsign, String qth) async {
     if (callsign.isEmpty || qth.isEmpty) return null;
     final db = await database;
