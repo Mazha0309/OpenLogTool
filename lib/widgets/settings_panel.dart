@@ -1321,6 +1321,7 @@ class SettingsPanel extends StatelessWidget {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final dictProvider =
         Provider.of<DictionaryProvider>(context, listen: false);
+    final db = DatabaseHelper();
 
     final logs = logProvider.logs.map((log) => log.toJson()).toList();
     final deviceDicts = dictProvider.deviceDict.map((d) => d.toMap()).toList();
@@ -1329,6 +1330,7 @@ class SettingsPanel extends StatelessWidget {
     final qthDicts = dictProvider.qthDict.map((d) => d.toMap()).toList();
     final callsignDicts =
         dictProvider.callsignDict.map((d) => d.toMap()).toList();
+    final callsignQthHistory = await db.getAllCallsignQthHistory();
 
     final allDicts = <Map<String, dynamic>>[
       ...deviceDicts
@@ -1340,7 +1342,8 @@ class SettingsPanel extends StatelessWidget {
           .map((d) => {...d, 'type': 'callsign'} as Map<String, dynamic>),
     ];
 
-    final result = await syncProvider.pushSync(logs, dictionaries: allDicts);
+    final result = await syncProvider.pushSync(logs,
+        dictionaries: allDicts, callsignQthHistory: callsignQthHistory);
 
     if (context.mounted) {
       if (result != null && result['success'] == true) {
