@@ -72,14 +72,21 @@ class DictionaryItem {
 
   static String _normalizeTimestamp(String? value, {String? fallback}) {
     final normalized = value?.trim();
-    if (normalized != null && normalized.isNotEmpty) {
-      return normalized;
+    if (_isValidIsoTimestamp(normalized)) {
+      return normalized!;
     }
     final normalizedFallback = fallback?.trim();
-    if (normalizedFallback != null && normalizedFallback.isNotEmpty) {
-      return normalizedFallback;
+    if (_isValidIsoTimestamp(normalizedFallback)) {
+      return normalizedFallback!;
     }
-    return DateTime.now().toIso8601String();
+    return DateTime.now().toUtc().toIso8601String();
+  }
+
+  static bool _isValidIsoTimestamp(String? value) {
+    if (value == null || value.isEmpty) {
+      return false;
+    }
+    return DateTime.tryParse(value) != null;
   }
 
   static String? _normalizeNullableString(dynamic value) {
@@ -114,6 +121,20 @@ class DictionaryItem {
     );
   }
 
+  factory DictionaryItem.fromJson(Map<String, dynamic> json) {
+    return DictionaryItem(
+      id: _readLocalId(json['id']),
+      raw: json['raw']?.toString() ?? '',
+      pinyin: json['pinyin']?.toString() ?? '',
+      abbreviation: json['abbreviation']?.toString() ?? '',
+      syncId: _normalizeNullableString(json['syncId'] ?? json['sync_id']),
+      type: json['type']?.toString() ?? '',
+      createdAt: json['createdAt']?.toString() ?? json['created_at']?.toString(),
+      updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
+      deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
@@ -142,6 +163,32 @@ class DictionaryItem {
     };
   }
 
+  DictionaryItem copyWith({
+    int? id,
+    String? raw,
+    String? pinyin,
+    String? abbreviation,
+    String? syncId,
+    String? type,
+    String? createdAt,
+    String? updatedAt,
+    Object? deletedAt = _dictionaryCopyWithSentinel,
+  }) {
+    return DictionaryItem(
+      id: id ?? this.id,
+      raw: raw ?? this.raw,
+      pinyin: pinyin ?? this.pinyin,
+      abbreviation: abbreviation ?? this.abbreviation,
+      syncId: syncId ?? this.syncId,
+      type: type ?? this.type,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: identical(deletedAt, _dictionaryCopyWithSentinel)
+          ? this.deletedAt
+          : deletedAt as String?,
+    );
+  }
+
   bool matches(String query) {
     final lowerQuery = query.toLowerCase();
     return raw.toLowerCase().contains(lowerQuery) ||
@@ -152,3 +199,5 @@ class DictionaryItem {
   @override
   String toString() => raw;
 }
+
+const Object _dictionaryCopyWithSentinel = Object();

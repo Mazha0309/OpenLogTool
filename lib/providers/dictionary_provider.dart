@@ -62,7 +62,8 @@ class DictionaryProvider with ChangeNotifier {
         'pinyin': '',
         'abbreviation': '',
       });
-      _deviceDict.add(DictionaryItem(raw: device, pinyin: '', abbreviation: ''));
+      final persisted = await db.getDictionaryItemByRaw('device_dictionary', device);
+      _deviceDict.add(persisted ?? DictionaryItem(raw: device, pinyin: '', abbreviation: '', type: 'device'));
       _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
     }
@@ -76,7 +77,8 @@ class DictionaryProvider with ChangeNotifier {
         'pinyin': '',
         'abbreviation': '',
       });
-      _antennaDict.add(DictionaryItem(raw: antenna, pinyin: '', abbreviation: ''));
+      final persisted = await db.getDictionaryItemByRaw('antenna_dictionary', antenna);
+      _antennaDict.add(persisted ?? DictionaryItem(raw: antenna, pinyin: '', abbreviation: '', type: 'antenna'));
       _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
     }
@@ -90,7 +92,8 @@ class DictionaryProvider with ChangeNotifier {
         'pinyin': '',
         'abbreviation': '',
       });
-      _callsignDict.add(DictionaryItem(raw: callsign, pinyin: '', abbreviation: ''));
+      final persisted = await db.getDictionaryItemByRaw('callsign_dictionary', callsign);
+      _callsignDict.add(persisted ?? DictionaryItem(raw: callsign, pinyin: '', abbreviation: '', type: 'callsign'));
       _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
     }
@@ -104,7 +107,8 @@ class DictionaryProvider with ChangeNotifier {
         'pinyin': '',
         'abbreviation': '',
       });
-      _qthDict.add(DictionaryItem(raw: qth, pinyin: '', abbreviation: ''));
+      final persisted = await db.getDictionaryItemByRaw('qth_dictionary', qth);
+      _qthDict.add(persisted ?? DictionaryItem(raw: qth, pinyin: '', abbreviation: '', type: 'qth'));
       _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
     }
@@ -119,7 +123,8 @@ class DictionaryProvider with ChangeNotifier {
           'pinyin': '',
           'abbreviation': '',
         });
-        _deviceDict.add(DictionaryItem(raw: device, pinyin: '', abbreviation: ''));
+        final persisted = await db.getDictionaryItemByRaw('device_dictionary', device);
+        _deviceDict.add(persisted ?? DictionaryItem(raw: device, pinyin: '', abbreviation: '', type: 'device'));
       }
     }
     _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
@@ -135,7 +140,8 @@ class DictionaryProvider with ChangeNotifier {
           'pinyin': '',
           'abbreviation': '',
         });
-        _antennaDict.add(DictionaryItem(raw: antenna, pinyin: '', abbreviation: ''));
+        final persisted = await db.getDictionaryItemByRaw('antenna_dictionary', antenna);
+        _antennaDict.add(persisted ?? DictionaryItem(raw: antenna, pinyin: '', abbreviation: '', type: 'antenna'));
       }
     }
     _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
@@ -151,7 +157,8 @@ class DictionaryProvider with ChangeNotifier {
           'pinyin': '',
           'abbreviation': '',
         });
-        _callsignDict.add(DictionaryItem(raw: callsign, pinyin: '', abbreviation: ''));
+        final persisted = await db.getDictionaryItemByRaw('callsign_dictionary', callsign);
+        _callsignDict.add(persisted ?? DictionaryItem(raw: callsign, pinyin: '', abbreviation: '', type: 'callsign'));
       }
     }
     _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
@@ -167,7 +174,8 @@ class DictionaryProvider with ChangeNotifier {
           'pinyin': '',
           'abbreviation': '',
         });
-        _qthDict.add(DictionaryItem(raw: qth, pinyin: '', abbreviation: ''));
+        final persisted = await db.getDictionaryItemByRaw('qth_dictionary', qth);
+        _qthDict.add(persisted ?? DictionaryItem(raw: qth, pinyin: '', abbreviation: '', type: 'qth'));
       }
     }
     _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
@@ -176,28 +184,40 @@ class DictionaryProvider with ChangeNotifier {
 
   Future<void> clearDeviceDict() async {
     final db = DatabaseHelper();
-    await db.clearDictionary('device_dictionary');
+    final deletedAt = DateTime.now().toUtc().toIso8601String();
+    for (final item in _deviceDict) {
+      await db.softDeleteDictionaryItem('device_dictionary', item.syncId, deletedAt);
+    }
     _deviceDict.clear();
     notifyListeners();
   }
 
   Future<void> clearAntennaDict() async {
     final db = DatabaseHelper();
-    await db.clearDictionary('antenna_dictionary');
+    final deletedAt = DateTime.now().toUtc().toIso8601String();
+    for (final item in _antennaDict) {
+      await db.softDeleteDictionaryItem('antenna_dictionary', item.syncId, deletedAt);
+    }
     _antennaDict.clear();
     notifyListeners();
   }
 
   Future<void> clearCallsignDict() async {
     final db = DatabaseHelper();
-    await db.clearDictionary('callsign_dictionary');
+    final deletedAt = DateTime.now().toUtc().toIso8601String();
+    for (final item in _callsignDict) {
+      await db.softDeleteDictionaryItem('callsign_dictionary', item.syncId, deletedAt);
+    }
     _callsignDict.clear();
     notifyListeners();
   }
 
   Future<void> clearQthDict() async {
     final db = DatabaseHelper();
-    await db.clearDictionary('qth_dictionary');
+    final deletedAt = DateTime.now().toUtc().toIso8601String();
+    for (final item in _qthDict) {
+      await db.softDeleteDictionaryItem('qth_dictionary', item.syncId, deletedAt);
+    }
     _qthDict.clear();
     notifyListeners();
   }
