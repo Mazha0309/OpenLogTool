@@ -107,7 +107,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       height: _heightController.text,
     );
 
-    logProvider.addLog(log);
+    await logProvider.addLog(log);
     _resetForm();
     _qthFieldKey.currentState?.refresh();
 

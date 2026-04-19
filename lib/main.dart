@@ -21,9 +21,21 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => LogProvider()),
         ChangeNotifierProvider(create: (_) => DictionaryProvider()),
         ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProxyProvider<SyncProvider, LogProvider>(
+          create: (_) => LogProvider(),
+          update: (_, syncProvider, logProvider) {
+            final provider = logProvider ?? LogProvider();
+            provider.setOnLogAdded(() async {
+              if (syncProvider.settings.syncEnabled &&
+                  syncProvider.settings.syncMode == 'realtime') {
+                await syncProvider.triggerSyncAndWait();
+              }
+            });
+            return provider;
+          },
+        ),
       ],
       child: const MyApp(),
     ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/database/database_helper.dart';
 
@@ -6,10 +7,15 @@ class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
   List<LogEntry> _undoStack = [];
   bool _isInitialized = false;
+  Future<void> Function()? _onLogAdded;
 
   List<LogEntry> get logs => _logs;
   int get logCount => _logs.length;
   bool get canUndo => _logs.isNotEmpty;
+
+  void setOnLogAdded(Future<void> Function()? callback) {
+    _onLogAdded = callback;
+  }
 
   int get todayLogCount {
     return _logs.length;
@@ -35,6 +41,9 @@ class LogProvider with ChangeNotifier {
     await db.insertLog(log);
     _logs.add(log);
     notifyListeners();
+    if (_onLogAdded != null) {
+      unawaited(_onLogAdded!());
+    }
   }
 
   Future<void> updateLog(int index, LogEntry log) async {
