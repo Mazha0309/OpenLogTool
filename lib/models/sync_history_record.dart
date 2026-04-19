@@ -68,14 +68,21 @@ class SyncHistoryRecord {
 
   static String _normalizeTimestamp(String? value, {String? fallback}) {
     final normalized = value?.trim();
-    if (normalized != null && normalized.isNotEmpty) {
-      return normalized;
+    if (_isValidIsoTimestamp(normalized)) {
+      return normalized!;
     }
     final normalizedFallback = fallback?.trim();
-    if (normalizedFallback != null && normalizedFallback.isNotEmpty) {
-      return normalizedFallback;
+    if (_isValidIsoTimestamp(normalizedFallback)) {
+      return normalizedFallback!;
     }
-    return DateTime.now().toIso8601String();
+    return DateTime.now().toUtc().toIso8601String();
+  }
+
+  static bool _isValidIsoTimestamp(String? value) {
+    if (value == null || value.isEmpty) {
+      return false;
+    }
+    return DateTime.tryParse(value) != null;
   }
 
   static String? _normalizeNullableString(dynamic value) {

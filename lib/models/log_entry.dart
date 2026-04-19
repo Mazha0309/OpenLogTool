@@ -1,6 +1,7 @@
 import 'dart:math';
 
 class LogEntry {
+  final int? localId;
   final String id;
   final bool hasExplicitSyncId;
   final String time;
@@ -18,6 +19,7 @@ class LogEntry {
   final String? sourceDeviceId;
 
   factory LogEntry({
+    int? localId,
     String? id,
     required String time,
     required String controller,
@@ -36,6 +38,7 @@ class LogEntry {
     final normalizedId = _normalizeSyncId(id, prefix: 'log');
     final normalizedCreatedAt = _normalizeTimestamp(createdAt);
     return LogEntry._internal(
+      localId: localId,
       id: normalizedId,
       hasExplicitSyncId: _hasText(id),
       time: time,
@@ -55,6 +58,7 @@ class LogEntry {
   }
 
   const LogEntry._internal({
+    required this.localId,
     required this.id,
     required this.hasExplicitSyncId,
     required this.time,
@@ -100,7 +104,7 @@ class LogEntry {
     if (_isValidIsoTimestamp(normalizedFallback)) {
       return normalizedFallback!;
     }
-    return DateTime.now().toIso8601String();
+    return DateTime.now().toUtc().toIso8601String();
   }
 
   static bool _isValidIsoTimestamp(String? value) {
@@ -139,6 +143,7 @@ class LogEntry {
 
   Map<String, dynamic> toMap() {
     return {
+      if (localId != null) 'id': localId,
       'sync_id': id,
       'time': time,
       'controller': controller,
@@ -158,6 +163,7 @@ class LogEntry {
 
   factory LogEntry.fromJson(Map<String, dynamic> json) {
     return LogEntry(
+      localId: json['localId'] is int ? json['localId'] as int : (json['id'] is int ? json['id'] as int : null),
       id: _normalizeNullableString(json['id'] ?? json['sync_id']),
       time: json['time']?.toString() ?? '',
       controller: json['controller']?.toString() ?? '',
@@ -177,6 +183,7 @@ class LogEntry {
 
   factory LogEntry.fromMap(Map<String, dynamic> map) {
     return LogEntry(
+      localId: map['id'] is int ? map['id'] as int : int.tryParse('${map['id'] ?? ''}'),
       id: _normalizeNullableString(map['sync_id'] ?? map['id']),
       time: map['time']?.toString() ?? '',
       controller: map['controller']?.toString() ?? '',
@@ -209,6 +216,7 @@ class LogEntry {
   }
 
   LogEntry copyWith({
+    int? localId,
     String? id,
     String? time,
     String? controller,
@@ -225,6 +233,7 @@ class LogEntry {
     Object? sourceDeviceId = _copyWithSentinel,
   }) {
     return LogEntry(
+      localId: localId ?? this.localId,
       id: id ?? this.id,
       time: time ?? this.time,
       controller: controller ?? this.controller,
