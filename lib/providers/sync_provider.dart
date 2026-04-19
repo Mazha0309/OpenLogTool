@@ -83,6 +83,10 @@ class SyncProvider with ChangeNotifier {
   String? _lastError;
   bool _isLoggingIn = false;
 
+  String _getBaseUrl() {
+    return _settings.serverUrl.replaceAll(RegExp(r'/$'), '');
+  }
+
   SyncSettings get settings => _settings;
   bool get isSyncing => _isSyncing;
   bool get isLoggingIn => _isLoggingIn;
@@ -150,7 +154,7 @@ class SyncProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/auth/login');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/login');
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
@@ -205,7 +209,7 @@ class SyncProvider with ChangeNotifier {
     if (!isLoggedIn) return false;
 
     try {
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/auth/password');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/password');
       final response = await http.put(
         uri,
         headers: {
@@ -241,7 +245,7 @@ class SyncProvider with ChangeNotifier {
     }
 
     try {
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/auth/theme');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/theme');
       final response = await http.put(
         uri,
         headers: {
@@ -285,7 +289,7 @@ class SyncProvider with ChangeNotifier {
         headers['Authorization'] = 'Bearer ${_settings.token}';
       }
 
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/logs/sync/push');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/push');
       final response = await http.post(
         uri,
         headers: headers,
@@ -333,7 +337,7 @@ class SyncProvider with ChangeNotifier {
       final since = _settings.lastSyncTime?.toIso8601String() ??
           '1970-01-01T00:00:00.000Z';
       final uri = Uri.parse(
-          '${_settings.serverUrl}/api/v1/logs/sync/pull?deviceId=${_settings.deviceId}&since=$since');
+          '${_getBaseUrl()}/api/v1/logs/sync/pull?deviceId=${_settings.deviceId}&since=$since');
       final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
@@ -363,7 +367,7 @@ class SyncProvider with ChangeNotifier {
     if (!isLoggedIn) return false;
 
     try {
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/sync/share');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/sync/share');
       final response = await http.post(
         uri,
         headers: {
@@ -386,7 +390,7 @@ class SyncProvider with ChangeNotifier {
     if (!isLoggedIn) return null;
 
     try {
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/sync/inbox');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/sync/inbox');
       final response = await http.get(
         uri,
         headers: {'Authorization': 'Bearer ${_settings.token}'},
@@ -406,8 +410,7 @@ class SyncProvider with ChangeNotifier {
     if (!isLoggedIn) return false;
 
     try {
-      final uri =
-          Uri.parse('${_settings.serverUrl}/api/v1/sync/accept/$shareId');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/sync/accept/$shareId');
       final response = await http.post(
         uri,
         headers: {'Authorization': 'Bearer ${_settings.token}'},
@@ -423,7 +426,7 @@ class SyncProvider with ChangeNotifier {
     if (_settings.serverUrl.isEmpty) return false;
 
     try {
-      final uri = Uri.parse('${_settings.serverUrl}/api/v1/health');
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/health');
       final response = await http.get(uri).timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (_) {
