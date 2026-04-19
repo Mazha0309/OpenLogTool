@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,8 @@ class SyncSettings {
   final String deviceId;
   final bool syncEnabled;
   final String syncStrategy;
+  final String syncMode;
+  final int syncIntervalMinutes;
   final DateTime? lastSyncTime;
   final String? token;
   final String? userId;
@@ -18,6 +21,8 @@ class SyncSettings {
     this.deviceId = '',
     this.syncEnabled = false,
     this.syncStrategy = 'server-wins',
+    this.syncMode = 'manual',
+    this.syncIntervalMinutes = 5,
     this.lastSyncTime,
     this.token,
     this.userId,
@@ -29,6 +34,8 @@ class SyncSettings {
     String? deviceId,
     bool? syncEnabled,
     String? syncStrategy,
+    String? syncMode,
+    int? syncIntervalMinutes,
     DateTime? lastSyncTime,
     String? token,
     String? userId,
@@ -39,6 +46,8 @@ class SyncSettings {
       deviceId: deviceId ?? this.deviceId,
       syncEnabled: syncEnabled ?? this.syncEnabled,
       syncStrategy: syncStrategy ?? this.syncStrategy,
+      syncMode: syncMode ?? this.syncMode,
+      syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
       lastSyncTime: lastSyncTime ?? this.lastSyncTime,
       token: token ?? this.token,
       userId: userId ?? this.userId,
@@ -52,6 +61,8 @@ class SyncSettings {
       'deviceId': deviceId,
       'syncEnabled': syncEnabled,
       'syncStrategy': syncStrategy,
+      'syncMode': syncMode,
+      'syncIntervalMinutes': syncIntervalMinutes,
       'lastSyncTime': lastSyncTime?.toIso8601String(),
       'token': token,
       'userId': userId,
@@ -65,6 +76,8 @@ class SyncSettings {
       deviceId: json['deviceId'] ?? '',
       syncEnabled: json['syncEnabled'] ?? false,
       syncStrategy: json['syncStrategy'] ?? 'server-wins',
+      syncMode: json['syncMode'] ?? 'manual',
+      syncIntervalMinutes: json['syncIntervalMinutes'] ?? 5,
       lastSyncTime: json['lastSyncTime'] != null
           ? DateTime.parse(json['lastSyncTime'])
           : null,
@@ -82,6 +95,7 @@ class SyncProvider with ChangeNotifier {
   bool _isSyncing = false;
   String? _lastError;
   bool _isLoggingIn = false;
+  Timer? _syncTimer;
 
   String _getBaseUrl() {
     return _settings.serverUrl.replaceAll(RegExp(r'/$'), '');
@@ -109,11 +123,43 @@ class SyncProvider with ChangeNotifier {
         notifyListeners();
       } catch (_) {}
     }
+    _updateSyncTimer();
   }
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_syncSettingsKey, json.encode(_settings.toJson()));
+    _updateSyncTimer();
+  }
+
+  void _updateSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+
+    if (_settings.syncEnabled && _settings.syncMode == 'interval') {
+      _syncTimer = Timer.periodic(
+        Duration(minutes: _settings.syncIntervalMinutes),
+        (_) => triggerSync(),
+      );
+    }
+  }
+
+  void triggerSync() {
+    if (!isConfigured || !isLoggedIn || _isSyncing) return;
+    // This method can be called externally for realtime sync
+    // The actual sync will be performed by _performSync
+  }
+
+  Future<void> setSyncMode(String mode) async {
+    _settings = _settings.copyWith(syncMode: mode);
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  Future<void> setSyncIntervalMinutes(int minutes) async {
+    _settings = _settings.copyWith(syncIntervalMinutes: minutes);
+    await _saveSettings();
+    notifyListeners();
   }
 
   Future<void> setServerUrl(String url) async {

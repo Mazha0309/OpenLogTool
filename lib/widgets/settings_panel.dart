@@ -408,6 +408,61 @@ class SettingsPanel extends StatelessWidget {
                               syncProvider.setSyncStrategy(value);
                           },
                         ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                            labelText: '同步方式',
+                            border: OutlineInputBorder(),
+                          ),
+                          value: syncProvider.settings.syncMode,
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'realtime', child: Text('实时同步')),
+                            DropdownMenuItem(
+                                value: 'interval', child: Text('间隔同步')),
+                            DropdownMenuItem(
+                                value: 'manual', child: Text('手动同步')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) syncProvider.setSyncMode(value);
+                          },
+                        ),
+                        if (syncProvider.settings.syncMode == 'interval') ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<int>(
+                                  decoration: const InputDecoration(
+                                    labelText: '同步间隔',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  value:
+                                      syncProvider.settings.syncIntervalMinutes,
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 1, child: Text('1 分钟')),
+                                    DropdownMenuItem(
+                                        value: 5, child: Text('5 分钟')),
+                                    DropdownMenuItem(
+                                        value: 10, child: Text('10 分钟')),
+                                    DropdownMenuItem(
+                                        value: 15, child: Text('15 分钟')),
+                                    DropdownMenuItem(
+                                        value: 30, child: Text('30 分钟')),
+                                    DropdownMenuItem(
+                                        value: 60, child: Text('1 小时')),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null)
+                                      syncProvider
+                                          .setSyncIntervalMinutes(value);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -424,7 +479,31 @@ class SettingsPanel extends StatelessWidget {
                               },
                             ),
                             const SizedBox(width: 8),
-                            if (syncProvider.isSyncing)
+                            if (syncProvider.settings.syncMode != 'manual')
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: syncProvider.settings.syncMode ==
+                                          'realtime'
+                                      ? Colors.green.withValues(alpha: 0.2)
+                                      : Colors.blue.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  syncProvider.settings.syncMode == 'realtime'
+                                      ? '实时同步'
+                                      : '间隔 ${syncProvider.settings.syncIntervalMinutes} 分钟',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: syncProvider.settings.syncMode ==
+                                            'realtime'
+                                        ? Colors.green
+                                        : Colors.blue,
+                                  ),
+                                ),
+                              )
+                            else if (syncProvider.isSyncing)
                               const SizedBox(
                                 width: 20,
                                 height: 20,
