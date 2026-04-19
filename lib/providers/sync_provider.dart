@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:openlogtool/database/database_helper.dart';
 
 class SyncSettings {
   final String serverUrl;
@@ -124,6 +125,7 @@ class SyncProvider with ChangeNotifier {
       } catch (_) {}
     }
     _updateSyncTimer();
+    _scheduleAutoSyncOnce();
   }
 
   Future<void> _saveSettings() async {
@@ -144,16 +146,63 @@ class SyncProvider with ChangeNotifier {
     }
   }
 
+  bool get _shouldAutoSync =>
+      _settings.syncEnabled &&
+      isConfigured &&
+      isLoggedIn &&
+      (_settings.syncMode == 'realtime' || _settings.syncMode == 'interval');
+
+  void _scheduleAutoSyncOnce() {
+    if (_shouldAutoSync && !_isSyncing) {
+      unawaited(_executeFullSync());
+    }
+  }
+
+  Future<bool> _executeFullSync() async {
+    if (!isConfigured || !isLoggedIn || _isSyncing) return false;
+
+    try {
+      final db = DatabaseHelper();
+      final logs = await db.getAllLogs();
+      final deviceDicts = await db.getDictionary('device_dictionary');
+      final antennaDicts = await db.getDictionary('antenna_dictionary');
+      final qthDicts = await db.getDictionary('qth_dictionary');
+      final callsignDicts = await db.getDictionary('callsign_dictionary');
+      final callsignQthHistory = await db.getAllCallsignQthHistory();
+
+      final result = await pushSync(
+        logs.map((log) => log.toJson()).toList(),
+        dictionaries: [
+          ...deviceDicts.map((d) => {...d, 'type': 'device'}),
+          ...antennaDicts.map((d) => {...d, 'type': 'antenna'}),
+          ...qthDicts.map((d) => {...d, 'type': 'qth'}),
+          ...callsignDicts.map((d) => {...d, 'type': 'callsign'}),
+        ],
+        callsignQthHistory: callsignQthHistory,
+      );
+
+      return result != null && result['success'] == true;
+    } catch (e) {
+      _lastError = '同步失败: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   void triggerSync() {
     if (!isConfigured || !isLoggedIn || _isSyncing) return;
-    // This method can be called externally for realtime sync
-    // The actual sync will be performed by _performSync
+    unawaited(_executeFullSync());
+  }
+
+  Future<bool> triggerSyncAndWait() async {
+    return _executeFullSync();
   }
 
   Future<void> setSyncMode(String mode) async {
     _settings = _settings.copyWith(syncMode: mode);
     await _saveSettings();
     notifyListeners();
+    _scheduleAutoSyncOnce();
   }
 
   Future<void> setSyncIntervalMinutes(int minutes) async {
@@ -178,6 +227,7 @@ class SyncProvider with ChangeNotifier {
     _settings = _settings.copyWith(syncEnabled: enabled);
     await _saveSettings();
     notifyListeners();
+    _scheduleAutoSyncOnce();
   }
 
   Future<void> setSyncStrategy(String strategy) async {
@@ -218,6 +268,7 @@ class SyncProvider with ChangeNotifier {
           await _saveSettings();
           _isLoggingIn = false;
           notifyListeners();
+          _scheduleAutoSyncOnce();
           return true;
         } else {
           _lastError = result['error']?['message'] ?? '登录失败';

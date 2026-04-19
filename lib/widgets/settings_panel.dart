@@ -1397,50 +1397,12 @@ class SettingsPanel extends StatelessWidget {
 
   Future<void> _performSync(
       BuildContext context, SyncProvider syncProvider) async {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final dictProvider =
-        Provider.of<DictionaryProvider>(context, listen: false);
-    final db = DatabaseHelper();
-
-    final logs = logProvider.logs.map((log) => log.toJson()).toList();
-    final deviceDicts = dictProvider.deviceDict.map((d) => d.toMap()).toList();
-    final antennaDicts =
-        dictProvider.antennaDict.map((d) => d.toMap()).toList();
-    final qthDicts = dictProvider.qthDict.map((d) => d.toMap()).toList();
-    final callsignDicts =
-        dictProvider.callsignDict.map((d) => d.toMap()).toList();
-
-    List<Map<String, dynamic>> callsignQthHistory = [];
-    try {
-      callsignQthHistory = await db.getAllCallsignQthHistory();
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('获取QTH历史记录失败: $e')),
-        );
-      }
-      return;
-    }
-
-    final allDicts = <Map<String, dynamic>>[
-      ...deviceDicts
-          .map((d) => {...d, 'type': 'device'} as Map<String, dynamic>),
-      ...antennaDicts
-          .map((d) => {...d, 'type': 'antenna'} as Map<String, dynamic>),
-      ...qthDicts.map((d) => {...d, 'type': 'qth'} as Map<String, dynamic>),
-      ...callsignDicts
-          .map((d) => {...d, 'type': 'callsign'} as Map<String, dynamic>),
-    ];
-
-    final result = await syncProvider.pushSync(logs,
-        dictionaries: allDicts, callsignQthHistory: callsignQthHistory);
+    final ok = await syncProvider.triggerSyncAndWait();
 
     if (context.mounted) {
-      if (result != null && result['success'] == true) {
+      if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text('同步成功！日志 ${logs.length} 条，词典 ${allDicts.length} 条')),
+          const SnackBar(content: Text('同步成功！')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
