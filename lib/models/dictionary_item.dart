@@ -1,22 +1,116 @@
+import 'dart:math';
+
 class DictionaryItem {
   final int? id;
   final String raw;
   final String pinyin;
   final String abbreviation;
+  final String syncId;
+  final bool hasExplicitSyncId;
+  final String type;
+  final String createdAt;
+  final String updatedAt;
+  final String? deletedAt;
 
-  DictionaryItem({
-    this.id,
+  factory DictionaryItem({
+    int? id,
+    required String raw,
+    required String pinyin,
+    required String abbreviation,
+    String? syncId,
+    String type = '',
+    String? createdAt,
+    String? updatedAt,
+    String? deletedAt,
+  }) {
+    final normalizedCreatedAt = _normalizeTimestamp(createdAt);
+    return DictionaryItem._internal(
+      id: id,
+      raw: raw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+      syncId: _normalizeSyncId(syncId, prefix: 'dict'),
+      hasExplicitSyncId: _hasText(syncId),
+      type: type,
+      createdAt: normalizedCreatedAt,
+      updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
+      deletedAt: deletedAt,
+    );
+  }
+
+  const DictionaryItem._internal({
+    required this.id,
     required this.raw,
     required this.pinyin,
     required this.abbreviation,
+    required this.syncId,
+    required this.hasExplicitSyncId,
+    required this.type,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.deletedAt,
   });
+
+  static bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+
+  static String _normalizeSyncId(String? value, {required String prefix}) {
+    final normalized = value?.trim();
+    if (normalized != null && normalized.isNotEmpty) {
+      return normalized;
+    }
+    return _generateSyncId(prefix);
+  }
+
+  static String _generateSyncId(String prefix) {
+    final random = Random.secure();
+    final suffix = List<String>.generate(
+      4,
+      (_) => random.nextInt(1 << 16).toRadixString(16).padLeft(4, '0'),
+    ).join();
+    return '$prefix-${DateTime.now().toUtc().microsecondsSinceEpoch}-$suffix';
+  }
+
+  static String _normalizeTimestamp(String? value, {String? fallback}) {
+    final normalized = value?.trim();
+    if (normalized != null && normalized.isNotEmpty) {
+      return normalized;
+    }
+    final normalizedFallback = fallback?.trim();
+    if (normalizedFallback != null && normalizedFallback.isNotEmpty) {
+      return normalizedFallback;
+    }
+    return DateTime.now().toIso8601String();
+  }
+
+  static String? _normalizeNullableString(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    final normalized = value.toString().trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  static int? _readLocalId(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
+  }
 
   factory DictionaryItem.fromMap(Map<String, dynamic> map) {
     return DictionaryItem(
-      id: map['id'] as int?,
-      raw: map['raw'] as String? ?? '',
-      pinyin: map['pinyin'] as String? ?? '',
-      abbreviation: map['abbreviation'] as String? ?? '',
+      id: _readLocalId(map['id']),
+      raw: map['raw']?.toString() ?? '',
+      pinyin: map['pinyin']?.toString() ?? '',
+      abbreviation: map['abbreviation']?.toString() ?? '',
+      syncId: _normalizeNullableString(map['sync_id'] ?? map['syncId']),
+      type: map['type']?.toString() ?? '',
+      createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
+      updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
+      deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
     );
   }
 
@@ -26,14 +120,33 @@ class DictionaryItem {
       'raw': raw,
       'pinyin': pinyin,
       'abbreviation': abbreviation,
+      'sync_id': syncId,
+      'type': type,
+      'created_at': createdAt,
+      'updated_at': updatedAt,
+      'deleted_at': deletedAt,
+    };
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (id != null) 'id': id,
+      'raw': raw,
+      'pinyin': pinyin,
+      'abbreviation': abbreviation,
+      'syncId': syncId,
+      'type': type,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'deletedAt': deletedAt,
     };
   }
 
   bool matches(String query) {
     final lowerQuery = query.toLowerCase();
     return raw.toLowerCase().contains(lowerQuery) ||
-           pinyin.toLowerCase().contains(lowerQuery) ||
-           abbreviation.toLowerCase().contains(lowerQuery);
+        pinyin.toLowerCase().contains(lowerQuery) ||
+        abbreviation.toLowerCase().contains(lowerQuery);
   }
 
   @override
