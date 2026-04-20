@@ -445,7 +445,11 @@ class SyncProvider with ChangeNotifier {
   }
 
   Future<void> _clearAuthState() async {
-    _settings = _settings.copyWith(token: null, userId: null);
+    _settings = _settings.copyWith(
+      token: null,
+      userId: null,
+      lastSyncTime: null,
+    );
     await _saveSettings();
   }
 
