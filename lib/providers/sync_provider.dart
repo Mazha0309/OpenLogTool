@@ -42,9 +42,9 @@ class SyncSettings {
     String? syncMode,
     int? syncIntervalMinutes,
     DateTime? lastSyncTime,
-    String? token,
-    String? userId,
-    String? theme,
+    Object? token = _syncSettingsUnset,
+    Object? userId = _syncSettingsUnset,
+    Object? theme = _syncSettingsUnset,
   }) {
     return SyncSettings(
       serverUrl: serverUrl ?? this.serverUrl,
@@ -54,9 +54,9 @@ class SyncSettings {
       syncMode: syncMode ?? this.syncMode,
       syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
       lastSyncTime: lastSyncTime ?? this.lastSyncTime,
-      token: token ?? this.token,
-      userId: userId ?? this.userId,
-      theme: theme ?? this.theme,
+      token: identical(token, _syncSettingsUnset) ? this.token : token as String?,
+      userId: identical(userId, _syncSettingsUnset) ? this.userId : userId as String?,
+      theme: identical(theme, _syncSettingsUnset) ? this.theme : theme as String?,
     );
   }
 
@@ -92,6 +92,8 @@ class SyncSettings {
     );
   }
 }
+
+const Object _syncSettingsUnset = Object();
 
 class SyncProvider with ChangeNotifier {
   static const String _syncSettingsKey = 'syncSettings';
