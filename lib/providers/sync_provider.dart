@@ -423,6 +423,25 @@ class SyncProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Map<String, dynamic>?> _fetchCurrentUser(String token) async {
+    final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/me');
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 200) {
+      return null;
+    }
+
+    final result = json.decode(response.body) as Map<String, dynamic>;
+    if (result['success'] != true || result['data'] == null) {
+      return null;
+    }
+
+    return Map<String, dynamic>.from(result['data']);
+  }
+
   Future<bool> login(String username, String password) async {
     if (!isConfigured) return false;
 
@@ -439,12 +458,28 @@ class SyncProvider with ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
-        final result = json.decode(response.body);
+        final result = json.decode(response.body) as Map<String, dynamic>;
         if (result['success'] == true) {
+          final token = result['data']['token']?.toString();
+          if (token == null || token.isEmpty) {
+            _lastError = '登录失败: 服务端未返回有效令牌';
+            _isLoggingIn = false;
+            notifyListeners();
+            return false;
+          }
+
+          final user = await _fetchCurrentUser(token);
+          if (user == null) {
+            _lastError = '登录失败: 登录校验未通过';
+            _isLoggingIn = false;
+            notifyListeners();
+            return false;
+          }
+
           _settings = _settings.copyWith(
-            token: result['data']['token'],
-            userId: result['data']['user']['id'],
-            theme: result['data']['user']['theme'] ?? 'light',
+            token: token,
+            userId: user['id']?.toString(),
+            theme: user['theme']?.toString() ?? 'light',
           );
           await _saveSettings();
           _isLoggingIn = false;
