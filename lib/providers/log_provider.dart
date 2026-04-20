@@ -6,14 +6,20 @@ import 'package:openlogtool/database/database_helper.dart';
 class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
   List<LogEntry> _undoStack = [];
-  Future<void> Function()? _onLogAdded;
+  Future<void> Function()? _onDataChanged;
 
   List<LogEntry> get logs => _logs;
   int get logCount => _logs.length;
   bool get canUndo => _logs.isNotEmpty;
 
-  void setOnLogAdded(Future<void> Function()? callback) {
-    _onLogAdded = callback;
+  void setOnDataChanged(Future<void> Function()? callback) {
+    _onDataChanged = callback;
+  }
+
+  Future<void> _notifyDataChanged() async {
+    if (_onDataChanged != null) {
+      unawaited(_onDataChanged!());
+    }
   }
 
   int get todayLogCount {
@@ -40,9 +46,7 @@ class LogProvider with ChangeNotifier {
     final persistedLog = await db.getLogByLocalId(localId);
     _logs.add(persistedLog ?? log);
     notifyListeners();
-    if (_onLogAdded != null) {
-      unawaited(_onLogAdded!());
-    }
+    await _notifyDataChanged();
   }
 
   Future<void> updateLog(int index, LogEntry log) async {
@@ -67,6 +71,7 @@ class LogProvider with ChangeNotifier {
         updatedAt: DateTime.now().toUtc().toIso8601String(),
       );
       notifyListeners();
+      await _notifyDataChanged();
     }
   }
 
@@ -82,6 +87,7 @@ class LogProvider with ChangeNotifier {
       _undoStack.add(log);
       _logs.removeAt(index);
       notifyListeners();
+      await _notifyDataChanged();
     }
   }
 
@@ -97,6 +103,7 @@ class LogProvider with ChangeNotifier {
       _undoStack.add(log);
       _logs.removeLast();
       notifyListeners();
+      await _notifyDataChanged();
     }
   }
 
@@ -113,6 +120,7 @@ class LogProvider with ChangeNotifier {
     }
     _logs.clear();
     notifyListeners();
+    await _notifyDataChanged();
   }
 
   Future<List<Map<String, dynamic>>> getHistory() async {
@@ -134,12 +142,14 @@ class LogProvider with ChangeNotifier {
       _logs.add(persistedLog ?? log);
     }
     notifyListeners();
+    await _notifyDataChanged();
   }
 
   Future<void> deleteHistoryRecord(int historyId) async {
     final db = DatabaseHelper();
     await db.deleteHistory(historyId);
     notifyListeners();
+    await _notifyDataChanged();
   }
 
   Future<void> importLogs(List<LogEntry> importedLogs) async {
@@ -150,6 +160,7 @@ class LogProvider with ChangeNotifier {
       _logs.add(persistedLog ?? log);
     }
     notifyListeners();
+    await _notifyDataChanged();
   }
 
   List<List<String>> getLogsAsList() {

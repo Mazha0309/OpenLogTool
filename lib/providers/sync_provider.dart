@@ -4,6 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/models/sync_callsign_qth_record.dart';
+import 'package:openlogtool/models/sync_history_record.dart';
 
 class SyncSettings {
   final String serverUrl;
@@ -97,6 +101,7 @@ class SyncProvider with ChangeNotifier {
   String? _lastError;
   bool _isLoggingIn = false;
   Timer? _syncTimer;
+  bool _hasPendingSyncRequest = false;
 
   String _getBaseUrl() {
     return _settings.serverUrl.replaceAll(RegExp(r'/$'), '');
@@ -154,48 +159,224 @@ class SyncProvider with ChangeNotifier {
 
   void _scheduleAutoSyncOnce() {
     if (_shouldAutoSync && !_isSyncing) {
-      unawaited(_executeFullSync());
-    }
-  }
-
-  Future<bool> _executeFullSync() async {
-    if (!isConfigured || !isLoggedIn || _isSyncing) return false;
-
-    try {
-      final db = DatabaseHelper();
-      final logs = await db.getAllLogs();
-      final deviceDicts = await db.getDictionary('device_dictionary');
-      final antennaDicts = await db.getDictionary('antenna_dictionary');
-      final qthDicts = await db.getDictionary('qth_dictionary');
-      final callsignDicts = await db.getDictionary('callsign_dictionary');
-      final callsignQthHistory = await db.getAllCallsignQthHistory();
-
-      final result = await pushSync(
-        logs.map((log) => log.toJson()).toList(),
-        dictionaries: [
-          ...deviceDicts.map((d) => {...d, 'type': 'device'}),
-          ...antennaDicts.map((d) => {...d, 'type': 'antenna'}),
-          ...qthDicts.map((d) => {...d, 'type': 'qth'}),
-          ...callsignDicts.map((d) => {...d, 'type': 'callsign'}),
-        ],
-        callsignQthHistory: callsignQthHistory,
-      );
-
-      return result != null && result['success'] == true;
-    } catch (e) {
-      _lastError = '同步失败: $e';
-      notifyListeners();
-      return false;
+      unawaited(runBidirectionalSync());
     }
   }
 
   void triggerSync() {
     if (!isConfigured || !isLoggedIn || _isSyncing) return;
-    unawaited(_executeFullSync());
+    unawaited(runBidirectionalSync());
   }
 
   Future<bool> triggerSyncAndWait() async {
-    return _executeFullSync();
+    return runBidirectionalSync();
+  }
+
+  String _lastSyncAtValue() {
+    return _settings.lastSyncTime?.toUtc().toIso8601String() ??
+        '1970-01-01T00:00:00.000Z';
+  }
+
+  Map<String, dynamic> _normalizeDictionaryPayload(
+      Map<String, dynamic> row, String type) {
+    final item = DictionaryItem.fromMap({...row, 'type': type});
+    return {
+      'id': item.syncId,
+      'raw': item.raw,
+      'pinyin': item.pinyin,
+      'abbreviation': item.abbreviation,
+      'type': item.type,
+      'createdAt': item.createdAt,
+      'updatedAt': item.updatedAt,
+      'deletedAt': item.deletedAt,
+    };
+  }
+
+  Map<String, dynamic> _normalizeHistoryPayload(Map<String, dynamic> row) {
+    final item = SyncHistoryRecord.fromMap(row);
+    return {
+      'id': item.syncId,
+      'name': item.name,
+      'logsData': item.logsData,
+      'logCount': item.logCount,
+      'createdAt': item.createdAt,
+      'updatedAt': item.updatedAt,
+      'deletedAt': item.deletedAt,
+    };
+  }
+
+  Map<String, dynamic> _normalizeCallsignQthPayload(Map<String, dynamic> row) {
+    final item = SyncCallsignQthRecord.fromMap(row);
+    return {
+      'id': item.syncId,
+      'callsign': item.callsign,
+      'qth': item.qth,
+      'recordedAt': item.recordedAt,
+      'createdAt': item.createdAt,
+      'updatedAt': item.updatedAt,
+      'deletedAt': item.deletedAt,
+    };
+  }
+
+  Map<String, dynamic> _normalizeIncomingSyncItem(Map<String, dynamic> row) {
+    final id = row['id'];
+    if (id == null) {
+      return row;
+    }
+    return {
+      ...row,
+      'syncId': row['syncId'] ?? id,
+      'sync_id': row['sync_id'] ?? id,
+    };
+  }
+
+  Future<Map<String, dynamic>> _collectBidirectionalPayload() async {
+    final db = DatabaseHelper();
+    final since = _lastSyncAtValue();
+
+    final logs = await db.getLogsChangedSince(since);
+    final deviceDicts = await db.getDictionaryChangedSince('device_dictionary', since);
+    final antennaDicts = await db.getDictionaryChangedSince('antenna_dictionary', since);
+    final qthDicts = await db.getDictionaryChangedSince('qth_dictionary', since);
+    final callsignDicts = await db.getDictionaryChangedSince('callsign_dictionary', since);
+    final history = await db.getHistoryChangedSince(since);
+    final callsignQthHistory = await db.getCallsignQthHistoryChangedSince(since);
+
+    return {
+      'logs': logs.map((row) => LogEntry.fromMap(row).toJson()).toList(),
+      'dictionaries': [
+        ...deviceDicts.map((row) => _normalizeDictionaryPayload(row, 'device')),
+        ...antennaDicts.map((row) => _normalizeDictionaryPayload(row, 'antenna')),
+        ...qthDicts.map((row) => _normalizeDictionaryPayload(row, 'qth')),
+        ...callsignDicts.map((row) => _normalizeDictionaryPayload(row, 'callsign')),
+      ],
+      'callsignQthHistory': callsignQthHistory
+          .map((row) => _normalizeCallsignQthPayload(row))
+          .toList(),
+      'history': history.map((row) => _normalizeHistoryPayload(row)).toList(),
+    };
+  }
+
+  Future<void> _applyBidirectionalChanges(Map<String, dynamic> changes) async {
+    final db = DatabaseHelper();
+
+    final logs = List<Map<String, dynamic>>.from(changes['logs'] ?? const []);
+    for (final item in logs) {
+      if (item['deletedAt'] != null) {
+        await db.softDeleteLog(item['id'].toString(), item['deletedAt'].toString());
+      } else {
+        await db.upsertLogFromSync(item);
+      }
+    }
+
+    final dictionaries =
+        List<Map<String, dynamic>>.from(changes['dictionaries'] ?? const []);
+    for (final item in dictionaries) {
+      final normalized = _normalizeIncomingSyncItem(item);
+      final type = normalized['type']?.toString() ?? '';
+      final tableName = switch (type) {
+        'device' => 'device_dictionary',
+        'antenna' => 'antenna_dictionary',
+        'qth' => 'qth_dictionary',
+        'callsign' => 'callsign_dictionary',
+        _ => '',
+      };
+      if (tableName.isEmpty) continue;
+      if (normalized['deletedAt'] != null) {
+        await db.softDeleteDictionaryItem(
+            tableName, normalized['id'].toString(), normalized['deletedAt'].toString());
+      } else {
+        await db.upsertDictionaryItemFromSync(tableName, normalized);
+      }
+    }
+
+    final history = List<Map<String, dynamic>>.from(changes['history'] ?? const []);
+    for (final item in history) {
+      final normalized = _normalizeIncomingSyncItem(item);
+      if (normalized['deletedAt'] != null) {
+        await db.softDeleteHistory(
+            normalized['id'].toString(), normalized['deletedAt'].toString());
+      } else {
+        await db.upsertHistoryFromSync(normalized);
+      }
+    }
+
+    final callsignQthHistory =
+        List<Map<String, dynamic>>.from(changes['callsignQthHistory'] ?? const []);
+    for (final item in callsignQthHistory) {
+      final normalized = _normalizeIncomingSyncItem(item);
+      if (normalized['deletedAt'] != null) {
+        await db.softDeleteCallsignQthHistory(
+            normalized['id'].toString(), normalized['deletedAt'].toString());
+      } else {
+        await db.upsertCallsignQthHistoryFromSync(normalized);
+      }
+    }
+  }
+
+  Future<bool> runBidirectionalSync() async {
+    if (!isConfigured || !isLoggedIn) return false;
+    if (_isSyncing) {
+      _hasPendingSyncRequest = true;
+      return false;
+    }
+
+    _isSyncing = true;
+    _lastError = null;
+    notifyListeners();
+
+    try {
+      final payload = await _collectBidirectionalPayload();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (_settings.token != null) {
+        headers['Authorization'] = 'Bearer ${_settings.token}';
+      }
+
+      final uri = Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/bidirectional');
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: json.encode({
+          'deviceId': _settings.deviceId,
+          'lastSyncAt': _lastSyncAtValue(),
+          'payload': payload,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        _lastError = '双向同步失败: ${response.statusCode}';
+        return false;
+      }
+
+      final result = json.decode(response.body) as Map<String, dynamic>;
+      if (result['success'] != true) {
+        _lastError = result['error']?['message']?.toString() ?? '双向同步失败';
+        return false;
+      }
+
+      await _applyBidirectionalChanges(
+          Map<String, dynamic>.from(result['changes'] ?? const {}));
+
+      final serverTimeValue = result['serverTime']?.toString();
+      final serverTime =
+          serverTimeValue != null ? DateTime.tryParse(serverTimeValue)?.toUtc() : null;
+      _settings = _settings.copyWith(
+        lastSyncTime: serverTime ?? DateTime.now().toUtc(),
+      );
+      await _saveSettings();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _lastError = '双向同步失败: $e';
+      return false;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+      if (_hasPendingSyncRequest && isConfigured && isLoggedIn) {
+        _hasPendingSyncRequest = false;
+        unawaited(runBidirectionalSync());
+      }
+    }
   }
 
   Future<void> setSyncMode(String mode) async {
@@ -525,7 +706,11 @@ class SyncProvider with ChangeNotifier {
     try {
       final uri = Uri.parse('${_getBaseUrl()}/api/v1/health');
       final response = await http.get(uri).timeout(const Duration(seconds: 5));
-      return response.statusCode == 200;
+      final ok = response.statusCode == 200;
+      if (ok) {
+        _scheduleAutoSyncOnce();
+      }
+      return ok;
     } catch (_) {
       return false;
     }

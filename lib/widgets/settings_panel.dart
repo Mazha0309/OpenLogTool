@@ -393,24 +393,6 @@ class SettingsPanel extends StatelessWidget {
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(
-                            labelText: '同步策略',
-                            border: OutlineInputBorder(),
-                          ),
-                          value: syncProvider.settings.syncStrategy,
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'server-wins', child: Text('服务器优先')),
-                            DropdownMenuItem(
-                                value: 'client-wins', child: Text('本地优先')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null)
-                              syncProvider.setSyncStrategy(value);
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
                             labelText: '同步方式',
                             border: OutlineInputBorder(),
                           ),
@@ -1397,7 +1379,7 @@ class SettingsPanel extends StatelessWidget {
 
   Future<void> _performSync(
       BuildContext context, SyncProvider syncProvider) async {
-    final ok = await syncProvider.triggerSyncAndWait();
+    final ok = await syncProvider.runBidirectionalSync();
 
     if (context.mounted) {
       if (ok) {

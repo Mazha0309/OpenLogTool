@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:openlogtool/database/database_helper.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
@@ -7,11 +8,22 @@ class DictionaryProvider with ChangeNotifier {
   List<DictionaryItem> _antennaDict = [];
   List<DictionaryItem> _callsignDict = [];
   List<DictionaryItem> _qthDict = [];
+  Future<void> Function()? _onDictionaryChanged;
 
   List<DictionaryItem> get deviceDict => _deviceDict;
   List<DictionaryItem> get antennaDict => _antennaDict;
   List<DictionaryItem> get callsignDict => _callsignDict;
   List<DictionaryItem> get qthDict => _qthDict;
+
+  void setOnDictionaryChanged(Future<void> Function()? callback) {
+    _onDictionaryChanged = callback;
+  }
+
+  Future<void> _notifyDictionaryChanged() async {
+    if (_onDictionaryChanged != null) {
+      unawaited(_onDictionaryChanged!());
+    }
+  }
 
   DictionaryProvider() {
     _loadDictionaries();
@@ -66,6 +78,7 @@ class DictionaryProvider with ChangeNotifier {
       _deviceDict.add(persisted ?? DictionaryItem(raw: device, pinyin: '', abbreviation: '', type: 'device'));
       _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
+      await _notifyDictionaryChanged();
     }
   }
 
@@ -81,6 +94,7 @@ class DictionaryProvider with ChangeNotifier {
       _antennaDict.add(persisted ?? DictionaryItem(raw: antenna, pinyin: '', abbreviation: '', type: 'antenna'));
       _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
+      await _notifyDictionaryChanged();
     }
   }
 
@@ -96,6 +110,7 @@ class DictionaryProvider with ChangeNotifier {
       _callsignDict.add(persisted ?? DictionaryItem(raw: callsign, pinyin: '', abbreviation: '', type: 'callsign'));
       _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
+      await _notifyDictionaryChanged();
     }
   }
 
@@ -111,6 +126,7 @@ class DictionaryProvider with ChangeNotifier {
       _qthDict.add(persisted ?? DictionaryItem(raw: qth, pinyin: '', abbreviation: '', type: 'qth'));
       _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
       notifyListeners();
+      await _notifyDictionaryChanged();
     }
   }
 
@@ -129,6 +145,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> importAntennas(List<String> antennas) async {
@@ -146,6 +163,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> importCallsigns(List<String> callsigns) async {
@@ -163,6 +181,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> importQths(List<String> qths) async {
@@ -180,6 +199,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> clearDeviceDict() async {
@@ -190,6 +210,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _deviceDict.clear();
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> clearAntennaDict() async {
@@ -200,6 +221,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _antennaDict.clear();
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> clearCallsignDict() async {
@@ -210,6 +232,7 @@ class DictionaryProvider with ChangeNotifier {
     }
     _callsignDict.clear();
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> clearQthDict() async {
@@ -220,17 +243,20 @@ class DictionaryProvider with ChangeNotifier {
     }
     _qthDict.clear();
     notifyListeners();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> resetDictionaries() async {
     final db = DatabaseHelper();
     await db.resetDictionaries();
     await _loadDictionaries();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> resetAllData() async {
     final db = DatabaseHelper();
     await db.resetAllData();
     await _loadDictionaries();
+    await _notifyDictionaryChanged();
   }
 }
