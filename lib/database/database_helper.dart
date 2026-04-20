@@ -111,7 +111,9 @@ class DatabaseHelper {
         source_device_id TEXT
       )
     ''');
-    await _ensureUniqueIndex(db, 'idx_logs_sync_id', _logsTable, 'sync_id');
+    if (!ifNotExists) {
+      await _ensureUniqueIndex(db, 'idx_logs_sync_id', _logsTable, 'sync_id');
+    }
   }
 
   Future<void> _createDictionaryTable(
@@ -132,7 +134,9 @@ class DatabaseHelper {
         deleted_at TEXT
       )
     ''');
-    await _ensureUniqueIndex(db, 'idx_${tableName}_sync_id', tableName, 'sync_id');
+    if (!ifNotExists) {
+      await _ensureUniqueIndex(db, 'idx_${tableName}_sync_id', tableName, 'sync_id');
+    }
   }
 
   Future<void> _createHistoryTable(Database db, {bool ifNotExists = false}) async {
@@ -148,7 +152,9 @@ class DatabaseHelper {
         deleted_at TEXT
       )
     ''');
-    await _ensureUniqueIndex(db, 'idx_history_sync_id', _historyTable, 'sync_id');
+    if (!ifNotExists) {
+      await _ensureUniqueIndex(db, 'idx_history_sync_id', _historyTable, 'sync_id');
+    }
   }
 
   Future<void> _createCallsignQthHistoryTable(
@@ -167,12 +173,14 @@ class DatabaseHelper {
         deleted_at TEXT
       )
     ''');
-    await _ensureUniqueIndex(
-      db,
-      'idx_callsign_qth_history_sync_id',
-      _callsignQthHistoryTable,
-      'sync_id',
-    );
+    if (!ifNotExists) {
+      await _ensureUniqueIndex(
+        db,
+        'idx_callsign_qth_history_sync_id',
+        _callsignQthHistoryTable,
+        'sync_id',
+      );
+    }
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_callsign_qth_callsign
       ON $_callsignQthHistoryTable(callsign)
