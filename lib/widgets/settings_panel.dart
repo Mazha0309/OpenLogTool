@@ -305,6 +305,16 @@ class SettingsPanel extends StatelessWidget {
         // 服务器同步设置
         Consumer<SyncProvider>(
           builder: (context, syncProvider, _) {
+            if (syncProvider.settings.syncEnabled && syncProvider.isLoggedIn) {
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final stillValid = await syncProvider.validateCurrentLogin();
+                if (!stillValid && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('登录状态已失效，请重新登录')),
+                  );
+                }
+              });
+            }
             return FCard(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
