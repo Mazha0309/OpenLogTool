@@ -442,6 +442,43 @@ class SyncProvider with ChangeNotifier {
     return Map<String, dynamic>.from(result['data']);
   }
 
+  Future<void> _clearAuthState() async {
+    _settings = _settings.copyWith(token: null, userId: null);
+    await _saveSettings();
+  }
+
+  Future<bool> validateCurrentLogin() async {
+    if (!isLoggedIn || _settings.token == null) {
+      return false;
+    }
+
+    try {
+      final user = await _fetchCurrentUser(_settings.token!);
+      if (user == null) {
+        await _clearAuthState();
+        notifyListeners();
+        return false;
+      }
+
+      final normalizedUserId = user['id']?.toString();
+      final normalizedTheme = user['theme']?.toString() ?? _settings.theme;
+      if (normalizedUserId != _settings.userId || normalizedTheme != _settings.theme) {
+        _settings = _settings.copyWith(
+          userId: normalizedUserId,
+          theme: normalizedTheme,
+        );
+        await _saveSettings();
+        notifyListeners();
+      }
+
+      return true;
+    } catch (_) {
+      await _clearAuthState();
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> login(String username, String password) async {
     if (!isConfigured) return false;
 
@@ -450,6 +487,7 @@ class SyncProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      await _clearAuthState();
       final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/login');
       final response = await http.post(
         uri,
@@ -471,6 +509,7 @@ class SyncProvider with ChangeNotifier {
           final user = await _fetchCurrentUser(token);
           if (user == null) {
             _lastError = '登录失败: 登录校验未通过';
+            await _clearAuthState();
             _isLoggingIn = false;
             notifyListeners();
             return false;
@@ -488,18 +527,21 @@ class SyncProvider with ChangeNotifier {
           return true;
         } else {
           _lastError = result['error']?['message'] ?? '登录失败';
+          await _clearAuthState();
           _isLoggingIn = false;
           notifyListeners();
           return false;
         }
       } else {
         _lastError = '登录失败: ${response.statusCode}';
+        await _clearAuthState();
         _isLoggingIn = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _lastError = '登录失败: $e';
+      await _clearAuthState();
       _isLoggingIn = false;
       notifyListeners();
       return false;
@@ -507,14 +549,7 @@ class SyncProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
-    _settings = SyncSettings(
-      serverUrl: _settings.serverUrl,
-      deviceId: _settings.deviceId,
-      syncEnabled: _settings.syncEnabled,
-      syncStrategy: _settings.syncStrategy,
-      lastSyncTime: _settings.lastSyncTime,
-    );
-    await _saveSettings();
+    await _clearAuthState();
     notifyListeners();
   }
 
