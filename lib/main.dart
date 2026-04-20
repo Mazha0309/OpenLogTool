@@ -21,13 +21,25 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => DictionaryProvider()),
         ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProxyProvider<SyncProvider, DictionaryProvider>(
+          create: (_) => DictionaryProvider(),
+          update: (_, syncProvider, dictionaryProvider) {
+            final provider = dictionaryProvider ?? DictionaryProvider();
+            provider.setOnDictionaryChanged(() async {
+              if (syncProvider.settings.syncEnabled &&
+                  syncProvider.settings.syncMode == 'realtime') {
+                await syncProvider.triggerSyncAndWait();
+              }
+            });
+            return provider;
+          },
+        ),
         ChangeNotifierProxyProvider<SyncProvider, LogProvider>(
           create: (_) => LogProvider(),
           update: (_, syncProvider, logProvider) {
             final provider = logProvider ?? LogProvider();
-            provider.setOnLogAdded(() async {
+            provider.setOnDataChanged(() async {
               if (syncProvider.settings.syncEnabled &&
                   syncProvider.settings.syncMode == 'realtime') {
                 await syncProvider.triggerSyncAndWait();
