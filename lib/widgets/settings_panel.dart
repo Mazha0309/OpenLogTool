@@ -471,6 +471,22 @@ class SettingsPanel extends StatelessWidget {
                               },
                             ),
                             const SizedBox(width: 8),
+                            FButton(
+                              label: '重置同步基线',
+                              onPress: syncProvider.isConfigured
+                                  ? () async {
+                                      await syncProvider.resetSyncBaseline();
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text('已重置同步基线，下次同步将重新上传本地增量')),
+                                        );
+                                      }
+                                    }
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
                             if (syncProvider.settings.syncMode != 'manual')
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -517,6 +533,46 @@ class SettingsPanel extends StatelessWidget {
                             '上次同步: ${_formatDateTime(syncProvider.settings.lastSyncTime!)}',
                             style: const TextStyle(
                                 fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                        if (syncProvider.lastSyncSummary != null) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: syncProvider.lastSyncConflicts > 0
+                                  ? Colors.orange.withValues(alpha: 0.12)
+                                  : Colors.green.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: syncProvider.lastSyncConflicts > 0
+                                    ? Colors.orange.withValues(alpha: 0.35)
+                                    : Colors.green.withValues(alpha: 0.28),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  syncProvider.lastSyncConflicts > 0
+                                      ? '最近一次同步存在冲突'
+                                      : '最近一次同步结果',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: syncProvider.lastSyncConflicts > 0
+                                        ? Colors.orange.shade800
+                                        : Colors.green.shade800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  syncProvider.lastSyncSummaryText,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                         if (syncProvider.lastError != null) ...[
@@ -1394,7 +1450,7 @@ class SettingsPanel extends StatelessWidget {
     if (context.mounted) {
       if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('同步成功！')),
+          SnackBar(content: Text('同步成功：${syncProvider.lastSyncSummaryText}')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
