@@ -11,6 +11,7 @@ class DictionaryItem {
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
+  final String? sourceDeviceId;
 
   factory DictionaryItem({
     int? id,
@@ -22,6 +23,7 @@ class DictionaryItem {
     String? createdAt,
     String? updatedAt,
     String? deletedAt,
+    String? sourceDeviceId,
   }) {
     final normalizedCreatedAt = _normalizeTimestamp(createdAt);
     return DictionaryItem._internal(
@@ -35,6 +37,7 @@ class DictionaryItem {
       createdAt: normalizedCreatedAt,
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
+      sourceDeviceId: sourceDeviceId,
     );
   }
 
@@ -49,9 +52,11 @@ class DictionaryItem {
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
+    required this.sourceDeviceId,
   });
 
-  static bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+  static bool _hasText(String? value) =>
+      value != null && value.trim().isNotEmpty;
 
   static String _normalizeSyncId(String? value, {required String prefix}) {
     final normalized = value?.trim();
@@ -117,7 +122,10 @@ class DictionaryItem {
       type: map['type']?.toString() ?? '',
       createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
       updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
-      deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      deletedAt:
+          _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      sourceDeviceId: _normalizeNullableString(
+          map['source_device_id'] ?? map['sourceDeviceId']),
     );
   }
 
@@ -129,9 +137,14 @@ class DictionaryItem {
       abbreviation: json['abbreviation']?.toString() ?? '',
       syncId: _normalizeNullableString(json['syncId'] ?? json['sync_id']),
       type: json['type']?.toString() ?? '',
-      createdAt: json['createdAt']?.toString() ?? json['created_at']?.toString(),
-      updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
-      deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+      createdAt:
+          json['createdAt']?.toString() ?? json['created_at']?.toString(),
+      updatedAt:
+          json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
+      deletedAt:
+          _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+      sourceDeviceId: _normalizeNullableString(
+          json['sourceDeviceId'] ?? json['source_device_id']),
     );
   }
 
@@ -146,6 +159,7 @@ class DictionaryItem {
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
+      'source_device_id': sourceDeviceId,
     };
   }
 
@@ -160,6 +174,7 @@ class DictionaryItem {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
+      'sourceDeviceId': sourceDeviceId,
     };
   }
 
@@ -173,6 +188,7 @@ class DictionaryItem {
     String? createdAt,
     String? updatedAt,
     Object? deletedAt = _dictionaryCopyWithSentinel,
+    Object? sourceDeviceId = _dictionaryCopyWithSentinel,
   }) {
     return DictionaryItem(
       id: id ?? this.id,
@@ -186,6 +202,9 @@ class DictionaryItem {
       deletedAt: identical(deletedAt, _dictionaryCopyWithSentinel)
           ? this.deletedAt
           : deletedAt as String?,
+      sourceDeviceId: identical(sourceDeviceId, _dictionaryCopyWithSentinel)
+          ? this.sourceDeviceId
+          : sourceDeviceId as String?,
     );
   }
 

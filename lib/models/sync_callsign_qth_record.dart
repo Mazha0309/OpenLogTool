@@ -10,6 +10,7 @@ class SyncCallsignQthRecord {
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
+  final String? sourceDeviceId;
 
   factory SyncCallsignQthRecord({
     int? id,
@@ -20,8 +21,10 @@ class SyncCallsignQthRecord {
     String? createdAt,
     String? updatedAt,
     String? deletedAt,
+    String? sourceDeviceId,
   }) {
-    final normalizedCreatedAt = _normalizeTimestamp(createdAt, fallback: recordedAt);
+    final normalizedCreatedAt =
+        _normalizeTimestamp(createdAt, fallback: recordedAt);
     return SyncCallsignQthRecord._internal(
       id: id,
       syncId: _normalizeSyncId(syncId, prefix: 'callsign-qth'),
@@ -32,6 +35,7 @@ class SyncCallsignQthRecord {
       createdAt: normalizedCreatedAt,
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
+      sourceDeviceId: sourceDeviceId,
     );
   }
 
@@ -45,9 +49,11 @@ class SyncCallsignQthRecord {
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
+    required this.sourceDeviceId,
   });
 
-  static bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+  static bool _hasText(String? value) =>
+      value != null && value.trim().isNotEmpty;
 
   static String _normalizeSyncId(String? value, {required String prefix}) {
     final normalized = value?.trim();
@@ -99,10 +105,17 @@ class SyncCallsignQthRecord {
       syncId: json['syncId']?.toString() ?? json['sync_id']?.toString(),
       callsign: json['callsign']?.toString() ?? '',
       qth: json['qth']?.toString() ?? '',
-      recordedAt: json['recordedAt']?.toString() ?? json['recorded_at']?.toString() ?? '',
-      createdAt: json['createdAt']?.toString() ?? json['created_at']?.toString(),
-      updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
-      deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+      recordedAt: json['recordedAt']?.toString() ??
+          json['recorded_at']?.toString() ??
+          '',
+      createdAt:
+          json['createdAt']?.toString() ?? json['created_at']?.toString(),
+      updatedAt:
+          json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
+      deletedAt:
+          _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+      sourceDeviceId: _normalizeNullableString(
+          json['sourceDeviceId'] ?? json['source_device_id']),
     );
   }
 
@@ -112,10 +125,14 @@ class SyncCallsignQthRecord {
       syncId: map['sync_id']?.toString() ?? map['syncId']?.toString(),
       callsign: map['callsign']?.toString() ?? '',
       qth: map['qth']?.toString() ?? '',
-      recordedAt: map['recorded_at']?.toString() ?? map['recordedAt']?.toString() ?? '',
+      recordedAt:
+          map['recorded_at']?.toString() ?? map['recordedAt']?.toString() ?? '',
       createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
       updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
-      deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      deletedAt:
+          _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      sourceDeviceId: _normalizeNullableString(
+          map['source_device_id'] ?? map['sourceDeviceId']),
     );
   }
 
@@ -129,6 +146,7 @@ class SyncCallsignQthRecord {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
+      'sourceDeviceId': sourceDeviceId,
     };
   }
 
@@ -142,6 +160,7 @@ class SyncCallsignQthRecord {
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
+      'source_device_id': sourceDeviceId,
     };
   }
 
@@ -154,6 +173,7 @@ class SyncCallsignQthRecord {
     String? createdAt,
     String? updatedAt,
     Object? deletedAt = _syncCallsignQthCopyWithSentinel,
+    Object? sourceDeviceId = _syncCallsignQthCopyWithSentinel,
   }) {
     return SyncCallsignQthRecord(
       id: id ?? this.id,
@@ -163,7 +183,13 @@ class SyncCallsignQthRecord {
       recordedAt: recordedAt ?? this.recordedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: identical(deletedAt, _syncCallsignQthCopyWithSentinel) ? this.deletedAt : deletedAt as String?,
+      deletedAt: identical(deletedAt, _syncCallsignQthCopyWithSentinel)
+          ? this.deletedAt
+          : deletedAt as String?,
+      sourceDeviceId:
+          identical(sourceDeviceId, _syncCallsignQthCopyWithSentinel)
+              ? this.sourceDeviceId
+              : sourceDeviceId as String?,
     );
   }
 }
