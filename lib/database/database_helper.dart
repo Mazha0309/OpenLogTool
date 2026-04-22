@@ -37,7 +37,8 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path = '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
+    final path =
+        '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
 
     return openDatabase(
       path,
@@ -131,15 +132,18 @@ class DatabaseHelper {
         type TEXT,
         created_at TEXT,
         updated_at TEXT,
-        deleted_at TEXT
+        deleted_at TEXT,
+        source_device_id TEXT
       )
     ''');
     if (!ifNotExists) {
-      await _ensureUniqueIndex(db, 'idx_${tableName}_sync_id', tableName, 'sync_id');
+      await _ensureUniqueIndex(
+          db, 'idx_${tableName}_sync_id', tableName, 'sync_id');
     }
   }
 
-  Future<void> _createHistoryTable(Database db, {bool ifNotExists = false}) async {
+  Future<void> _createHistoryTable(Database db,
+      {bool ifNotExists = false}) async {
     await db.execute('''
       CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}$_historyTable (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,11 +153,13 @@ class DatabaseHelper {
         log_count INTEGER NOT NULL,
         created_at TEXT,
         updated_at TEXT,
-        deleted_at TEXT
+        deleted_at TEXT,
+        source_device_id TEXT
       )
     ''');
     if (!ifNotExists) {
-      await _ensureUniqueIndex(db, 'idx_history_sync_id', _historyTable, 'sync_id');
+      await _ensureUniqueIndex(
+          db, 'idx_history_sync_id', _historyTable, 'sync_id');
     }
   }
 
@@ -170,7 +176,8 @@ class DatabaseHelper {
         recorded_at TEXT NOT NULL,
         created_at TEXT,
         updated_at TEXT,
-        deleted_at TEXT
+        deleted_at TEXT,
+        source_device_id TEXT
       )
     ''');
     if (!ifNotExists) {
@@ -216,7 +223,8 @@ class DatabaseHelper {
         continue;
       }
       final fallbackTime = _stringOrNull(row['time']);
-      final createdAt = _stringOrNull(row['created_at']) ?? _legacyTimestamp(fallbackTime);
+      final createdAt =
+          _stringOrNull(row['created_at']) ?? _legacyTimestamp(fallbackTime);
       final updates = <String, Object?>{};
 
       if (_isBlank(row['sync_id'])) {
@@ -230,7 +238,8 @@ class DatabaseHelper {
       }
 
       if (updates.isNotEmpty) {
-        batch.update(_logsTable, updates, where: 'id = ?', whereArgs: <Object?>[logId]);
+        batch.update(_logsTable, updates,
+            where: 'id = ?', whereArgs: <Object?>[logId]);
       }
     }
     await batch.commit(noResult: true);
@@ -242,8 +251,11 @@ class DatabaseHelper {
     await _ensureColumn(db, tableName, 'created_at', 'TEXT');
     await _ensureColumn(db, tableName, 'updated_at', 'TEXT');
     await _ensureColumn(db, tableName, 'deleted_at', 'TEXT');
-    await _repairDuplicateSyncIds(db, tableName, _dictionaryTypeForTable(tableName));
-    await _ensureUniqueIndex(db, 'idx_${tableName}_sync_id', tableName, 'sync_id');
+    await _ensureColumn(db, tableName, 'source_device_id', 'TEXT');
+    await _repairDuplicateSyncIds(
+        db, tableName, _dictionaryTypeForTable(tableName));
+    await _ensureUniqueIndex(
+        db, 'idx_${tableName}_sync_id', tableName, 'sync_id');
 
     final dictionaryType = _dictionaryTypeForTable(tableName);
     final rows = await db.query(
@@ -273,7 +285,8 @@ class DatabaseHelper {
       }
 
       if (updates.isNotEmpty) {
-        batch.update(tableName, updates, where: 'id = ?', whereArgs: <Object?>[localId]);
+        batch.update(tableName, updates,
+            where: 'id = ?', whereArgs: <Object?>[localId]);
       }
     }
     await batch.commit(noResult: true);
@@ -284,8 +297,10 @@ class DatabaseHelper {
     await _ensureColumn(db, _historyTable, 'created_at', 'TEXT');
     await _ensureColumn(db, _historyTable, 'updated_at', 'TEXT');
     await _ensureColumn(db, _historyTable, 'deleted_at', 'TEXT');
+    await _ensureColumn(db, _historyTable, 'source_device_id', 'TEXT');
     await _repairDuplicateSyncIds(db, _historyTable, 'history');
-    await _ensureUniqueIndex(db, 'idx_history_sync_id', _historyTable, 'sync_id');
+    await _ensureUniqueIndex(
+        db, 'idx_history_sync_id', _historyTable, 'sync_id');
 
     final rows = await db.query(
       _historyTable,
@@ -311,7 +326,8 @@ class DatabaseHelper {
       }
 
       if (updates.isNotEmpty) {
-        batch.update(_historyTable, updates, where: 'id = ?', whereArgs: <Object?>[localId]);
+        batch.update(_historyTable, updates,
+            where: 'id = ?', whereArgs: <Object?>[localId]);
       }
     }
     await batch.commit(noResult: true);
@@ -322,6 +338,8 @@ class DatabaseHelper {
     await _ensureColumn(db, _callsignQthHistoryTable, 'created_at', 'TEXT');
     await _ensureColumn(db, _callsignQthHistoryTable, 'updated_at', 'TEXT');
     await _ensureColumn(db, _callsignQthHistoryTable, 'deleted_at', 'TEXT');
+    await _ensureColumn(
+        db, _callsignQthHistoryTable, 'source_device_id', 'TEXT');
     await _repairDuplicateSyncIds(db, _callsignQthHistoryTable, 'callsign-qth');
     await _ensureUniqueIndex(
       db,
@@ -332,7 +350,13 @@ class DatabaseHelper {
 
     final rows = await db.query(
       _callsignQthHistoryTable,
-      columns: <String>['id', 'recorded_at', 'sync_id', 'created_at', 'updated_at'],
+      columns: <String>[
+        'id',
+        'recorded_at',
+        'sync_id',
+        'created_at',
+        'updated_at'
+      ],
     );
     final batch = db.batch();
     for (final row in rows) {
@@ -341,7 +365,8 @@ class DatabaseHelper {
         continue;
       }
       final recordedAt = _stringOrNull(row['recorded_at']);
-      final createdAt = _stringOrNull(row['created_at']) ?? _legacyTimestamp(recordedAt);
+      final createdAt =
+          _stringOrNull(row['created_at']) ?? _legacyTimestamp(recordedAt);
       final updates = <String, Object?>{};
 
       if (_isBlank(row['sync_id'])) {
@@ -376,7 +401,8 @@ class DatabaseHelper {
     if (columns.contains(columnName)) {
       return;
     }
-    await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $definition');
+    await db
+        .execute('ALTER TABLE $tableName ADD COLUMN $columnName $definition');
   }
 
   Future<Set<String>> _getExistingColumns(Database db, String tableName) async {
@@ -395,7 +421,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> _repairDuplicateSyncIds(Database db, String tableName, String prefix) async {
+  Future<void> _repairDuplicateSyncIds(
+      Database db, String tableName, String prefix) async {
     final duplicates = await db.rawQuery(
       '''
       SELECT sync_id
@@ -442,9 +469,12 @@ class DatabaseHelper {
   }
 
   Future<void> _loadInitialDictionaries(Database db) async {
-    await _loadDictionaryFromAsset(db, 'assets/dictionaries/antenna.json', 'antenna_dictionary');
-    await _loadDictionaryFromAsset(db, 'assets/dictionaries/device.json', 'device_dictionary');
-    await _loadDictionaryFromAsset(db, 'assets/dictionaries/qth.json', 'qth_dictionary');
+    await _loadDictionaryFromAsset(
+        db, 'assets/dictionaries/antenna.json', 'antenna_dictionary');
+    await _loadDictionaryFromAsset(
+        db, 'assets/dictionaries/device.json', 'device_dictionary');
+    await _loadDictionaryFromAsset(
+        db, 'assets/dictionaries/qth.json', 'qth_dictionary');
   }
 
   Future<void> loadInitialDictionaries() async {
@@ -452,7 +482,8 @@ class DatabaseHelper {
     await _loadInitialDictionaries(db);
   }
 
-  Future<void> _loadDictionaryFromAsset(Database db, String assetPath, String tableName) async {
+  Future<void> _loadDictionaryFromAsset(
+      Database db, String assetPath, String tableName) async {
     try {
       final String jsonString = await rootBundle.loadString(assetPath);
       final List<dynamic> jsonList = json.decode(jsonString) as List<dynamic>;
@@ -477,7 +508,8 @@ class DatabaseHelper {
 
   Map<String, dynamic> _buildLogRow(LogEntry log) {
     final createdAt = _legacyTimestamp(log.createdAt);
-    final updatedAt = _legacyTimestamp(log.updatedAt.isNotEmpty ? log.updatedAt : createdAt);
+    final updatedAt =
+        _legacyTimestamp(log.updatedAt.isNotEmpty ? log.updatedAt : createdAt);
     return <String, dynamic>{
       'sync_id': log.id,
       'time': log.time,
@@ -496,18 +528,24 @@ class DatabaseHelper {
     };
   }
 
-  Map<String, dynamic> _buildDictionaryRow(String tableName, Map<String, dynamic> item) {
-    final createdAt = _legacyTimestamp(_stringOrNull(item['created_at'] ?? item['createdAt']));
-    final updatedAt = _legacyTimestamp(_stringOrNull(item['updated_at'] ?? item['updatedAt']) ?? createdAt);
+  Map<String, dynamic> _buildDictionaryRow(
+      String tableName, Map<String, dynamic> item) {
+    final createdAt = _legacyTimestamp(
+        _stringOrNull(item['created_at'] ?? item['createdAt']));
+    final updatedAt = _legacyTimestamp(
+        _stringOrNull(item['updated_at'] ?? item['updatedAt']) ?? createdAt);
     final row = <String, dynamic>{
       'raw': item['raw']?.toString() ?? '',
       'pinyin': item['pinyin']?.toString() ?? '',
       'abbreviation': item['abbreviation']?.toString() ?? '',
-      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ?? _generateSyncId(_dictionaryTypeForTable(tableName)),
+      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ??
+          _generateSyncId(_dictionaryTypeForTable(tableName)),
       'type': _stringOrNull(item['type']) ?? _dictionaryTypeForTable(tableName),
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': _stringOrNull(item['deleted_at'] ?? item['deletedAt']),
+      'source_device_id':
+          _stringOrNull(item['source_device_id'] ?? item['sourceDeviceId']),
     };
 
     final localId = item['id'];
@@ -582,7 +620,8 @@ class DatabaseHelper {
     return null;
   }
 
-  bool _shouldApplyDeletedAt(dynamic existingDeletedAt, String incomingDeletedAt) {
+  bool _shouldApplyDeletedAt(
+      dynamic existingDeletedAt, String incomingDeletedAt) {
     final existing = _parseTimestamp(_stringOrNull(existingDeletedAt));
     final incoming = _parseTimestamp(incomingDeletedAt);
     if (incoming == null) {
@@ -613,39 +652,49 @@ class DatabaseHelper {
   }
 
   Map<String, dynamic> _buildHistoryRow(Map<String, dynamic> item) {
-    final createdAtInput = _stringOrNull(item['created_at'] ?? item['createdAt']);
+    final createdAtInput =
+        _stringOrNull(item['created_at'] ?? item['createdAt']);
     final createdAt = _legacyTimestamp(createdAtInput);
     final updatedAt = _legacyTimestamp(
       _stringOrNull(item['updated_at'] ?? item['updatedAt']) ?? createdAt,
     );
     return <String, dynamic>{
-      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ?? _generateSyncId('history'),
+      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ??
+          _generateSyncId('history'),
       'name': item['name']?.toString() ?? '',
-      'logs_data': item['logs_data']?.toString() ?? item['logsData']?.toString() ?? '[]',
+      'logs_data':
+          item['logs_data']?.toString() ?? item['logsData']?.toString() ?? '[]',
       'log_count': _intOrNull(item['log_count'] ?? item['logCount']) ?? 0,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': _stringOrNull(item['deleted_at'] ?? item['deletedAt']),
+      'source_device_id':
+          _stringOrNull(item['source_device_id'] ?? item['sourceDeviceId']),
     };
   }
 
   Map<String, dynamic> _buildCallsignQthHistoryRow(Map<String, dynamic> item) {
-    final createdAtInput = _stringOrNull(item['created_at'] ?? item['createdAt']);
+    final createdAtInput =
+        _stringOrNull(item['created_at'] ?? item['createdAt']);
     final recordedAt = _legacyTimestamp(
-      _stringOrNull(item['recorded_at'] ?? item['recordedAt']) ?? createdAtInput,
+      _stringOrNull(item['recorded_at'] ?? item['recordedAt']) ??
+          createdAtInput,
     );
     final createdAt = _legacyTimestamp(createdAtInput ?? recordedAt);
     final updatedAt = _legacyTimestamp(
       _stringOrNull(item['updated_at'] ?? item['updatedAt']) ?? createdAt,
     );
     return <String, dynamic>{
-      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ?? _generateSyncId('callsign-qth'),
+      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ??
+          _generateSyncId('callsign-qth'),
       'callsign': item['callsign']?.toString().toUpperCase() ?? '',
       'qth': item['qth']?.toString() ?? '',
       'recorded_at': recordedAt,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': _stringOrNull(item['deleted_at'] ?? item['deletedAt']),
+      'source_device_id':
+          _stringOrNull(item['source_device_id'] ?? item['sourceDeviceId']),
     };
   }
 
@@ -688,7 +737,8 @@ class DatabaseHelper {
     }
   }
 
-  Future<void> _softDeleteBySyncId(String tableName, String syncId, String deletedAt) async {
+  Future<void> _softDeleteBySyncId(
+      String tableName, String syncId, String deletedAt) async {
     final db = await database;
     final normalizedDeletedAt = _legacyTimestamp(deletedAt);
     final existingRows = await db.query(
@@ -700,7 +750,8 @@ class DatabaseHelper {
     );
 
     if (existingRows.isEmpty ||
-        !_shouldApplyDeletedAt(existingRows.first['deleted_at'], normalizedDeletedAt)) {
+        !_shouldApplyDeletedAt(
+            existingRows.first['deleted_at'], normalizedDeletedAt)) {
       return;
     }
 
@@ -733,7 +784,8 @@ class DatabaseHelper {
       _logsTable,
       <String, dynamic>{
         ...row,
-        'created_at': _stringOrNull(existingRows.first['created_at']) ?? row['created_at'],
+        'created_at': _stringOrNull(existingRows.first['created_at']) ??
+            row['created_at'],
         'deleted_at': null,
       },
       where: 'id = ?',
@@ -759,7 +811,8 @@ class DatabaseHelper {
   Future<List<LogEntry>> getAllLogs() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(_logsTable);
-    return List<LogEntry>.generate(maps.length, (int i) => LogEntry.fromMap(maps[i]));
+    return List<LogEntry>.generate(
+        maps.length, (int i) => LogEntry.fromMap(maps[i]));
   }
 
   Future<List<LogEntry>> getVisibleLogs() async {
@@ -769,7 +822,8 @@ class DatabaseHelper {
       where: 'deleted_at IS NULL',
       orderBy: 'id ASC',
     );
-    return List<LogEntry>.generate(maps.length, (int i) => LogEntry.fromMap(maps[i]));
+    return List<LogEntry>.generate(
+        maps.length, (int i) => LogEntry.fromMap(maps[i]));
   }
 
   Future<int> updateLog(int id, LogEntry log) async {
@@ -833,7 +887,8 @@ class DatabaseHelper {
   Future<void> upsertLogFromSync(Map<String, dynamic> data) async {
     final log = LogEntry.fromJson(data);
     final row = _buildLogRow(log);
-    final syncId = _stringOrNull(data['id'] ?? data['sync_id'] ?? row['sync_id']);
+    final syncId =
+        _stringOrNull(data['id'] ?? data['sync_id'] ?? row['sync_id']);
     if (syncId == null) {
       return;
     }
@@ -894,7 +949,8 @@ class DatabaseHelper {
         .toList();
   }
 
-  Future<DictionaryItem?> getDictionaryItemByRaw(String tableName, String raw) async {
+  Future<DictionaryItem?> getDictionaryItemByRaw(
+      String tableName, String raw) async {
     _assertDictionaryTable(tableName);
     final db = await database;
     final rows = await db.query(
@@ -912,7 +968,8 @@ class DatabaseHelper {
     });
   }
 
-  Future<int> insertDictionaryItem(String tableName, Map<String, dynamic> item) async {
+  Future<int> insertDictionaryItem(
+      String tableName, Map<String, dynamic> item) async {
     _assertDictionaryTable(tableName);
     final db = await database;
     final row = _buildDictionaryRow(tableName, item);
@@ -937,8 +994,10 @@ class DatabaseHelper {
       tableName,
       <String, dynamic>{
         ...row,
-        'sync_id': _stringOrNull(existingRows.first['sync_id']) ?? row['sync_id'],
-        'created_at': _stringOrNull(existingRows.first['created_at']) ?? row['created_at'],
+        'sync_id':
+            _stringOrNull(existingRows.first['sync_id']) ?? row['sync_id'],
+        'created_at': _stringOrNull(existingRows.first['created_at']) ??
+            row['created_at'],
         'updated_at': _now(),
         'deleted_at': null,
       },
@@ -948,7 +1007,8 @@ class DatabaseHelper {
     return localId;
   }
 
-  Future<void> importDictionaryItems(String tableName, List<Map<String, dynamic>> items) async {
+  Future<void> importDictionaryItems(
+      String tableName, List<Map<String, dynamic>> items) async {
     final db = await database;
     final batch = db.batch();
     for (final item in items) {
@@ -981,7 +1041,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<List<Map<String, dynamic>>> getDictionaryChangedSince(String tableName, String since) async {
+  Future<List<Map<String, dynamic>>> getDictionaryChangedSince(
+      String tableName, String since) async {
     _assertDictionaryTable(tableName);
     final db = await database;
     return db.query(
@@ -992,10 +1053,12 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> upsertDictionaryItemFromSync(String tableName, Map<String, dynamic> item) async {
+  Future<void> upsertDictionaryItemFromSync(
+      String tableName, Map<String, dynamic> item) async {
     _assertDictionaryTable(tableName);
     final row = _buildDictionaryRow(tableName, item);
-    final syncId = _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
+    final syncId =
+        _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
     if (syncId == null) {
       return;
     }
@@ -1007,7 +1070,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> softDeleteDictionaryItem(String tableName, String syncId, String deletedAt) async {
+  Future<void> softDeleteDictionaryItem(
+      String tableName, String syncId, String deletedAt) async {
     _assertDictionaryTable(tableName);
     await _softDeleteBySyncId(tableName, syncId, deletedAt);
   }
@@ -1026,7 +1090,8 @@ class DatabaseHelper {
       _database = null;
     }
     final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path = '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
+    final path =
+        '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
     final dbFile = File(path);
     if (await dbFile.exists()) {
       await dbFile.delete();
@@ -1068,9 +1133,11 @@ class DatabaseHelper {
     if (maps.isEmpty) {
       return <LogEntry>[];
     }
-    final logsData = json.decode(maps.first['logs_data'] as String) as List<dynamic>;
+    final logsData =
+        json.decode(maps.first['logs_data'] as String) as List<dynamic>;
     return logsData
-        .map((dynamic l) => LogEntry.fromJson(Map<String, dynamic>.from(l as Map)))
+        .map((dynamic l) =>
+            LogEntry.fromJson(Map<String, dynamic>.from(l as Map)))
         .toList();
   }
 
@@ -1094,7 +1161,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<List<Map<String, dynamic>>> getHistoryChangedSince(String since) async {
+  Future<List<Map<String, dynamic>>> getHistoryChangedSince(
+      String since) async {
     final db = await database;
     return db.query(
       _historyTable,
@@ -1106,7 +1174,8 @@ class DatabaseHelper {
 
   Future<void> upsertHistoryFromSync(Map<String, dynamic> item) async {
     final row = _buildHistoryRow(item);
-    final syncId = _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
+    final syncId =
+        _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
     if (syncId == null) {
       return;
     }
@@ -1226,11 +1295,13 @@ class DatabaseHelper {
     await _migrateSyncSchema(db);
   }
 
-  List<Map<String, dynamic>> _sanitizeImportedRows(List<dynamic> rows, String prefix) {
+  List<Map<String, dynamic>> _sanitizeImportedRows(
+      List<dynamic> rows, String prefix) {
     final seenSyncIds = <String>{};
     return rows.map((dynamic row) {
       final normalized = Map<String, dynamic>.from(row as Map);
-      final existingSyncId = _stringOrNull(normalized['sync_id'] ?? normalized['syncId']);
+      final existingSyncId =
+          _stringOrNull(normalized['sync_id'] ?? normalized['syncId']);
       if (existingSyncId == null || seenSyncIds.contains(existingSyncId)) {
         final generated = _generateSyncId(prefix);
         normalized['sync_id'] = generated;
@@ -1245,14 +1316,27 @@ class DatabaseHelper {
   Future<Map<String, dynamic>> getDatabaseStats() async {
     final db = await database;
 
-    final logsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $_logsTable')) ?? 0;
-    final deviceCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM device_dictionary')) ?? 0;
-    final antennaCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM antenna_dictionary')) ?? 0;
-    final qthCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM qth_dictionary')) ?? 0;
-    final callsignCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM callsign_dictionary')) ?? 0;
-    final historyCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $_historyTable')) ?? 0;
-    final callsignQthHistoryCount =
-        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $_callsignQthHistoryTable')) ?? 0;
+    final logsCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM $_logsTable')) ??
+        0;
+    final deviceCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM device_dictionary')) ??
+        0;
+    final antennaCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM antenna_dictionary')) ??
+        0;
+    final qthCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM qth_dictionary')) ??
+        0;
+    final callsignCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM callsign_dictionary')) ??
+        0;
+    final historyCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM $_historyTable')) ??
+        0;
+    final callsignQthHistoryCount = Sqflite.firstIntValue(await db
+            .rawQuery('SELECT COUNT(*) FROM $_callsignQthHistoryTable')) ??
+        0;
 
     return <String, dynamic>{
       'logs': logsCount,
@@ -1282,7 +1366,8 @@ class DatabaseHelper {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getCallsignQthHistory(String callsign, {int limit = 3}) async {
+  Future<List<Map<String, dynamic>>> getCallsignQthHistory(String callsign,
+      {int limit = 3}) async {
     if (callsign.isEmpty) {
       return <Map<String, dynamic>>[];
     }
@@ -1332,7 +1417,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<List<Map<String, dynamic>>> getCallsignQthHistoryChangedSince(String since) async {
+  Future<List<Map<String, dynamic>>> getCallsignQthHistoryChangedSince(
+      String since) async {
     final db = await database;
     return db.query(
       _callsignQthHistoryTable,
@@ -1342,9 +1428,11 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> upsertCallsignQthHistoryFromSync(Map<String, dynamic> item) async {
+  Future<void> upsertCallsignQthHistoryFromSync(
+      Map<String, dynamic> item) async {
     final row = _buildCallsignQthHistoryRow(item);
-    final syncId = _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
+    final syncId =
+        _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
     if (syncId == null) {
       return;
     }
@@ -1356,7 +1444,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> softDeleteCallsignQthHistory(String syncId, String deletedAt) async {
+  Future<void> softDeleteCallsignQthHistory(
+      String syncId, String deletedAt) async {
     await _softDeleteBySyncId(_callsignQthHistoryTable, syncId, deletedAt);
   }
 }

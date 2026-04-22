@@ -10,6 +10,7 @@ class SyncHistoryRecord {
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
+  final String? sourceDeviceId;
 
   factory SyncHistoryRecord({
     int? id,
@@ -20,6 +21,7 @@ class SyncHistoryRecord {
     String? createdAt,
     String? updatedAt,
     String? deletedAt,
+    String? sourceDeviceId,
   }) {
     final normalizedCreatedAt = _normalizeTimestamp(createdAt);
     return SyncHistoryRecord._internal(
@@ -32,6 +34,7 @@ class SyncHistoryRecord {
       createdAt: normalizedCreatedAt,
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
+      sourceDeviceId: sourceDeviceId,
     );
   }
 
@@ -45,9 +48,11 @@ class SyncHistoryRecord {
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
+    required this.sourceDeviceId,
   });
 
-  static bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+  static bool _hasText(String? value) =>
+      value != null && value.trim().isNotEmpty;
 
   static String _normalizeSyncId(String? value, {required String prefix}) {
     final normalized = value?.trim();
@@ -98,11 +103,17 @@ class SyncHistoryRecord {
       id: json['id'] as int?,
       syncId: json['syncId']?.toString() ?? json['sync_id']?.toString(),
       name: json['name']?.toString() ?? '',
-      logsData: json['logsData']?.toString() ?? json['logs_data']?.toString() ?? '',
+      logsData:
+          json['logsData']?.toString() ?? json['logs_data']?.toString() ?? '',
       logCount: (json['logCount'] ?? json['log_count'] ?? 0) as int,
-      createdAt: json['createdAt']?.toString() ?? json['created_at']?.toString(),
-      updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
-      deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+      createdAt:
+          json['createdAt']?.toString() ?? json['created_at']?.toString(),
+      updatedAt:
+          json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
+      deletedAt:
+          _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
+      sourceDeviceId: _normalizeNullableString(
+          json['sourceDeviceId'] ?? json['source_device_id']),
     );
   }
 
@@ -111,11 +122,15 @@ class SyncHistoryRecord {
       id: map['id'] as int?,
       syncId: map['sync_id']?.toString() ?? map['syncId']?.toString(),
       name: map['name']?.toString() ?? '',
-      logsData: map['logs_data']?.toString() ?? map['logsData']?.toString() ?? '',
+      logsData:
+          map['logs_data']?.toString() ?? map['logsData']?.toString() ?? '',
       logCount: (map['log_count'] ?? map['logCount'] ?? 0) as int,
       createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
       updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
-      deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      deletedAt:
+          _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      sourceDeviceId: _normalizeNullableString(
+          map['source_device_id'] ?? map['sourceDeviceId']),
     );
   }
 
@@ -129,6 +144,7 @@ class SyncHistoryRecord {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
+      'sourceDeviceId': sourceDeviceId,
     };
   }
 
@@ -142,6 +158,7 @@ class SyncHistoryRecord {
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
+      'source_device_id': sourceDeviceId,
     };
   }
 
@@ -154,6 +171,7 @@ class SyncHistoryRecord {
     String? createdAt,
     String? updatedAt,
     Object? deletedAt = _syncHistoryCopyWithSentinel,
+    Object? sourceDeviceId = _syncHistoryCopyWithSentinel,
   }) {
     return SyncHistoryRecord(
       id: id ?? this.id,
@@ -163,7 +181,12 @@ class SyncHistoryRecord {
       logCount: logCount ?? this.logCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: identical(deletedAt, _syncHistoryCopyWithSentinel) ? this.deletedAt : deletedAt as String?,
+      deletedAt: identical(deletedAt, _syncHistoryCopyWithSentinel)
+          ? this.deletedAt
+          : deletedAt as String?,
+      sourceDeviceId: identical(sourceDeviceId, _syncHistoryCopyWithSentinel)
+          ? this.sourceDeviceId
+          : sourceDeviceId as String?,
     );
   }
 }
