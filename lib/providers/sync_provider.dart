@@ -41,7 +41,7 @@ class SyncSettings {
     String? syncStrategy,
     String? syncMode,
     int? syncIntervalMinutes,
-    DateTime? lastSyncTime,
+    Object? lastSyncTime = _syncSettingsUnset,
     Object? token = _syncSettingsUnset,
     Object? userId = _syncSettingsUnset,
     Object? theme = _syncSettingsUnset,
@@ -53,10 +53,16 @@ class SyncSettings {
       syncStrategy: syncStrategy ?? this.syncStrategy,
       syncMode: syncMode ?? this.syncMode,
       syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
-      lastSyncTime: lastSyncTime ?? this.lastSyncTime,
-      token: identical(token, _syncSettingsUnset) ? this.token : token as String?,
-      userId: identical(userId, _syncSettingsUnset) ? this.userId : userId as String?,
-      theme: identical(theme, _syncSettingsUnset) ? this.theme : theme as String?,
+      lastSyncTime: identical(lastSyncTime, _syncSettingsUnset)
+          ? this.lastSyncTime
+          : lastSyncTime as DateTime?,
+      token:
+          identical(token, _syncSettingsUnset) ? this.token : token as String?,
+      userId: identical(userId, _syncSettingsUnset)
+          ? this.userId
+          : userId as String?,
+      theme:
+          identical(theme, _syncSettingsUnset) ? this.theme : theme as String?,
     );
   }
 
@@ -95,6 +101,30 @@ class SyncSettings {
 
 const Object _syncSettingsUnset = Object();
 
+int syncSummaryGroupTotal(Map<String, dynamic>? summary, String key) {
+  final group = summary?[key];
+  if (group is! Map) {
+    return 0;
+  }
+  return group.values
+      .whereType<num>()
+      .fold<int>(0, (sum, value) => sum + value.toInt());
+}
+
+int syncSummaryConflicts(Map<String, dynamic>? summary) {
+  return (summary?['conflicts'] as num?)?.toInt() ?? 0;
+}
+
+String formatSyncSummaryText(Map<String, dynamic>? summary) {
+  if (summary == null) {
+    return '暂无同步结果';
+  }
+  final applied = syncSummaryGroupTotal(summary, 'applied');
+  final ignored = syncSummaryGroupTotal(summary, 'ignored');
+  final conflicts = syncSummaryConflicts(summary);
+  return '已应用 $applied 条，忽略 $ignored 条，冲突 $conflicts 条';
+}
+
 class SyncProvider with ChangeNotifier {
   static const String _syncSettingsKey = 'syncSettings';
 
@@ -104,6 +134,7 @@ class SyncProvider with ChangeNotifier {
   bool _isLoggingIn = false;
   Timer? _syncTimer;
   bool _hasPendingSyncRequest = false;
+  Map<String, dynamic>? _lastSyncSummary;
 
   String _getBaseUrl() {
     return _settings.serverUrl.replaceAll(RegExp(r'/$'), '');
@@ -113,10 +144,21 @@ class SyncProvider with ChangeNotifier {
   bool get isSyncing => _isSyncing;
   bool get isLoggingIn => _isLoggingIn;
   String? get lastError => _lastError;
+  Map<String, dynamic>? get lastSyncSummary => _lastSyncSummary;
   bool get isConfigured =>
       _settings.serverUrl.isNotEmpty && _settings.deviceId.isNotEmpty;
   bool get isLoggedIn => _settings.token != null && _settings.userId != null;
   String get theme => _settings.theme ?? 'light';
+
+  int get lastSyncConflicts => syncSummaryConflicts(_lastSyncSummary);
+
+  int get lastSyncAppliedTotal =>
+      syncSummaryGroupTotal(_lastSyncSummary, 'applied');
+
+  int get lastSyncIgnoredTotal =>
+      syncSummaryGroupTotal(_lastSyncSummary, 'ignored');
+
+  String get lastSyncSummaryText => formatSyncSummaryText(_lastSyncSummary);
 
   SyncProvider() {
     _loadSettings();
@@ -183,53 +225,99 @@ class SyncProvider with ChangeNotifier {
       Map<String, dynamic> row, String type) {
     final item = DictionaryItem.fromMap({...row, 'type': type});
     return {
-      'id': item.syncId,
+      'sync_id': item.syncId,
       'raw': item.raw,
       'pinyin': item.pinyin,
       'abbreviation': item.abbreviation,
       'type': item.type,
-      'createdAt': item.createdAt,
-      'updatedAt': item.updatedAt,
-      'deletedAt': item.deletedAt,
+      'created_at': item.createdAt,
+      'updated_at': item.updatedAt,
+      'deleted_at': item.deletedAt,
+      'source_device_id': item.sourceDeviceId ?? _settings.deviceId,
     };
   }
 
   Map<String, dynamic> _normalizeHistoryPayload(Map<String, dynamic> row) {
     final item = SyncHistoryRecord.fromMap(row);
     return {
-      'id': item.syncId,
+      'sync_id': item.syncId,
       'name': item.name,
-      'logsData': item.logsData,
-      'logCount': item.logCount,
-      'createdAt': item.createdAt,
-      'updatedAt': item.updatedAt,
-      'deletedAt': item.deletedAt,
+      'logs_data': item.logsData,
+      'log_count': item.logCount,
+      'created_at': item.createdAt,
+      'updated_at': item.updatedAt,
+      'deleted_at': item.deletedAt,
+      'source_device_id': item.sourceDeviceId ?? _settings.deviceId,
     };
   }
 
   Map<String, dynamic> _normalizeCallsignQthPayload(Map<String, dynamic> row) {
     final item = SyncCallsignQthRecord.fromMap(row);
     return {
-      'id': item.syncId,
+      'sync_id': item.syncId,
       'callsign': item.callsign,
       'qth': item.qth,
-      'recordedAt': item.recordedAt,
-      'createdAt': item.createdAt,
-      'updatedAt': item.updatedAt,
-      'deletedAt': item.deletedAt,
+      'recorded_at': item.recordedAt,
+      'created_at': item.createdAt,
+      'updated_at': item.updatedAt,
+      'deleted_at': item.deletedAt,
+      'source_device_id': item.sourceDeviceId ?? _settings.deviceId,
     };
   }
 
   Map<String, dynamic> _normalizeIncomingSyncItem(Map<String, dynamic> row) {
-    final id = row['id'];
-    if (id == null) {
-      return row;
-    }
+    final id = row['sync_id'] ?? row['id'];
     return {
       ...row,
-      'syncId': row['syncId'] ?? id,
-      'sync_id': row['sync_id'] ?? id,
+      if (id != null) 'syncId': row['syncId'] ?? id,
+      if (id != null) 'sync_id': row['sync_id'] ?? id,
+      'createdAt': row['createdAt'] ?? row['created_at'],
+      'created_at': row['created_at'] ?? row['createdAt'],
+      'updatedAt': row['updatedAt'] ?? row['updated_at'],
+      'updated_at': row['updated_at'] ?? row['updatedAt'],
+      'deletedAt': row['deletedAt'] ?? row['deleted_at'],
+      'deleted_at': row['deleted_at'] ?? row['deletedAt'],
+      'sourceDeviceId': row['sourceDeviceId'] ?? row['source_device_id'],
+      'source_device_id': row['source_device_id'] ?? row['sourceDeviceId'],
+      'recordedAt': row['recordedAt'] ?? row['recorded_at'],
+      'recorded_at': row['recorded_at'] ?? row['recordedAt'],
+      'logsData': row['logsData'] ?? row['logs_data'],
+      'logs_data': row['logs_data'] ?? row['logsData'],
+      'logCount': row['logCount'] ?? row['log_count'],
+      'log_count': row['log_count'] ?? row['logCount'],
     };
+  }
+
+  String? _dictionaryTableForSyncType(String type) {
+    return switch (type) {
+      'device' || 'rig' || 'rigs' => 'device_dictionary',
+      'antenna' || 'antennas' => 'antenna_dictionary',
+      'qth' || 'qths' => 'qth_dictionary',
+      'callsign' || 'callsigns' => 'callsign_dictionary',
+      _ => null,
+    };
+  }
+
+  Map<String, dynamic> _buildDictionarySyncPayload() {
+    return {
+      'rigs': <Map<String, dynamic>>[],
+      'antennas': <Map<String, dynamic>>[],
+      'qths': <Map<String, dynamic>>[],
+      'callsigns': <Map<String, dynamic>>[],
+    };
+  }
+
+  void _captureSyncSummary(Map<String, dynamic> result) {
+    final summary = result['summary'];
+    if (summary is Map<String, dynamic>) {
+      _lastSyncSummary = Map<String, dynamic>.from(summary);
+    } else if (summary is Map) {
+      _lastSyncSummary = Map<String, dynamic>.from(
+        summary.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    } else {
+      _lastSyncSummary = null;
+    }
   }
 
   Future<Map<String, dynamic>> _collectBidirectionalPayload() async {
@@ -237,21 +325,36 @@ class SyncProvider with ChangeNotifier {
     final since = _lastSyncAtValue();
 
     final logs = await db.getLogsChangedSince(since);
-    final deviceDicts = await db.getDictionaryChangedSince('device_dictionary', since);
-    final antennaDicts = await db.getDictionaryChangedSince('antenna_dictionary', since);
-    final qthDicts = await db.getDictionaryChangedSince('qth_dictionary', since);
-    final callsignDicts = await db.getDictionaryChangedSince('callsign_dictionary', since);
+    final deviceDicts =
+        await db.getDictionaryChangedSince('device_dictionary', since);
+    final antennaDicts =
+        await db.getDictionaryChangedSince('antenna_dictionary', since);
+    final qthDicts =
+        await db.getDictionaryChangedSince('qth_dictionary', since);
+    final callsignDicts =
+        await db.getDictionaryChangedSince('callsign_dictionary', since);
     final history = await db.getHistoryChangedSince(since);
-    final callsignQthHistory = await db.getCallsignQthHistoryChangedSince(since);
+    final callsignQthHistory =
+        await db.getCallsignQthHistoryChangedSince(since);
+
+    final dictionaries = _buildDictionarySyncPayload();
+    dictionaries['rigs'] = deviceDicts
+        .map((row) => _normalizeDictionaryPayload(row, 'device'))
+        .toList();
+    dictionaries['antennas'] = antennaDicts
+        .map((row) => _normalizeDictionaryPayload(row, 'antenna'))
+        .toList();
+    dictionaries['qths'] =
+        qthDicts.map((row) => _normalizeDictionaryPayload(row, 'qth')).toList();
+    dictionaries['callsigns'] = callsignDicts
+        .map((row) => _normalizeDictionaryPayload(row, 'callsign'))
+        .toList();
 
     return {
-      'logs': logs.map((row) => LogEntry.fromMap(row).toJson()).toList(),
-      'dictionaries': [
-        ...deviceDicts.map((row) => _normalizeDictionaryPayload(row, 'device')),
-        ...antennaDicts.map((row) => _normalizeDictionaryPayload(row, 'antenna')),
-        ...qthDicts.map((row) => _normalizeDictionaryPayload(row, 'qth')),
-        ...callsignDicts.map((row) => _normalizeDictionaryPayload(row, 'callsign')),
-      ],
+      'logs': logs
+          .map((row) => LogEntry.fromMap(row).toMap()..remove('id'))
+          .toList(),
+      'dictionaries': dictionaries,
       'callsignQthHistory': callsignQthHistory
           .map((row) => _normalizeCallsignQthPayload(row))
           .toList(),
@@ -264,52 +367,63 @@ class SyncProvider with ChangeNotifier {
 
     final logs = List<Map<String, dynamic>>.from(changes['logs'] ?? const []);
     for (final item in logs) {
-      if (item['deletedAt'] != null) {
-        await db.softDeleteLog(item['id'].toString(), item['deletedAt'].toString());
-      } else {
-        await db.upsertLogFromSync(item);
-      }
-    }
-
-    final dictionaries =
-        List<Map<String, dynamic>>.from(changes['dictionaries'] ?? const []);
-    for (final item in dictionaries) {
       final normalized = _normalizeIncomingSyncItem(item);
-      final type = normalized['type']?.toString() ?? '';
-      final tableName = switch (type) {
-        'device' => 'device_dictionary',
-        'antenna' => 'antenna_dictionary',
-        'qth' => 'qth_dictionary',
-        'callsign' => 'callsign_dictionary',
-        _ => '',
-      };
-      if (tableName.isEmpty) continue;
-      if (normalized['deletedAt'] != null) {
-        await db.softDeleteDictionaryItem(
-            tableName, normalized['id'].toString(), normalized['deletedAt'].toString());
+      final syncId = normalized['sync_id']?.toString();
+      final deletedAt = normalized['deleted_at']?.toString();
+      if (syncId == null) continue;
+      if (deletedAt != null) {
+        await db.softDeleteLog(syncId, deletedAt);
       } else {
-        await db.upsertDictionaryItemFromSync(tableName, normalized);
+        await db.upsertLogFromSync(normalized);
       }
     }
 
-    final history = List<Map<String, dynamic>>.from(changes['history'] ?? const []);
+    final rawDictionaries = changes['dictionaries'];
+    if (rawDictionaries is Map<String, dynamic>) {
+      for (final entry in rawDictionaries.entries) {
+        final items = List<Map<String, dynamic>>.from(entry.value ?? const []);
+        for (final item in items) {
+          final normalized = _normalizeIncomingSyncItem({
+            ...item,
+            'type': item['type'] ?? entry.key,
+          });
+          final tableName = _dictionaryTableForSyncType(
+              normalized['type']?.toString() ?? entry.key);
+          final syncId = normalized['sync_id']?.toString();
+          final deletedAt = normalized['deleted_at']?.toString();
+          if (tableName == null || syncId == null) continue;
+          if (deletedAt != null) {
+            await db.softDeleteDictionaryItem(tableName, syncId, deletedAt);
+          } else {
+            await db.upsertDictionaryItemFromSync(tableName, normalized);
+          }
+        }
+      }
+    }
+
+    final history =
+        List<Map<String, dynamic>>.from(changes['history'] ?? const []);
     for (final item in history) {
       final normalized = _normalizeIncomingSyncItem(item);
-      if (normalized['deletedAt'] != null) {
-        await db.softDeleteHistory(
-            normalized['id'].toString(), normalized['deletedAt'].toString());
+      final syncId = normalized['sync_id']?.toString();
+      final deletedAt = normalized['deleted_at']?.toString();
+      if (syncId == null) continue;
+      if (deletedAt != null) {
+        await db.softDeleteHistory(syncId, deletedAt);
       } else {
         await db.upsertHistoryFromSync(normalized);
       }
     }
 
-    final callsignQthHistory =
-        List<Map<String, dynamic>>.from(changes['callsignQthHistory'] ?? const []);
+    final callsignQthHistory = List<Map<String, dynamic>>.from(
+        changes['callsignQthHistory'] ?? const []);
     for (final item in callsignQthHistory) {
       final normalized = _normalizeIncomingSyncItem(item);
-      if (normalized['deletedAt'] != null) {
-        await db.softDeleteCallsignQthHistory(
-            normalized['id'].toString(), normalized['deletedAt'].toString());
+      final syncId = normalized['sync_id']?.toString();
+      final deletedAt = normalized['deleted_at']?.toString();
+      if (syncId == null) continue;
+      if (deletedAt != null) {
+        await db.softDeleteCallsignQthHistory(syncId, deletedAt);
       } else {
         await db.upsertCallsignQthHistoryFromSync(normalized);
       }
@@ -351,17 +465,22 @@ class SyncProvider with ChangeNotifier {
       }
 
       final result = json.decode(response.body) as Map<String, dynamic>;
-      if (result['success'] != true) {
+      if (result['ok'] != true) {
         _lastError = result['error']?['message']?.toString() ?? '双向同步失败';
         return false;
       }
 
+      _captureSyncSummary(result);
+
       await _applyBidirectionalChanges(
           Map<String, dynamic>.from(result['changes'] ?? const {}));
 
-      final serverTimeValue = result['serverTime']?.toString();
-      final serverTime =
-          serverTimeValue != null ? DateTime.tryParse(serverTimeValue)?.toUtc() : null;
+      final nextSyncToken = result['nextSyncToken'] as Map<String, dynamic>?;
+      final serverTimeValue = nextSyncToken?['lastSyncAt']?.toString() ??
+          result['serverTime']?.toString();
+      final serverTime = serverTimeValue != null
+          ? DateTime.tryParse(serverTimeValue)?.toUtc()
+          : null;
       _settings = _settings.copyWith(
         lastSyncTime: serverTime ?? DateTime.now().toUtc(),
       );
@@ -425,6 +544,12 @@ class SyncProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> resetSyncBaseline() async {
+    _settings = _settings.copyWith(lastSyncTime: null);
+    await _saveSettings();
+    notifyListeners();
+  }
+
   Future<Map<String, dynamic>?> _fetchCurrentUser(String token) async {
     final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/me');
     final response = await http.get(
@@ -468,7 +593,8 @@ class SyncProvider with ChangeNotifier {
 
       final normalizedUserId = user['id']?.toString();
       final normalizedTheme = user['theme']?.toString() ?? _settings.theme;
-      if (normalizedUserId != _settings.userId || normalizedTheme != _settings.theme) {
+      if (normalizedUserId != _settings.userId ||
+          normalizedTheme != _settings.theme) {
         _settings = _settings.copyWith(
           userId: normalizedUserId,
           theme: normalizedTheme,
@@ -627,8 +753,9 @@ class SyncProvider with ChangeNotifier {
   }
 
   Future<Map<String, dynamic>?> pushSync(List<Map<String, dynamic>> logs,
-      {List<Map<String, dynamic>>? dictionaries,
-      List<Map<String, dynamic>>? callsignQthHistory}) async {
+      {Map<String, dynamic>? dictionaries,
+      List<Map<String, dynamic>>? callsignQthHistory,
+      List<Map<String, dynamic>>? history}) async {
     if (!isConfigured) return null;
 
     _isSyncing = true;
@@ -648,16 +775,33 @@ class SyncProvider with ChangeNotifier {
         uri,
         headers: headers,
         body: json.encode({
-          'logs': logs,
-          'dictionaries': dictionaries,
-          'callsignQthHistory': callsignQthHistory,
           'deviceId': _settings.deviceId,
+          'payload': {
+            'logs': logs,
+            'dictionaries': dictionaries ?? _buildDictionarySyncPayload(),
+            'callsignQthHistory': callsignQthHistory ?? const [],
+            'history': history ?? const [],
+          },
         }),
       );
 
       if (response.statusCode == 200) {
-        final result = json.decode(response.body);
-        await updateLastSyncTime();
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        if (result['ok'] != true) {
+          _lastError = result['error']?['message']?.toString() ?? '推送失败';
+          _isSyncing = false;
+          notifyListeners();
+          return null;
+        }
+        _captureSyncSummary(result);
+        final syncAt =
+            (result['nextSyncToken']?['lastSyncAt'] ?? result['serverTime'])
+                ?.toString();
+        if (syncAt != null) {
+          _settings = _settings.copyWith(
+              lastSyncTime: DateTime.tryParse(syncAt)?.toUtc());
+          await _saveSettings();
+        }
         _isSyncing = false;
         notifyListeners();
         return result;
@@ -690,13 +834,30 @@ class SyncProvider with ChangeNotifier {
 
       final since = _settings.lastSyncTime?.toIso8601String() ??
           '1970-01-01T00:00:00.000Z';
-      final uri = Uri.parse(
-          '${_getBaseUrl()}/api/v1/logs/sync/pull?deviceId=${_settings.deviceId}&since=$since');
+      final uri =
+          Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/pull?since=$since');
       final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
-        final result = json.decode(response.body);
-        await updateLastSyncTime();
+        final result = json.decode(response.body) as Map<String, dynamic>;
+        if (result['ok'] != true) {
+          _lastError = result['error']?['message']?.toString() ?? '拉取失败';
+          _isSyncing = false;
+          notifyListeners();
+          return null;
+        }
+        _captureSyncSummary(result);
+        await _applyBidirectionalChanges(
+          Map<String, dynamic>.from(result['changes'] ?? const {}),
+        );
+        final syncAt =
+            (result['nextSyncToken']?['lastSyncAt'] ?? result['serverTime'])
+                ?.toString();
+        if (syncAt != null) {
+          _settings = _settings.copyWith(
+              lastSyncTime: DateTime.tryParse(syncAt)?.toUtc());
+          await _saveSettings();
+        }
         _isSyncing = false;
         notifyListeners();
         return result;
