@@ -115,6 +115,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     required String title,
     required List<DictionaryItem> items,
     required Function(String) onAdd,
+    double cardPadding = 16.0,
   }) {
     return FCard(
       child: ExpansionPanelList(
@@ -129,15 +130,15 @@ class _DictionaryManagerState extends State<DictionaryManager> {
               return ListTile(
                 title: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontSize: cardPadding == 12.0 ? 14 : 16,
                   ),
                 ),
               );
             },
             body: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(cardPadding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -250,6 +251,8 @@ class _DictionaryManagerState extends State<DictionaryManager> {
   Widget build(BuildContext context) {
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
     final allExpanded = _expandedStates.values.every((state) => state);
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final cardSpacing = isNarrow ? 8.0 : 12.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,32 +261,34 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               '词库管理器',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: isNarrow ? 18 : 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
             ElevatedButton.icon(
-              icon: Icon(allExpanded ? Icons.expand_less : Icons.expand_more),
+              icon: Icon(allExpanded ? Icons.expand_less : Icons.expand_more, size: isNarrow ? 18 : null),
               label: Text(allExpanded ? '折叠全部' : '展开全部'),
               onPressed: _toggleAll,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primaryContainer,
                 foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 12, vertical: isNarrow ? 6 : 8),
               ),
             ),
           ],
         ),
 
-        const SizedBox(height: 16),
+        SizedBox(height: isNarrow ? 12 : 16),
 
         // 设备词典
         _buildDictionaryCard(
           type: 'device',
           title: '设备词典管理',
           items: dictionaryProvider.deviceDict,
+          cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addDevice(value);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -295,13 +300,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           },
         ),
 
-        const SizedBox(height: 12),
+        SizedBox(height: cardSpacing),
 
         // 天线词典
         _buildDictionaryCard(
           type: 'antenna',
           title: '天线词典管理',
           items: dictionaryProvider.antennaDict,
+          cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addAntenna(value);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -313,13 +319,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           },
         ),
 
-        const SizedBox(height: 12),
+        SizedBox(height: cardSpacing),
 
         // 呼号词典
         _buildDictionaryCard(
           type: 'callsign',
           title: '呼号词典管理',
           items: dictionaryProvider.callsignDict,
+          cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addCallsign(value);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -331,13 +338,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           },
         ),
 
-        const SizedBox(height: 12),
+        SizedBox(height: cardSpacing),
 
         // QTH词典
         _buildDictionaryCard(
           type: 'qth',
           title: 'QTH词典管理',
           items: dictionaryProvider.qthDict,
+          cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addQth(value);
             ScaffoldMessenger.of(context).showSnackBar(

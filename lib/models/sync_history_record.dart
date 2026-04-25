@@ -1,39 +1,36 @@
 import 'dart:math';
 
-class DictionaryItem {
+class SyncHistoryRecord {
   final int? id;
-  final String raw;
-  final String pinyin;
-  final String abbreviation;
   final String syncId;
   final bool hasExplicitSyncId;
-  final String type;
+  final String name;
+  final String logsData;
+  final int logCount;
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
   final String? sourceDeviceId;
 
-  factory DictionaryItem({
+  factory SyncHistoryRecord({
     int? id,
-    required String raw,
-    required String pinyin,
-    required String abbreviation,
     String? syncId,
-    String type = '',
+    required String name,
+    required String logsData,
+    required int logCount,
     String? createdAt,
     String? updatedAt,
     String? deletedAt,
     String? sourceDeviceId,
   }) {
     final normalizedCreatedAt = _normalizeTimestamp(createdAt);
-    return DictionaryItem._internal(
+    return SyncHistoryRecord._internal(
       id: id,
-      raw: raw,
-      pinyin: pinyin,
-      abbreviation: abbreviation,
-      syncId: _normalizeSyncId(syncId, prefix: 'dict'),
+      syncId: _normalizeSyncId(syncId, prefix: 'history'),
       hasExplicitSyncId: _hasText(syncId),
-      type: type,
+      name: name,
+      logsData: logsData,
+      logCount: logCount,
       createdAt: normalizedCreatedAt,
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
@@ -41,14 +38,13 @@ class DictionaryItem {
     );
   }
 
-  const DictionaryItem._internal({
+  const SyncHistoryRecord._internal({
     required this.id,
-    required this.raw,
-    required this.pinyin,
-    required this.abbreviation,
     required this.syncId,
     required this.hasExplicitSyncId,
-    required this.type,
+    required this.name,
+    required this.logsData,
+    required this.logCount,
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
@@ -102,41 +98,14 @@ class DictionaryItem {
     return normalized.isEmpty ? null : normalized;
   }
 
-  static int? _readLocalId(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-    if (value is String) {
-      return int.tryParse(value);
-    }
-    return null;
-  }
-
-  factory DictionaryItem.fromMap(Map<String, dynamic> map) {
-    return DictionaryItem(
-      id: _readLocalId(map['id']),
-      raw: map['raw']?.toString() ?? '',
-      pinyin: map['pinyin']?.toString() ?? '',
-      abbreviation: map['abbreviation']?.toString() ?? '',
-      syncId: _normalizeNullableString(map['sync_id'] ?? map['syncId']),
-      type: map['type']?.toString() ?? '',
-      createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
-      updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
-      deletedAt:
-          _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
-      sourceDeviceId: _normalizeNullableString(
-          map['source_device_id'] ?? map['sourceDeviceId']),
-    );
-  }
-
-  factory DictionaryItem.fromJson(Map<String, dynamic> json) {
-    return DictionaryItem(
-      id: _readLocalId(json['id']),
-      raw: json['raw']?.toString() ?? '',
-      pinyin: json['pinyin']?.toString() ?? '',
-      abbreviation: json['abbreviation']?.toString() ?? '',
-      syncId: _normalizeNullableString(json['syncId'] ?? json['sync_id']),
-      type: json['type']?.toString() ?? '',
+  factory SyncHistoryRecord.fromJson(Map<String, dynamic> json) {
+    return SyncHistoryRecord(
+      id: json['id'] as int?,
+      syncId: json['syncId']?.toString() ?? json['sync_id']?.toString(),
+      name: json['name']?.toString() ?? '',
+      logsData:
+          json['logsData']?.toString() ?? json['logs_data']?.toString() ?? '',
+      logCount: (json['logCount'] ?? json['log_count'] ?? 0) as int,
       createdAt:
           json['createdAt']?.toString() ?? json['created_at']?.toString(),
       updatedAt:
@@ -148,29 +117,30 @@ class DictionaryItem {
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      if (id != null) 'id': id,
-      'raw': raw,
-      'pinyin': pinyin,
-      'abbreviation': abbreviation,
-      'sync_id': syncId,
-      'type': type,
-      'created_at': createdAt,
-      'updated_at': updatedAt,
-      'deleted_at': deletedAt,
-      'source_device_id': sourceDeviceId,
-    };
+  factory SyncHistoryRecord.fromMap(Map<String, dynamic> map) {
+    return SyncHistoryRecord(
+      id: map['id'] as int?,
+      syncId: map['sync_id']?.toString() ?? map['syncId']?.toString(),
+      name: map['name']?.toString() ?? '',
+      logsData:
+          map['logs_data']?.toString() ?? map['logsData']?.toString() ?? '',
+      logCount: (map['log_count'] ?? map['logCount'] ?? 0) as int,
+      createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
+      updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
+      deletedAt:
+          _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
+      sourceDeviceId: _normalizeNullableString(
+          map['source_device_id'] ?? map['sourceDeviceId']),
+    );
   }
 
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
-      'raw': raw,
-      'pinyin': pinyin,
-      'abbreviation': abbreviation,
       'syncId': syncId,
-      'type': type,
+      'name': name,
+      'logsData': logsData,
+      'logCount': logCount,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
@@ -178,45 +148,47 @@ class DictionaryItem {
     };
   }
 
-  DictionaryItem copyWith({
+  Map<String, dynamic> toMap() {
+    return {
+      if (id != null) 'id': id,
+      'sync_id': syncId,
+      'name': name,
+      'logs_data': logsData,
+      'log_count': logCount,
+      'created_at': createdAt,
+      'updated_at': updatedAt,
+      'deleted_at': deletedAt,
+      'source_device_id': sourceDeviceId,
+    };
+  }
+
+  SyncHistoryRecord copyWith({
     int? id,
-    String? raw,
-    String? pinyin,
-    String? abbreviation,
     String? syncId,
-    String? type,
+    String? name,
+    String? logsData,
+    int? logCount,
     String? createdAt,
     String? updatedAt,
-    Object? deletedAt = _dictionaryCopyWithSentinel,
-    Object? sourceDeviceId = _dictionaryCopyWithSentinel,
+    Object? deletedAt = _syncHistoryCopyWithSentinel,
+    Object? sourceDeviceId = _syncHistoryCopyWithSentinel,
   }) {
-    return DictionaryItem(
+    return SyncHistoryRecord(
       id: id ?? this.id,
-      raw: raw ?? this.raw,
-      pinyin: pinyin ?? this.pinyin,
-      abbreviation: abbreviation ?? this.abbreviation,
       syncId: syncId ?? this.syncId,
-      type: type ?? this.type,
+      name: name ?? this.name,
+      logsData: logsData ?? this.logsData,
+      logCount: logCount ?? this.logCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: identical(deletedAt, _dictionaryCopyWithSentinel)
+      deletedAt: identical(deletedAt, _syncHistoryCopyWithSentinel)
           ? this.deletedAt
           : deletedAt as String?,
-      sourceDeviceId: identical(sourceDeviceId, _dictionaryCopyWithSentinel)
+      sourceDeviceId: identical(sourceDeviceId, _syncHistoryCopyWithSentinel)
           ? this.sourceDeviceId
           : sourceDeviceId as String?,
     );
   }
-
-  bool matches(String query) {
-    final lowerQuery = query.toLowerCase();
-    return raw.toLowerCase().contains(lowerQuery) ||
-        pinyin.toLowerCase().contains(lowerQuery) ||
-        abbreviation.toLowerCase().contains(lowerQuery);
-  }
-
-  @override
-  String toString() => raw;
 }
 
-const Object _dictionaryCopyWithSentinel = Object();
+const Object _syncHistoryCopyWithSentinel = Object();

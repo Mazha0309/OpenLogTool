@@ -107,7 +107,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       height: _heightController.text,
     );
 
-    logProvider.addLog(log);
+    await logProvider.addLog(log);
     _resetForm();
     _qthFieldKey.currentState?.refresh();
 
@@ -145,8 +145,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       builder: (context, constraints) {
         // 根据可用宽度计算每行显示几个字段
         final availableWidth = constraints.maxWidth;
-        final fieldWidth = 200.0;
-        final spacing = 12.0;
+        final isNarrow = availableWidth < 600;
+        final fieldWidth = isNarrow ? 160.0 : 200.0;
+        final spacing = isNarrow ? 8.0 : 12.0;
         final fieldsPerRow = ((availableWidth + spacing) / (fieldWidth + spacing)).floor().clamp(1, 5);
         final calculatedFieldWidth = (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
 
@@ -159,7 +160,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
               // 使用 Wrap 实现响应式自动换行布局，输入框会根据可用空间自动调整宽度
               Wrap(
                 spacing: spacing,
-                runSpacing: spacing,
+                runSpacing: isNarrow ? 8 : spacing,
                 alignment: WrapAlignment.start,
                 children: [
                   SizedBox(
@@ -169,6 +170,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       label: '主控呼号 *',
                       hintText: '输入主控呼号',
                       error: _controllerError,
+                      isDense: isNarrow,
                       onChanged: (value) {
                         if (_controllerError != null) {
                           setState(() => _controllerError = null);
@@ -184,6 +186,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       dictionaryOptions: dictionaryProvider.callsignDict,
                       label: '点名呼号',
                       hintText: '输入呼号',
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -194,6 +197,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       hintText: '输入设备名称',
                       options: dictionaryProvider.deviceDict,
                       upperCase: false,
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -204,6 +208,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       hintText: '输入天线名称',
                       options: dictionaryProvider.antennaDict,
                       upperCase: false,
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -214,6 +219,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       hintText: '输入功率',
                       keyboardType: TextInputType.number,
                       upperCase: false,
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -225,6 +231,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       dictionaryOptions: dictionaryProvider.qthDict,
                       label: 'QTH',
                       hintText: '输入QTH',
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -235,6 +242,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       hintText: '输入高度',
                       keyboardType: TextInputType.number,
                       upperCase: false,
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -242,8 +250,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     child: _buildMaterialTextField(
                       controller: _timeController,
                       label: '时间',
-                      hintText: 'HH:mm (留空使用当前时间)',
+                      hintText: 'HH:mm',
                       upperCase: false,
+                      isDense: isNarrow,
                     ),
                   ),
                   SizedBox(
@@ -259,27 +268,25 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                         }
                       },
                       upperCase: false,
+                      isDense: isNarrow,
                     ),
                   ),
                 ],
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // 操作按钮 - 占满宽度
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _submitForm,
-                      icon: const Icon(Icons.add),
-                      label: const Text('添加记录'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
+              SizedBox(
+                height: isNarrow ? 44 : 48,
+                child: ElevatedButton.icon(
+                  onPressed: _submitForm,
+                  icon: const Icon(Icons.add),
+                  label: const Text('添加记录'),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -296,6 +303,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     String? error,
     void Function(String)? onChanged,
     bool upperCase = true,
+    bool isDense = false,
   }) {
     return TextFormField(
       controller: controller,
@@ -304,8 +312,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         hintText: hintText,
         errorText: error,
         border: const OutlineInputBorder(),
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        isDense: isDense,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isDense ? 10 : 14),
       ),
       keyboardType: keyboardType,
       onChanged: onChanged,
@@ -321,6 +329,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     required List<DictionaryItem> options,
     void Function(String)? onChanged,
     bool upperCase = true,
+    bool isDense = false,
   }) {
     final textCapitalization = upperCase ? TextCapitalization.characters : TextCapitalization.none;
     final inputFormatters = upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
@@ -354,8 +363,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             labelText: label,
             hintText: hintText,
             border: const OutlineInputBorder(),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            isDense: isDense,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isDense ? 10 : 14),
           ),
           onChanged: (value) {
             controller.text = upperCase ? value.toUpperCase() : value;
@@ -403,6 +412,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     required List<DictionaryItem> dictionaryOptions,
     required String label,
     required String hintText,
+    bool isDense = false,
   }) {
     return Autocomplete<DictionaryItem>(
       optionsBuilder: (TextEditingValue textEditingValue) {
@@ -433,8 +443,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             labelText: label,
             hintText: hintText,
             border: const OutlineInputBorder(),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            isDense: isDense,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isDense ? 10 : 14),
           ),
           onChanged: (value) {
             controller.text = value.toUpperCase();
@@ -482,6 +492,7 @@ class _QthFieldWithHistory extends StatefulWidget {
   final List<DictionaryItem> dictionaryOptions;
   final String label;
   final String hintText;
+  final bool isDense;
 
   const _QthFieldWithHistory({
     super.key,
@@ -490,6 +501,7 @@ class _QthFieldWithHistory extends StatefulWidget {
     required this.dictionaryOptions,
     required this.label,
     required this.hintText,
+    this.isDense = false,
   });
 
   @override
@@ -766,6 +778,8 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
     return TapRegion(
       onTapOutside: (_) {
         // 点击组件外部时隐藏历史记录
@@ -799,7 +813,7 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
               fieldController.text = widget.controller.text;
             }
           });
-          
+
           return TextFormField(
             controller: fieldController,
             focusNode: fieldFocusNode,
@@ -807,8 +821,8 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
               labelText: widget.label,
               hintText: widget.hintText,
               border: const OutlineInputBorder(),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              isDense: isNarrow,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isNarrow ? 10 : 14),
             ),
             onTap: () {
               // 点击输入框时，如果为空且有历史记录，显示历史记录
