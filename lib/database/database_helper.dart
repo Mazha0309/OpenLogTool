@@ -820,7 +820,7 @@ class DatabaseHelper {
     final maps = await db.query(
       _logsTable,
       where: 'deleted_at IS NULL',
-      orderBy: 'id ASC',
+      orderBy: 'id DESC',
     );
     return List<LogEntry>.generate(
         maps.length, (int i) => LogEntry.fromMap(maps[i]));
