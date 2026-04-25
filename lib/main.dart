@@ -5,6 +5,7 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -20,8 +21,33 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => LogProvider()),
-        ChangeNotifierProvider(create: (_) => DictionaryProvider()),
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProxyProvider<SyncProvider, DictionaryProvider>(
+          create: (_) => DictionaryProvider(),
+          update: (_, syncProvider, dictionaryProvider) {
+            final provider = dictionaryProvider ?? DictionaryProvider();
+            provider.setOnDictionaryChanged(() async {
+              if (syncProvider.settings.syncEnabled &&
+                  syncProvider.settings.syncMode == 'realtime') {
+                await syncProvider.triggerSyncAndWait();
+              }
+            });
+            return provider;
+          },
+        ),
+        ChangeNotifierProxyProvider<SyncProvider, LogProvider>(
+          create: (_) => LogProvider(),
+          update: (_, syncProvider, logProvider) {
+            final provider = logProvider ?? LogProvider();
+            provider.setOnDataChanged(() async {
+              if (syncProvider.settings.syncEnabled &&
+                  syncProvider.settings.syncMode == 'realtime') {
+                await syncProvider.triggerSyncAndWait();
+              }
+            });
+            return provider;
+          },
+        ),
       ],
       child: const MyApp(),
     ),
@@ -44,11 +70,14 @@ class MyApp extends StatelessWidget {
         background: isDark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF),
         foreground: isDark ? const Color(0xFFFAFAFA) : const Color(0xFF09090B),
         primary: themeColor,
-        primaryForeground: isDark ? const Color(0xFF18181B) : const Color(0xFFFFFFFF),
+        primaryForeground:
+            isDark ? const Color(0xFF18181B) : const Color(0xFFFFFFFF),
         secondary: isDark ? const Color(0xFF27272A) : const Color(0xFFF4F4F5),
-        secondaryForeground: isDark ? const Color(0xFFFAFAFA) : const Color(0xFF18181B),
+        secondaryForeground:
+            isDark ? const Color(0xFFFAFAFA) : const Color(0xFF18181B),
         muted: isDark ? const Color(0xFF27272A) : const Color(0xFFF4F4F5),
-        mutedForeground: isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A),
+        mutedForeground:
+            isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A),
         destructive: const Color(0xFFEF4444),
         destructiveForeground: const Color(0xFFFAFAFA),
         error: const Color(0xFFEF4444),
