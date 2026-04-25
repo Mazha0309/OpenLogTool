@@ -18,6 +18,24 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  bool _isBottomNavVisible = true;
+  double _lastScrollOffset = 0;
+
+  void _onScroll(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      final currentOffset = notification.metrics.pixels;
+      if (currentOffset > _lastScrollOffset && currentOffset > 50) {
+        if (_isBottomNavVisible) {
+          setState(() => _isBottomNavVisible = false);
+        }
+      } else if (currentOffset < _lastScrollOffset - 10) {
+        if (!_isBottomNavVisible) {
+          setState(() => _isBottomNavVisible = true);
+        }
+      }
+      _lastScrollOffset = currentOffset;
+    }
+  }
 
   static const List<Widget> _pages = <Widget>[
     AddRecordPage(),
@@ -50,26 +68,47 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  double _getBottomNavHeight(BuildContext context) {
+    // BottomNavigationBar default height is 56 + labels (if shown)
+    return 56.0 + (MediaQuery.of(context).padding.bottom);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bottomNavHeight = _getBottomNavHeight(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('OpenLogTool'),
         centerTitle: true,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          _onScroll(notification);
+          return false;
+        },
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: _pages,
+        ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: _navItems,
-        currentIndex: _selectedIndex,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor:
-            Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
-        showUnselectedLabels: true,
+      bottomNavigationBar: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        height: _isBottomNavVisible ? bottomNavHeight : 0,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 100),
+          opacity: _isBottomNavVisible ? 1.0 : 0.0,
+          child: BottomNavigationBar(
+            items: _navItems,
+            currentIndex: _selectedIndex,
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor:
+                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            onTap: _onItemTapped,
+            type: BottomNavigationBarType.fixed,
+            showUnselectedLabels: true,
+          ),
+        ),
       ),
     );
   }
@@ -159,13 +198,13 @@ class AddRecordPage extends StatelessWidget {
 
   Widget _buildNarrowLayout(BuildContext context, LogProvider logProvider) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FCard(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -173,34 +212,34 @@ class AddRecordPage extends StatelessWidget {
                   const Text(
                     '添加点名记录',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   const LogForm(),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           FCard(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildLogHeader(context, logProvider),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   const Text(
                     '已有记录',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   const LogTable(),
                 ],
               ),
@@ -439,20 +478,20 @@ class ImportExportPage extends StatelessWidget {
           );
         } else {
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 FCard(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(12.0),
                     child: ExportPanel(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 FCard(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(12.0),
                     child: DictionaryManager(),
                   ),
                 ),
@@ -470,19 +509,14 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: SettingsPanel(),
-            ),
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 16, vertical: isNarrow ? 12 : 16),
+          child: SettingsPanel(),
+        );
+      },
     );
   }
 }

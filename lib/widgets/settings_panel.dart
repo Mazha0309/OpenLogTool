@@ -91,35 +91,37 @@ class SettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final appInfoProvider = Provider.of<AppInfoProvider>(context);
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final cardPadding = isNarrow ? 12.0 : 16.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '应用设置',
           style: TextStyle(
-            fontSize: 20,
+            fontSize: isNarrow ? 18 : 20,
             fontWeight: FontWeight.bold,
           ),
         ),
 
-        const SizedBox(height: 24),
+        SizedBox(height: isNarrow ? 16 : 24),
 
         // 主题设置
         FCard(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(cardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '主题设置',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: isNarrow ? 14 : 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: isNarrow ? 8 : 12),
 
                 // 主题色选择器
                 Row(
@@ -204,18 +206,18 @@ class SettingsPanel extends StatelessWidget {
         // 布局设置
         FCard(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(cardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '布局设置',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: isNarrow ? 14 : 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: isNarrow ? 8 : 12),
 
                 // 宽屏布局开关
                 Row(
@@ -295,6 +297,38 @@ class SettingsPanel extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                SizedBox(height: isNarrow ? 8 : 12),
+
+                // 导入时记录呼号QTH历史开关
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '导入时记录呼号QTH',
+                            style: TextStyle(
+                              fontSize: isNarrow ? 13 : 14,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            '导入JSON时，将呼号与QTH联动记录到历史数据库',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: settingsProvider.importCallsignQthHistoryEnabled,
+                      onChanged: (value) =>
+                          settingsProvider.setImportCallsignQthHistory(value),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -317,17 +351,17 @@ class SettingsPanel extends StatelessWidget {
             }
             return FCard(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(cardPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           '服务器同步',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: isNarrow ? 14 : 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -597,18 +631,18 @@ class SettingsPanel extends StatelessWidget {
         // 数据操作
         FCard(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(cardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '数据操作',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: isNarrow ? 14 : 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: isNarrow ? 8 : 12),
                 _buildSettingsListTile(
                   icon: Icons.storage,
                   title: '数据库状态',

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10,6 +11,7 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/export_settings.dart';
+import 'package:openlogtool/database/database_helper.dart';
 
 class _HSVSaturationValuePainter extends CustomPainter {
   final double hue;
@@ -89,66 +91,82 @@ class ExportPanel extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWideScreen = constraints.maxWidth > 600;
-        
+        final isNarrow = constraints.maxWidth < 400;
+        final cardPadding = isNarrow ? 12.0 : 16.0;
+        final screenPadding = isNarrow ? 8.0 : 16.0;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '数据导入导出',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            Padding(
+              padding: EdgeInsets.only(left: isNarrow ? 4 : 0),
+              child: Text(
+                '数据导入导出',
+                style: TextStyle(
+                  fontSize: isNarrow ? 18 : 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-            
-            const SizedBox(height: 24),
-            
+
+            SizedBox(height: isNarrow ? 16 : 24),
+
             if (isWideScreen)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildExportCard(context)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildImportCard(context)),
-                ],
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: screenPadding),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildExportCard(context, cardPadding)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildImportCard(context, cardPadding)),
+                  ],
+                ),
               )
             else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildExportCard(context),
-                  const SizedBox(height: 16),
-                  _buildImportCard(context),
-                ],
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: screenPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildExportCard(context, cardPadding),
+                    SizedBox(height: isNarrow ? 12 : 16),
+                    _buildImportCard(context, cardPadding),
+                  ],
+                ),
               ),
-            
-            const SizedBox(height: 16),
-            
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '文件格式说明',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
+
+            SizedBox(height: isNarrow ? 12 : 16),
+
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: screenPadding),
+              child: Container(
+                padding: EdgeInsets.all(cardPadding),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '文件格式说明',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isNarrow ? 13 : 14,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '• JSON: 标准JSON格式，包含所有记录数据\n'
-                    '• Excel: 使用Excel格式，包含分组和样式',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    SizedBox(height: isNarrow ? 6 : 8),
+                    Text(
+                      '• JSON: 标准JSON格式，包含所有记录数据\n'
+                      '• Excel: 使用Excel格式，包含分组和样式',
+                      style: TextStyle(
+                        fontSize: isNarrow ? 12 : 14,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -157,17 +175,17 @@ class ExportPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildExportCard(BuildContext context) {
+  Widget _buildExportCard(BuildContext context, double cardPadding) {
     return FCard(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   '导出数据',
                   style: TextStyle(
                     fontSize: 16,
@@ -182,7 +200,7 @@ class ExportPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            
+
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -217,14 +235,14 @@ class ExportPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildImportCard(BuildContext context) {
+  Widget _buildImportCard(BuildContext context, double cardPadding) {
     return FCard(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               '导入数据',
               style: TextStyle(
                 fontSize: 16,
@@ -232,7 +250,7 @@ class ExportPanel extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            
+
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1363,29 +1381,99 @@ class ExportPanel extends StatelessWidget {
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
-      
+
       if (result == null || result.files.isEmpty) return;
-      
+
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
-      
-      final jsonData = json.decode(content) as List;
+
+      final jsonData = json.decode(content);
       final logProvider = Provider.of<LogProvider>(context, listen: false);
-      
-      final importedLogs = jsonData.map((item) {
-        return LogEntry(
-          time: item['time'] ?? '',
-          controller: item['controller'] ?? '',
-          callsign: item['callsign'] ?? '',
-          report: item['report'] ?? '',
-          qth: item['qth'] ?? '',
-          device: item['device'] ?? '',
-          power: item['power'] ?? '',
-          antenna: item['antenna'] ?? '',
-          height: item['height'] ?? '',
-        );
-      }).toList();
-      
+      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+
+      List<LogEntry> importedLogs;
+      List<List<String>> callsignQthPairs = []; // Collect pairs for later
+
+      if (jsonData is Map && jsonData.containsKey('currentRecords')) {
+        // HamTool format compatibility
+        final records = jsonData['currentRecords'] as List;
+        importedLogs = records.map((item) {
+          // Parse created_at datetime to extract HH:mm
+          String time = '';
+          final createdAt = item['created_at'];
+          if (createdAt != null) {
+            try {
+              final dt = DateTime.parse(createdAt.toString());
+              time = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+            } catch (_) {}
+          }
+
+          // Safely extract string fields
+          String callsign = '';
+          String qth = '';
+          if (item['called_call'] != null) callsign = item['called_call'].toString();
+          if (item['qth'] != null) qth = item['qth'].toString();
+
+          // Record callsign-qth history if enabled
+          if (settingsProvider.importCallsignQthHistoryEnabled &&
+              callsign.isNotEmpty && qth.isNotEmpty) {
+            callsignQthPairs.add([callsign, qth]);
+          }
+
+          String report = '59';
+          if (item['signal_report'] != null) {
+            report = item['signal_report'].toString();
+          }
+
+          return LogEntry(
+            time: time,
+            controller: item['controller_call']?.toString() ?? '',
+            callsign: callsign,
+            report: report,
+            qth: qth,
+            device: item['device']?.toString() ?? '',
+            power: item['power']?.toString() ?? '',
+            antenna: item['antenna']?.toString() ?? '',
+            height: item['height']?.toString() ?? '',
+          );
+        }).toList();
+      } else if (jsonData is List) {
+        // OpenLogTool JSON format
+        importedLogs = jsonData.map((item) {
+          String callsign = '';
+          String qth = '';
+          if (item['callsign'] != null) callsign = item['callsign'].toString();
+          if (item['qth'] != null) qth = item['qth'].toString();
+
+          // Record callsign-qth history if enabled
+          if (settingsProvider.importCallsignQthHistoryEnabled &&
+              callsign.isNotEmpty && qth.isNotEmpty) {
+            callsignQthPairs.add([callsign, qth]);
+          }
+
+          return LogEntry(
+            time: item['time']?.toString() ?? '',
+            controller: item['controller']?.toString() ?? '',
+            callsign: callsign,
+            report: item['report']?.toString() ?? '59',
+            qth: qth,
+            device: item['device']?.toString() ?? '',
+            power: item['power']?.toString() ?? '',
+            antenna: item['antenna']?.toString() ?? '',
+            height: item['height']?.toString() ?? '',
+          );
+        }).toList();
+      } else {
+        _showSnackBar(context, '导入失败: 未知的JSON格式');
+        return;
+      }
+
+      // Insert callsign-qth history records
+      final db = DatabaseHelper();
+      for (final pair in callsignQthPairs) {
+        await db.addCallsignQthRecord(pair[0], pair[1]);
+      }
+
       logProvider.importLogs(importedLogs);
       _showSnackBar(context, '导入成功: ${importedLogs.length} 条记录');
     } catch (e) {
@@ -1432,7 +1520,7 @@ class ExportPanel extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.copy, size: 20),
                   onPressed: () {
-                    // 复制到剪贴板功能
+                    Clipboard.setData(ClipboardData(text: path));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('路径已复制')),
                     );
