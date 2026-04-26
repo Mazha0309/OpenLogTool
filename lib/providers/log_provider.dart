@@ -44,7 +44,7 @@ class LogProvider with ChangeNotifier {
     final db = DatabaseHelper();
     final localId = await db.insertLog(log);
     final persistedLog = await db.getLogByLocalId(localId);
-    _logs.insert(0, persistedLog ?? log);
+    _logs.add(persistedLog ?? log);
     notifyListeners();
     await _notifyDataChanged();
   }
@@ -139,7 +139,7 @@ class LogProvider with ChangeNotifier {
     for (final log in historyLogs) {
       final localId = await db.insertLog(log);
       final persistedLog = await db.getLogByLocalId(localId);
-      _logs.insert(0, persistedLog ?? log);
+      _logs.add(persistedLog ?? log);
     }
     notifyListeners();
     await _notifyDataChanged();
@@ -157,7 +157,7 @@ class LogProvider with ChangeNotifier {
     for (final log in importedLogs) {
       final localId = await db.insertLog(log);
       final persistedLog = await db.getLogByLocalId(localId);
-      _logs.insert(0, persistedLog ?? log);
+      _logs.add(persistedLog ?? log);
     }
     notifyListeners();
     await _notifyDataChanged();

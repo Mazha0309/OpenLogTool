@@ -214,24 +214,21 @@ class _LogTableState extends State<LogTable> {
 
   List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider, SettingsProvider settingsProvider) {
     final logs = logProvider.logs;
-    
-    // 如果启用分页，只显示当前页的数据
-    List<LogEntry> displayLogs;
+    final indexedLogs = logs.asMap().entries.toList().reversed.toList();
+
+    // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
+    List<MapEntry<int, LogEntry>> displayEntries;
     if (settingsProvider.paginationEnabled) {
       final startIndex = _currentPage * _itemsPerPage;
-      final endIndex = (startIndex + _itemsPerPage).clamp(0, logs.length);
-      displayLogs = logs.sublist(startIndex, endIndex);
+      final endIndex = (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
+      displayEntries = indexedLogs.sublist(startIndex, endIndex);
     } else {
-      displayLogs = logs;
+      displayEntries = indexedLogs;
     }
-    
-    return displayLogs.asMap().entries.map((entry) {
-      final displayIndex = entry.key;
-      final log = entry.value;
-      // 计算原始索引（用于编辑和删除）
-      final originalIndex = settingsProvider.paginationEnabled 
-          ? _currentPage * _itemsPerPage + displayIndex
-          : displayIndex;
+
+    return displayEntries.asMap().entries.map((entry) {
+      final originalIndex = entry.value.key;
+      final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
       // 倒序序号：总记录数 - 原始索引
       final reverseIndex = logs.length - originalIndex;
