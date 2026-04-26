@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class DictionaryManager extends StatefulWidget {
   const DictionaryManager({super.key});
@@ -77,7 +78,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
             break;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           SnackBar(
             content: Text('已导入 ${lines.length} 条${_getDictName(dictType)}'),
             duration: const Duration(seconds: 2),
@@ -85,7 +86,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      context.showLoggedSnackBar(
         SnackBar(
           content: Text('导入失败: $e'),
           backgroundColor: Colors.red,
@@ -291,7 +292,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addDevice(value);
-            ScaffoldMessenger.of(context).showSnackBar(
+            context.showLoggedSnackBar(
               SnackBar(
                 content: Text('已添加设备: $value'),
                 duration: const Duration(seconds: 2),
@@ -310,7 +311,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addAntenna(value);
-            ScaffoldMessenger.of(context).showSnackBar(
+            context.showLoggedSnackBar(
               SnackBar(
                 content: Text('已添加天线: $value'),
                 duration: const Duration(seconds: 2),
@@ -329,7 +330,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addCallsign(value);
-            ScaffoldMessenger.of(context).showSnackBar(
+            context.showLoggedSnackBar(
               SnackBar(
                 content: Text('已添加呼号: $value'),
                 duration: const Duration(seconds: 2),
@@ -348,7 +349,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
             await dictionaryProvider.addQth(value);
-            ScaffoldMessenger.of(context).showSnackBar(
+            context.showLoggedSnackBar(
               SnackBar(
                 content: Text('已添加QTH: $value'),
                 duration: const Duration(seconds: 2),
