@@ -5,6 +5,7 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'dart:io';
@@ -20,6 +21,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
+        ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => SyncProvider()),
         ChangeNotifierProxyProvider<SyncProvider, DictionaryProvider>(

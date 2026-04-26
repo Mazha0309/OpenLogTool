@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class LogTable extends StatefulWidget {
   const LogTable({super.key});
@@ -127,7 +128,7 @@ class _LogTableState extends State<LogTable> {
             : 400.0;
         
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
               height: maxHeight,
@@ -140,11 +141,15 @@ class _LogTableState extends State<LogTable> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     controller: horizontalController,
-                    child: SingleChildScrollView(
-                      child: DataTable(
-                    columnSpacing: 16,
-                    horizontalMargin: 16,
-                    headingRowHeight: 48,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: SingleChildScrollView(
+                          child: DataTable(
+                     columnSpacing: 16,
+                     horizontalMargin: 16,
+                     headingRowHeight: 48,
                     dataRowMinHeight: 48,
                     dataRowMaxHeight: 64,
                     headingTextStyle: TextStyle(
@@ -161,42 +166,44 @@ class _LogTableState extends State<LogTable> {
                       width: 1,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    columns: const [
+                    columns: [
                       DataColumn(
-                        label: SizedBox(width: 60, child: Text('#')),
+                        label: _buildCenteredCell(const Text('#'), 60),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 100, child: Text('时间')),
+                        label: _buildCenteredCell(const Text('时间'), 100),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 120, child: Text('点名主控')),
+                        label: _buildCenteredCell(const Text('点名主控'), 120),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 120, child: Text('呼号')),
+                        label: _buildCenteredCell(const Text('呼号'), 120),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 100, child: Text('信号报告')),
+                        label: _buildCenteredCell(const Text('信号报告'), 100),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 150, child: Text('QTH')),
+                        label: _buildCenteredCell(const Text('QTH'), 150),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 150, child: Text('设备')),
+                        label: _buildCenteredCell(const Text('设备'), 150),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 80, child: Text('功率')),
+                        label: _buildCenteredCell(const Text('功率'), 80),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 150, child: Text('天线')),
+                        label: _buildCenteredCell(const Text('天线'), 150),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 80, child: Text('高度')),
+                        label: _buildCenteredCell(const Text('高度'), 80),
                       ),
                       DataColumn(
-                        label: SizedBox(width: 120, child: Text('操作')),
+                        label: _buildCenteredCell(const Text('操作'), 120),
                       ),
                     ],
                     rows: _buildTableRows(context, logProvider, settingsProvider),
+                      ),
+                        ),
                       ),
                     ),
                   ),
@@ -214,24 +221,21 @@ class _LogTableState extends State<LogTable> {
 
   List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider, SettingsProvider settingsProvider) {
     final logs = logProvider.logs;
-    
-    // 如果启用分页，只显示当前页的数据
-    List<LogEntry> displayLogs;
+    final indexedLogs = logs.asMap().entries.toList().reversed.toList();
+
+    // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
+    List<MapEntry<int, LogEntry>> displayEntries;
     if (settingsProvider.paginationEnabled) {
       final startIndex = _currentPage * _itemsPerPage;
-      final endIndex = (startIndex + _itemsPerPage).clamp(0, logs.length);
-      displayLogs = logs.sublist(startIndex, endIndex);
+      final endIndex = (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
+      displayEntries = indexedLogs.sublist(startIndex, endIndex);
     } else {
-      displayLogs = logs;
+      displayEntries = indexedLogs;
     }
-    
-    return displayLogs.asMap().entries.map((entry) {
-      final displayIndex = entry.key;
-      final log = entry.value;
-      // 计算原始索引（用于编辑和删除）
-      final originalIndex = settingsProvider.paginationEnabled 
-          ? _currentPage * _itemsPerPage + displayIndex
-          : displayIndex;
+
+    return displayEntries.asMap().entries.map((entry) {
+      final originalIndex = entry.value.key;
+      final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
       // 倒序序号：总记录数 - 原始索引
       final reverseIndex = logs.length - originalIndex;
@@ -239,150 +243,155 @@ class _LogTableState extends State<LogTable> {
       return DataRow(
         cells: [
           DataCell(
-            SizedBox(
-              width: 60,
-              child: Text('$reverseIndex'),
-            ),
+            _buildCenteredCell(Text('$reverseIndex'), 60),
           ),
           DataCell(
-            SizedBox(
-              width: 100,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 100,
+                    child: TextField(
                       controller: _controllers['time'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.time),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.time), 100),
           ),
           DataCell(
-            SizedBox(
-              width: 120,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 120,
+                    child: TextField(
                       controller: _controllers['controller'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.controller),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.controller), 120),
           ),
           DataCell(
-            SizedBox(
-              width: 120,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 120,
+                    child: TextField(
                       controller: _controllers['callsign'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.callsign),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.callsign), 120),
           ),
           DataCell(
-            SizedBox(
-              width: 100,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 100,
+                    child: TextField(
                       controller: _controllers['report'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.report),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.report), 100),
           ),
           DataCell(
-            SizedBox(
-              width: 150,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 150,
+                    child: TextField(
                       controller: _controllers['qth'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.qth),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.qth), 150),
           ),
           DataCell(
-            SizedBox(
-              width: 150,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 150,
+                    child: TextField(
                       controller: _controllers['device'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.device),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.device), 150),
           ),
           DataCell(
-            SizedBox(
-              width: 80,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 80,
+                    child: TextField(
                       controller: _controllers['power'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.power),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.power), 80),
           ),
           DataCell(
-            SizedBox(
-              width: 150,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 150,
+                    child: TextField(
                       controller: _controllers['antenna'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.antenna),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.antenna), 150),
           ),
           DataCell(
-            SizedBox(
-              width: 80,
-              child: isEditing
-                  ? TextField(
+            isEditing
+                ? SizedBox(
+                    width: 80,
+                    child: TextField(
                       controller: _controllers['height'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                    )
-                  : Text(log.height),
-            ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.height), 80),
           ),
           DataCell(
-            SizedBox(
-              width: 120,
-              child: isEditing
+            _buildCenteredCell(
+              isEditing
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -439,11 +448,22 @@ class _LogTableState extends State<LogTable> {
                         ),
                       ],
                     ),
+              120,
             ),
           ),
         ],
       );
     }).toList();
+  }
+
+  Widget _buildCenteredCell(Widget child, double width) {
+    return SizedBox(
+      width: width,
+      child: Align(
+        alignment: Alignment.center,
+        child: child,
+      ),
+    );
   }
 
   Widget _buildPaginationControls(int totalItems) {
@@ -480,7 +500,7 @@ class _LogTableState extends State<LogTable> {
 
     if (history.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           const SnackBar(content: Text('暂无历史记录')),
         );
       }
@@ -519,7 +539,7 @@ class _LogTableState extends State<LogTable> {
                         await logProvider.restoreFromHistory(id);
                         if (context.mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          context.showLoggedSnackBar(
                             const SnackBar(content: Text('已恢复历史记录')),
                           );
                         }
@@ -567,7 +587,7 @@ class _LogTableState extends State<LogTable> {
             onPressed: () {
               Provider.of<LogProvider>(context, listen: false).deleteLog(index);
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
+              context.showLoggedSnackBar(
                 const SnackBar(
                   content: Text('记录已删除'),
                   duration: Duration(seconds: 2),

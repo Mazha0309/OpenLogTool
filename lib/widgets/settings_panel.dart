@@ -7,10 +7,12 @@ import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class _HSVSaturationValuePainter extends CustomPainter {
   final double hue;
@@ -244,7 +246,7 @@ class SettingsPanel extends StatelessWidget {
                   ],
                 ),
 
-                const Divider(),
+                SizedBox(height: isNarrow ? 10 : 12),
 
                 // 分页显示开关
                 Row(
@@ -271,7 +273,7 @@ class SettingsPanel extends StatelessWidget {
                   ],
                 ),
 
-                const Divider(),
+                SizedBox(height: isNarrow ? 10 : 12),
 
                 // QTH联动开关
                 Row(
@@ -298,7 +300,7 @@ class SettingsPanel extends StatelessWidget {
                   ],
                 ),
 
-                SizedBox(height: isNarrow ? 8 : 12),
+                SizedBox(height: isNarrow ? 10 : 12),
 
                 // 导入时记录呼号QTH历史开关
                 Row(
@@ -343,7 +345,7 @@ class SettingsPanel extends StatelessWidget {
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 final stillValid = await syncProvider.validateCurrentLogin();
                 if (!stillValid && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  context.showLoggedSnackBar(
                     const SnackBar(content: Text('登录状态已失效，请重新登录')),
                   );
                 }
@@ -397,7 +399,7 @@ class SettingsPanel extends StatelessWidget {
                                   _LoginDialog.password ?? '',
                                 );
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  context.showLoggedSnackBar(
                                     SnackBar(
                                       content: Text(ok
                                           ? '登录成功'
@@ -426,7 +428,7 @@ class SettingsPanel extends StatelessWidget {
                               onPress: () async {
                                 await syncProvider.logout();
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  context.showLoggedSnackBar(
                                     const SnackBar(content: Text('已退出登录')),
                                   );
                                 }
@@ -497,7 +499,7 @@ class SettingsPanel extends StatelessWidget {
                               onPress: () async {
                                 final ok = await syncProvider.testConnection();
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  context.showLoggedSnackBar(
                                     SnackBar(
                                         content: Text(ok ? '连接成功' : '连接失败')),
                                   );
@@ -650,6 +652,12 @@ class SettingsPanel extends StatelessWidget {
                   onTap: () => _showDatabaseLogDialog(context),
                 ),
                 _buildSettingsListTile(
+                  icon: Icons.message_outlined,
+                  title: '查看弹窗日志',
+                  subtitle: '查看本次运行期间记录的底部弹窗消息',
+                  onTap: () => _showSnackbarLogDialog(context),
+                ),
+                _buildSettingsListTile(
                   icon: Icons.upload,
                   title: '导出数据库',
                   subtitle: '将数据库导出为JSON文件',
@@ -775,6 +783,51 @@ class SettingsPanel extends StatelessWidget {
             Icon(Icons.chevron_right, color: Colors.grey[400]),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showSnackbarLogDialog(BuildContext context) {
+    final entries = Provider.of<SnackbarLogProvider>(context, listen: false).entries;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('弹窗日志'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: entries.isEmpty
+              ? const Text('当前没有弹窗日志')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: entries.length,
+                  separatorBuilder: (context, index) => const Divider(height: 16),
+                  itemBuilder: (context, index) {
+                    final entry = entries[index];
+                    final time = '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.message,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$time · ${entry.type} · ${entry.source}',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
   }
@@ -1131,7 +1184,7 @@ class SettingsPanel extends StatelessWidget {
               Provider.of<SettingsProvider>(context, listen: false)
                   .resetToDefaults();
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
+              context.showLoggedSnackBar(
                 const SnackBar(
                   content: Text('已恢复默认设置'),
                   duration: Duration(seconds: 2),
@@ -1166,7 +1219,7 @@ class SettingsPanel extends StatelessWidget {
                     Provider.of<DictionaryProvider>(context, listen: false);
                 await dictionaryProvider.resetAllData();
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  context.showLoggedSnackBar(
                     const SnackBar(
                       content: Text('已清空所有数据'),
                       duration: Duration(seconds: 2),
@@ -1175,7 +1228,7 @@ class SettingsPanel extends StatelessWidget {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  context.showLoggedSnackBar(
                     SnackBar(
                       content: Text('清空失败: $e'),
                       duration: const Duration(seconds: 5),
@@ -1209,11 +1262,13 @@ class SettingsPanel extends StatelessWidget {
       );
 
       if (result != null) {
-        final file = File(result);
-        await file.writeAsString(jsonData);
+        if (!Platform.isAndroid) {
+          final file = File(result);
+          await file.writeAsString(jsonData);
+        }
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          context.showLoggedSnackBar(
             SnackBar(
               content: Text(
                   '数据库已导出！\n记录: ${stats['logs']} 条\n设备: ${stats['device_dictionary']} 个\n天线: ${stats['antenna_dictionary']} 个\nQTH: ${stats['qth_dictionary']} 个\n呼号: ${stats['callsign_dictionary']} 个\n历史: ${stats['history']} 条'),
@@ -1224,7 +1279,7 @@ class SettingsPanel extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           SnackBar(
             content: Text('导出失败: $e'),
             duration: const Duration(seconds: 5),
@@ -1274,7 +1329,7 @@ class SettingsPanel extends StatelessWidget {
         await db.importDatabase(jsonData);
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          context.showLoggedSnackBar(
             const SnackBar(
               content: Text('数据库导入成功！'),
               duration: Duration(seconds: 3),
@@ -1284,7 +1339,7 @@ class SettingsPanel extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           SnackBar(
             content: Text('导入失败: $e'),
             duration: const Duration(seconds: 5),
@@ -1483,11 +1538,11 @@ class SettingsPanel extends StatelessWidget {
 
     if (context.mounted) {
       if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           SnackBar(content: Text('同步成功：${syncProvider.lastSyncSummaryText}')),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           SnackBar(content: Text('同步失败: ${syncProvider.lastError ?? "未知错误"}')),
         );
       }
