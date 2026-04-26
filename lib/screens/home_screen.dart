@@ -8,6 +8,7 @@ import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -68,14 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  double _getBottomNavHeight(BuildContext context) {
-    // BottomNavigationBar default height is 56 + labels (if shown)
-    return 56.0 + (MediaQuery.of(context).padding.bottom);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bottomNavHeight = _getBottomNavHeight(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('OpenLogTool'),
@@ -91,23 +86,28 @@ class _HomeScreenState extends State<HomeScreen> {
           children: _pages,
         ),
       ),
-      bottomNavigationBar: AnimatedContainer(
+      bottomNavigationBar: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: _isBottomNavVisible ? 1 : 0),
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        height: _isBottomNavVisible ? bottomNavHeight : 0,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 100),
-          opacity: _isBottomNavVisible ? 1.0 : 0.0,
-          child: BottomNavigationBar(
-            items: _navItems,
-            currentIndex: _selectedIndex,
-            selectedItemColor: Theme.of(context).colorScheme.primary,
-            unselectedItemColor:
-                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-            onTap: _onItemTapped,
-            type: BottomNavigationBarType.fixed,
-            showUnselectedLabels: true,
-          ),
+        builder: (context, value, child) {
+          return ClipRect(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              heightFactor: value,
+              child: child,
+            ),
+          );
+        },
+        child: BottomNavigationBar(
+          items: _navItems,
+          currentIndex: _selectedIndex,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+          onTap: _onItemTapped,
+          type: BottomNavigationBarType.fixed,
+          showUnselectedLabels: true,
         ),
       ),
     );
@@ -142,13 +142,13 @@ class AddRecordPage extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Flexible(
-            flex: 2,
+          Expanded(
+            flex: 1,
             child: FCard(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
@@ -159,14 +159,17 @@ class AddRecordPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const LogForm(),
+                    const SizedBox(
+                      width: double.infinity,
+                      child: LogForm(),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
           const SizedBox(width: 16),
-          Flexible(
+          Expanded(
             flex: 2,
             child: FCard(
               child: Padding(
@@ -290,7 +293,7 @@ class AddRecordPage extends StatelessWidget {
 
     if (history.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           const SnackBar(content: Text('暂无历史记录')),
         );
       }
@@ -330,7 +333,7 @@ class AddRecordPage extends StatelessWidget {
                         await logProvider.restoreFromHistory(id);
                         if (context.mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          context.showLoggedSnackBar(
                             const SnackBar(content: Text('已恢复历史记录')),
                           );
                         }
@@ -375,7 +378,7 @@ class AddRecordPage extends StatelessWidget {
             onPress: () {
               Provider.of<LogProvider>(context, listen: false).clearAllLogs();
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
+              context.showLoggedSnackBar(
                 const SnackBar(content: Text('已清空所有记录')),
               );
             },
