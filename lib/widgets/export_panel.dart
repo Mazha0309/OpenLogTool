@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class _HSVSaturationValuePainter extends CustomPainter {
   final double hue;
@@ -81,6 +83,18 @@ class _HSVSaturationValuePainter extends CustomPainter {
            oldDelegate.saturation != saturation || 
            oldDelegate.value != value;
   }
+}
+
+class _ExportSaveResult {
+  final String? path;
+  final bool usedSaf;
+  final bool cancelled;
+
+  const _ExportSaveResult({
+    this.path,
+    this.usedSaf = false,
+    this.cancelled = false,
+  });
 }
 
 class ExportPanel extends StatelessWidget {
@@ -650,7 +664,7 @@ class ExportPanel extends StatelessWidget {
                   settings.headerText = headerTextController.text;
                   settingsProvider.updateExportSettings(settings);
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  context.showLoggedSnackBar(
                     const SnackBar(content: Text('设置已保存')),
                   );
                 },
@@ -1055,6 +1069,8 @@ class ExportPanel extends StatelessWidget {
 
   Future<void> _exportJSON(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = settingsProvider.exportSettings;
     final logs = logProvider.logs;
     
     if (logs.isEmpty) {
@@ -1065,20 +1081,37 @@ class ExportPanel extends StatelessWidget {
     try {
       final jsonData = logs.map((log) => log.toJson()).toList();
       final jsonString = const JsonEncoder.withIndent('  ').convert(jsonData);
-      
-      final directory = await getDownloadsDirectory();
-      if (directory == null) {
+      final jsonBytes = Uint8List.fromList(utf8.encode(jsonString));
+
+      final now = DateTime.now();
+
+      String filename = _generateFileName(settings.fileNameTemplate, now);
+      if (!filename.endsWith('.json')) {
+        filename += '.json';
+      }
+
+      final saveResult = await _saveExportFile(
+        configuredPath: settings.exportPath,
+        filename: filename,
+        bytes: jsonBytes,
+        dialogTitle: '保存 JSON 导出文件',
+        allowedExtensions: const ['json'],
+      );
+
+      if (saveResult.cancelled) {
+        return;
+      }
+
+      if (saveResult.path == null) {
         _showSnackBar(context, '无法访问下载目录');
         return;
       }
-      
-      final now = DateTime.now();
-      final filename = '点名记录_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
-      final file = File('${directory.path}/$filename');
-      
-      await file.writeAsString(jsonString);
-      
-      _showSuccessDialog(context, 'JSON导出成功', '文件已保存到:\n${file.path}', file.path);
+
+      if (saveResult.usedSaf) {
+        _showSnackBar(context, 'JSON导出成功，已通过系统文件选择器保存');
+      } else {
+        _showSuccessDialog(context, 'JSON导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+      }
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
     }
@@ -1290,32 +1323,38 @@ class ExportPanel extends StatelessWidget {
       }
 
       // 确定导出路径
-      String exportPath;
-      if (settings.exportPath.isNotEmpty) {
-        exportPath = settings.exportPath;
-      } else {
-        final directory = await getDownloadsDirectory();
-        if (directory == null) {
-          _showSnackBar(context, '无法访问下载目录');
-          return;
-        }
-        exportPath = directory.path;
+      final bytes = excel.save();
+      if (bytes == null) {
+        _showSnackBar(context, '导出失败: 无法生成Excel文件');
+        return;
       }
 
-      // 生成文件名
       String filename = _generateFileName(settings.fileNameTemplate, now);
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';
       }
 
-      final file = File('$exportPath/$filename');
+      final saveResult = await _saveExportFile(
+        configuredPath: settings.exportPath,
+        filename: filename,
+        bytes: Uint8List.fromList(bytes),
+        dialogTitle: '保存 Excel 导出文件',
+        allowedExtensions: const ['xlsx'],
+      );
 
-      final bytes = excel.save();
-      if (bytes != null) {
-        await file.writeAsBytes(bytes);
-        _showSuccessDialog(context, 'Excel导出成功', '文件已保存到:\n${file.path}', file.path);
+      if (saveResult.cancelled) {
+        return;
+      }
+
+      if (saveResult.path == null) {
+        _showSnackBar(context, '无法访问下载目录');
+        return;
+      }
+
+      if (saveResult.usedSaf) {
+        _showSnackBar(context, 'Excel导出成功，已通过系统文件选择器保存');
       } else {
-        _showSnackBar(context, '导出失败: 无法生成Excel文件');
+        _showSuccessDialog(context, 'Excel导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
       }
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
@@ -1332,6 +1371,79 @@ class ExportPanel extends StatelessWidget {
     filename = filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
     filename = filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
     return filename;
+  }
+
+  Future<String?> _resolveExportPath(String configuredPath) async {
+    if (!Platform.isAndroid && configuredPath.isNotEmpty) {
+      return configuredPath;
+    }
+
+    final directory = await getDownloadsDirectory();
+    return directory?.path;
+  }
+
+  Future<_ExportSaveResult> _saveExportFile({
+    required String configuredPath,
+    required String filename,
+    required Uint8List bytes,
+    required String dialogTitle,
+    required List<String> allowedExtensions,
+  }) async {
+    if (await _shouldUseAndroidSaf(configuredPath)) {
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: dialogTitle,
+        fileName: filename,
+        type: FileType.custom,
+        allowedExtensions: allowedExtensions,
+        bytes: bytes,
+      );
+
+      if (result == null) {
+        return const _ExportSaveResult(cancelled: true, usedSaf: true);
+      }
+
+      return _ExportSaveResult(path: result, usedSaf: true);
+    }
+
+    final exportPath = await _resolveExportPath(configuredPath);
+    if (exportPath == null) {
+      return const _ExportSaveResult();
+    }
+
+    final file = File('$exportPath/$filename');
+    await file.writeAsBytes(bytes);
+    return _ExportSaveResult(path: file.path, usedSaf: false);
+  }
+
+  Future<bool> _shouldUseAndroidSaf(String configuredPath) async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+
+    final normalizedConfiguredPath = configuredPath.trim();
+    if (normalizedConfiguredPath.isEmpty) {
+      return false;
+    }
+
+    final downloadsDirectory = await getDownloadsDirectory();
+    final downloadsPath = downloadsDirectory?.path;
+    if (downloadsPath == null) {
+      return true;
+    }
+
+    final normalizedDownloadsPath = _normalizePath(downloadsPath);
+    final normalizedConfigured = _normalizePath(normalizedConfiguredPath);
+
+    return !(normalizedConfigured == normalizedDownloadsPath ||
+        normalizedConfigured.startsWith('$normalizedDownloadsPath/'));
+  }
+
+  String _normalizePath(String path) {
+    var normalized = path.replaceAll('\\', '/').trim();
+    while (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
   }
 
   String _calculateControllerTime(String timeStr) {
@@ -1486,7 +1598,7 @@ class ExportPanel extends StatelessWidget {
   }
 
   void _showSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    context.showLoggedSnackBar(
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 2),
@@ -1521,7 +1633,7 @@ class ExportPanel extends StatelessWidget {
                   icon: const Icon(Icons.copy, size: 20),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: path));
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    context.showLoggedSnackBar(
                       const SnackBar(content: Text('路径已复制')),
                     );
                   },
