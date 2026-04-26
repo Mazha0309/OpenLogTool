@@ -143,66 +143,63 @@ class _LogTableState extends State<LogTable> {
                     controller: horizontalController,
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: SingleChildScrollView(
-                          child: DataTable(
-                     columnSpacing: 16,
-                     horizontalMargin: 16,
-                     headingRowHeight: 48,
-                    dataRowMinHeight: 48,
-                    dataRowMaxHeight: 64,
-                    headingTextStyle: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 14,
-                    ),
-                    dataTextStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 13,
-                    ),
-                    border: TableBorder.all(
-                      color: Theme.of(context).dividerColor,
-                      width: 1,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    columns: [
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('#'), 60),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('时间'), 100),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('点名主控'), 120),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('呼号'), 120),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('信号报告'), 100),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('QTH'), 150),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('设备'), 150),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('功率'), 80),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('天线'), 150),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('高度'), 80),
-                      ),
-                      DataColumn(
-                        label: _buildCenteredCell(const Text('操作'), 120),
-                      ),
-                    ],
-                    rows: _buildTableRows(context, logProvider, settingsProvider),
-                      ),
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          columnSpacing: 16,
+                          horizontalMargin: 16,
+                          headingRowHeight: 48,
+                          dataRowMinHeight: 48,
+                          dataRowMaxHeight: 64,
+                          headingTextStyle: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 14,
+                          ),
+                          dataTextStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 13,
+                          ),
+                          border: TableBorder.all(
+                            color: Theme.of(context).dividerColor,
+                            width: 1,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          columns: [
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('#'), 60),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('时间'), 100),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('点名主控'), 120),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('呼号'), 120),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('信号报告'), 100),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('QTH'), 150),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('设备'), 150),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('功率'), 80),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('天线'), 150),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('高度'), 80),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('操作'), 120),
+                            ),
+                          ],
+                          rows: _buildTableRows(context, logProvider, settingsProvider),
                         ),
                       ),
                     ),
@@ -237,8 +234,8 @@ class _LogTableState extends State<LogTable> {
       final originalIndex = entry.value.key;
       final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
-      // 倒序序号：总记录数 - 原始索引
-      final reverseIndex = logs.length - originalIndex;
+      // 倒序序号：使用显示顺序的索引（最新的序号最大）
+      final reverseIndex = logs.length - (_currentPage * _itemsPerPage) - entry.key;
 
       return DataRow(
         cells: [
