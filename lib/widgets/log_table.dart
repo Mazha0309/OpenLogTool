@@ -234,8 +234,8 @@ class _LogTableState extends State<LogTable> {
       final originalIndex = entry.value.key;
       final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
-      // 倒序序号：使用显示顺序的索引（最新的序号最大）
-      final reverseIndex = logs.length - (_currentPage * _itemsPerPage) - entry.key;
+      // 倒序序号：总记录数减去原始索引（最新的序号最大）
+      final reverseIndex = logs.length - originalIndex;
 
       return DataRow(
         cells: [
