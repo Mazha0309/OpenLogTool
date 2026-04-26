@@ -172,6 +172,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       hintText: '输入主控呼号',
                       error: _controllerError,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                       onChanged: (value) {
                         if (_controllerError != null) {
                           setState(() => _controllerError = null);
@@ -188,6 +189,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       label: '点名呼号',
                       hintText: '输入呼号',
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -199,6 +201,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       options: dictionaryProvider.deviceDict,
                       upperCase: false,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -210,6 +213,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       options: dictionaryProvider.antennaDict,
                       upperCase: false,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -221,6 +225,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       keyboardType: TextInputType.number,
                       upperCase: false,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -233,6 +238,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       label: 'QTH',
                       hintText: '输入QTH',
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -244,6 +250,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       keyboardType: TextInputType.number,
                       upperCase: false,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -254,6 +261,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       hintText: 'HH:mm',
                       upperCase: false,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                   SizedBox(
@@ -270,6 +278,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       },
                       upperCase: false,
                       isCompact: isNarrow,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _submitForm(),
                     ),
                   ),
                 ],
@@ -303,6 +313,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     TextInputType? keyboardType,
     String? error,
     void Function(String)? onChanged,
+    void Function(String)? onSubmitted,
+    TextInputAction? textInputAction,
     bool upperCase = true,
     bool isCompact = false,
   }) {
@@ -318,6 +330,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       ),
       keyboardType: keyboardType,
       onChanged: onChanged,
+      onFieldSubmitted: onSubmitted ?? (_) => FocusScope.of(context).nextFocus(),
+      textInputAction: textInputAction ?? TextInputAction.next,
       textCapitalization: upperCase ? TextCapitalization.characters : TextCapitalization.none,
       inputFormatters: upperCase ? [UpperCaseTextFormatter()] : [],
     );
@@ -329,6 +343,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     required String hintText,
     required List<DictionaryItem> options,
     void Function(String)? onChanged,
+    TextInputAction? textInputAction,
     bool upperCase = true,
     bool isCompact = false,
   }) {
@@ -371,6 +386,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             controller.text = upperCase ? value.toUpperCase() : value;
             onChanged?.call(value);
           },
+          onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+          textInputAction: textInputAction ?? TextInputAction.next,
           textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
         );
@@ -413,6 +430,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     required List<DictionaryItem> dictionaryOptions,
     required String label,
     required String hintText,
+    TextInputAction? textInputAction,
     bool isCompact = false,
   }) {
     return Autocomplete<DictionaryItem>(
@@ -450,6 +468,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           onChanged: (value) {
             controller.text = value.toUpperCase();
           },
+          onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+          textInputAction: textInputAction ?? TextInputAction.next,
           textCapitalization: TextCapitalization.characters,
           inputFormatters: [UpperCaseTextFormatter()],
         );
@@ -493,6 +513,7 @@ class _QthFieldWithHistory extends StatefulWidget {
   final List<DictionaryItem> dictionaryOptions;
   final String label;
   final String hintText;
+  final TextInputAction? textInputAction;
   final bool isCompact;
 
   const _QthFieldWithHistory({
@@ -502,6 +523,7 @@ class _QthFieldWithHistory extends StatefulWidget {
     required this.dictionaryOptions,
     required this.label,
     required this.hintText,
+    this.textInputAction,
     this.isCompact = false,
   });
 
@@ -836,6 +858,8 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                 _hideOverlay();
               }
             },
+            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            textInputAction: widget.textInputAction ?? TextInputAction.next,
           );
         },
         optionsViewBuilder: (
