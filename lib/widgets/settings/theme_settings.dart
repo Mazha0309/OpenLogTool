@@ -78,6 +78,29 @@ class ThemeSettings extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            // Monet 莫奈取色
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('莫奈取色',
+                          style: TextStyle(fontSize: isNarrow ? 13 : 14)),
+                      const SizedBox(height: 2),
+                      const Text('在Android 12+上自动提取壁纸颜色',
+                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: settingsProvider.monetColorEnabled,
+                  onChanged: (v) => settingsProvider.setMonetColor(v),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             // 字体
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -77,10 +77,12 @@ class MyApp extends StatelessWidget {
     final fontFamily = settingsProvider.fontFamily;
 
 
-    final baseLight = lightDynamic ??
-        ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.light);
-    final baseDark = darkDynamic ??
-        ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.dark);
+    final baseLight = (lightDynamic != null && settingsProvider.monetColorEnabled)
+        ? lightDynamic!
+        : ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.light);
+    final baseDark = (darkDynamic != null && settingsProvider.monetColorEnabled)
+        ? darkDynamic!
+        : ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.dark);
 
     final vividRed = const Color(0xFFDC2626);
 
