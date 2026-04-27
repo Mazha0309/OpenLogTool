@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
@@ -17,8 +18,10 @@ void main() {
   }
 
   runApp(
-    MultiProvider(
-      providers: [
+    DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        return MultiProvider(
+          providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
@@ -49,14 +52,22 @@ void main() {
             return provider;
           },
         ),
-      ],
-      child: const MyApp(),
-    ),
+        ],
+        child: MyApp(
+          lightDynamic: lightDynamic,
+          darkDynamic: darkDynamic,
+        ),
+      );
+    },
+  ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ColorScheme? lightDynamic;
+  final ColorScheme? darkDynamic;
+
+  const MyApp({super.key, this.lightDynamic, this.darkDynamic});
 
   @override
   Widget build(BuildContext context) {
@@ -66,15 +77,19 @@ class MyApp extends StatelessWidget {
     final fontFamily = settingsProvider.fontFamily;
 
 
+    final baseLight = lightDynamic ??
+        ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.light);
+    final baseDark = darkDynamic ??
+        ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.dark);
+
+    final vividRed = const Color(0xFFDC2626);
+
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.light,
-        ),
+        colorScheme: baseLight.harmonized().copyWith(error: vividRed),
         fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
@@ -100,10 +115,7 @@ class MyApp extends StatelessWidget {
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.dark,
-        ),
+        colorScheme: baseDark.harmonized().copyWith(error: vividRed),
         fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
