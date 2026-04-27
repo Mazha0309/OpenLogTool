@@ -16,6 +16,7 @@ import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
+import 'package:openlogtool/widgets/settings/subwidgets.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
 
 class SettingsPanel extends StatelessWidget {
@@ -95,7 +96,7 @@ class SettingsPanel extends StatelessWidget {
                     ),
                     if (syncProvider.settings.syncEnabled) ...[
                       const SizedBox(height: 12),
-                      _ServerSettingsFields(syncProvider: syncProvider),
+                      ServerSettingsFields(syncProvider: syncProvider),
                       const SizedBox(height: 8),
                       if (!syncProvider.isLoggedIn) ...[
                         if (syncProvider.isLoggingIn)
@@ -110,12 +111,12 @@ class SettingsPanel extends StatelessWidget {
                             onPress: () async {
                               final result = await showDialog<bool>(
                                 context: context,
-                                builder: (ctx) => _LoginDialog(),
+                                builder: (ctx) => const LoginDialog(),
                               );
                               if (result == true) {
                                 final ok = await syncProvider.login(
-                                  _LoginDialog.username ?? '',
-                                  _LoginDialog.password ?? '',
+                                  LoginDialog.username ?? '',
+                                  LoginDialog.password ?? '',
                                 );
                                 if (context.mounted) {
                                   context.showLoggedSnackBar(
@@ -1232,132 +1233,3 @@ class SettingsPanel extends StatelessWidget {
   }
 }
 
-class _ServerSettingsFields extends StatefulWidget {
-  final SyncProvider syncProvider;
-
-  const _ServerSettingsFields({required this.syncProvider});
-
-  @override
-  State<_ServerSettingsFields> createState() => _ServerSettingsFieldsState();
-}
-
-class _ServerSettingsFieldsState extends State<_ServerSettingsFields> {
-  late TextEditingController _serverUrlController;
-  late TextEditingController _deviceIdController;
-
-  @override
-  void initState() {
-    super.initState();
-    _serverUrlController =
-        TextEditingController(text: widget.syncProvider.settings.serverUrl);
-    _deviceIdController =
-        TextEditingController(text: widget.syncProvider.settings.deviceId);
-  }
-
-  @override
-  void didUpdateWidget(_ServerSettingsFields oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.syncProvider.settings.serverUrl != _serverUrlController.text) {
-      _serverUrlController.text = widget.syncProvider.settings.serverUrl;
-    }
-    if (widget.syncProvider.settings.deviceId != _deviceIdController.text) {
-      _deviceIdController.text = widget.syncProvider.settings.deviceId;
-    }
-  }
-
-  @override
-  void dispose() {
-    _serverUrlController.dispose();
-    _deviceIdController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TextField(
-          decoration: const InputDecoration(
-            labelText: '服务器地址',
-            hintText: 'http://localhost:3000',
-            border: OutlineInputBorder(),
-          ),
-          controller: _serverUrlController,
-          onChanged: (value) => widget.syncProvider.setServerUrl(value),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          decoration: const InputDecoration(
-            labelText: '设备ID',
-            hintText: 'device-001',
-            border: OutlineInputBorder(),
-          ),
-          controller: _deviceIdController,
-          onChanged: (value) => widget.syncProvider.setDeviceId(value),
-        ),
-      ],
-    );
-  }
-}
-
-class _LoginDialog extends StatefulWidget {
-  static String? username;
-  static String? password;
-
-  @override
-  State<_LoginDialog> createState() => _LoginDialogState();
-}
-
-class _LoginDialogState extends State<_LoginDialog> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('子账号登录'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: '用户名',
-              border: OutlineInputBorder(),
-            ),
-            controller: _usernameController,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            decoration: const InputDecoration(
-              labelText: '密码',
-              border: OutlineInputBorder(),
-            ),
-            obscureText: true,
-            controller: _passwordController,
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            _LoginDialog.username = _usernameController.text;
-            _LoginDialog.password = _passwordController.text;
-            Navigator.pop(context, true);
-          },
-          child: const Text('登录'),
-        ),
-      ],
-    );
-  }
-}
