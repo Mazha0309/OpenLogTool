@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
@@ -106,9 +105,9 @@ class SettingsPanel extends StatelessWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         else
-                          FButton(
-                            label: '子账号登录',
-                            onPress: () async {
+                          FilledButton(
+                            child: const Text('子账号登录'),
+                            onPressed: () async {
                               final result = await showDialog<bool>(
                                 context: context,
                                 builder: (ctx) => const LoginDialog(),
@@ -142,10 +141,10 @@ class SettingsPanel extends StatelessWidget {
                                   fontSize: 12, color: Colors.green),
                             ),
                             const Spacer(),
-                            FButton(
-                              label: '退出登录',
-                              style: FButtonStyle.destructive,
-                              onPress: () async {
+                            FilledButton(
+                              child: const Text('退出登录'),
+                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                              onPressed: () async {
                                 await syncProvider.logout();
                                 if (context.mounted) {
                                   context.showLoggedSnackBar(
@@ -214,9 +213,9 @@ class SettingsPanel extends StatelessWidget {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            FButton(
-                              label: '测试连接',
-                              onPress: () async {
+                            FilledButton(
+                              child: const Text('测试连接'),
+                              onPressed: () async {
                                 final ok = await syncProvider.testConnection();
                                 if (context.mounted) {
                                   context.showLoggedSnackBar(
@@ -227,9 +226,9 @@ class SettingsPanel extends StatelessWidget {
                               },
                             ),
                             const SizedBox(width: 8),
-                            FButton(
-                              label: '重置同步基线',
-                              onPress: syncProvider.isConfigured
+                            FilledButton(
+                              child: const Text('重置同步基线'),
+                              onPressed: syncProvider.isConfigured
                                   ? () async {
                                       await syncProvider.resetSyncBaseline();
                                       if (context.mounted) {
@@ -275,9 +274,9 @@ class SettingsPanel extends StatelessWidget {
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
                             else
-                              FButton(
-                                label: '立即同步',
-                                onPress: syncProvider.isConfigured
+                              FilledButton(
+                                child: const Text('立即同步'),
+                                onPressed: syncProvider.isConfigured
                                     ? () => _performSync(context, syncProvider)
                                     : null,
                               ),
@@ -366,17 +365,17 @@ class SettingsPanel extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: FButton(
-                label: '恢复默认设置',
-                onPress: () => _showResetConfirmation(context),
-                style: FButtonStyle.destructive,
+              child: FilledButton(
+                child: const Text('恢复默认设置'),
+                onPressed: () => _showResetConfirmation(context),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: FButton(
-                label: '关于应用',
-                onPress: () => _showAboutDialog(context),
+              child: FilledButton(
+                child: const Text('关于应用'),
+                onPressed: () => _showAboutDialog(context),
               ),
             ),
           ],
@@ -846,18 +845,18 @@ class SettingsPanel extends StatelessWidget {
   void _showResetConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '恢复默认设置',
-        body: '确定要恢复所有设置为默认值吗？',
+      builder: (context) => AlertDialog(
+        title: const Text('恢复默认设置'),
+        content: const Text('确定要恢复所有设置为默认值吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认恢复',
-            style: FButtonStyle.destructive,
-            onPress: () {
+          FilledButton(
+            child: const Text('确认恢复'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () {
               Provider.of<SettingsProvider>(context, listen: false)
                   .resetToDefaults();
               Navigator.pop(context);
@@ -877,19 +876,18 @@ class SettingsPanel extends StatelessWidget {
   void _showClearDataConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '清空所有数据',
-        body:
-            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？',
+      builder: (context) => AlertDialog(
+        title: const Text('清空所有数据'),
+        content: const Text('⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认清空',
-            style: FButtonStyle.destructive,
-            onPress: () async {
+          FilledButton(
+            child: const Text('确认清空'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () async {
               Navigator.pop(context);
               try {
                 final dictionaryProvider =
@@ -974,14 +972,14 @@ class SettingsPanel extends StatelessWidget {
         content:
             const Text('⚠️ 警告：导入将覆盖所有现有数据！\n\n此操作不可恢复，建议先导出当前数据库。\n\n确定要继续吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(dialogContext),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext),
           ),
-          FButton(
-            label: '继续导入',
-            style: FButtonStyle.destructive,
-            onPress: () async {
+          FilledButton(
+            child: const Text('继续导入'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () async {
               Navigator.pop(dialogContext);
               await _importDatabase(context);
             },
@@ -1043,9 +1041,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '关闭',
-            onPress: () => Navigator.pop(dialogContext),
+          FilledButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(dialogContext),
           ),
         ],
       ),
@@ -1136,9 +1134,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '关闭',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -1200,9 +1198,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),

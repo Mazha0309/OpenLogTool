@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -283,9 +282,9 @@ class ExportPanel extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    FButton(
-                                      label: '选择',
-                                      onPress: () async {
+                                    FilledButton(
+                                      child: const Text('选择'),
+                                      onPressed: () async {
                                         final result = await FilePicker.platform.getDirectoryPath();
                                         if (result != null) {
                                           exportPathController.text = result;
