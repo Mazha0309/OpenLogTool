@@ -143,7 +143,7 @@ class SettingsPanel extends StatelessWidget {
                             const Spacer(),
                             FilledButton(
                               child: const Text('退出登录'),
-                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
                               onPressed: () async {
                                 await syncProvider.logout();
                                 if (context.mounted) {
@@ -368,7 +368,7 @@ class SettingsPanel extends StatelessWidget {
               child: FilledButton(
                 child: const Text('恢复默认设置'),
                 onPressed: () => _showResetConfirmation(context),
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
               ),
             ),
             const SizedBox(width: 12),
@@ -855,7 +855,7 @@ class SettingsPanel extends StatelessWidget {
           ),
           FilledButton(
             child: const Text('确认恢复'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () {
               Provider.of<SettingsProvider>(context, listen: false)
                   .resetToDefaults();
@@ -886,7 +886,7 @@ class SettingsPanel extends StatelessWidget {
           ),
           FilledButton(
             child: const Text('确认清空'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
               try {
@@ -978,7 +978,7 @@ class SettingsPanel extends StatelessWidget {
           ),
           FilledButton(
             child: const Text('继续导入'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await _importDatabase(context);

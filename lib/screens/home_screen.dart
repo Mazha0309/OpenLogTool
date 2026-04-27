@@ -268,7 +268,7 @@ class AddRecordPage extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
               onPressed: logProvider.logCount > 0
                   ? () => _showClearConfirmation(context)
                   : null,
@@ -373,7 +373,7 @@ class AddRecordPage extends StatelessWidget {
           ),
           FilledButton(
             child: const Text('确认清空'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () {
               Provider.of<LogProvider>(context, listen: false).clearAllLogs();
               Navigator.pop(context);
@@ -424,7 +424,7 @@ class AddRecordPage extends StatelessWidget {
           ),
           FilledButton(
             child: const Text('确认删除'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () async {
               await logProvider.deleteHistoryRecord(id);
               Navigator.pop(context);
