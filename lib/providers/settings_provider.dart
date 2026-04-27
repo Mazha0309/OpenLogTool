@@ -24,7 +24,7 @@ class SettingsProvider with ChangeNotifier {
   bool _callSignQthLinkEnabled = true;
   bool _paginationEnabled = false;
   bool _importCallsignQthHistoryEnabled = true;
-  bool _monetColorEnabled = true;
+  bool _monetColorEnabled = false;
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
@@ -67,7 +67,7 @@ class SettingsProvider with ChangeNotifier {
     _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
     _paginationEnabled = prefs.getBool(_paginationEnabledKey) ?? false;
     _importCallsignQthHistoryEnabled = prefs.getBool(_importCallsignQthHistoryKey) ?? true;
-    _monetColorEnabled = prefs.getBool(_monetColorEnabledKey) ?? true;
+    _monetColorEnabled = prefs.getBool(_monetColorEnabledKey) ?? false;
 
     notifyListeners();
   }
