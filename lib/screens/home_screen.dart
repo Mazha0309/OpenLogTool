@@ -144,7 +144,7 @@ class AddRecordPage extends StatelessWidget {
         children: [
           Expanded(
             flex: 1,
-            child: FCard(
+            child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -171,7 +171,7 @@ class AddRecordPage extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             flex: 2,
-            child: FCard(
+            child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -205,7 +205,7 @@ class AddRecordPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FCard(
+          Card(
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
@@ -226,7 +226,7 @@ class AddRecordPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          FCard(
+          Card(
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
@@ -460,7 +460,7 @@ class ImportExportPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
-                  child: FCard(
+                  child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: ExportPanel(),
@@ -469,7 +469,7 @@ class ImportExportPage extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Flexible(
-                  child: FCard(
+                  child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: DictionaryManager(),
@@ -485,14 +485,14 @@ class ImportExportPage extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FCard(
+                Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: ExportPanel(),
                   ),
                 ),
                 const SizedBox(height: 12),
-                FCard(
+                Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: DictionaryManager(),

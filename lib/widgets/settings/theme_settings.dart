@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 
 class ThemeSettings extends StatelessWidget {
@@ -21,7 +20,7 @@ class ThemeSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
 
-    return FCard(
+    return Card(
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
@@ -50,7 +49,10 @@ class ThemeSettings extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                FButton(label: '选择颜色', onPress: onPickColor),
+                FilledButton(
+                  onPressed: onPickColor,
+                  child: const Text('选择颜色'),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -91,9 +93,9 @@ class ThemeSettings extends StatelessWidget {
                     ],
                   ),
                 ),
-                FButton(
-                  label: settingsProvider.fontFamily ?? '系统默认',
-                  onPress: onPickFont,
+                FilledButton(
+                  onPressed: onPickFont,
+                  child: Text(settingsProvider.fontFamily ?? '系统默认'),
                 ),
               ],
             ),
