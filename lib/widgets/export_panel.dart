@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -6,13 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:excel/excel.dart' as excel_lib;
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class _HSVSaturationValuePainter extends CustomPainter {
@@ -1072,25 +1069,22 @@ class ExportPanel extends StatelessWidget {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final settings = settingsProvider.exportSettings;
     final logs = logProvider.logs;
-    
+
     if (logs.isEmpty) {
       _showSnackBar(context, '没有数据可以导出');
       return;
     }
-    
+
     try {
-      final jsonData = logs.map((log) => log.toJson()).toList();
-      final jsonString = const JsonEncoder.withIndent('  ').convert(jsonData);
-      final jsonBytes = Uint8List.fromList(utf8.encode(jsonString));
-
+      final jsonBytes = ExportService.generateJsonBytes(logs);
       final now = DateTime.now();
-
-      String filename = _generateFileName(settings.fileNameTemplate, now);
+      String filename = ExportService.generateFileName(
+          settings.fileNameTemplate, now);
       if (!filename.endsWith('.json')) {
         filename += '.json';
       }
 
-      final saveResult = await _saveExportFile(
+      final saveResult = await ExportService.saveFile(
         configuredPath: settings.exportPath,
         filename: filename,
         bytes: jsonBytes,
@@ -1098,10 +1092,7 @@ class ExportPanel extends StatelessWidget {
         allowedExtensions: const ['json'],
       );
 
-      if (saveResult.cancelled) {
-        return;
-      }
-
+      if (saveResult.cancelled) return;
       if (saveResult.path == null) {
         _showSnackBar(context, '无法访问下载目录');
         return;
@@ -1110,7 +1101,8 @@ class ExportPanel extends StatelessWidget {
       if (saveResult.usedSaf) {
         _showSnackBar(context, 'JSON导出成功，已通过系统文件选择器保存');
       } else {
-        _showSuccessDialog(context, 'JSON导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+        _showSuccessDialog(
+            context, 'JSON导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
       }
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
@@ -1129,212 +1121,20 @@ class ExportPanel extends StatelessWidget {
     }
 
     try {
-      final excel = excel_lib.Excel.createExcel();
-      final sheet = excel['点名记录'];
-
-      final defaultSheet = excel.getDefaultSheet();
-      if (defaultSheet != null && defaultSheet != '点名记录') {
-        excel.delete(defaultSheet);
-      }
-
       final now = DateTime.now();
-      String headerText = settings.headerText;
-      headerText = _generateFileName(headerText, now);
-
-      final headerColor = excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
-      final headerRowColor = excel_lib.ExcelColor.fromInt(settings.headerRowBackgroundColor.toARGB32());
-      final controllerColor = excel_lib.ExcelColor.fromInt(settings.controllerBackgroundColor.toARGB32());
-      final alternateColor = excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
-      const whiteColor = excel_lib.ExcelColor.white;
-
-      final borderStyle = excel_lib.Border(
-        borderStyle: excel_lib.BorderStyle.Thin,
-        borderColorHex: excel_lib.ExcelColor.grey,
-      );
-
-      final String? excelFontFamily = settings.fontFamily.isEmpty ? null : settings.fontFamily;
-
-      sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
-      sheet.merge(excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0), excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 0), customValue: excel_lib.TextCellValue(headerText));
-      sheet.row(0).forEach((cell) {
-        if (cell != null) {
-          cell.cellStyle = excel_lib.CellStyle(
-            backgroundColorHex: headerColor,
-            fontSize: 14,
-            bold: true,
-            fontFamily: excelFontFamily,
-            horizontalAlign: excel_lib.HorizontalAlign.Center,
-            verticalAlign: excel_lib.VerticalAlign.Center,
-            textWrapping: excel_lib.TextWrapping.WrapText,
-            topBorder: borderStyle,
-            bottomBorder: borderStyle,
-            leftBorder: borderStyle,
-            rightBorder: borderStyle,
-          );
-        }
-      });
-      sheet.setRowHeight(0, 30);
-
-      final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
-      sheet.insertRowIterables(headers.map((e) => excel_lib.TextCellValue(e)).toList(), 1);
-      sheet.row(1).forEach((cell) {
-        if (cell != null) {
-          cell.cellStyle = excel_lib.CellStyle(
-            backgroundColorHex: headerRowColor,
-            fontSize: 12,
-            bold: true,
-            fontFamily: excelFontFamily,
-            horizontalAlign: excel_lib.HorizontalAlign.Center,
-            verticalAlign: excel_lib.VerticalAlign.Center,
-            topBorder: borderStyle,
-            bottomBorder: borderStyle,
-            leftBorder: borderStyle,
-            rightBorder: borderStyle,
-          );
-        }
-      });
-      sheet.setRowHeight(1, 25);
-
-      final grouped = <String, List<LogEntry>>{};
-      for (final log in logs) {
-        final controller = log.controller;
-        grouped.putIfAbsent(controller, () => []).add(log);
-      }
-
-      int globalIndex = 1;
-      int currentRow = 2;
-
-      for (final controller in grouped.keys) {
-        final controllerLogs = grouped[controller]!;
-
-        final firstTime = controllerLogs.isNotEmpty ? controllerLogs.first.time : '';
-        final controllerTime = _calculateControllerTime(firstTime);
-
-        final controllerRow = <String>['点名主控:', controllerTime, controller, '', '', '', '', '', '', ''];
-        sheet.insertRowIterables(controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(), currentRow);
-        sheet.row(currentRow).forEach((cell) {
-          if (cell != null) {
-            cell.cellStyle = excel_lib.CellStyle(
-              backgroundColorHex: controllerColor,
-              fontSize: 11,
-              bold: true,
-              fontFamily: excelFontFamily,
-              horizontalAlign: excel_lib.HorizontalAlign.Center,
-              verticalAlign: excel_lib.VerticalAlign.Center,
-              topBorder: borderStyle,
-              bottomBorder: borderStyle,
-              leftBorder: borderStyle,
-              rightBorder: borderStyle,
-            );
-          }
-        });
-        sheet.setRowHeight(currentRow, 20);
-        currentRow++;
-
-        for (int i = 0; i < controllerLogs.length; i++) {
-          final log = controllerLogs[i];
-          excel_lib.ExcelColor rowColor;
-          
-          if (settings.useAlternateColors) {
-            rowColor = i % 2 == 0 ? whiteColor : alternateColor;
-          } else {
-            rowColor = whiteColor;
-          }
-          
-          final rowData = [
-            excel_lib.TextCellValue(globalIndex.toString()),
-            excel_lib.TextCellValue(log.time),
-            excel_lib.TextCellValue(log.callsign),
-            excel_lib.TextCellValue(log.report),
-            excel_lib.TextCellValue(log.qth),
-            excel_lib.TextCellValue(log.device),
-            excel_lib.TextCellValue(log.power),
-            excel_lib.TextCellValue(log.antenna),
-            excel_lib.TextCellValue(log.height),
-            excel_lib.TextCellValue(''),
-          ];
-          sheet.insertRowIterables(rowData, currentRow);
-          sheet.row(currentRow).forEach((cell) {
-            if (cell != null) {
-              cell.cellStyle = excel_lib.CellStyle(
-                backgroundColorHex: rowColor,
-                fontSize: 11,
-                fontFamily: excelFontFamily,
-                horizontalAlign: excel_lib.HorizontalAlign.Center,
-                verticalAlign: excel_lib.VerticalAlign.Center,
-                topBorder: borderStyle,
-                bottomBorder: borderStyle,
-                leftBorder: borderStyle,
-                rightBorder: borderStyle,
-              );
-            }
-          });
-          sheet.setRowHeight(currentRow, 20);
-          globalIndex++;
-          currentRow++;
-        }
-      }
-
-      if (settings.showFooter) {
-        currentRow += 2;
-
-        const footerBgColor = excel_lib.ExcelColor.white;
-        const footerTextColor = excel_lib.ExcelColor.grey;
-        final lightGreyBorder = excel_lib.Border(
-          borderStyle: excel_lib.BorderStyle.Thin,
-          borderColorHex: excel_lib.ExcelColor.grey,
-        );
-
-        final footerTexts = [
-          '此表格由 OpenLogTool 生成导出，本项目使用开源协议: GNU Affero General Public License V3',
-          '项目仓库地址: https://github.com/Mazha0309/OpenLogTool',
-          '分享点名记录时无须携带本条说明',
-        ];
-
-        for (int i = 0; i < footerTexts.length; i++) {
-          sheet.insertRowIterables([excel_lib.TextCellValue(footerTexts[i])], currentRow);
-          sheet.merge(
-            excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: currentRow),
-            excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: currentRow),
-            customValue: excel_lib.TextCellValue(footerTexts[i]),
-          );
-          sheet.row(currentRow).forEach((cell) {
-            if (cell != null) {
-              cell.cellStyle = excel_lib.CellStyle(
-                backgroundColorHex: footerBgColor,
-                fontColorHex: footerTextColor,
-                fontSize: 10,
-                fontFamily: excelFontFamily,
-                horizontalAlign: excel_lib.HorizontalAlign.Center,
-                verticalAlign: excel_lib.VerticalAlign.Center,
-                leftBorder: lightGreyBorder,
-                rightBorder: lightGreyBorder,
-              );
-            }
-          });
-          sheet.setRowHeight(currentRow, 22);
-          currentRow++;
-        }
-      }
-
-      final colWidths = <double>[10, 10, 15, 12, 18, 15, 10, 18, 10, 10];
-      for (var i = 0; i < colWidths.length; i++) {
-        sheet.setColumnWidth(i, colWidths[i]);
-      }
-
-      // 确定导出路径
-      final bytes = excel.save();
+      final bytes = ExportService.generateExcelBytes(logs, settings, now);
       if (bytes == null) {
         _showSnackBar(context, '导出失败: 无法生成Excel文件');
         return;
       }
 
-      String filename = _generateFileName(settings.fileNameTemplate, now);
+      String filename = ExportService.generateFileName(
+          settings.fileNameTemplate, now);
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';
       }
 
-      final saveResult = await _saveExportFile(
+      final saveResult = await ExportService.saveFile(
         configuredPath: settings.exportPath,
         filename: filename,
         bytes: Uint8List.fromList(bytes),
@@ -1342,10 +1142,7 @@ class ExportPanel extends StatelessWidget {
         allowedExtensions: const ['xlsx'],
       );
 
-      if (saveResult.cancelled) {
-        return;
-      }
-
+      if (saveResult.cancelled) return;
       if (saveResult.path == null) {
         _showSnackBar(context, '无法访问下载目录');
         return;
@@ -1354,137 +1151,12 @@ class ExportPanel extends StatelessWidget {
       if (saveResult.usedSaf) {
         _showSnackBar(context, 'Excel导出成功，已通过系统文件选择器保存');
       } else {
-        _showSuccessDialog(context, 'Excel导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+        _showSuccessDialog(
+            context, 'Excel导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
       }
     } catch (e) {
       _showSnackBar(context, '导出失败: $e');
     }
-  }
-
-  String _generateFileName(String template, DateTime now) {
-    String filename = template;
-    // 按照长度从长到短的顺序替换，避免部分替换问题
-    filename = filename.replaceAll('{yyyy}', now.year.toString());
-    filename = filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{HH}', now.hour.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
-    return filename;
-  }
-
-  Future<String?> _resolveExportPath(String configuredPath) async {
-    if (!Platform.isAndroid && configuredPath.isNotEmpty) {
-      return configuredPath;
-    }
-
-    final directory = await getDownloadsDirectory();
-    return directory?.path;
-  }
-
-  Future<_ExportSaveResult> _saveExportFile({
-    required String configuredPath,
-    required String filename,
-    required Uint8List bytes,
-    required String dialogTitle,
-    required List<String> allowedExtensions,
-  }) async {
-    if (await _shouldUseAndroidSaf(configuredPath)) {
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: dialogTitle,
-        fileName: filename,
-        type: FileType.custom,
-        allowedExtensions: allowedExtensions,
-        bytes: bytes,
-      );
-
-      if (result == null) {
-        return const _ExportSaveResult(cancelled: true, usedSaf: true);
-      }
-
-      return _ExportSaveResult(path: result, usedSaf: true);
-    }
-
-    final exportPath = await _resolveExportPath(configuredPath);
-    if (exportPath == null) {
-      return const _ExportSaveResult();
-    }
-
-    final file = File('$exportPath/$filename');
-    await file.writeAsBytes(bytes);
-    return _ExportSaveResult(path: file.path, usedSaf: false);
-  }
-
-  Future<bool> _shouldUseAndroidSaf(String configuredPath) async {
-    if (!Platform.isAndroid) {
-      return false;
-    }
-
-    final normalizedConfiguredPath = configuredPath.trim();
-    if (normalizedConfiguredPath.isEmpty) {
-      return false;
-    }
-
-    final downloadsDirectory = await getDownloadsDirectory();
-    final downloadsPath = downloadsDirectory?.path;
-    if (downloadsPath == null) {
-      return true;
-    }
-
-    final normalizedDownloadsPath = _normalizePath(downloadsPath);
-    final normalizedConfigured = _normalizePath(normalizedConfiguredPath);
-
-    return !(normalizedConfigured == normalizedDownloadsPath ||
-        normalizedConfigured.startsWith('$normalizedDownloadsPath/'));
-  }
-
-  String _normalizePath(String path) {
-    var normalized = path.replaceAll('\\', '/').trim();
-    while (normalized.endsWith('/')) {
-      normalized = normalized.substring(0, normalized.length - 1);
-    }
-    return normalized;
-  }
-
-  String _calculateControllerTime(String timeStr) {
-    if (timeStr.isEmpty) return '';
-
-    final parts = timeStr.split(':');
-    if (parts.length < 2) return timeStr;
-
-    var hours = int.tryParse(parts[0]) ?? 0;
-    var minutes = int.tryParse(parts[1]) ?? 0;
-
-    minutes -= 1;
-    if (minutes < 0) {
-      minutes = 59;
-      hours = (hours - 1) % 24;
-    }
-
-    if (minutes % 5 == 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
-    }
-
-    final nearestFive = (minutes / 5).round() * 5;
-    final nearestTen = (minutes / 10).round() * 10;
-
-    final diffToFive = (minutes - nearestFive).abs();
-    final diffToTen = (minutes - nearestTen).abs();
-
-    if (diffToTen == 1 || nearestTen == 60) {
-      minutes = nearestTen == 60 ? 0 : nearestTen;
-      if (nearestTen == 60) {
-        hours = (hours + 1) % 24;
-      }
-    } else if (diffToFive == 1) {
-      minutes = nearestFive % 60;
-      if (nearestFive == 60) {
-        hours = (hours + 1) % 24;
-        minutes = 0;
-      }
-    }
-
-    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
   }
 
   Future<void> _importJSON(BuildContext context) async {
@@ -1499,95 +1171,24 @@ class ExportPanel extends StatelessWidget {
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
 
-      final jsonData = json.decode(content);
       final logProvider = Provider.of<LogProvider>(context, listen: false);
       final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
-      List<LogEntry> importedLogs;
-      List<List<String>> callsignQthPairs = []; // Collect pairs for later
-
-      if (jsonData is Map && jsonData.containsKey('currentRecords')) {
-        // HamTool format compatibility
-        final records = jsonData['currentRecords'] as List;
-        importedLogs = records.map((item) {
-          // Parse created_at datetime to extract HH:mm
-          String time = '';
-          final createdAt = item['created_at'];
-          if (createdAt != null) {
-            try {
-              final dt = DateTime.parse(createdAt.toString());
-              time = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-            } catch (_) {}
-          }
-
-          // Safely extract string fields
-          String callsign = '';
-          String qth = '';
-          if (item['called_call'] != null) callsign = item['called_call'].toString();
-          if (item['qth'] != null) qth = item['qth'].toString();
-
-          // Record callsign-qth history if enabled
-          if (settingsProvider.importCallsignQthHistoryEnabled &&
-              callsign.isNotEmpty && qth.isNotEmpty) {
-            callsignQthPairs.add([callsign, qth]);
-          }
-
-          String report = '59';
-          if (item['signal_report'] != null) {
-            report = item['signal_report'].toString();
-          }
-
-          return LogEntry(
-            time: time,
-            controller: item['controller_call']?.toString() ?? '',
-            callsign: callsign,
-            report: report,
-            qth: qth,
-            device: item['device']?.toString() ?? '',
-            power: item['power']?.toString() ?? '',
-            antenna: item['antenna']?.toString() ?? '',
-            height: item['height']?.toString() ?? '',
-          );
-        }).toList();
-      } else if (jsonData is List) {
-        // OpenLogTool JSON format
-        importedLogs = jsonData.map((item) {
-          String callsign = '';
-          String qth = '';
-          if (item['callsign'] != null) callsign = item['callsign'].toString();
-          if (item['qth'] != null) qth = item['qth'].toString();
-
-          // Record callsign-qth history if enabled
-          if (settingsProvider.importCallsignQthHistoryEnabled &&
-              callsign.isNotEmpty && qth.isNotEmpty) {
-            callsignQthPairs.add([callsign, qth]);
-          }
-
-          return LogEntry(
-            time: item['time']?.toString() ?? '',
-            controller: item['controller']?.toString() ?? '',
-            callsign: callsign,
-            report: item['report']?.toString() ?? '59',
-            qth: qth,
-            device: item['device']?.toString() ?? '',
-            power: item['power']?.toString() ?? '',
-            antenna: item['antenna']?.toString() ?? '',
-            height: item['height']?.toString() ?? '',
-          );
-        }).toList();
-      } else {
-        _showSnackBar(context, '导入失败: 未知的JSON格式');
-        return;
-      }
+      final importResult = parseJsonImport(
+        content,
+        recordCallsignQth: settingsProvider.importCallsignQthHistoryEnabled,
+      );
 
       // Insert callsign-qth history records
-      final db = DatabaseHelper();
-      for (final pair in callsignQthPairs) {
-        await db.addCallsignQthRecord(pair[0], pair[1]);
+      if (importResult.callsignQthPairs.isNotEmpty) {
+        final db = DatabaseHelper();
+        for (final pair in importResult.callsignQthPairs) {
+          await db.addCallsignQthRecord(pair[0], pair[1]);
+        }
       }
 
-      logProvider.importLogs(importedLogs);
-      _showSnackBar(context, '导入成功: ${importedLogs.length} 条记录');
+      logProvider.importLogs(importResult.logs);
+      _showSnackBar(context, '导入成功: ${importResult.logs.length} 条记录');
     } catch (e) {
       _showSnackBar(context, '导入失败: $e');
     }
