@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -18,8 +18,10 @@ void main() {
   }
 
   runApp(
-    MultiProvider(
-      providers: [
+    DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        return MultiProvider(
+          providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
@@ -50,14 +52,22 @@ void main() {
             return provider;
           },
         ),
-      ],
-      child: const MyApp(),
-    ),
+        ],
+        child: MyApp(
+          lightDynamic: lightDynamic,
+          darkDynamic: darkDynamic,
+        ),
+      );
+    },
+  ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ColorScheme? lightDynamic;
+  final ColorScheme? darkDynamic;
+
+  const MyApp({super.key, this.lightDynamic, this.darkDynamic});
 
   @override
   Widget build(BuildContext context) {
@@ -66,37 +76,22 @@ class MyApp extends StatelessWidget {
     final themeColor = settingsProvider.themeColor;
     final fontFamily = settingsProvider.fontFamily;
 
-    final foruiTheme = FThemeData.inherit(
-      colorScheme: FColorScheme(
-        brightness: isDark ? Brightness.dark : Brightness.light,
-        background: isDark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF),
-        foreground: isDark ? const Color(0xFFFAFAFA) : const Color(0xFF09090B),
-        primary: themeColor,
-        primaryForeground:
-            isDark ? const Color(0xFF18181B) : const Color(0xFFFFFFFF),
-        secondary: isDark ? const Color(0xFF27272A) : const Color(0xFFF4F4F5),
-        secondaryForeground:
-            isDark ? const Color(0xFFFAFAFA) : const Color(0xFF18181B),
-        muted: isDark ? const Color(0xFF27272A) : const Color(0xFFF4F4F5),
-        mutedForeground:
-            isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A),
-        destructive: const Color(0xFFEF4444),
-        destructiveForeground: const Color(0xFFFAFAFA),
-        error: const Color(0xFFEF4444),
-        errorForeground: const Color(0xFFFAFAFA),
-        border: isDark ? const Color(0xFF27272A) : const Color(0xFFE4E4E7),
-      ),
-    );
+
+    final baseLight = (lightDynamic != null && settingsProvider.monetColorEnabled)
+        ? lightDynamic!
+        : ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.light);
+    final baseDark = (darkDynamic != null && settingsProvider.monetColorEnabled)
+        ? darkDynamic!
+        : ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.dark);
+
+    final vividRed = const Color(0xFFDC2626);
 
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.light,
-        ),
+        colorScheme: baseLight.harmonized().copyWith(error: vividRed),
         fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
@@ -109,18 +104,20 @@ class MyApp extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.dark,
-        ),
+        colorScheme: baseDark.harmonized().copyWith(error: vividRed),
         fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
@@ -133,17 +130,19 @@ class MyApp extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
       themeMode: settingsProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: FTheme(
-        data: foruiTheme,
-        child: const HomeScreen(),
-      ),
+      home: const HomeScreen(),
     );
   }
 }

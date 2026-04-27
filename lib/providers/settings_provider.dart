@@ -13,6 +13,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _callSignQthLinkKey = 'callSignQthLinkEnabled';
   static const String _paginationEnabledKey = 'paginationEnabled';
   static const String _importCallsignQthHistoryKey = 'importCallsignQthHistoryEnabled';
+  static const String _monetColorEnabledKey = 'monetColorEnabled';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
@@ -23,6 +24,7 @@ class SettingsProvider with ChangeNotifier {
   bool _callSignQthLinkEnabled = true;
   bool _paginationEnabled = false;
   bool _importCallsignQthHistoryEnabled = true;
+  bool _monetColorEnabled = false;
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
@@ -33,6 +35,7 @@ class SettingsProvider with ChangeNotifier {
   bool get callSignQthLinkEnabled => _callSignQthLinkEnabled;
   bool get paginationEnabled => _paginationEnabled;
   bool get importCallsignQthHistoryEnabled => _importCallsignQthHistoryEnabled;
+  bool get monetColorEnabled => _monetColorEnabled;
 
   SettingsProvider() {
     _loadSettings();
@@ -64,6 +67,7 @@ class SettingsProvider with ChangeNotifier {
     _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
     _paginationEnabled = prefs.getBool(_paginationEnabledKey) ?? false;
     _importCallsignQthHistoryEnabled = prefs.getBool(_importCallsignQthHistoryKey) ?? true;
+    _monetColorEnabled = prefs.getBool(_monetColorEnabledKey) ?? false;
 
     notifyListeners();
   }
@@ -119,6 +123,12 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setImportCallsignQthHistory(bool enabled) async {
     _importCallsignQthHistoryEnabled = enabled;
     await _saveSetting(_importCallsignQthHistoryKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setMonetColor(bool enabled) async {
+    _monetColorEnabled = enabled;
+    await _saveSetting(_monetColorEnabledKey, enabled);
     notifyListeners();
   }
 

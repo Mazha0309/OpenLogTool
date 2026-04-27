@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
@@ -13,78 +12,11 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/database/database_helper.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
-
-class _HSVSaturationValuePainter extends CustomPainter {
-  final double hue;
-  final double saturation;
-  final double value;
-
-  _HSVSaturationValuePainter(this.hue, this.saturation, this.value);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-
-    final saturationGradient = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-      colors: [
-        Colors.white,
-        HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
-      ],
-    );
-    canvas.drawRect(
-        rect, Paint()..shader = saturationGradient.createShader(rect));
-
-    final valueGradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        Colors.transparent,
-        Colors.black,
-      ],
-    );
-    canvas.drawRect(rect, Paint()..shader = valueGradient.createShader(rect));
-
-    final circleX = saturation * size.width;
-    final circleY = (1.0 - value) * size.height;
-    final circleColor =
-        HSVColor.fromAHSV(1.0, hue, saturation, value).toColor();
-
-    canvas.drawCircle(
-      Offset(circleX, circleY),
-      8,
-      Paint()
-        ..color = circleColor
-        ..style = PaintingStyle.fill,
-    );
-
-    canvas.drawCircle(
-      Offset(circleX, circleY),
-      8,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    canvas.drawCircle(
-      Offset(circleX, circleY),
-      10,
-      Paint()
-        ..color = Colors.black
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_HSVSaturationValuePainter oldDelegate) {
-    return oldDelegate.hue != hue ||
-        oldDelegate.saturation != saturation ||
-        oldDelegate.value != value;
-  }
-}
+import 'package:openlogtool/widgets/settings/theme_settings.dart';
+import 'package:openlogtool/widgets/settings/layout_settings.dart';
+import 'package:openlogtool/widgets/settings/data_operations.dart';
+import 'package:openlogtool/widgets/settings/subwidgets.dart';
+import 'package:openlogtool/widgets/hsv_color_painter.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -109,231 +41,18 @@ class SettingsPanel extends StatelessWidget {
 
         SizedBox(height: isNarrow ? 16 : 24),
 
-        // 主题设置
-        FCard(
-          child: Padding(
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '主题设置',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: isNarrow ? 8 : 12),
-
-                // 主题色选择器
-                Row(
-                  children: [
-                    const Text('主题颜色:'),
-                    const Spacer(),
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: settingsProvider.themeColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FButton(
-                      label: '选择颜色',
-                      onPress: () => _showColorPicker(context),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // 暗色模式开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('暗色模式'),
-                          SizedBox(height: 2),
-                          Text(
-                            '切换到暗色主题',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.isDarkMode,
-                      onChanged: (value) => settingsProvider.setDarkMode(value),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // 字体选择
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('字体'),
-                          SizedBox(height: 2),
-                          Text(
-                            '选择应用字体',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    FButton(
-                      label: settingsProvider.fontFamily ?? '系统默认',
-                      onPress: () => _showFontPicker(context),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        ThemeSettings(
+          isNarrow: isNarrow,
+          cardPadding: cardPadding,
+          onPickColor: () => _showColorPicker(context),
+          onPickFont: () => _showFontPicker(context),
         ),
 
         const SizedBox(height: 16),
 
-        // 布局设置
-        FCard(
-          child: Padding(
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '布局设置',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: isNarrow ? 8 : 12),
-
-                // 宽屏布局开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('启用宽屏平行布局'),
-                          SizedBox(height: 2),
-                          Text(
-                            '在窗口宽度足够时，将添加记录和已有记录并排显示',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.wideLayoutEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setWideLayout(value),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: isNarrow ? 10 : 12),
-
-                // 分页显示开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('分页显示记录'),
-                          SizedBox(height: 2),
-                          Text(
-                            '每5条记录分为一页显示',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.paginationEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setPaginationEnabled(value),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: isNarrow ? 10 : 12),
-
-                // QTH联动开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('呼号-QTH联动'),
-                          SizedBox(height: 2),
-                          Text(
-                            '自动关联呼号和QTH，输入呼号时显示历史QTH',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.callSignQthLinkEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setCallSignQthLink(value),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: isNarrow ? 10 : 12),
-
-                // 导入时记录呼号QTH历史开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '导入时记录呼号QTH',
-                            style: TextStyle(
-                              fontSize: isNarrow ? 13 : 14,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            '导入JSON时，将呼号与QTH联动记录到历史数据库',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.importCallsignQthHistoryEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setImportCallsignQthHistory(value),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        LayoutSettings(
+          isNarrow: isNarrow,
+          cardPadding: cardPadding,
         ),
 
         const SizedBox(height: 16),
@@ -351,7 +70,7 @@ class SettingsPanel extends StatelessWidget {
                 }
               });
             }
-            return FCard(
+            return Card(
               child: Padding(
                 padding: EdgeInsets.all(cardPadding),
                 child: Column(
@@ -376,7 +95,7 @@ class SettingsPanel extends StatelessWidget {
                     ),
                     if (syncProvider.settings.syncEnabled) ...[
                       const SizedBox(height: 12),
-                      _ServerSettingsFields(syncProvider: syncProvider),
+                      ServerSettingsFields(syncProvider: syncProvider),
                       const SizedBox(height: 8),
                       if (!syncProvider.isLoggedIn) ...[
                         if (syncProvider.isLoggingIn)
@@ -386,17 +105,17 @@ class SettingsPanel extends StatelessWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         else
-                          FButton(
-                            label: '子账号登录',
-                            onPress: () async {
+                          FilledButton(
+                            child: const Text('子账号登录'),
+                            onPressed: () async {
                               final result = await showDialog<bool>(
                                 context: context,
-                                builder: (ctx) => _LoginDialog(),
+                                builder: (ctx) => const LoginDialog(),
                               );
                               if (result == true) {
                                 final ok = await syncProvider.login(
-                                  _LoginDialog.username ?? '',
-                                  _LoginDialog.password ?? '',
+                                  LoginDialog.username ?? '',
+                                  LoginDialog.password ?? '',
                                 );
                                 if (context.mounted) {
                                   context.showLoggedSnackBar(
@@ -422,10 +141,10 @@ class SettingsPanel extends StatelessWidget {
                                   fontSize: 12, color: Colors.green),
                             ),
                             const Spacer(),
-                            FButton(
-                              label: '退出登录',
-                              style: FButtonStyle.destructive,
-                              onPress: () async {
+                            FilledButton(
+                              child: const Text('退出登录'),
+                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+                              onPressed: () async {
                                 await syncProvider.logout();
                                 if (context.mounted) {
                                   context.showLoggedSnackBar(
@@ -494,9 +213,9 @@ class SettingsPanel extends StatelessWidget {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            FButton(
-                              label: '测试连接',
-                              onPress: () async {
+                            FilledButton(
+                              child: const Text('测试连接'),
+                              onPressed: () async {
                                 final ok = await syncProvider.testConnection();
                                 if (context.mounted) {
                                   context.showLoggedSnackBar(
@@ -507,9 +226,9 @@ class SettingsPanel extends StatelessWidget {
                               },
                             ),
                             const SizedBox(width: 8),
-                            FButton(
-                              label: '重置同步基线',
-                              onPress: syncProvider.isConfigured
+                            FilledButton(
+                              child: const Text('重置同步基线'),
+                              onPressed: syncProvider.isConfigured
                                   ? () async {
                                       await syncProvider.resetSyncBaseline();
                                       if (context.mounted) {
@@ -555,9 +274,9 @@ class SettingsPanel extends StatelessWidget {
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
                             else
-                              FButton(
-                                label: '立即同步',
-                                onPress: syncProvider.isConfigured
+                              FilledButton(
+                                child: const Text('立即同步'),
+                                onPressed: syncProvider.isConfigured
                                     ? () => _performSync(context, syncProvider)
                                     : null,
                               ),
@@ -630,57 +349,14 @@ class SettingsPanel extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // 数据操作
-        FCard(
-          child: Padding(
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '数据操作',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: isNarrow ? 8 : 12),
-                _buildSettingsListTile(
-                  icon: Icons.storage,
-                  title: '数据库状态',
-                  subtitle: '查看数据库详细信息和日志',
-                  onTap: () => _showDatabaseLogDialog(context),
-                ),
-                _buildSettingsListTile(
-                  icon: Icons.message_outlined,
-                  title: '查看弹窗日志',
-                  subtitle: '查看本次运行期间记录的底部弹窗消息',
-                  onTap: () => _showSnackbarLogDialog(context),
-                ),
-                _buildSettingsListTile(
-                  icon: Icons.upload,
-                  title: '导出数据库',
-                  subtitle: '将数据库导出为JSON文件',
-                  onTap: () => _exportDatabase(context),
-                ),
-                _buildSettingsListTile(
-                  icon: Icons.download,
-                  title: '导入数据库',
-                  subtitle: '从JSON文件导入数据库',
-                  textColor: Colors.orange,
-                  onTap: () => _showImportDatabaseDialog(context),
-                ),
-                const Divider(),
-                _buildSettingsListTile(
-                  icon: Icons.delete_forever,
-                  title: '清空所有数据',
-                  subtitle: '删除所有点名记录和词典数据',
-                  textColor: Colors.red,
-                  onTap: () => _showClearDataConfirmation(context),
-                ),
-              ],
-            ),
-          ),
+        DataOperations(
+          isNarrow: isNarrow,
+          cardPadding: cardPadding,
+          onViewDatabaseLog: () => _showDatabaseLogDialog(context),
+          onExportDatabase: () => _exportDatabase(context),
+          onImportDatabase: () => _showImportDatabaseDialog(context),
+          onViewSnackbarLog: () => _showSnackbarLogDialog(context),
+          onClearAllData: () => _showClearDataConfirmation(context),
         ),
 
         const SizedBox(height: 16),
@@ -689,17 +365,17 @@ class SettingsPanel extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: FButton(
-                label: '恢复默认设置',
-                onPress: () => _showResetConfirmation(context),
-                style: FButtonStyle.destructive,
+              child: FilledButton(
+                child: const Text('恢复默认设置'),
+                onPressed: () => _showResetConfirmation(context),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: FButton(
-                label: '关于应用',
-                onPress: () => _showAboutDialog(context),
+              child: FilledButton(
+                child: const Text('关于应用'),
+                onPressed: () => _showAboutDialog(context),
               ),
             ),
           ],
@@ -962,7 +638,7 @@ class SettingsPanel extends StatelessWidget {
                           },
                           child: CustomPaint(
                             size: const Size(280, 150),
-                            painter: _HSVSaturationValuePainter(
+                            painter: HsvSaturationValuePainter(
                               hsvColor.hue,
                               hsvColor.saturation,
                               hsvColor.value,
@@ -1169,18 +845,18 @@ class SettingsPanel extends StatelessWidget {
   void _showResetConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '恢复默认设置',
-        body: '确定要恢复所有设置为默认值吗？',
+      builder: (context) => AlertDialog(
+        title: const Text('恢复默认设置'),
+        content: const Text('确定要恢复所有设置为默认值吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认恢复',
-            style: FButtonStyle.destructive,
-            onPress: () {
+          FilledButton(
+            child: const Text('确认恢复'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            onPressed: () {
               Provider.of<SettingsProvider>(context, listen: false)
                   .resetToDefaults();
               Navigator.pop(context);
@@ -1200,19 +876,18 @@ class SettingsPanel extends StatelessWidget {
   void _showClearDataConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '清空所有数据',
-        body:
-            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？',
+      builder: (context) => AlertDialog(
+        title: const Text('清空所有数据'),
+        content: const Text('⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认清空',
-            style: FButtonStyle.destructive,
-            onPress: () async {
+          FilledButton(
+            child: const Text('确认清空'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            onPressed: () async {
               Navigator.pop(context);
               try {
                 final dictionaryProvider =
@@ -1297,14 +972,14 @@ class SettingsPanel extends StatelessWidget {
         content:
             const Text('⚠️ 警告：导入将覆盖所有现有数据！\n\n此操作不可恢复，建议先导出当前数据库。\n\n确定要继续吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(dialogContext),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(dialogContext),
           ),
-          FButton(
-            label: '继续导入',
-            style: FButtonStyle.destructive,
-            onPress: () async {
+          FilledButton(
+            child: const Text('继续导入'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            onPressed: () async {
               Navigator.pop(dialogContext);
               await _importDatabase(context);
             },
@@ -1366,9 +1041,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '关闭',
-            onPress: () => Navigator.pop(dialogContext),
+          FilledButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(dialogContext),
           ),
         ],
       ),
@@ -1459,9 +1134,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '关闭',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -1523,9 +1198,9 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -1556,132 +1231,3 @@ class SettingsPanel extends StatelessWidget {
   }
 }
 
-class _ServerSettingsFields extends StatefulWidget {
-  final SyncProvider syncProvider;
-
-  const _ServerSettingsFields({required this.syncProvider});
-
-  @override
-  State<_ServerSettingsFields> createState() => _ServerSettingsFieldsState();
-}
-
-class _ServerSettingsFieldsState extends State<_ServerSettingsFields> {
-  late TextEditingController _serverUrlController;
-  late TextEditingController _deviceIdController;
-
-  @override
-  void initState() {
-    super.initState();
-    _serverUrlController =
-        TextEditingController(text: widget.syncProvider.settings.serverUrl);
-    _deviceIdController =
-        TextEditingController(text: widget.syncProvider.settings.deviceId);
-  }
-
-  @override
-  void didUpdateWidget(_ServerSettingsFields oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.syncProvider.settings.serverUrl != _serverUrlController.text) {
-      _serverUrlController.text = widget.syncProvider.settings.serverUrl;
-    }
-    if (widget.syncProvider.settings.deviceId != _deviceIdController.text) {
-      _deviceIdController.text = widget.syncProvider.settings.deviceId;
-    }
-  }
-
-  @override
-  void dispose() {
-    _serverUrlController.dispose();
-    _deviceIdController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TextField(
-          decoration: const InputDecoration(
-            labelText: '服务器地址',
-            hintText: 'http://localhost:3000',
-            border: OutlineInputBorder(),
-          ),
-          controller: _serverUrlController,
-          onChanged: (value) => widget.syncProvider.setServerUrl(value),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          decoration: const InputDecoration(
-            labelText: '设备ID',
-            hintText: 'device-001',
-            border: OutlineInputBorder(),
-          ),
-          controller: _deviceIdController,
-          onChanged: (value) => widget.syncProvider.setDeviceId(value),
-        ),
-      ],
-    );
-  }
-}
-
-class _LoginDialog extends StatefulWidget {
-  static String? username;
-  static String? password;
-
-  @override
-  State<_LoginDialog> createState() => _LoginDialogState();
-}
-
-class _LoginDialogState extends State<_LoginDialog> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('子账号登录'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: '用户名',
-              border: OutlineInputBorder(),
-            ),
-            controller: _usernameController,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            decoration: const InputDecoration(
-              labelText: '密码',
-              border: OutlineInputBorder(),
-            ),
-            obscureText: true,
-            controller: _passwordController,
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('取消'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            _LoginDialog.username = _usernameController.text;
-            _LoginDialog.password = _passwordController.text;
-            Navigator.pop(context, true);
-          },
-          child: const Text('登录'),
-        ),
-      ],
-    );
-  }
-}
