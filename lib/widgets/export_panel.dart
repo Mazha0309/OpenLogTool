@@ -106,7 +106,7 @@ class ExportPanel extends StatelessWidget {
   }
 
   Widget _buildExportCard(BuildContext context, double cardPadding) {
-    return FCard(
+    return Card(
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
@@ -166,7 +166,7 @@ class ExportPanel extends StatelessWidget {
   }
 
   Widget _buildImportCard(BuildContext context, double cardPadding) {
-    return FCard(
+    return Card(
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 
 class DataOperations extends StatelessWidget {
@@ -25,7 +24,7 @@ class DataOperations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FCard(
+    return Card(
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(

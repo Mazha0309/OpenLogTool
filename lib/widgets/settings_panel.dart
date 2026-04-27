@@ -71,7 +71,7 @@ class SettingsPanel extends StatelessWidget {
                 }
               });
             }
-            return FCard(
+            return Card(
               child: Padding(
                 padding: EdgeInsets.all(cardPadding),
                 child: Column(

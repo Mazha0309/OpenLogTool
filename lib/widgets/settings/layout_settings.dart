@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 
 class LayoutSettings extends StatelessWidget {
@@ -17,7 +16,7 @@ class LayoutSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
 
-    return FCard(
+    return Card(
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
