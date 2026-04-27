@@ -292,7 +292,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
               // 操作按钮 - 占满宽度
               SizedBox(
                 height: isNarrow ? 44 : 48,
-                child: ElevatedButton.icon(
+                child: FilledButton.icon(
                   onPressed: _submitForm,
                   icon: const Icon(Icons.add),
                   label: const Text('添加记录'),

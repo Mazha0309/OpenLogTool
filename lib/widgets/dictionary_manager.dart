@@ -162,7 +162,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton.icon(
+                      FilledButton.icon(
                         icon: const Icon(Icons.add),
                         label: const Text('添加'),
                         onPressed: () {
@@ -179,7 +179,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                   const SizedBox(height: 16),
 
                   // 导入文件按钮
-                  ElevatedButton.icon(
+                  FilledButton.icon(
                     icon: const Icon(Icons.file_upload),
                     label: const Text('从文件导入'),
                     onPressed: () => _importFromFile(type),
@@ -268,7 +268,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            ElevatedButton.icon(
+            FilledButton.icon(
               icon: Icon(allExpanded ? Icons.expand_less : Icons.expand_more, size: isNarrow ? 18 : null),
               label: Text(allExpanded ? '折叠全部' : '展开全部'),
               onPressed: _toggleAll,
