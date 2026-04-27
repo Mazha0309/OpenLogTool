@@ -330,7 +330,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       ),
       keyboardType: keyboardType,
       onChanged: onChanged,
-      onFieldSubmitted: onSubmitted ?? (_) => FocusScope.of(context).nextFocus(),
+      onFieldSubmitted: onSubmitted,
       textInputAction: textInputAction ?? TextInputAction.next,
       textCapitalization: upperCase ? TextCapitalization.characters : TextCapitalization.none,
       inputFormatters: upperCase ? [UpperCaseTextFormatter()] : [],
@@ -386,7 +386,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             controller.text = upperCase ? value.toUpperCase() : value;
             onChanged?.call(value);
           },
-          onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
           textInputAction: textInputAction ?? TextInputAction.next,
           textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
@@ -468,7 +467,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           onChanged: (value) {
             controller.text = value.toUpperCase();
           },
-          onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
           textInputAction: textInputAction ?? TextInputAction.next,
           textCapitalization: TextCapitalization.characters,
           inputFormatters: [UpperCaseTextFormatter()],
@@ -858,7 +856,6 @@ class _QthFieldWithHistoryState extends State<_QthFieldWithHistory> {
                 _hideOverlay();
               }
             },
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
             textInputAction: widget.textInputAction ?? TextInputAction.next,
           );
         },
