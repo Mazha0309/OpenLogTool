@@ -13,6 +13,9 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/database/database_helper.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
+import 'package:openlogtool/widgets/settings/theme_settings.dart';
+import 'package:openlogtool/widgets/settings/layout_settings.dart';
+import 'package:openlogtool/widgets/settings/data_operations.dart';
 
 class _HSVSaturationValuePainter extends CustomPainter {
   final double hue;
@@ -109,231 +112,18 @@ class SettingsPanel extends StatelessWidget {
 
         SizedBox(height: isNarrow ? 16 : 24),
 
-        // 主题设置
-        FCard(
-          child: Padding(
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '主题设置',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: isNarrow ? 8 : 12),
-
-                // 主题色选择器
-                Row(
-                  children: [
-                    const Text('主题颜色:'),
-                    const Spacer(),
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: settingsProvider.themeColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FButton(
-                      label: '选择颜色',
-                      onPress: () => _showColorPicker(context),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // 暗色模式开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('暗色模式'),
-                          SizedBox(height: 2),
-                          Text(
-                            '切换到暗色主题',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.isDarkMode,
-                      onChanged: (value) => settingsProvider.setDarkMode(value),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // 字体选择
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('字体'),
-                          SizedBox(height: 2),
-                          Text(
-                            '选择应用字体',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    FButton(
-                      label: settingsProvider.fontFamily ?? '系统默认',
-                      onPress: () => _showFontPicker(context),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        ThemeSettings(
+          isNarrow: isNarrow,
+          cardPadding: cardPadding,
+          onPickColor: () => _showColorPicker(context),
+          onPickFont: () => _showFontPicker(context),
         ),
 
         const SizedBox(height: 16),
 
-        // 布局设置
-        FCard(
-          child: Padding(
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '布局设置',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: isNarrow ? 8 : 12),
-
-                // 宽屏布局开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('启用宽屏平行布局'),
-                          SizedBox(height: 2),
-                          Text(
-                            '在窗口宽度足够时，将添加记录和已有记录并排显示',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.wideLayoutEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setWideLayout(value),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: isNarrow ? 10 : 12),
-
-                // 分页显示开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('分页显示记录'),
-                          SizedBox(height: 2),
-                          Text(
-                            '每5条记录分为一页显示',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.paginationEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setPaginationEnabled(value),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: isNarrow ? 10 : 12),
-
-                // QTH联动开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('呼号-QTH联动'),
-                          SizedBox(height: 2),
-                          Text(
-                            '自动关联呼号和QTH，输入呼号时显示历史QTH',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.callSignQthLinkEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setCallSignQthLink(value),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: isNarrow ? 10 : 12),
-
-                // 导入时记录呼号QTH历史开关
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '导入时记录呼号QTH',
-                            style: TextStyle(
-                              fontSize: isNarrow ? 13 : 14,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            '导入JSON时，将呼号与QTH联动记录到历史数据库',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: settingsProvider.importCallsignQthHistoryEnabled,
-                      onChanged: (value) =>
-                          settingsProvider.setImportCallsignQthHistory(value),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        LayoutSettings(
+          isNarrow: isNarrow,
+          cardPadding: cardPadding,
         ),
 
         const SizedBox(height: 16),
@@ -630,57 +420,14 @@ class SettingsPanel extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // 数据操作
-        FCard(
-          child: Padding(
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '数据操作',
-                  style: TextStyle(
-                    fontSize: isNarrow ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: isNarrow ? 8 : 12),
-                _buildSettingsListTile(
-                  icon: Icons.storage,
-                  title: '数据库状态',
-                  subtitle: '查看数据库详细信息和日志',
-                  onTap: () => _showDatabaseLogDialog(context),
-                ),
-                _buildSettingsListTile(
-                  icon: Icons.message_outlined,
-                  title: '查看弹窗日志',
-                  subtitle: '查看本次运行期间记录的底部弹窗消息',
-                  onTap: () => _showSnackbarLogDialog(context),
-                ),
-                _buildSettingsListTile(
-                  icon: Icons.upload,
-                  title: '导出数据库',
-                  subtitle: '将数据库导出为JSON文件',
-                  onTap: () => _exportDatabase(context),
-                ),
-                _buildSettingsListTile(
-                  icon: Icons.download,
-                  title: '导入数据库',
-                  subtitle: '从JSON文件导入数据库',
-                  textColor: Colors.orange,
-                  onTap: () => _showImportDatabaseDialog(context),
-                ),
-                const Divider(),
-                _buildSettingsListTile(
-                  icon: Icons.delete_forever,
-                  title: '清空所有数据',
-                  subtitle: '删除所有点名记录和词典数据',
-                  textColor: Colors.red,
-                  onTap: () => _showClearDataConfirmation(context),
-                ),
-              ],
-            ),
-          ),
+        DataOperations(
+          isNarrow: isNarrow,
+          cardPadding: cardPadding,
+          onViewDatabaseLog: () => _showDatabaseLogDialog(context),
+          onExportDatabase: () => _exportDatabase(context),
+          onImportDatabase: () => _showImportDatabaseDialog(context),
+          onViewSnackbarLog: () => _showSnackbarLogDialog(context),
+          onClearAllData: () => _showClearDataConfirmation(context),
         ),
 
         const SizedBox(height: 16),
