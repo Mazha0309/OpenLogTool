@@ -416,16 +416,24 @@ class AddRecordPage extends StatelessWidget {
           FilledButton(
             child: const Text('开始新记录'),
             onPressed: () async {
-              final name = controller.text.trim();
-              final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-              await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
-              await Provider.of<LogProvider>(context, listen: false)
-                  .reloadForSession(sessionProvider.currentSessionId);
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                context.showLoggedSnackBar(
-                  SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
-                );
+              try {
+                final name = controller.text.trim();
+                final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
+                await Provider.of<LogProvider>(context, listen: false)
+                    .reloadForSession(sessionProvider.currentSessionId);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  context.showLoggedSnackBar(
+                    SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
+                  );
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('创建失败: $e'), backgroundColor: Colors.red),
+                  );
+                }
               }
             },
           ),
