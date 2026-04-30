@@ -428,7 +428,8 @@ class AddRecordPage extends StatelessWidget {
                     SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
                   );
                 }
-              } catch (e) {
+              } catch (e, st) {
+                debugPrint('[SessionDialog] ERROR: $e\n$st');
                 if (context.mounted) {
                   context.showLoggedSnackBar(
                     SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Theme.of(context).colorScheme.error),
