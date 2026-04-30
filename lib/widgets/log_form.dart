@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
@@ -79,6 +80,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
     if (!_validateForm()) return;
 
     final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
@@ -110,7 +112,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
       height: _heightController.text,
     );
 
-    await logProvider.addLog(log);
+    await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
     _resetForm();
     _qthFieldKey.currentState?.refresh();
 
