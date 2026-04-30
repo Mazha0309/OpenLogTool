@@ -430,9 +430,19 @@ class AddRecordPage extends StatelessWidget {
                 }
               } catch (e, st) {
                 debugPrint('[SessionDialog] ERROR: $e\n$st');
-                if (context.mounted) {
-                  context.showLoggedSnackBar(
-                    SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+                if (ctx.mounted) {
+                  showDialog(
+                    context: ctx,
+                    builder: (c) => AlertDialog(
+                      title: const Text('创建失败'),
+                      content: Text('$e'),
+                      actions: [
+                        FilledButton(
+                          child: const Text('确定'),
+                          onPressed: () => Navigator.pop(c),
+                        ),
+                      ],
+                    ),
                   );
                 }
               }
