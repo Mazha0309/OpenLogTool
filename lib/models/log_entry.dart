@@ -17,6 +17,7 @@ class LogEntry {
   final String updatedAt;
   final String? deletedAt;
   final String? sourceDeviceId;
+  final String? sessionId;
 
   factory LogEntry({
     int? localId,
@@ -34,6 +35,7 @@ class LogEntry {
     String? updatedAt,
     String? deletedAt,
     String? sourceDeviceId,
+    String? sessionId,
   }) {
     final normalizedId = _normalizeSyncId(id, prefix: 'log');
     final normalizedCreatedAt = _normalizeTimestamp(createdAt);
@@ -54,6 +56,7 @@ class LogEntry {
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
       sourceDeviceId: sourceDeviceId,
+      sessionId: sessionId,
     );
   }
 
@@ -74,6 +77,7 @@ class LogEntry {
     required this.updatedAt,
     required this.deletedAt,
     required this.sourceDeviceId,
+    required this.sessionId,
   });
 
   static bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
@@ -138,6 +142,7 @@ class LogEntry {
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
       'sourceDeviceId': sourceDeviceId,
+      'sessionId': sessionId,
     };
   }
 
@@ -158,6 +163,7 @@ class LogEntry {
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
       'source_device_id': sourceDeviceId,
+      'session_id': sessionId,
     };
   }
 
@@ -178,6 +184,7 @@ class LogEntry {
       updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
       deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
       sourceDeviceId: _normalizeNullableString(json['sourceDeviceId'] ?? json['source_device_id']),
+      sessionId: _normalizeNullableString(json['sessionId'] ?? json['session_id']),
     );
   }
 
@@ -198,6 +205,7 @@ class LogEntry {
       updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
       deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
       sourceDeviceId: _normalizeNullableString(map['source_device_id'] ?? map['sourceDeviceId']),
+      sessionId: _normalizeNullableString(map['session_id'] ?? map['sessionId']),
     );
   }
 
@@ -231,6 +239,7 @@ class LogEntry {
     String? updatedAt,
     Object? deletedAt = _copyWithSentinel,
     Object? sourceDeviceId = _copyWithSentinel,
+    Object? sessionId = _copyWithSentinel,
   }) {
     return LogEntry(
       localId: localId ?? this.localId,
@@ -250,6 +259,9 @@ class LogEntry {
       sourceDeviceId: identical(sourceDeviceId, _copyWithSentinel)
           ? this.sourceDeviceId
           : sourceDeviceId as String?,
+      sessionId: identical(sessionId, _copyWithSentinel)
+          ? this.sessionId
+          : sessionId as String?,
     );
   }
 }
