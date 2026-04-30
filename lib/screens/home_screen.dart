@@ -429,9 +429,9 @@ class AddRecordPage extends StatelessWidget {
                   );
                 }
               } catch (e) {
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('创建失败: $e'), backgroundColor: Colors.red),
+                if (context.mounted) {
+                  context.showLoggedSnackBar(
+                    SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Theme.of(context).colorScheme.error),
                   );
                 }
               }
