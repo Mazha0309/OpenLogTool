@@ -151,12 +151,13 @@ class LogProvider with ChangeNotifier {
     await _notifyDataChanged();
   }
 
-  Future<void> importLogs(List<LogEntry> importedLogs) async {
+  Future<void> importLogs(List<LogEntry> importedLogs, {String? sessionId}) async {
     final db = DatabaseHelper();
     for (final log in importedLogs) {
-      final localId = await db.insertLog(log);
+      final effectiveLog = sessionId != null ? log.copyWith(sessionId: sessionId) : log;
+      final localId = await db.insertLog(effectiveLog);
       final persistedLog = await db.getLogByLocalId(localId);
-      _logs.add(persistedLog ?? log);
+      _logs.add(persistedLog ?? effectiveLog);
     }
     notifyListeners();
     await _notifyDataChanged();
