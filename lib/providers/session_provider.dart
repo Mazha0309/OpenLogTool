@@ -64,6 +64,7 @@ class SessionProvider with ChangeNotifier {
     final db = DatabaseHelper();
 
     if (_currentSessionId != null) {
+      debugPrint('[Session] closing session: $_currentSessionId');
       await db.closeSession(_currentSessionId!);
     }
 
@@ -84,10 +85,12 @@ class SessionProvider with ChangeNotifier {
       sourceDeviceId: instanceId,
     );
 
+    debugPrint('[Session] inserting: ${session.toMap()}');
     await db.insertSession(session);
     _currentSessionId = newSessionId;
     _currentSession = session;
     await _saveCurrentSessionId();
+    debugPrint('[Session] new session ready: $newSessionId');
     notifyListeners();
   }
 
