@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/database/database_helper.dart';
@@ -1090,6 +1091,7 @@ class ExportPanel extends StatelessWidget {
       final content = await file.readAsString();
 
       final logProvider = Provider.of<LogProvider>(context, listen: false);
+      final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
       final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
       final importResult = parseJsonImport(
@@ -1105,7 +1107,7 @@ class ExportPanel extends StatelessWidget {
         }
       }
 
-      logProvider.importLogs(importResult.logs);
+      logProvider.importLogs(importResult.logs, sessionId: sessionProvider.currentSessionId);
       _showSnackBar(context, '导入成功: ${importResult.logs.length} 条记录');
     } catch (e) {
       _showSnackBar(context, '导入失败: $e');
