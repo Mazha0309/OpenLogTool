@@ -879,13 +879,20 @@ class DatabaseHelper {
         maps.length, (int i) => LogEntry.fromMap(maps[i]));
   }
 
-  Future<List<LogEntry>> getVisibleLogs() async {
+  Future<List<LogEntry>> getVisibleLogs([String? sessionId]) async {
     final db = await database;
-    final maps = await db.query(
-      _logsTable,
-      where: 'deleted_at IS NULL',
-      orderBy: 'id ASC',
-    );
+    final maps = sessionId != null
+        ? await db.query(
+            _logsTable,
+            where: 'deleted_at IS NULL AND session_id = ?',
+            whereArgs: [sessionId],
+            orderBy: 'id ASC',
+          )
+        : await db.query(
+            _logsTable,
+            where: 'deleted_at IS NULL',
+            orderBy: 'id ASC',
+          );
     return List<LogEntry>.generate(
         maps.length, (int i) => LogEntry.fromMap(maps[i]));
   }
