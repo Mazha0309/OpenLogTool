@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/models/session.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -15,6 +16,7 @@ class DatabaseHelper {
   static const String _databaseName = 'openlogtool.db';
   static const String _logsTable = 'logs';
   static const String _historyTable = 'history';
+  static const String _sessionsTable = 'sessions';
   static const String _callsignQthHistoryTable = 'callsign_qth_history';
   static const List<String> _dictionaryTables = <String>[
     'device_dictionary',
@@ -53,7 +55,9 @@ class DatabaseHelper {
     await _ensureHistoryTableExists(db);
     await _ensureLogsTableExists(db);
     await _ensureCallsignQthHistoryTableExists(db);
+    await _ensureSessionsTableExists(db);
     await _migrateSyncSchema(db);
+    await _migrateHistoryToSessions(db);
 
     final count = Sqflite.firstIntValue(
       await db.rawQuery('SELECT COUNT(*) FROM device_dictionary'),
@@ -71,6 +75,7 @@ class DatabaseHelper {
     await _createDictionaryTable(db, 'callsign_dictionary');
     await _createHistoryTable(db);
     await _createCallsignQthHistoryTable(db);
+    await _createSessionsTable(db);
     await _loadInitialDictionaries(db);
   }
 
@@ -90,6 +95,10 @@ class DatabaseHelper {
 
   Future<void> _ensureCallsignQthHistoryTableExists(Database db) async {
     await _createCallsignQthHistoryTable(db, ifNotExists: true);
+  }
+
+  Future<void> _ensureSessionsTableExists(Database db) async {
+    await _createSessionsTable(db, ifNotExists: true);
   }
 
   Future<void> _createLogsTable(Database db, {bool ifNotExists = false}) async {
@@ -163,6 +172,27 @@ class DatabaseHelper {
     }
   }
 
+  Future<void> _createSessionsTable(Database db,
+      {bool ifNotExists = false}) async {
+    await db.execute('''
+      CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}$_sessionsTable (
+        session_id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        closed_at TEXT,
+        deleted_at TEXT,
+        source_device_id TEXT
+      )
+    ''');
+    if (!ifNotExists) {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sessions_status ON $_sessionsTable(status)',
+      );
+    }
+  }
+
   Future<void> _createCallsignQthHistoryTable(
     Database db, {
     bool ifNotExists = false,
@@ -209,8 +239,12 @@ class DatabaseHelper {
     await _ensureColumn(db, _logsTable, 'updated_at', 'TEXT');
     await _ensureColumn(db, _logsTable, 'deleted_at', 'TEXT');
     await _ensureColumn(db, _logsTable, 'source_device_id', 'TEXT');
+    await _ensureColumn(db, _logsTable, 'session_id', 'TEXT');
     await _repairDuplicateSyncIds(db, _logsTable, 'log');
     await _ensureUniqueIndex(db, 'idx_logs_sync_id', _logsTable, 'sync_id');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_logs_session_id ON $_logsTable(session_id)',
+    );
 
     final rows = await db.query(
       _logsTable,
@@ -391,6 +425,35 @@ class DatabaseHelper {
     await batch.commit(noResult: true);
   }
 
+  Future<void> _migrateHistoryToSessions(Database db) async {
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery("SELECT COUNT(*) FROM $_sessionsTable"),
+    );
+    if (count != null && count > 0) return;
+
+    final histories = await db.query(_historyTable);
+
+    for (final h in histories) {
+      final syncId = h['sync_id']?.toString();
+      if (syncId == null) continue;
+
+      final sessionId = Session.migrationSessionId(syncId);
+      final name = h['name']?.toString() ?? '未命名记录';
+
+      await db.insert(_sessionsTable, {
+        'session_id': sessionId,
+        'title': name,
+        'status': 'closed',
+        'created_at':
+            h['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
+        'updated_at':
+            h['updated_at'] ?? h['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
+        'closed_at':
+            h['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
+      });
+    }
+  }
+
   Future<void> _ensureColumn(
     Database db,
     String tableName,
@@ -525,6 +588,7 @@ class DatabaseHelper {
       'updated_at': updatedAt,
       'deleted_at': log.deletedAt,
       'source_device_id': _stringOrNull(log.sourceDeviceId),
+      'session_id': log.sessionId,
     };
   }
 
@@ -1189,6 +1253,71 @@ class DatabaseHelper {
 
   Future<void> softDeleteHistory(String syncId, String deletedAt) async {
     await _softDeleteBySyncId(_historyTable, syncId, deletedAt);
+  }
+
+  // Session operations
+  Future<List<Map<String, dynamic>>> getActiveSession() async {
+    final db = await database;
+    return db.query(
+      _sessionsTable,
+      where: 'status = ? AND deleted_at IS NULL',
+      whereArgs: ['active'],
+      limit: 1,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getClosedSessions() async {
+    final db = await database;
+    return db.query(
+      _sessionsTable,
+      where: "status IN ('closed', 'archived') AND deleted_at IS NULL",
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  Future<void> insertSession(Session session) async {
+    final db = await database;
+    await db.insert(_sessionsTable, session.toMap());
+  }
+
+  Future<void> closeSession(String sessionId) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.update(
+      _sessionsTable,
+      {
+        'status': 'closed',
+        'closed_at': now,
+        'updated_at': now,
+      },
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getSessionsChangedSince(
+      String since) async {
+    final db = await database;
+    return db.query(
+      _sessionsTable,
+      where: 'updated_at > ? OR deleted_at > ?',
+      whereArgs: [since, since],
+    );
+  }
+
+  Future<void> upsertSessionFromSync(Map<String, dynamic> data) async {
+    final sessionId = data['session_id']?.toString();
+    if (sessionId == null) return;
+
+    await _upsertSyncRow(
+      tableName: _sessionsTable,
+      syncId: sessionId,
+      incomingRow: data,
+    );
+  }
+
+  Future<void> softDeleteSession(String sessionId, String deletedAt) async {
+    await _softDeleteBySyncId(_sessionsTable, sessionId, deletedAt);
   }
 
   Future<String> exportDatabase() async {

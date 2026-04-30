@@ -9,6 +9,7 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/sync_callsign_qth_record.dart';
 import 'package:openlogtool/models/sync_history_record.dart';
 import 'package:openlogtool/services/auth_service.dart';
+import 'package:openlogtool/services/instance_service.dart';
 
 class SyncSettings {
   final String serverUrl;
@@ -337,6 +338,7 @@ class SyncProvider with ChangeNotifier {
     final history = await db.getHistoryChangedSince(since);
     final callsignQthHistory =
         await db.getCallsignQthHistoryChangedSince(since);
+    final sessions = await db.getSessionsChangedSince(since);
 
     final dictionaries = _buildDictionarySyncPayload();
     dictionaries['rigs'] = deviceDicts
@@ -360,11 +362,26 @@ class SyncProvider with ChangeNotifier {
           .map((row) => _normalizeCallsignQthPayload(row))
           .toList(),
       'history': history.map((row) => _normalizeHistoryPayload(row)).toList(),
+      'sessions': sessions,
     };
   }
 
   Future<void> _applyBidirectionalChanges(Map<String, dynamic> changes) async {
     final db = DatabaseHelper();
+
+    final sessions =
+        List<Map<String, dynamic>>.from(changes['sessions'] ?? const []);
+    for (final item in sessions) {
+      final normalized = _normalizeIncomingSyncItem(item);
+      final sessionId = normalized['session_id']?.toString();
+      final deletedAt = normalized['deleted_at']?.toString();
+      if (sessionId == null) continue;
+      if (deletedAt != null) {
+        await db.softDeleteSession(sessionId, deletedAt);
+      } else {
+        await db.upsertSessionFromSync(normalized);
+      }
+    }
 
     final logs = List<Map<String, dynamic>>.from(changes['logs'] ?? const []);
     for (final item in logs) {
@@ -449,12 +466,14 @@ class SyncProvider with ChangeNotifier {
         headers['Authorization'] = 'Bearer ${_settings.token}';
       }
 
+      final instanceId = await InstanceService.getInstanceId();
       final uri = Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/bidirectional');
       final response = await http.post(
         uri,
         headers: headers,
         body: json.encode({
           'deviceId': _settings.deviceId,
+          'clientInstanceId': instanceId,
           'lastSyncAt': _lastSyncAtValue(),
           'payload': payload,
         }),
@@ -708,11 +727,13 @@ class SyncProvider with ChangeNotifier {
       }
 
       final uri = Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/push');
+      final instanceId = await InstanceService.getInstanceId();
       final response = await http.post(
         uri,
         headers: headers,
         body: json.encode({
           'deviceId': _settings.deviceId,
+          'clientInstanceId': instanceId,
           'payload': {
             'logs': logs,
             'dictionaries': dictionaries ?? _buildDictionarySyncPayload(),
