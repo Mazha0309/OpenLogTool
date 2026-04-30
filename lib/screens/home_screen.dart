@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
@@ -20,6 +21,15 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _isBottomNavVisible = true;
   double _lastScrollOffset = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final session = context.read<SessionProvider>();
+      context.read<LogProvider>().reloadForSession(session.currentSessionId);
+    });
+  }
 
   void _onScroll(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification) {
@@ -374,12 +384,59 @@ class AddRecordPage extends StatelessWidget {
           FilledButton(
             child: const Text('确认清空'),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-            onPressed: () {
-              Provider.of<LogProvider>(context, listen: false).clearAllLogs();
+            onPressed: () async {
               Navigator.pop(context);
-              context.showLoggedSnackBar(
-                const SnackBar(content: Text('已清空所有记录')),
-              );
+              _showNewSessionNameDialog(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNewSessionNameDialog(BuildContext context) {
+    final controller = TextEditingController();
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('新记录名称'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入本次记录名称（可留空）',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          FilledButton(
+            child: const Text('开始新记录'),
+            onPressed: () async {
+              try {
+                final name = controller.text.trim();
+                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
+                await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  context.showLoggedSnackBar(
+                    SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
+                  );
+                }
+              } catch (e, st) {
+                debugPrint('[SessionDialog] ERROR: $e\n$st');
+                Navigator.pop(ctx);
+                if (context.mounted) {
+                  context.showLoggedSnackBar(
+                    SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
             },
           ),
         ],
