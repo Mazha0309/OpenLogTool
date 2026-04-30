@@ -7,6 +7,7 @@ class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
   List<LogEntry> _undoStack = [];
   Future<void> Function()? _onDataChanged;
+  String? _currentSessionId;
 
   List<LogEntry> get logs => _logs;
   int get logCount => _logs.length;
@@ -14,6 +15,11 @@ class LogProvider with ChangeNotifier {
 
   void setOnDataChanged(Future<void> Function()? callback) {
     _onDataChanged = callback;
+  }
+
+  Future<void> reloadForSession(String? sessionId) async {
+    _currentSessionId = sessionId;
+    await _loadLogs();
   }
 
   Future<void> _notifyDataChanged() async {
@@ -36,7 +42,7 @@ class LogProvider with ChangeNotifier {
 
   Future<void> _loadLogs() async {
     final db = DatabaseHelper();
-    _logs = await db.getVisibleLogs();
+    _logs = await db.getVisibleLogs(_currentSessionId);
     notifyListeners();
   }
 
