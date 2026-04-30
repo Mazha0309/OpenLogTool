@@ -7,6 +7,7 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -26,6 +27,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProvider(create: (_) => SessionProvider()),
         ChangeNotifierProxyProvider<SyncProvider, DictionaryProvider>(
           create: (_) => DictionaryProvider(),
           update: (_, syncProvider, dictionaryProvider) {
