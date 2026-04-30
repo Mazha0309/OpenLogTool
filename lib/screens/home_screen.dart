@@ -384,7 +384,7 @@ class AddRecordPage extends StatelessWidget {
           FilledButton(
             child: const Text('确认清空'),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
               _showNewSessionNameDialog(context);
             },
@@ -396,6 +396,8 @@ class AddRecordPage extends StatelessWidget {
 
   void _showNewSessionNameDialog(BuildContext context) {
     final controller = TextEditingController();
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -418,10 +420,8 @@ class AddRecordPage extends StatelessWidget {
             onPressed: () async {
               try {
                 final name = controller.text.trim();
-                final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
                 await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
-                await Provider.of<LogProvider>(context, listen: false)
-                    .reloadForSession(sessionProvider.currentSessionId);
+                await logProvider.reloadForSession(sessionProvider.currentSessionId);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   context.showLoggedSnackBar(
