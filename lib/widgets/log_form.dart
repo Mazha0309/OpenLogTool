@@ -26,6 +26,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
       GlobalKey<QthFieldWithHistoryState>();
   final _controllerController = TextEditingController();
   final _callsignController = TextEditingController();
+  final FocusNode _callsignFocusNode = FocusNode();
   final _deviceController = TextEditingController();
   final _antennaController = TextEditingController();
   final _powerController = TextEditingController();
@@ -44,6 +45,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
   void dispose() {
     _controllerController.dispose();
     _callsignController.dispose();
+    _callsignFocusNode.dispose();
     _deviceController.dispose();
     _antennaController.dispose();
     _powerController.dispose();
@@ -139,7 +141,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
       _controllerError = null;
       _reportError = null;
     });
-    FocusScope.of(context).requestFocus(FocusNode());
+    FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 
   @override
@@ -192,6 +194,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
                       dictionaryOptions: dictionaryProvider.callsignDict,
                       label: '点名呼号',
                       hintText: '输入呼号',
+                      focusNode: _callsignFocusNode,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
                     ),
@@ -434,6 +437,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
     required String label,
     required String hintText,
     TextInputAction? textInputAction,
+    FocusNode? focusNode,
     bool isCompact = false,
   }) {
     return Autocomplete<DictionaryItem>(
@@ -460,7 +464,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
         });
         return TextFormField(
           controller: fieldController,
-          focusNode: fieldFocusNode,
+          focusNode: focusNode ?? fieldFocusNode,
           decoration: InputDecoration(
             labelText: label,
             hintText: hintText,

@@ -289,7 +289,7 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
             });
             return TextFormField(
               controller: fieldController,
-              focusNode: fieldFocusNode,
+              focusNode: _focusNode,
               decoration: InputDecoration(
                 labelText: widget.label,
                 hintText: widget.hintText,

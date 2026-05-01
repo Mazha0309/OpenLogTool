@@ -27,7 +27,6 @@ dependencies:
   sqflite: ^2.4.0
   sqflite_common_ffi: ^2.3.0
   http: ^1.2.0
-  dynamic_color: ^1.8.1
   web_socket_channel: ^2.4.0
 
 dev_dependencies:

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:dynamic_color/dynamic_color.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
@@ -19,10 +18,8 @@ void main() {
   }
 
   runApp(
-    DynamicColorBuilder(
-      builder: (lightDynamic, darkDynamic) {
-        return MultiProvider(
-          providers: [
+    MultiProvider(
+      providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
@@ -71,46 +68,32 @@ void main() {
             return provider;
           },
         ),
-        ],
-        child: MyApp(
-          lightDynamic: lightDynamic,
-          darkDynamic: darkDynamic,
-        ),
-      );
-    },
-  ),
+      ],
+      child: const MyApp(),
+    ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  final ColorScheme? lightDynamic;
-  final ColorScheme? darkDynamic;
-
-  const MyApp({super.key, this.lightDynamic, this.darkDynamic});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
-    final isDark = settingsProvider.isDarkMode;
     final themeColor = settingsProvider.themeColor;
     final fontFamily = settingsProvider.fontFamily;
 
-
-    final baseLight = (lightDynamic != null && settingsProvider.monetColorEnabled)
-        ? lightDynamic!
-        : ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.light);
-    final baseDark = (darkDynamic != null && settingsProvider.monetColorEnabled)
-        ? darkDynamic!
-        : ColorScheme.fromSeed(seedColor: themeColor, brightness: Brightness.dark);
-
-    final vividRed = const Color(0xFFDC2626);
+    const vividRed = Color(0xFFDC2626);
 
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: baseLight.harmonized().copyWith(error: vividRed),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: themeColor,
+          brightness: Brightness.light,
+        ).copyWith(error: vividRed),
         fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
@@ -136,7 +119,10 @@ class MyApp extends StatelessWidget {
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
-        colorScheme: baseDark.harmonized().copyWith(error: vividRed),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: themeColor,
+          brightness: Brightness.dark,
+        ).copyWith(error: vividRed),
         fontFamily: fontFamily,
         cardTheme: CardThemeData(
           elevation: 0,
