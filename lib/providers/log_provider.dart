@@ -135,31 +135,17 @@ class LogProvider with ChangeNotifier {
 
   Future<List<Map<String, dynamic>>> getHistory() async {
     final db = DatabaseHelper();
-    return await db.getAllHistory();
+    return await db.getClosedSessions();
   }
 
-  Future<void> restoreFromHistory(int historyId) async {
-    final db = DatabaseHelper();
-    final historyLogs = await db.getHistoryLogs(historyId);
-    final deletedAt = DateTime.now().toUtc().toIso8601String();
-    for (final log in _logs) {
-      await db.softDeleteLog(log.id, deletedAt);
-    }
-    _logs.clear();
-    for (final log in historyLogs) {
-      final localId = await db.insertLog(log);
-      final persistedLog = await db.getLogByLocalId(localId);
-      _logs.add(persistedLog ?? log);
-    }
-    notifyListeners();
-    await _notifyDataChanged();
+  Future<void> switchToSession(String sessionId) async {
+    _currentSessionId = sessionId;
+    await _loadLogs();
   }
 
-  Future<void> deleteHistoryRecord(int historyId) async {
+  Future<void> deleteSession(String sessionId) async {
     final db = DatabaseHelper();
-    await db.deleteHistory(historyId);
-    notifyListeners();
-    await _notifyDataChanged();
+    await db.softDeleteSession(sessionId, DateTime.now().toUtc().toIso8601String());
   }
 
   Future<void> importLogs(List<LogEntry> importedLogs, {String? sessionId}) async {

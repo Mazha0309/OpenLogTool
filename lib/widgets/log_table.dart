@@ -493,13 +493,11 @@ class _LogTableState extends State<LogTable> {
 
   void _showHistoryDialog(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final history = await logProvider.getHistory();
+    final sessions = await logProvider.getHistory();
 
-    if (history.isEmpty) {
+    if (sessions.isEmpty) {
       if (context.mounted) {
-        context.showLoggedSnackBar(
-          const SnackBar(content: Text('暂无历史记录')),
-        );
+        context.showLoggedSnackBar(const SnackBar(content: Text('暂无历史记录')));
       }
       return;
     }
@@ -508,48 +506,36 @@ class _LogTableState extends State<LogTable> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('历史记录'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
             shrinkWrap: true,
-            itemCount: history.length,
-            itemBuilder: (context, index) {
-              final item = history[index];
-              final id = item['id'] as int;
-              final name = item['name'] as String;
-              final count = item['log_count'] as int;
+            itemCount: sessions.length,
+            itemBuilder: (_, index) {
+              final item = sessions[index];
+              final sessionId = item['session_id'] as String;
+              final name = item['title'] as String;
               final createdAt = DateTime.parse(item['created_at'] as String);
-              final formattedDate = '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
 
               return ListTile(
                 title: Text(name),
-                subtitle: Text('$formattedDate · $count 条记录'),
+                subtitle: Text(
+                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.restore),
-                      tooltip: '恢复',
+                      icon: const Icon(Icons.open_in_new),
+                      tooltip: '打开',
                       onPressed: () async {
-                        await logProvider.restoreFromHistory(id);
+                        await logProvider.switchToSession(sessionId);
+                        if (ctx.mounted) Navigator.pop(ctx);
                         if (context.mounted) {
-                          Navigator.pop(context);
                           context.showLoggedSnackBar(
-                            const SnackBar(content: Text('已恢复历史记录')),
+                            SnackBar(content: Text('已切换到: $name')),
                           );
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      tooltip: '删除',
-                      onPressed: () async {
-                        await logProvider.deleteHistoryRecord(id);
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          _showHistoryDialog(context);
                         }
                       },
                     ),
@@ -560,10 +546,7 @@ class _LogTableState extends State<LogTable> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
-          ),
+          FilledButton(child: const Text('关闭'), onPressed: () => Navigator.pop(ctx)),
         ],
       ),
     );
