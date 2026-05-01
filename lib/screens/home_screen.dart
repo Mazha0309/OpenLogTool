@@ -33,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initSession() async {
     final session = context.read<SessionProvider>();
     final logProvider = context.read<LogProvider>();
-    // Retry until session is ready
     for (int i = 0; i < 50; i++) {
       if (session.currentSessionId != null) break;
       await Future.delayed(const Duration(milliseconds: 100));

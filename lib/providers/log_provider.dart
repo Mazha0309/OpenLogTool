@@ -22,6 +22,7 @@ class LogProvider with ChangeNotifier {
     _onLogChanged = callback;
   }
 
+
   Future<void> reloadForSession(String? sessionId) async {
     _currentSessionId = sessionId;
     await _loadLogs();
@@ -157,6 +158,7 @@ class LogProvider with ChangeNotifier {
     final db = DatabaseHelper();
     return db.purgeDeletedRecords();
   }
+
 
   Future<void> importLogs(List<LogEntry> importedLogs, {String? sessionId}) async {
     final db = DatabaseHelper();
