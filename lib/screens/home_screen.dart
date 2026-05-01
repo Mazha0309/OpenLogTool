@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
@@ -25,10 +27,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final session = context.read<SessionProvider>();
-      context.read<LogProvider>().reloadForSession(session.currentSessionId);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
+  }
+
+  Future<void> _initSession() async {
+    final session = context.read<SessionProvider>();
+    final logProvider = context.read<LogProvider>();
+    for (int i = 0; i < 50; i++) {
+      if (session.currentSessionId != null) break;
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    logProvider.reloadForSession(session.currentSessionId);
   }
 
   void _onScroll(ScrollNotification notification) {
@@ -47,14 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  static const List<Widget> _pages = <Widget>[
-    AddRecordPage(),
-    ImportExportPage(),
-    SettingsPage(),
-  ];
-
-  static const List<BottomNavigationBarItem> _navItems =
-      <BottomNavigationBarItem>[
+  static const List<BottomNavigationBarItem> _navItems = <BottomNavigationBarItem>[
     BottomNavigationBarItem(
       icon: Icon(Icons.add_circle_outline, size: 24),
       activeIcon: Icon(Icons.add_circle, size: 24),
@@ -78,6 +80,105 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _showShareDialog(BuildContext context) async {
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+    final sessionId = sessionProvider.currentSessionId;
+    if (sessionId == null) return;
+
+    int selectedHours = 24;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Live Share'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('选择过期时间：'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [1, 3, 6, 12, 24, 0].map((h) => ChoiceChip(
+                  label: Text(h == 0 ? '永不过期' : '${h}小时'),
+                  selected: selectedHours == h,
+                  onSelected: (_) => setState(() => selectedHours = h),
+                )).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            FilledButton(
+              child: const Text('生成链接'),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _generateAndShowLink(context, syncProvider, sessionId, selectedHours);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateAndShowLink(BuildContext context, SyncProvider syncProvider, String sessionId, int expiresIn) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => const AlertDialog(
+        title: Text('Live Share'),
+        content: Text('正在生成分享链接...'),
+        actions: [],
+      ),
+    );
+
+    final result = await syncProvider.createLiveShareLink(sessionId, expiresIn: expiresIn);
+
+    if (context.mounted) {
+      Navigator.pop(context);
+      if (result != null) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('分享链接'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(result.url, style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 8),
+                Text('分享码: ${result.shareCode}'),
+                if (result.expiresAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text('过期时间: ${result.expiresAt}', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                child: const Text('复制'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: result.url));
+                  context.showLoggedSnackBar(const SnackBar(content: Text('链接已复制')));
+                  Navigator.pop(ctx);
+                },
+              ),
+              FilledButton(
+                child: const Text('关闭'),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        );
+      } else {
+        context.showLoggedSnackBar(const SnackBar(content: Text('获取分享链接失败')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,7 +193,11 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: IndexedStack(
           index: _selectedIndex,
-          children: _pages,
+          children: [
+            AddRecordPage(onSharePressed: () => _showShareDialog(context)),
+            const ImportExportPage(),
+            const SettingsPage(),
+          ],
         ),
       ),
       bottomNavigationBar: TweenAnimationBuilder<double>(
@@ -124,7 +229,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class AddRecordPage extends StatelessWidget {
-  const AddRecordPage({super.key});
+  final VoidCallback? onSharePressed;
+
+  const AddRecordPage({super.key, this.onSharePressed});
 
   @override
   Widget build(BuildContext context) {
@@ -159,20 +266,31 @@ class AddRecordPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      '添加点名记录',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '添加点名记录',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (onSharePressed != null)
+                            IconButton(
+                              icon: const Icon(Icons.share),
+                              tooltip: 'Live Share',
+                              onPressed: onSharePressed,
+                            ),
+                            ],
+                          ),
+                      const SizedBox(height: 16),
+                      const SizedBox(
+                        width: double.infinity,
+                        child: LogForm(),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    const SizedBox(
-                      width: double.infinity,
-                      child: LogForm(),
-                    ),
-                  ],
+                    ],
                 ),
               ),
             ),
@@ -221,12 +339,23 @@ class AddRecordPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    '添加点名记录',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '添加点名记录',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (onSharePressed != null)
+                        IconButton(
+                          icon: const Icon(Icons.share),
+                          tooltip: 'Live Share',
+                          onPressed: onSharePressed,
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   const LogForm(),
@@ -298,13 +427,11 @@ class AddRecordPage extends StatelessWidget {
 
   void _showHistoryDialog(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final history = await logProvider.getHistory();
+    final sessions = await logProvider.getHistory();
 
-    if (history.isEmpty) {
+    if (sessions.isEmpty) {
       if (context.mounted) {
-        context.showLoggedSnackBar(
-          const SnackBar(content: Text('暂无历史记录')),
-        );
+        context.showLoggedSnackBar(const SnackBar(content: Text('暂无历史记录')));
       }
       return;
     }
@@ -313,37 +440,37 @@ class AddRecordPage extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('历史记录'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
             shrinkWrap: true,
-            itemCount: history.length,
-            itemBuilder: (context, index) {
-              final item = history[index];
-              final id = item['id'] as int;
-              final name = item['name'] as String;
-              final count = item['log_count'] as int;
+            itemCount: sessions.length,
+            itemBuilder: (_, index) {
+              final item = sessions[index];
+              final sessionId = item['session_id'] as String;
+              final name = item['title'] as String;
+              final status = item['status'] as String;
               final createdAt = DateTime.parse(item['created_at'] as String);
-              final formattedDate =
-                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
 
               return ListTile(
                 title: Text(name),
-                subtitle: Text('$formattedDate · $count 条记录'),
+                subtitle: Text(
+                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
+                  ' · ${status == "active" ? "进行中" : "已关闭"}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.restore),
-                      tooltip: '恢复',
+                      icon: const Icon(Icons.open_in_new),
+                      tooltip: '打开',
                       onPressed: () async {
-                        await logProvider.restoreFromHistory(id);
+                        await logProvider.switchToSession(sessionId);
+                        if (ctx.mounted) Navigator.pop(ctx);
                         if (context.mounted) {
-                          Navigator.pop(context);
                           context.showLoggedSnackBar(
-                            const SnackBar(content: Text('已恢复历史记录')),
+                            SnackBar(content: Text('已切换到: $name')),
                           );
                         }
                       },
@@ -351,8 +478,16 @@ class AddRecordPage extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
                       tooltip: '删除',
-                      onPressed: () => _showDeleteHistoryConfirmation(
-                          context, logProvider, id),
+                      onPressed: () => _showDeleteSessionConfirmation(ctx, logProvider, sessionId, name),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever, color: Colors.red),
+                      tooltip: '彻底删除',
+                      onPressed: () async {
+                        await logProvider.hardDeleteSession(sessionId);
+                        Navigator.pop(ctx);
+                        if (context.mounted) _showHistoryDialog(context);
+                      },
                     ),
                   ],
                 ),
@@ -363,7 +498,31 @@ class AddRecordPage extends StatelessWidget {
         actions: [
           FilledButton(
             child: const Text('关闭'),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteSessionConfirmation(BuildContext context, LogProvider logProvider, String sessionId, String name) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除 "$name" 吗？'),
+        actions: [
+          TextButton(child: const Text('取消'), onPressed: () => Navigator.pop(ctx)),
+          TextButton(
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            onPressed: () async {
+              await logProvider.deleteSession(sessionId);
+              Navigator.pop(ctx);
+              Navigator.pop(context); // close history dialog
+              if (context.mounted) {
+                _showHistoryDialog(context);
+              }
+            },
           ),
         ],
       ),
@@ -478,18 +637,6 @@ class AddRecordPage extends StatelessWidget {
           FilledButton(
             child: const Text('取消'),
             onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            child: const Text('确认删除'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-            onPressed: () async {
-              await logProvider.deleteHistoryRecord(id);
-              Navigator.pop(context);
-              if (context.mounted) {
-                Navigator.pop(context);
-                _showHistoryDialog(context);
-              }
-            },
           ),
         ],
       ),

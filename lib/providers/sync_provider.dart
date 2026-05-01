@@ -10,6 +10,8 @@ import 'package:openlogtool/models/sync_callsign_qth_record.dart';
 import 'package:openlogtool/models/sync_history_record.dart';
 import 'package:openlogtool/services/auth_service.dart';
 import 'package:openlogtool/services/instance_service.dart';
+import 'package:openlogtool/services/live_share_service.dart';
+import 'package:openlogtool/services/collaboration_service.dart';
 
 class SyncSettings {
   final String serverUrl;
@@ -137,6 +139,8 @@ class SyncProvider with ChangeNotifier {
   Timer? _syncTimer;
   bool _hasPendingSyncRequest = false;
   Map<String, dynamic>? _lastSyncSummary;
+
+  final CollaborationService collaborationService = CollaborationService();
 
   String _getBaseUrl() {
     return _settings.serverUrl.replaceAll(RegExp(r'/$'), '');
@@ -909,5 +913,33 @@ class SyncProvider with ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<LiveShareResult?> createLiveShareLink(String sessionId, {int expiresIn = 24}) async {
+    if (!isLoggedIn) return null;
+    final service = LiveShareService(serverUrl: _getBaseUrl(), token: _settings.token!);
+    return service.createShareLink(sessionId, expiresIn: expiresIn);
+  }
+
+  void connectCollaboration(String sessionId, String deviceId) {
+    if (!isLoggedIn || !isConfigured) return;
+    collaborationService.connect(
+      serverUrl: _getBaseUrl(),
+      token: _settings.token!,
+      sessionId: sessionId,
+      deviceId: deviceId,
+    );
+  }
+
+  void disconnectCollaboration() {
+    collaborationService.disconnect();
+  }
+
+  Future<void> pushLogUpsertToCollab(String sessionId, Map<String, dynamic> log) async {
+    await collaborationService.pushLogUpsert(sessionId, log, _settings.deviceId);
+  }
+
+  Future<void> pushLogDeleteToCollab(String sessionId, String syncId) async {
+    await collaborationService.pushLogDelete(sessionId, syncId, _settings.deviceId);
   }
 }
