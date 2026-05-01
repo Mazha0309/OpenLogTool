@@ -5,14 +5,16 @@ class LiveShareResult {
   final String url;
   final String shareCode;
   final String sessionId;
+  final String? expiresAt;
 
-  LiveShareResult({required this.url, required this.shareCode, required this.sessionId});
+  LiveShareResult({required this.url, required this.shareCode, required this.sessionId, this.expiresAt});
 
   factory LiveShareResult.fromJson(Map<String, dynamic> json) {
     return LiveShareResult(
       url: json['url'] ?? '',
       shareCode: json['shareCode'] ?? '',
       sessionId: json['sessionId'] ?? '',
+      expiresAt: json['expiresAt'],
     );
   }
 }
@@ -23,7 +25,7 @@ class LiveShareService {
 
   LiveShareService({required this.serverUrl, required this.token});
 
-  Future<LiveShareResult?> createShareLink(String sessionId) async {
+  Future<LiveShareResult?> createShareLink(String sessionId, {int expiresIn = 24}) async {
     try {
       final uri = Uri.parse('${serverUrl.replaceAll(RegExp(r'/\$'), '')}/api/v1/logs/sessions/$sessionId/public-link');
       final response = await http.post(
@@ -32,7 +34,7 @@ class LiveShareService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode({'enabled': true}),
+        body: json.encode({'enabled': true, 'expiresIn': expiresIn}),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

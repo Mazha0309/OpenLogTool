@@ -915,10 +915,10 @@ class SyncProvider with ChangeNotifier {
     }
   }
 
-  Future<LiveShareResult?> createLiveShareLink(String sessionId) async {
+  Future<LiveShareResult?> createLiveShareLink(String sessionId, {int expiresIn = 24}) async {
     if (!isLoggedIn) return null;
     final service = LiveShareService(serverUrl: _getBaseUrl(), token: _settings.token!);
-    return service.createShareLink(sessionId);
+    return service.createShareLink(sessionId, expiresIn: expiresIn);
   }
 
   void connectCollaboration(String sessionId, String deviceId) {
