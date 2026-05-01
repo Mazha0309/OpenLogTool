@@ -8,6 +8,8 @@ import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/sync_callsign_qth_record.dart';
 import 'package:openlogtool/models/sync_history_record.dart';
+import 'package:openlogtool/services/auth_service.dart';
+import 'package:openlogtool/services/instance_service.dart';
 
 class SyncSettings {
   final String serverUrl;
@@ -336,6 +338,7 @@ class SyncProvider with ChangeNotifier {
     final history = await db.getHistoryChangedSince(since);
     final callsignQthHistory =
         await db.getCallsignQthHistoryChangedSince(since);
+    final sessions = await db.getSessionsChangedSince(since);
 
     final dictionaries = _buildDictionarySyncPayload();
     dictionaries['rigs'] = deviceDicts
@@ -359,11 +362,26 @@ class SyncProvider with ChangeNotifier {
           .map((row) => _normalizeCallsignQthPayload(row))
           .toList(),
       'history': history.map((row) => _normalizeHistoryPayload(row)).toList(),
+      'sessions': sessions,
     };
   }
 
   Future<void> _applyBidirectionalChanges(Map<String, dynamic> changes) async {
     final db = DatabaseHelper();
+
+    final sessions =
+        List<Map<String, dynamic>>.from(changes['sessions'] ?? const []);
+    for (final item in sessions) {
+      final normalized = _normalizeIncomingSyncItem(item);
+      final sessionId = normalized['session_id']?.toString();
+      final deletedAt = normalized['deleted_at']?.toString();
+      if (sessionId == null) continue;
+      if (deletedAt != null) {
+        await db.softDeleteSession(sessionId, deletedAt);
+      } else {
+        await db.upsertSessionFromSync(normalized);
+      }
+    }
 
     final logs = List<Map<String, dynamic>>.from(changes['logs'] ?? const []);
     for (final item in logs) {
@@ -448,12 +466,14 @@ class SyncProvider with ChangeNotifier {
         headers['Authorization'] = 'Bearer ${_settings.token}';
       }
 
+      final instanceId = await InstanceService.getInstanceId();
       final uri = Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/bidirectional');
       final response = await http.post(
         uri,
         headers: headers,
         body: json.encode({
           'deviceId': _settings.deviceId,
+          'clientInstanceId': instanceId,
           'lastSyncAt': _lastSyncAtValue(),
           'payload': payload,
         }),
@@ -550,24 +570,7 @@ class SyncProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Map<String, dynamic>?> _fetchCurrentUser(String token) async {
-    final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/me');
-    final response = await http.get(
-      uri,
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode != 200) {
-      return null;
-    }
-
-    final result = json.decode(response.body) as Map<String, dynamic>;
-    if (result['success'] != true || result['data'] == null) {
-      return null;
-    }
-
-    return Map<String, dynamic>.from(result['data']);
-  }
+  AuthService get _authService => AuthService(_settings.serverUrl);
 
   Future<void> _clearAuthState() async {
     _settings = _settings.copyWith(
@@ -584,7 +587,7 @@ class SyncProvider with ChangeNotifier {
     }
 
     try {
-      final user = await _fetchCurrentUser(_settings.token!);
+      final user = await _authService.fetchCurrentUser(_settings.token!);
       if (user == null) {
         await _clearAuthState();
         notifyListeners();
@@ -620,57 +623,35 @@ class SyncProvider with ChangeNotifier {
 
     try {
       await _clearAuthState();
-      final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/login');
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'username': username, 'password': password}),
-      );
+      final authResult = await _authService.login(
+          _settings.token ?? '', username, password);
+      if (authResult == null) {
+        _lastError = '登录失败: 服务端未返回有效令牌';
+        _isLoggingIn = false;
+        notifyListeners();
+        return false;
+      }
 
-      if (response.statusCode == 200) {
-        final result = json.decode(response.body) as Map<String, dynamic>;
-        if (result['success'] == true) {
-          final token = result['data']['token']?.toString();
-          if (token == null || token.isEmpty) {
-            _lastError = '登录失败: 服务端未返回有效令牌';
-            _isLoggingIn = false;
-            notifyListeners();
-            return false;
-          }
-
-          final user = await _fetchCurrentUser(token);
-          if (user == null) {
-            _lastError = '登录失败: 登录校验未通过';
-            await _clearAuthState();
-            _isLoggingIn = false;
-            notifyListeners();
-            return false;
-          }
-
-          _settings = _settings.copyWith(
-            token: token,
-            userId: user['id']?.toString(),
-            theme: user['theme']?.toString() ?? 'light',
-          );
-          await _saveSettings();
-          _isLoggingIn = false;
-          notifyListeners();
-          _scheduleAutoSyncOnce();
-          return true;
-        } else {
-          _lastError = result['error']?['message'] ?? '登录失败';
-          await _clearAuthState();
-          _isLoggingIn = false;
-          notifyListeners();
-          return false;
-        }
-      } else {
-        _lastError = '登录失败: ${response.statusCode}';
+      final token = authResult['token'] as String;
+      final user = await _authService.fetchCurrentUser(token);
+      if (user == null) {
+        _lastError = '登录失败: 登录校验未通过';
         await _clearAuthState();
         _isLoggingIn = false;
         notifyListeners();
         return false;
       }
+
+      _settings = _settings.copyWith(
+        token: token,
+        userId: user['id']?.toString(),
+        theme: user['theme']?.toString() ?? 'light',
+      );
+      await _saveSettings();
+      _isLoggingIn = false;
+      notifyListeners();
+      _scheduleAutoSyncOnce();
+      return true;
     } catch (e) {
       _lastError = '登录失败: $e';
       await _clearAuthState();
@@ -687,28 +668,14 @@ class SyncProvider with ChangeNotifier {
 
   Future<bool> changePassword(String oldPassword, String newPassword) async {
     if (!isLoggedIn) return false;
-
     try {
-      final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/password');
-      final response = await http.put(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${_settings.token}',
-        },
-        body: json.encode({
-          'oldPassword': oldPassword,
-          'newPassword': newPassword,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        return true;
-      } else {
-        _lastError = '修改密码失败: ${response.statusCode}';
+      final ok = await _authService.changePassword(
+          _settings.token!, oldPassword, newPassword);
+      if (!ok) {
+        _lastError = '修改密码失败';
         notifyListeners();
-        return false;
       }
+      return ok;
     } catch (e) {
       _lastError = '修改密码失败: $e';
       notifyListeners();
@@ -723,28 +690,17 @@ class SyncProvider with ChangeNotifier {
       notifyListeners();
       return true;
     }
-
     try {
-      final uri = Uri.parse('${_getBaseUrl()}/api/v1/auth/theme');
-      final response = await http.put(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${_settings.token}',
-        },
-        body: json.encode({'theme': theme}),
-      );
-
-      if (response.statusCode == 200) {
+      final ok = await _authService.setTheme(_settings.token!, theme);
+      if (ok) {
         _settings = _settings.copyWith(theme: theme);
         await _saveSettings();
         notifyListeners();
-        return true;
       } else {
-        _lastError = '设置主题失败: ${response.statusCode}';
+        _lastError = '设置主题失败';
         notifyListeners();
-        return false;
       }
+      return ok;
     } catch (e) {
       _lastError = '设置主题失败: $e';
       notifyListeners();
@@ -771,11 +727,13 @@ class SyncProvider with ChangeNotifier {
       }
 
       final uri = Uri.parse('${_getBaseUrl()}/api/v1/logs/sync/push');
+      final instanceId = await InstanceService.getInstanceId();
       final response = await http.post(
         uri,
         headers: headers,
         body: json.encode({
           'deviceId': _settings.deviceId,
+          'clientInstanceId': instanceId,
           'payload': {
             'logs': logs,
             'dictionaries': dictionaries ?? _buildDictionarySyncPayload(),
