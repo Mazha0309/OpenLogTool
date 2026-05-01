@@ -87,6 +87,46 @@ class _HomeScreenState extends State<HomeScreen> {
     final sessionId = sessionProvider.currentSessionId;
     if (sessionId == null) return;
 
+    int selectedHours = 24;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Live Share'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('选择过期时间：'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [1, 3, 6, 12, 24, 0].map((h) => ChoiceChip(
+                  label: Text(h == 0 ? '永不过期' : '${h}小时'),
+                  selected: selectedHours == h,
+                  onSelected: (_) => setState(() => selectedHours = h),
+                )).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('取消'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            FilledButton(
+              child: const Text('生成链接'),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _generateAndShowLink(context, syncProvider, sessionId, selectedHours);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateAndShowLink(BuildContext context, SyncProvider syncProvider, String sessionId, int expiresIn) async {
     showDialog(
       context: context,
       builder: (ctx) => const AlertDialog(
@@ -96,10 +136,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    final result = await syncProvider.createLiveShareLink(sessionId);
+    final result = await syncProvider.createLiveShareLink(sessionId, expiresIn: expiresIn);
 
     if (context.mounted) {
-      Navigator.pop(context); // close loading dialog
+      Navigator.pop(context);
       if (result != null) {
         showDialog(
           context: context,
@@ -112,6 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(result.url, style: const TextStyle(fontSize: 12)),
                 const SizedBox(height: 8),
                 Text('分享码: ${result.shareCode}'),
+                if (result.expiresAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text('过期时间: ${result.expiresAt}', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
               ],
             ),
             actions: [
