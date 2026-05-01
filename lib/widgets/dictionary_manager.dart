@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
@@ -118,7 +117,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     required Function(String) onAdd,
     double cardPadding = 16.0,
   }) {
-    return FCard(
+    return Card(
       child: ExpansionPanelList(
         elevation: 0,
         expandedHeaderPadding: EdgeInsets.zero,
@@ -163,7 +162,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton.icon(
+                      FilledButton.icon(
                         icon: const Icon(Icons.add),
                         label: const Text('添加'),
                         onPressed: () {
@@ -180,7 +179,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                   const SizedBox(height: 16),
 
                   // 导入文件按钮
-                  ElevatedButton.icon(
+                  FilledButton.icon(
                     icon: const Icon(Icons.file_upload),
                     label: const Text('从文件导入'),
                     onPressed: () => _importFromFile(type),
@@ -269,7 +268,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            ElevatedButton.icon(
+            FilledButton.icon(
               icon: Icon(allExpanded ? Icons.expand_less : Icons.expand_more, size: isNarrow ? 18 : null),
               label: Text(allExpanded ? '折叠全部' : '展开全部'),
               onPressed: _toggleAll,

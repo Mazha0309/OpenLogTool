@@ -7,6 +7,7 @@ class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
   List<LogEntry> _undoStack = [];
   Future<void> Function()? _onDataChanged;
+  String? _currentSessionId;
 
   List<LogEntry> get logs => _logs;
   int get logCount => _logs.length;
@@ -14,6 +15,11 @@ class LogProvider with ChangeNotifier {
 
   void setOnDataChanged(Future<void> Function()? callback) {
     _onDataChanged = callback;
+  }
+
+  Future<void> reloadForSession(String? sessionId) async {
+    _currentSessionId = sessionId;
+    await _loadLogs();
   }
 
   Future<void> _notifyDataChanged() async {
@@ -36,15 +42,16 @@ class LogProvider with ChangeNotifier {
 
   Future<void> _loadLogs() async {
     final db = DatabaseHelper();
-    _logs = await db.getVisibleLogs();
+    _logs = await db.getVisibleLogs(_currentSessionId);
     notifyListeners();
   }
 
-  Future<void> addLog(LogEntry log) async {
+  Future<void> addLog(LogEntry log, {String? sessionId}) async {
     final db = DatabaseHelper();
-    final localId = await db.insertLog(log);
+    final effectiveLog = sessionId != null ? log.copyWith(sessionId: sessionId) : log;
+    final localId = await db.insertLog(effectiveLog);
     final persistedLog = await db.getLogByLocalId(localId);
-    _logs.add(persistedLog ?? log);
+    _logs.add(persistedLog ?? effectiveLog);
     notifyListeners();
     await _notifyDataChanged();
   }
@@ -110,14 +117,6 @@ class LogProvider with ChangeNotifier {
   Future<void> clearAllLogs() async {
     if (_logs.isEmpty) return;
     _undoStack = List.from(_logs);
-    final db = DatabaseHelper();
-    final now = DateTime.now();
-    final historyName = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} (${_logs.length}条记录)';
-    await db.insertHistory(historyName, _logs);
-    final deletedAt = now.toUtc().toIso8601String();
-    for (final log in _logs) {
-      await db.softDeleteLog(log.id, deletedAt);
-    }
     _logs.clear();
     notifyListeners();
     await _notifyDataChanged();
@@ -152,12 +151,13 @@ class LogProvider with ChangeNotifier {
     await _notifyDataChanged();
   }
 
-  Future<void> importLogs(List<LogEntry> importedLogs) async {
+  Future<void> importLogs(List<LogEntry> importedLogs, {String? sessionId}) async {
     final db = DatabaseHelper();
     for (final log in importedLogs) {
-      final localId = await db.insertLog(log);
+      final effectiveLog = sessionId != null ? log.copyWith(sessionId: sessionId) : log;
+      final localId = await db.insertLog(effectiveLog);
       final persistedLog = await db.getLogByLocalId(localId);
-      _logs.add(persistedLog ?? log);
+      _logs.add(persistedLog ?? effectiveLog);
     }
     notifyListeners();
     await _notifyDataChanged();

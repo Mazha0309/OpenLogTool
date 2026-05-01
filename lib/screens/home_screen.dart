@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:forui/forui.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
@@ -21,6 +21,15 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _isBottomNavVisible = true;
   double _lastScrollOffset = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final session = context.read<SessionProvider>();
+      context.read<LogProvider>().reloadForSession(session.currentSessionId);
+    });
+  }
 
   void _onScroll(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification) {
@@ -144,7 +153,7 @@ class AddRecordPage extends StatelessWidget {
         children: [
           Expanded(
             flex: 1,
-            child: FCard(
+            child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -171,7 +180,7 @@ class AddRecordPage extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             flex: 2,
-            child: FCard(
+            child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -205,7 +214,7 @@ class AddRecordPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FCard(
+          Card(
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
@@ -226,7 +235,7 @@ class AddRecordPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          FCard(
+          Card(
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
@@ -261,19 +270,19 @@ class AddRecordPage extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FButton(
-              onPress: logProvider.canUndo
+            FilledButton(
+              onPressed: logProvider.canUndo
                   ? () => _showUndoConfirmation(context)
                   : null,
-              label: '撤销',
+              child: const Text('撤销'),
             ),
             const SizedBox(width: 8),
-            FButton(
-              style: FButtonStyle.destructive,
-              onPress: logProvider.logCount > 0
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+              onPressed: logProvider.logCount > 0
                   ? () => _showClearConfirmation(context)
                   : null,
-              label: '清空',
+              child: const Text('清空'),
             ),
             const SizedBox(width: 4),
             IconButton(
@@ -352,9 +361,9 @@ class AddRecordPage extends StatelessWidget {
           ),
         ),
         actions: [
-          FButton(
-            label: '关闭',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -364,23 +373,70 @@ class AddRecordPage extends StatelessWidget {
   void _showClearConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '确认清空记录',
-        body: '您确定要清空所有点名记录吗？此操作不可撤销！',
+      builder: (context) => AlertDialog(
+        title: const Text('确认清空记录'),
+        content: const Text('您确定要清空所有点名记录吗？此操作不可撤销！'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认清空',
-            style: FButtonStyle.destructive,
-            onPress: () {
-              Provider.of<LogProvider>(context, listen: false).clearAllLogs();
+          FilledButton(
+            child: const Text('确认清空'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            onPressed: () async {
               Navigator.pop(context);
-              context.showLoggedSnackBar(
-                const SnackBar(content: Text('已清空所有记录')),
-              );
+              _showNewSessionNameDialog(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNewSessionNameDialog(BuildContext context) {
+    final controller = TextEditingController();
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('新记录名称'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入本次记录名称（可留空）',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          FilledButton(
+            child: const Text('开始新记录'),
+            onPressed: () async {
+              try {
+                final name = controller.text.trim();
+                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
+                await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  context.showLoggedSnackBar(
+                    SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
+                  );
+                }
+              } catch (e, st) {
+                debugPrint('[SessionDialog] ERROR: $e\n$st');
+                Navigator.pop(ctx);
+                if (context.mounted) {
+                  context.showLoggedSnackBar(
+                    SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
             },
           ),
         ],
@@ -391,17 +447,17 @@ class AddRecordPage extends StatelessWidget {
   void _showUndoConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '确认撤销',
-        body: '您确定要撤销上一条记录吗？',
+      builder: (context) => AlertDialog(
+        title: const Text('确认撤销'),
+        content: const Text('您确定要撤销上一条记录吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认撤销',
-            onPress: () {
+          FilledButton(
+            child: const Text('确认撤销'),
+            onPressed: () {
               Provider.of<LogProvider>(context, listen: false).undoLastLog();
               Navigator.pop(context);
             },
@@ -415,18 +471,18 @@ class AddRecordPage extends StatelessWidget {
       BuildContext context, LogProvider logProvider, int id) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: '确认删除',
-        body: '确定要删除这条历史记录吗？',
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: const Text('确定要删除这条历史记录吗？'),
         actions: [
-          FButton(
-            label: '取消',
-            onPress: () => Navigator.pop(context),
+          FilledButton(
+            child: const Text('取消'),
+            onPressed: () => Navigator.pop(context),
           ),
-          FButton(
-            label: '确认删除',
-            style: FButtonStyle.destructive,
-            onPress: () async {
+          FilledButton(
+            child: const Text('确认删除'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            onPressed: () async {
               await logProvider.deleteHistoryRecord(id);
               Navigator.pop(context);
               if (context.mounted) {
@@ -460,7 +516,7 @@ class ImportExportPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
-                  child: FCard(
+                  child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: ExportPanel(),
@@ -469,7 +525,7 @@ class ImportExportPage extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Flexible(
-                  child: FCard(
+                  child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: DictionaryManager(),
@@ -485,14 +541,14 @@ class ImportExportPage extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FCard(
+                Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: ExportPanel(),
                   ),
                 ),
                 const SizedBox(height: 12),
-                FCard(
+                Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: DictionaryManager(),
