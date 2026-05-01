@@ -1277,6 +1277,29 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> hardDeleteSession(String sessionId) async {
+    final db = await database;
+    return db.delete(_sessionsTable, where: 'session_id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
+  }
+
+  Future<int> hardDeleteLog(String syncId) async {
+    final db = await database;
+    return db.delete(_logsTable, where: 'sync_id = ? AND deleted_at IS NOT NULL', whereArgs: [syncId]);
+  }
+
+  Future<int> purgeDeletedRecords() async {
+    final db = await database;
+    var count = 0;
+    count += await db.delete(_logsTable, where: 'deleted_at IS NOT NULL');
+    count += await db.delete(_sessionsTable, where: 'deleted_at IS NOT NULL');
+    count += await db.delete(_historyTable, where: 'deleted_at IS NOT NULL');
+    count += await db.delete(_callsignQthHistoryTable, where: 'deleted_at IS NOT NULL');
+    for (final table in _dictionaryTables) {
+      count += await db.delete(table, where: 'deleted_at IS NOT NULL');
+    }
+    return count;
+  }
+
   Future<void> insertSession(Session session) async {
     final db = await database;
     await db.insert(_sessionsTable, session.toMap());

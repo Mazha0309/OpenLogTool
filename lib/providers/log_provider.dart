@@ -148,6 +148,16 @@ class LogProvider with ChangeNotifier {
     await db.softDeleteSession(sessionId, DateTime.now().toUtc().toIso8601String());
   }
 
+  Future<void> hardDeleteSession(String sessionId) async {
+    final db = DatabaseHelper();
+    await db.hardDeleteSession(sessionId);
+  }
+
+  Future<int> purgeDeletedRecords() async {
+    final db = DatabaseHelper();
+    return db.purgeDeletedRecords();
+  }
+
   Future<void> importLogs(List<LogEntry> importedLogs, {String? sessionId}) async {
     final db = DatabaseHelper();
     for (final log in importedLogs) {

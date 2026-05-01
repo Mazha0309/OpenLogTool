@@ -421,6 +421,15 @@ class AddRecordPage extends StatelessWidget {
                       tooltip: '删除',
                       onPressed: () => _showDeleteSessionConfirmation(ctx, logProvider, sessionId, name),
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever, color: Colors.red),
+                      tooltip: '彻底删除',
+                      onPressed: () async {
+                        await logProvider.hardDeleteSession(sessionId);
+                        Navigator.pop(ctx);
+                        if (context.mounted) _showHistoryDialog(context);
+                      },
+                    ),
                   ],
                 ),
               );
