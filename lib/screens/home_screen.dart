@@ -267,20 +267,31 @@ class AddRecordPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      '添加点名记录',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '添加点名记录',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (onSharePressed != null)
+                            IconButton(
+                              icon: const Icon(Icons.share),
+                              tooltip: 'Live Share',
+                              onPressed: onSharePressed,
+                            ),
+                            ],
+                          ),
+                      const SizedBox(height: 16),
+                      const SizedBox(
+                        width: double.infinity,
+                        child: LogForm(),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    const SizedBox(
-                      width: double.infinity,
-                      child: LogForm(),
-                    ),
-                  ],
+                    ],
                 ),
               ),
             ),
@@ -329,12 +340,23 @@ class AddRecordPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    '添加点名记录',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '添加点名记录',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (onSharePressed != null)
+                        IconButton(
+                          icon: const Icon(Icons.share),
+                          tooltip: 'Live Share',
+                          onPressed: onSharePressed,
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   const LogForm(),
@@ -378,12 +400,6 @@ class AddRecordPage extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (onSharePressed != null)
-              IconButton(
-                icon: const Icon(Icons.share),
-                tooltip: '分享',
-                onPressed: onSharePressed,
-              ),
             FilledButton(
               onPressed: logProvider.canUndo
                   ? () => _showUndoConfirmation(context)
