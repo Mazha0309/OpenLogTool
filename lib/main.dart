@@ -43,12 +43,29 @@ void main() {
         ),
         ChangeNotifierProxyProvider<SyncProvider, LogProvider>(
           create: (_) => LogProvider(),
-          update: (_, syncProvider, logProvider) {
+          update: (context, syncProvider, logProvider) {
             final provider = logProvider ?? LogProvider();
             provider.setOnDataChanged(() async {
               if (syncProvider.settings.syncEnabled &&
                   syncProvider.settings.syncMode == 'realtime') {
                 await syncProvider.triggerSyncAndWait();
+              }
+            });
+            provider.setOnLogChanged((log, isDelete) async {
+              final sp = Provider.of<SyncProvider>(context, listen: false);
+              final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+              if (sp.settings.syncEnabled && sessionProvider.currentSessionId != null) {
+                if (isDelete) {
+                  await sp.pushLogDeleteToCollab(
+                    sessionProvider.currentSessionId!,
+                    log.id,
+                  );
+                } else {
+                  await sp.pushLogUpsertToCollab(
+                    sessionProvider.currentSessionId!,
+                    log.toJson(),
+                  );
+                }
               }
             });
             return provider;

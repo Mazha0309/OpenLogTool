@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
@@ -47,14 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  static const List<Widget> _pages = <Widget>[
-    AddRecordPage(),
-    ImportExportPage(),
-    SettingsPage(),
-  ];
-
-  static const List<BottomNavigationBarItem> _navItems =
-      <BottomNavigationBarItem>[
+  static const List<BottomNavigationBarItem> _navItems = <BottomNavigationBarItem>[
     BottomNavigationBarItem(
       icon: Icon(Icons.add_circle_outline, size: 24),
       activeIcon: Icon(Icons.add_circle, size: 24),
@@ -78,6 +73,61 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _showShareDialog(BuildContext context) async {
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+    final sessionId = sessionProvider.currentSessionId;
+    if (sessionId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => const AlertDialog(
+        title: Text('Live Share'),
+        content: Text('正在生成分享链接...'),
+        actions: [],
+      ),
+    );
+
+    final result = await syncProvider.createLiveShareLink(sessionId);
+
+    if (context.mounted) {
+      Navigator.pop(context); // close loading dialog
+      if (result != null) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('分享链接'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(result.url, style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 8),
+                Text('分享码: ${result.shareCode}'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                child: const Text('复制'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: result.url));
+                  context.showLoggedSnackBar(const SnackBar(content: Text('链接已复制')));
+                  Navigator.pop(ctx);
+                },
+              ),
+              FilledButton(
+                child: const Text('关闭'),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        );
+      } else {
+        context.showLoggedSnackBar(const SnackBar(content: Text('获取分享链接失败')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,7 +142,11 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: IndexedStack(
           index: _selectedIndex,
-          children: _pages,
+          children: [
+            AddRecordPage(onSharePressed: () => _showShareDialog(context)),
+            const ImportExportPage(),
+            const SettingsPage(),
+          ],
         ),
       ),
       bottomNavigationBar: TweenAnimationBuilder<double>(
@@ -124,7 +178,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class AddRecordPage extends StatelessWidget {
-  const AddRecordPage({super.key});
+  final VoidCallback? onSharePressed;
+
+  const AddRecordPage({super.key, this.onSharePressed});
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +326,12 @@ class AddRecordPage extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (onSharePressed != null)
+              IconButton(
+                icon: const Icon(Icons.share),
+                tooltip: '分享',
+                onPressed: onSharePressed,
+              ),
             FilledButton(
               onPressed: logProvider.canUndo
                   ? () => _showUndoConfirmation(context)

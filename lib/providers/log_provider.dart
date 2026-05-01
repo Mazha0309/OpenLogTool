@@ -7,6 +7,7 @@ class LogProvider with ChangeNotifier {
   List<LogEntry> _logs = [];
   List<LogEntry> _undoStack = [];
   Future<void> Function()? _onDataChanged;
+  Future<void> Function(LogEntry log, bool isDelete)? _onLogChanged;
   String? _currentSessionId;
 
   List<LogEntry> get logs => _logs;
@@ -15,6 +16,10 @@ class LogProvider with ChangeNotifier {
 
   void setOnDataChanged(Future<void> Function()? callback) {
     _onDataChanged = callback;
+  }
+
+  void setOnLogChanged(Future<void> Function(LogEntry log, bool isDelete)? callback) {
+    _onLogChanged = callback;
   }
 
   Future<void> reloadForSession(String? sessionId) async {
@@ -54,6 +59,9 @@ class LogProvider with ChangeNotifier {
     _logs.add(persistedLog ?? effectiveLog);
     notifyListeners();
     await _notifyDataChanged();
+    if (_onLogChanged != null) {
+      await _onLogChanged!(effectiveLog, false);
+    }
   }
 
   Future<void> updateLog(int index, LogEntry log) async {
@@ -95,6 +103,9 @@ class LogProvider with ChangeNotifier {
       _logs.removeAt(index);
       notifyListeners();
       await _notifyDataChanged();
+      if (_onLogChanged != null) {
+        await _onLogChanged!(log, true);
+      }
     }
   }
 
