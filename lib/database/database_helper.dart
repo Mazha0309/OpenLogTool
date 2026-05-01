@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/session.dart';
@@ -1323,11 +1324,17 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getSessionsChangedSince(
       String since) async {
     final db = await database;
-    return db.query(
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM $_sessionsTable'),
+    ) ?? 0;
+    debugPrint('[DB] sessions table has $count rows, querying since=$since');
+    final result = await db.query(
       _sessionsTable,
       where: 'updated_at > ? OR deleted_at > ?',
       whereArgs: [since, since],
     );
+    debugPrint('[DB] getSessionsChangedSince returned ${result.length} rows');
+    return result;
   }
 
   Future<void> upsertSessionFromSync(Map<String, dynamic> data) async {
