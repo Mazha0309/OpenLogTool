@@ -27,10 +27,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final session = context.read<SessionProvider>();
-      context.read<LogProvider>().reloadForSession(session.currentSessionId);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
+  }
+
+  Future<void> _initSession() async {
+    final session = context.read<SessionProvider>();
+    final logProvider = context.read<LogProvider>();
+    // Retry until session is ready
+    for (int i = 0; i < 50; i++) {
+      if (session.currentSessionId != null) break;
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    logProvider.reloadForSession(session.currentSessionId);
   }
 
   void _onScroll(ScrollNotification notification) {
