@@ -16,8 +16,10 @@ class SnackbarLogEntry {
 
 class SnackbarLogProvider with ChangeNotifier {
   final List<SnackbarLogEntry> _entries = <SnackbarLogEntry>[];
+  List<SnackbarLogEntry>? _reversedCache;
 
-  List<SnackbarLogEntry> get entries => List<SnackbarLogEntry>.unmodifiable(_entries.reversed);
+  List<SnackbarLogEntry> get entries =>
+      _reversedCache ??= List<SnackbarLogEntry>.unmodifiable(_entries.reversed);
 
   void add({
     required String message,
@@ -32,11 +34,13 @@ class SnackbarLogProvider with ChangeNotifier {
         createdAt: DateTime.now(),
       ),
     );
+    _reversedCache = null;
     notifyListeners();
   }
 
   void clear() {
     _entries.clear();
+    _reversedCache = null;
     notifyListeners();
   }
 }

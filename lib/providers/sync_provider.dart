@@ -12,6 +12,7 @@ import 'package:openlogtool/services/auth_service.dart';
 import 'package:openlogtool/services/instance_service.dart';
 import 'package:openlogtool/services/live_share_service.dart';
 import 'package:openlogtool/services/collaboration_service.dart';
+import 'package:openlogtool/services/share_service.dart';
 
 class SyncSettings {
   final String serverUrl;
@@ -132,6 +133,7 @@ String formatSyncSummaryText(Map<String, dynamic>? summary) {
 class SyncProvider with ChangeNotifier {
   static const String _syncSettingsKey = 'syncSettings';
 
+  bool _disposed = false;
   SyncSettings _settings = SyncSettings();
   bool _isSyncing = false;
   String? _lastError;
@@ -141,6 +143,15 @@ class SyncProvider with ChangeNotifier {
   Map<String, dynamic>? _lastSyncSummary;
 
   final CollaborationService collaborationService = CollaborationService();
+  List<ShareInfo> _shares = [];
+
+  List<ShareInfo> get shares => _shares;
+
+  List<ShareInfo> get activeShares =>
+      _shares.where((s) => s.isActive).toList();
+
+  List<ShareInfo> get pendingShares =>
+      _shares.where((s) => s.isPending).toList();
 
   String _getBaseUrl() {
     return _settings.serverUrl.replaceAll(RegExp(r'/$'), '');
@@ -167,7 +178,21 @@ class SyncProvider with ChangeNotifier {
   String get lastSyncSummaryText => formatSyncSummaryText(_lastSyncSummary);
 
   SyncProvider() {
-    _loadSettings();
+    scheduleMicrotask(_loadSettings);
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    collaborationService.disconnect();
+    super.dispose();
+  }
+
+  void _safeNotify() {
+    if (_disposed) return;
+    notifyListeners();
   }
 
   Future<void> _loadSettings() async {
@@ -176,8 +201,10 @@ class SyncProvider with ChangeNotifier {
     if (jsonStr != null) {
       try {
         _settings = SyncSettings.fromJson(jsonDecode(jsonStr));
-        notifyListeners();
-      } catch (_) {}
+        _safeNotify();
+      } catch (e, st) {
+        debugPrint('[Sync] _loadSettings parse failed: $e\n$st');
+      }
     }
     _updateSyncTimer();
     _scheduleAutoSyncOnce();
@@ -372,31 +399,42 @@ class SyncProvider with ChangeNotifier {
 
   Future<void> _applyBidirectionalChanges(Map<String, dynamic> changes) async {
     final db = DatabaseHelper();
+    var failures = 0;
 
     final sessions =
         List<Map<String, dynamic>>.from(changes['sessions'] ?? const []);
     for (final item in sessions) {
-      final normalized = _normalizeIncomingSyncItem(item);
-      final sessionId = normalized['session_id']?.toString();
-      final deletedAt = normalized['deleted_at']?.toString();
-      if (sessionId == null) continue;
-      if (deletedAt != null) {
-        await db.softDeleteSession(sessionId, deletedAt);
-      } else {
-        await db.upsertSessionFromSync(normalized);
+      try {
+        final normalized = _normalizeIncomingSyncItem(item);
+        final sessionId = normalized['session_id']?.toString();
+        final deletedAt = normalized['deleted_at']?.toString();
+        if (sessionId == null) continue;
+        if (deletedAt != null) {
+          await db.softDeleteSession(sessionId, deletedAt);
+        } else {
+          await db.upsertSessionFromSync(normalized);
+        }
+      } catch (e, st) {
+        failures++;
+        debugPrint('[Sync] session apply failed: $e\n$st\nitem=$item');
       }
     }
 
     final logs = List<Map<String, dynamic>>.from(changes['logs'] ?? const []);
     for (final item in logs) {
-      final normalized = _normalizeIncomingSyncItem(item);
-      final syncId = normalized['sync_id']?.toString();
-      final deletedAt = normalized['deleted_at']?.toString();
-      if (syncId == null) continue;
-      if (deletedAt != null) {
-        await db.softDeleteLog(syncId, deletedAt);
-      } else {
-        await db.upsertLogFromSync(normalized);
+      try {
+        final normalized = _normalizeIncomingSyncItem(item);
+        final syncId = normalized['sync_id']?.toString();
+        final deletedAt = normalized['deleted_at']?.toString();
+        if (syncId == null) continue;
+        if (deletedAt != null) {
+          await db.softDeleteLog(syncId, deletedAt);
+        } else {
+          await db.upsertLogFromSync(normalized);
+        }
+      } catch (e, st) {
+        failures++;
+        debugPrint('[Sync] log apply failed: $e\n$st\nitem=$item');
       }
     }
 
@@ -405,19 +443,24 @@ class SyncProvider with ChangeNotifier {
       for (final entry in rawDictionaries.entries) {
         final items = List<Map<String, dynamic>>.from(entry.value ?? const []);
         for (final item in items) {
-          final normalized = _normalizeIncomingSyncItem({
-            ...item,
-            'type': item['type'] ?? entry.key,
-          });
-          final tableName = _dictionaryTableForSyncType(
-              normalized['type']?.toString() ?? entry.key);
-          final syncId = normalized['sync_id']?.toString();
-          final deletedAt = normalized['deleted_at']?.toString();
-          if (tableName == null || syncId == null) continue;
-          if (deletedAt != null) {
-            await db.softDeleteDictionaryItem(tableName, syncId, deletedAt);
-          } else {
-            await db.upsertDictionaryItemFromSync(tableName, normalized);
+          try {
+            final normalized = _normalizeIncomingSyncItem({
+              ...item,
+              'type': item['type'] ?? entry.key,
+            });
+            final tableName = _dictionaryTableForSyncType(
+                normalized['type']?.toString() ?? entry.key);
+            final syncId = normalized['sync_id']?.toString();
+            final deletedAt = normalized['deleted_at']?.toString();
+            if (tableName == null || syncId == null) continue;
+            if (deletedAt != null) {
+              await db.softDeleteDictionaryItem(tableName, syncId, deletedAt);
+            } else {
+              await db.upsertDictionaryItemFromSync(tableName, normalized);
+            }
+          } catch (e, st) {
+            failures++;
+            debugPrint('[Sync] dictionary apply failed: $e\n$st\nitem=$item');
           }
         }
       }
@@ -426,29 +469,51 @@ class SyncProvider with ChangeNotifier {
     final history =
         List<Map<String, dynamic>>.from(changes['history'] ?? const []);
     for (final item in history) {
-      final normalized = _normalizeIncomingSyncItem(item);
-      final syncId = normalized['sync_id']?.toString();
-      final deletedAt = normalized['deleted_at']?.toString();
-      if (syncId == null) continue;
-      if (deletedAt != null) {
-        await db.softDeleteHistory(syncId, deletedAt);
-      } else {
-        await db.upsertHistoryFromSync(normalized);
+      try {
+        final normalized = _normalizeIncomingSyncItem(item);
+        final syncId = normalized['sync_id']?.toString();
+        final deletedAt = normalized['deleted_at']?.toString();
+        if (syncId == null) continue;
+        if (deletedAt != null) {
+          await db.softDeleteHistory(syncId, deletedAt);
+        } else {
+          await db.upsertHistoryFromSync(normalized);
+        }
+      } catch (e, st) {
+        failures++;
+        debugPrint('[Sync] history apply failed: $e\n$st\nitem=$item');
       }
     }
 
     final callsignQthHistory = List<Map<String, dynamic>>.from(
         changes['callsignQthHistory'] ?? const []);
     for (final item in callsignQthHistory) {
-      final normalized = _normalizeIncomingSyncItem(item);
-      final syncId = normalized['sync_id']?.toString();
-      final deletedAt = normalized['deleted_at']?.toString();
-      if (syncId == null) continue;
-      if (deletedAt != null) {
-        await db.softDeleteCallsignQthHistory(syncId, deletedAt);
-      } else {
-        await db.upsertCallsignQthHistoryFromSync(normalized);
+      try {
+        final normalized = _normalizeIncomingSyncItem(item);
+        final syncId = normalized['sync_id']?.toString();
+        final deletedAt = normalized['deleted_at']?.toString();
+        if (syncId == null) continue;
+        if (deletedAt != null) {
+          await db.softDeleteCallsignQthHistory(syncId, deletedAt);
+        } else {
+          await db.upsertCallsignQthHistoryFromSync(normalized);
+        }
+      } catch (e, st) {
+        failures++;
+        debugPrint('[Sync] callsign-qth apply failed: $e\n$st\nitem=$item');
       }
+    }
+
+    if (failures > 0) {
+      _lastError = '同步部分应用失败：$failures 条记录已跳过';
+    }
+
+    // Parse incoming shares
+    final rawShares = changes['shares'];
+    if (rawShares is List) {
+      _shares = rawShares
+          .map((e) => ShareInfo.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
     }
   }
 
@@ -941,5 +1006,40 @@ class SyncProvider with ChangeNotifier {
 
   Future<void> pushLogDeleteToCollab(String sessionId, String syncId) async {
     await collaborationService.pushLogDelete(sessionId, syncId, _settings.deviceId);
+  }
+
+  // --- Share helpers ---
+
+  ShareService get _shareService =>
+      ShareService(baseUrl: _getBaseUrl(), token: _settings.token!);
+
+  /// Create a share invite for [sessionId]. Returns the share code.
+  Future<String?> createShareForSession(String sessionId) async {
+    if (!isLoggedIn) return null;
+    final result = await _shareService.createShare(sessionId);
+    return result?['shareCode']?.toString();
+  }
+
+  /// Join a share by its [shareCode]. Returns the session info on success.
+  Future<JoinShareResult> joinShare(String shareCode) async {
+    if (!isLoggedIn) {
+      return const JoinShareResult(success: false, error: '请先登录');
+    }
+    return _shareService.joinShare(shareCode);
+  }
+
+  /// Refresh the shares list from the server.
+  Future<void> refreshShares() async {
+    if (!isLoggedIn) return;
+    _shares = await _shareService.listShares();
+    _safeNotify();
+  }
+
+  /// Revoke a share.
+  Future<bool> revokeShare(String shareId) async {
+    if (!isLoggedIn) return false;
+    final ok = await _shareService.revokeShare(shareId);
+    if (ok) await refreshShares();
+    return ok;
   }
 }

@@ -256,8 +256,16 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
   }
 
   void _hideOverlay() {
-    _overlayEntry?.remove();
+    final entry = _overlayEntry;
     _overlayEntry = null;
+    if (entry == null) return;
+    try {
+      entry.remove();
+    } catch (_) {
+      // The parent Overlay may have already torn this entry down
+      // (e.g. during widget dispose). Swallow — the goal is to make
+      // sure the reference is dropped, which we did above.
+    }
   }
 
   @override

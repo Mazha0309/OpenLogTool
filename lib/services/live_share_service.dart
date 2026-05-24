@@ -27,15 +27,17 @@ class LiveShareService {
 
   Future<LiveShareResult?> createShareLink(String sessionId, {int expiresIn = 24}) async {
     try {
-      final uri = Uri.parse('${serverUrl.replaceAll(RegExp(r'/\$'), '')}/api/v1/logs/sessions/$sessionId/public-link');
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'enabled': true, 'expiresIn': expiresIn}),
-      );
+      final uri = Uri.parse('${serverUrl.replaceAll(RegExp(r'/$'), '')}/api/v1/logs/sessions/$sessionId/public-link');
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: json.encode({'enabled': true, 'expiresIn': expiresIn}),
+          )
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['ok'] == true) return LiveShareResult.fromJson(data);

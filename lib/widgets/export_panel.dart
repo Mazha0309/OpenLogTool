@@ -569,7 +569,12 @@ class ExportPanel extends StatelessWidget {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  exportPathController.dispose();
+                  fileNameController.dispose();
+                  headerTextController.dispose();
+                  Navigator.pop(context);
+                },
                 child: const Text('取消'),
               ),
               ElevatedButton(
@@ -579,6 +584,9 @@ class ExportPanel extends StatelessWidget {
                   settings.fileNameTemplate = fileNameController.text;
                   settings.headerText = headerTextController.text;
                   settingsProvider.updateExportSettings(settings);
+                  exportPathController.dispose();
+                  fileNameController.dispose();
+                  headerTextController.dispose();
                   Navigator.pop(context);
                   context.showLoggedSnackBar(
                     const SnackBar(content: Text('设置已保存')),

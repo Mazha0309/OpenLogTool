@@ -23,7 +23,6 @@ class SettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
     final appInfoProvider = Provider.of<AppInfoProvider>(context);
     final isNarrow = MediaQuery.of(context).size.width < 600;
     final cardPadding = isNarrow ? 12.0 : 16.0;
@@ -62,6 +61,7 @@ class SettingsPanel extends StatelessWidget {
           builder: (context, syncProvider, _) {
             if (syncProvider.settings.syncEnabled && syncProvider.isLoggedIn) {
               WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!context.mounted) return;
                 final stillValid = await syncProvider.validateCurrentLogin();
                 if (!stillValid && context.mounted) {
                   context.showLoggedSnackBar(
@@ -415,51 +415,6 @@ class SettingsPanel extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSettingsListTile({
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    Color? textColor,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Icon(icon, color: textColor ?? Colors.grey[700]),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: textColor,
-                    ),
-                  ),
-                  if (subtitle != null)
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: textColor ?? Colors.grey,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey[400]),
-          ],
-        ),
-      ),
     );
   }
 

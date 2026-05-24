@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/models/log_entry.dart';
@@ -13,6 +13,7 @@ import 'package:sqflite/sqflite.dart';
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
+  static Future<Database>? _databaseInitFuture;
 
   static const String _databaseName = 'openlogtool.db';
   static const String _logsTable = 'logs';
@@ -26,25 +27,61 @@ class DatabaseHelper {
     'callsign_dictionary',
   ];
 
+  /// Whitelist of tables that may receive ALTER TABLE / CREATE INDEX
+  /// statements via helper methods. DDL cannot be parameterized, so we
+  /// gate the names here instead of allowing arbitrary interpolation.
+  static const Set<String> _allowedDdlTables = <String>{
+    _logsTable,
+    _historyTable,
+    _sessionsTable,
+    _callsignQthHistoryTable,
+    'device_dictionary',
+    'antenna_dictionary',
+    'qth_dictionary',
+    'callsign_dictionary',
+  };
+
+  static final RegExp _identifierRegExp = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
+  static void _assertSafeIdentifier(String value, String kind) {
+    if (!_identifierRegExp.hasMatch(value)) {
+      throw ArgumentError('Invalid $kind: $value');
+    }
+  }
+
+  static void _assertKnownTable(String tableName) {
+    if (!_allowedDdlTables.contains(tableName)) {
+      throw ArgumentError('Unknown table for DDL: $tableName');
+    }
+  }
+
   factory DatabaseHelper() => _instance;
 
   DatabaseHelper._internal();
 
-  Future<Database> get database async {
+  Future<Database> get database {
     if (_database != null) {
-      return _database!;
+      return Future.value(_database!);
     }
-    _database = await _initDatabase();
-    return _database!;
+    // Single-flight: concurrent get-calls share the same init future.
+    return _databaseInitFuture ??= _initDatabase().then((db) {
+      _database = db;
+      _databaseInitFuture = null;
+      return db;
+    });
   }
 
   Future<Database> _initDatabase() async {
-    final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path =
-        '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
+    String dbPath;
+    if (kIsWeb) {
+      dbPath = _databaseName;
+    } else {
+      final documentsDirectory = await getApplicationDocumentsDirectory();
+      dbPath = p.join(documentsDirectory.path, _databaseName);
+    }
 
     return openDatabase(
-      path,
+      dbPath,
       version: 1,
       onCreate: _onCreate,
       onOpen: _onOpen,
@@ -461,6 +498,8 @@ class DatabaseHelper {
     String columnName,
     String definition,
   ) async {
+    _assertKnownTable(tableName);
+    _assertSafeIdentifier(columnName, 'column name');
     final columns = await _getExistingColumns(db, tableName);
     if (columns.contains(columnName)) {
       return;
@@ -470,6 +509,7 @@ class DatabaseHelper {
   }
 
   Future<Set<String>> _getExistingColumns(Database db, String tableName) async {
+    _assertKnownTable(tableName);
     final result = await db.rawQuery('PRAGMA table_info($tableName)');
     return result.map((row) => row['name'].toString()).toSet();
   }
@@ -480,6 +520,9 @@ class DatabaseHelper {
     String tableName,
     String columnName,
   ) async {
+    _assertKnownTable(tableName);
+    _assertSafeIdentifier(indexName, 'index name');
+    _assertSafeIdentifier(columnName, 'column name');
     await db.execute(
       'CREATE UNIQUE INDEX IF NOT EXISTS $indexName ON $tableName($columnName)',
     );
@@ -883,9 +926,13 @@ class DatabaseHelper {
   Future<List<LogEntry>> getVisibleLogs([String? sessionId]) async {
     final db = await database;
     final maps = sessionId != null
+        // Show logs explicitly tagged with this session AND orphan logs
+        // (session_id IS NULL) so legacy / unbound rows are still reachable
+        // from the active session view instead of vanishing.
         ? await db.query(
             _logsTable,
-            where: 'deleted_at IS NULL AND session_id = ?',
+            where:
+                'deleted_at IS NULL AND (session_id = ? OR session_id IS NULL)',
             whereArgs: [sessionId],
             orderBy: 'id ASC',
           )
@@ -1000,7 +1047,12 @@ class DatabaseHelper {
       where: 'deleted_at IS NULL',
       orderBy: 'raw ASC',
     );
-    return maps.map((Map<String, dynamic> m) => m['raw'] as String).toList();
+    final result = <String>[];
+    for (final m in maps) {
+      final raw = _stringOrNull(m['raw']);
+      if (raw != null) result.add(raw);
+    }
+    return result;
   }
 
   Future<List<DictionaryItem>> getDictionaryItems(String tableName) async {
@@ -1162,12 +1214,10 @@ class DatabaseHelper {
       _database = null;
     }
     final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path =
-        '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
-    final dbFile = File(path);
-    if (await dbFile.exists()) {
-      await dbFile.delete();
-    }
+    final dbPath = p.join(documentsDirectory.path, _databaseName);
+    try {
+      await deleteDatabase(dbPath);
+    } catch (_) {}
   }
 
   // History operations
@@ -1274,6 +1324,21 @@ class DatabaseHelper {
     );
   }
 
+  /// Returns the session row for [sessionId] if it exists and is not
+  /// soft-deleted. Used to validate persisted "current session" pointers
+  /// against the actual DB state.
+  Future<Session?> getSessionById(String sessionId) async {
+    final db = await database;
+    final rows = await db.query(
+      _sessionsTable,
+      where: 'session_id = ? AND deleted_at IS NULL',
+      whereArgs: [sessionId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return Session.fromMap(rows.first);
+  }
+
   Future<List<Map<String, dynamic>>> getClosedSessions() async {
     final db = await database;
     return db.query(
@@ -1283,14 +1348,46 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> hardDeleteSession(String sessionId) async {
+  /// Count of visible (non-deleted) logs attached to [sessionId]. Used by
+  /// the history panel to show a per-session record count.
+  Future<int> getLogCountForSession(String sessionId) async {
     final db = await database;
-    return db.delete(_sessionsTable, where: 'session_id = ? AND deleted_at IS NOT NULL', whereArgs: [sessionId]);
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) FROM $_logsTable WHERE session_id = ? AND deleted_at IS NULL',
+      [sessionId],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Permanently remove a session and all its associated logs. No soft-delete
+  /// precondition — works on any session.
+  Future<int> hardDeleteSession(String sessionId) async {
+    final db = await database;
+    return db.transaction<int>((txn) async {
+      await txn.delete(
+        _logsTable,
+        where: 'session_id = ?',
+        whereArgs: [sessionId],
+      );
+      return txn.delete(
+        _sessionsTable,
+        where: 'session_id = ?',
+        whereArgs: [sessionId],
+      );
+    });
+  }
+
+  /// Permanently delete a single log row. No soft-delete precondition.
   Future<int> hardDeleteLog(String syncId) async {
     final db = await database;
-    return db.delete(_logsTable, where: 'sync_id = ? AND deleted_at IS NOT NULL', whereArgs: [syncId]);
+    return db.delete(_logsTable, where: 'sync_id = ?', whereArgs: [syncId]);
+  }
+
+  /// Permanently delete a dictionary item. No soft-delete precondition.
+  Future<int> hardDeleteDictionaryItem(String tableName, String syncId) async {
+    _assertDictionaryTable(tableName);
+    final db = await database;
+    return db.delete(tableName, where: 'sync_id = ?', whereArgs: [syncId]);
   }
 
   Future<int> purgeDeletedRecords() async {
@@ -1343,19 +1440,71 @@ class DatabaseHelper {
     return result;
   }
 
+  /// Sessions table uses `session_id` as its primary key, not `sync_id`, so
+  /// it cannot share the generic `_upsertSyncRow` / `_softDeleteBySyncId`
+  /// helpers that query by `sync_id`. These are dedicated implementations.
   Future<void> upsertSessionFromSync(Map<String, dynamic> data) async {
     final sessionId = data['session_id']?.toString();
     if (sessionId == null) return;
 
-    await _upsertSyncRow(
-      tableName: _sessionsTable,
-      syncId: sessionId,
-      incomingRow: data,
+    final db = await database;
+    final existingRows = await db.query(
+      _sessionsTable,
+      columns: ['session_id', 'updated_at', 'deleted_at'],
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+      limit: 1,
     );
+
+    if (existingRows.isEmpty) {
+      await db.insert(_sessionsTable, data,
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      return;
+    }
+
+    final existingVersion = _latestVersionTimestamp(
+      updatedAt: existingRows.first['updated_at'],
+      deletedAt: existingRows.first['deleted_at'],
+    );
+    final incomingVersion = _latestVersionTimestamp(
+      updatedAt: data['updated_at'],
+      deletedAt: data['deleted_at'],
+    );
+
+    if (incomingVersion != null &&
+        (existingVersion == null || incomingVersion.isAfter(existingVersion))) {
+      await db.update(
+        _sessionsTable,
+        data,
+        where: 'session_id = ?',
+        whereArgs: [sessionId],
+      );
+    }
   }
 
   Future<void> softDeleteSession(String sessionId, String deletedAt) async {
-    await _softDeleteBySyncId(_sessionsTable, sessionId, deletedAt);
+    final db = await database;
+    final normalizedDeletedAt = _legacyTimestamp(deletedAt);
+    final existingRows = await db.query(
+      _sessionsTable,
+      columns: ['session_id', 'deleted_at'],
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+      limit: 1,
+    );
+
+    if (existingRows.isEmpty) return;
+    if (!_shouldApplyDeletedAt(
+        existingRows.first['deleted_at'], normalizedDeletedAt)) {
+      return;
+    }
+
+    await db.update(
+      _sessionsTable,
+      <String, dynamic>{'deleted_at': normalizedDeletedAt},
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+    );
   }
 
   Future<String> exportDatabase() async {
@@ -1368,9 +1517,10 @@ class DatabaseHelper {
     final callsignDict = await db.query('callsign_dictionary');
     final history = await db.query(_historyTable);
     final callsignQthHistory = await db.query(_callsignQthHistoryTable);
+    final sessions = await db.query(_sessionsTable);
 
     final exportData = <String, dynamic>{
-      'version': 1,
+      'version': 2,
       'exportedAt': _now(),
       'logs': logs,
       'device_dictionary': deviceDict,
@@ -1379,6 +1529,7 @@ class DatabaseHelper {
       'callsign_dictionary': callsignDict,
       'history': history,
       'callsign_qth_history': callsignQthHistory,
+      'sessions': sessions,
     };
 
     return json.encode(exportData);
@@ -1387,7 +1538,8 @@ class DatabaseHelper {
   Future<void> importDatabase(String jsonData) async {
     final data = json.decode(jsonData) as Map<String, dynamic>;
 
-    if (data['version'] != 1) {
+    final version = data['version'];
+    if (version != 1 && version != 2) {
       throw Exception('不支持的数据库版本');
     }
 
@@ -1420,6 +1572,11 @@ class DatabaseHelper {
       (data['callsign_qth_history'] as List<dynamic>?) ?? <dynamic>[],
       'callsign-qth',
     );
+    final importedSessions = ((data['sessions'] as List<dynamic>?) ?? const [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .where((m) => _stringOrNull(m['session_id']) != null)
+        .toList();
 
     await db.transaction((Transaction txn) async {
       await txn.delete(_logsTable);
@@ -1429,37 +1586,46 @@ class DatabaseHelper {
       await txn.delete('callsign_dictionary');
       await txn.delete(_historyTable);
       await txn.delete(_callsignQthHistoryTable);
+      await txn.delete(_sessionsTable);
 
+      // Use a Batch to avoid awaiting once per row inside the transaction,
+      // which serialized every insert and held the write-lock for the
+      // duration of the loop on large imports.
+      final batch = txn.batch();
       for (final log in importedLogs) {
-        await txn.insert(_logsTable, log);
+        batch.insert(_logsTable, log);
       }
-
       for (final item in importedDeviceDictionary) {
-        await txn.insert('device_dictionary', item);
+        batch.insert('device_dictionary', item);
       }
-
       for (final item in importedAntennaDictionary) {
-        await txn.insert('antenna_dictionary', item);
+        batch.insert('antenna_dictionary', item);
       }
-
       for (final item in importedQthDictionary) {
-        await txn.insert('qth_dictionary', item);
+        batch.insert('qth_dictionary', item);
       }
-
       for (final item in importedCallsignDictionary) {
-        await txn.insert('callsign_dictionary', item);
+        batch.insert('callsign_dictionary', item);
       }
-
       for (final item in importedHistory) {
-        await txn.insert(_historyTable, item);
+        batch.insert(_historyTable, item);
       }
-
       for (final item in importedCallsignQthHistory) {
-        await txn.insert(_callsignQthHistoryTable, item);
+        batch.insert(_callsignQthHistoryTable, item);
       }
+      for (final item in importedSessions) {
+        batch.insert(_sessionsTable, item,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
     });
 
     await _migrateSyncSchema(db);
+    if (importedSessions.isEmpty) {
+      // v1 export had no sessions. Reconstruct from history so logs that
+      // were tagged via _migrateHistoryToSessions still resolve.
+      await _migrateHistoryToSessions(db);
+    }
   }
 
   List<Map<String, dynamic>> _sanitizeImportedRows(
@@ -1514,6 +1680,33 @@ class DatabaseHelper {
       'history': historyCount,
       'callsign_qth_history': callsignQthHistoryCount,
     };
+  }
+
+  Future<LogEntry?> getLatestLogByCallsign(String callsign) async {
+    if (callsign.isEmpty) return null;
+    final db = await database;
+    final rows = await db.query(
+      _logsTable,
+      where: 'callsign = ? AND deleted_at IS NULL',
+      whereArgs: [callsign.toUpperCase()],
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return LogEntry.fromMap(rows.first);
+  }
+
+  Future<List<LogEntry>> getLogsByCallsign(String callsign, {int limit = 5}) async {
+    if (callsign.isEmpty) return [];
+    final db = await database;
+    final rows = await db.query(
+      _logsTable,
+      where: 'callsign = ? AND deleted_at IS NULL',
+      whereArgs: [callsign.toUpperCase()],
+      orderBy: 'id DESC',
+      limit: limit,
+    );
+    return rows.map((m) => LogEntry.fromMap(m)).toList();
   }
 
   Future<void> addCallsignQthRecord(String callsign, String qth) async {
@@ -1572,7 +1765,7 @@ class DatabaseHelper {
     if (results.isEmpty) {
       return null;
     }
-    return results.first['recorded_at'] as String;
+    return _stringOrNull(results.first['recorded_at']);
   }
 
   Future<void> clearCallsignQthHistory() async {
