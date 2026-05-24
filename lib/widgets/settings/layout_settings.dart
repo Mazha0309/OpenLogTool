@@ -45,8 +45,8 @@ class LayoutSettings extends StatelessWidget {
             ),
             SizedBox(height: isNarrow ? 10 : 12),
             _buildSwitchRow(
-              title: '呼号-QTH联动',
-              subtitle: '自动关联呼号和QTH，输入呼号时显示历史QTH',
+              title: '呼号历史填充',
+              subtitle: '输入已记录过的呼号时，显示历史记录并一键填充全部字段',
               value: settingsProvider.callSignQthLinkEnabled,
               onChanged: (v) => settingsProvider.setCallSignQthLink(v),
             ),

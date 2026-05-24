@@ -9,7 +9,7 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/database/database_helper.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
-import 'package:openlogtool/widgets/qth_field_with_history.dart';
+import 'package:openlogtool/widgets/callsign_history_field.dart';
 
 /// 日志表单组件
 /// 用于添加和编辑点名记录
@@ -22,9 +22,7 @@ class LogForm extends StatefulWidget {
 
 class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
-final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
-      GlobalKey<QthFieldWithHistoryState>();
-  final _controllerController = TextEditingController();
+final _controllerController = TextEditingController();
   final _callsignController = TextEditingController();
   final FocusNode _callsignFocusNode = FocusNode();
   final _deviceController = TextEditingController();
@@ -116,7 +114,6 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
 
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
     _resetForm();
-    _qthFieldKey.currentState?.refresh();
 
     if (context.mounted) {
         context.showLoggedSnackBar(
@@ -189,10 +186,13 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
-                    child: _buildCallsignFieldWithQthLink(
-                      controller: _callsignController,
+                    child: CallsignHistoryField(
+                      callsignController: _callsignController,
+                      deviceController: _deviceController,
+                      antennaController: _antennaController,
                       qthController: _qthController,
-                      dictionaryOptions: dictionaryProvider.callsignDict,
+                      powerController: _powerController,
+                      heightController: _heightController,
                       label: '点名呼号',
                       hintText: '输入呼号',
                       focusNode: _callsignFocusNode,
@@ -238,13 +238,12 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
-                    child: QthFieldWithHistory(
-                      key: _qthFieldKey,
+                    child: _buildAutocompleteField(
                       controller: _qthController,
-                      callsignController: _callsignController,
-                      dictionaryOptions: dictionaryProvider.qthDict,
                       label: 'QTH',
                       hintText: '输入QTH',
+                      options: dictionaryProvider.qthDict,
+                      upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
                     ),
@@ -397,88 +396,6 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
           textInputAction: textInputAction ?? TextInputAction.next,
           textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
-        );
-      },
-      optionsViewBuilder: (
-        BuildContext context,
-        AutocompleteOnSelected<DictionaryItem> onSelected,
-        Iterable<DictionaryItem> options,
-      ) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4.0,
-            borderRadius: BorderRadius.circular(8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (BuildContext context, int index) {
-                  final DictionaryItem item = options.elementAt(index);
-                  return ListTile(
-                    title: Text(item.raw),
-                    dense: true,
-                    onTap: () => onSelected(item),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCallsignFieldWithQthLink({
-    required TextEditingController controller,
-    required TextEditingController qthController,
-    required List<DictionaryItem> dictionaryOptions,
-    required String label,
-    required String hintText,
-    TextInputAction? textInputAction,
-    FocusNode? focusNode,
-    bool isCompact = false,
-  }) {
-    return Autocomplete<DictionaryItem>(
-      optionsBuilder: (TextEditingValue textEditingValue) {
-        if (textEditingValue.text.isEmpty) {
-          return const Iterable<DictionaryItem>.empty();
-        }
-        return dictionaryOptions.where((option) =>
-            option.matches(textEditingValue.text));
-      },
-      onSelected: (DictionaryItem selection) {
-        controller.text = selection.raw;
-      },
-      fieldViewBuilder: (
-        BuildContext context,
-        TextEditingController fieldController,
-        FocusNode fieldFocusNode,
-        VoidCallback onFieldSubmitted,
-      ) {
-        controller.addListener(() {
-          if (fieldController.text != controller.text) {
-            fieldController.text = controller.text;
-          }
-        });
-        return TextFormField(
-          controller: fieldController,
-          focusNode: focusNode ?? fieldFocusNode,
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hintText,
-            border: const OutlineInputBorder(),
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 10 : 14),
-          ),
-          onChanged: (value) {
-            controller.text = value.toUpperCase();
-          },
-          textInputAction: textInputAction ?? TextInputAction.next,
-          textCapitalization: TextCapitalization.characters,
-          inputFormatters: [UpperCaseTextFormatter()],
         );
       },
       optionsViewBuilder: (
