@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/models/log_entry.dart';
@@ -72,12 +72,16 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path =
-        '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
+    String dbPath;
+    if (kIsWeb) {
+      dbPath = _databaseName;
+    } else {
+      final documentsDirectory = await getApplicationDocumentsDirectory();
+      dbPath = p.join(documentsDirectory.path, _databaseName);
+    }
 
     return openDatabase(
-      path,
+      dbPath,
       version: 1,
       onCreate: _onCreate,
       onOpen: _onOpen,
@@ -1210,12 +1214,10 @@ class DatabaseHelper {
       _database = null;
     }
     final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path =
-        '${documentsDirectory.path}${Platform.pathSeparator}$_databaseName';
-    final dbFile = File(path);
-    if (await dbFile.exists()) {
-      await dbFile.delete();
-    }
+    final dbPath = p.join(documentsDirectory.path, _databaseName);
+    try {
+      await deleteDatabase(dbPath);
+    } catch (_) {}
   }
 
   // History operations
