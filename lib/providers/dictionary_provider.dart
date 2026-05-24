@@ -4,6 +4,7 @@ import 'package:openlogtool/database/database_helper.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 
 class DictionaryProvider with ChangeNotifier {
+  bool _disposed = false;
   List<DictionaryItem> _deviceDict = [];
   List<DictionaryItem> _antennaDict = [];
   List<DictionaryItem> _callsignDict = [];
@@ -26,24 +27,38 @@ class DictionaryProvider with ChangeNotifier {
   }
 
   DictionaryProvider() {
-    _loadDictionaries();
+    scheduleMicrotask(_loadDictionaries);
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  void _safeNotify() {
+    if (_disposed) return;
+    notifyListeners();
   }
 
   Future<void> _loadDictionaries() async {
-    final db = DatabaseHelper();
-    _deviceDict = await db.getDictionaryItems('device_dictionary');
-    _antennaDict = await db.getDictionaryItems('antenna_dictionary');
-    _callsignDict = await db.getDictionaryItems('callsign_dictionary');
-    _qthDict = await db.getDictionaryItems('qth_dictionary');
-
-    if (_deviceDict.isEmpty && _antennaDict.isEmpty && _qthDict.isEmpty) {
-      await db.loadInitialDictionaries();
+    try {
+      final db = DatabaseHelper();
       _deviceDict = await db.getDictionaryItems('device_dictionary');
       _antennaDict = await db.getDictionaryItems('antenna_dictionary');
+      _callsignDict = await db.getDictionaryItems('callsign_dictionary');
       _qthDict = await db.getDictionaryItems('qth_dictionary');
-    }
 
-    notifyListeners();
+      if (_deviceDict.isEmpty && _antennaDict.isEmpty && _qthDict.isEmpty) {
+        await db.loadInitialDictionaries();
+        _deviceDict = await db.getDictionaryItems('device_dictionary');
+        _antennaDict = await db.getDictionaryItems('antenna_dictionary');
+        _qthDict = await db.getDictionaryItems('qth_dictionary');
+      }
+    } catch (e, st) {
+      debugPrint('[DictionaryProvider] _loadDictionaries failed: $e\n$st');
+    }
+    _safeNotify();
   }
 
   List<DictionaryItem> filterDevices(String query) {
@@ -67,7 +82,8 @@ class DictionaryProvider with ChangeNotifier {
   }
 
   Future<void> addDevice(String device) async {
-    if (device.isNotEmpty && !_deviceDict.any((d) => d.raw == device)) {
+    if (device.isEmpty || _deviceDict.any((d) => d.raw == device)) return;
+    try {
       final db = DatabaseHelper();
       await db.insertDictionaryItem('device_dictionary', {
         'raw': device,
@@ -77,13 +93,17 @@ class DictionaryProvider with ChangeNotifier {
       final persisted = await db.getDictionaryItemByRaw('device_dictionary', device);
       _deviceDict.add(persisted ?? DictionaryItem(raw: device, pinyin: '', abbreviation: '', type: 'device'));
       _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
-      notifyListeners();
+      _safeNotify();
       await _notifyDictionaryChanged();
+    } catch (e, st) {
+      debugPrint('[DictionaryProvider] addDevice failed: $e\n$st');
+      rethrow;
     }
   }
 
   Future<void> addAntenna(String antenna) async {
-    if (antenna.isNotEmpty && !_antennaDict.any((a) => a.raw == antenna)) {
+    if (antenna.isEmpty || _antennaDict.any((a) => a.raw == antenna)) return;
+    try {
       final db = DatabaseHelper();
       await db.insertDictionaryItem('antenna_dictionary', {
         'raw': antenna,
@@ -93,13 +113,17 @@ class DictionaryProvider with ChangeNotifier {
       final persisted = await db.getDictionaryItemByRaw('antenna_dictionary', antenna);
       _antennaDict.add(persisted ?? DictionaryItem(raw: antenna, pinyin: '', abbreviation: '', type: 'antenna'));
       _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
-      notifyListeners();
+      _safeNotify();
       await _notifyDictionaryChanged();
+    } catch (e, st) {
+      debugPrint('[DictionaryProvider] addAntenna failed: $e\n$st');
+      rethrow;
     }
   }
 
   Future<void> addCallsign(String callsign) async {
-    if (callsign.isNotEmpty && !_callsignDict.any((c) => c.raw == callsign)) {
+    if (callsign.isEmpty || _callsignDict.any((c) => c.raw == callsign)) return;
+    try {
       final db = DatabaseHelper();
       await db.insertDictionaryItem('callsign_dictionary', {
         'raw': callsign,
@@ -109,13 +133,17 @@ class DictionaryProvider with ChangeNotifier {
       final persisted = await db.getDictionaryItemByRaw('callsign_dictionary', callsign);
       _callsignDict.add(persisted ?? DictionaryItem(raw: callsign, pinyin: '', abbreviation: '', type: 'callsign'));
       _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
-      notifyListeners();
+      _safeNotify();
       await _notifyDictionaryChanged();
+    } catch (e, st) {
+      debugPrint('[DictionaryProvider] addCallsign failed: $e\n$st');
+      rethrow;
     }
   }
 
   Future<void> addQth(String qth) async {
-    if (qth.isNotEmpty && !_qthDict.any((q) => q.raw == qth)) {
+    if (qth.isEmpty || _qthDict.any((q) => q.raw == qth)) return;
+    try {
       final db = DatabaseHelper();
       await db.insertDictionaryItem('qth_dictionary', {
         'raw': qth,
@@ -125,8 +153,11 @@ class DictionaryProvider with ChangeNotifier {
       final persisted = await db.getDictionaryItemByRaw('qth_dictionary', qth);
       _qthDict.add(persisted ?? DictionaryItem(raw: qth, pinyin: '', abbreviation: '', type: 'qth'));
       _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
-      notifyListeners();
+      _safeNotify();
       await _notifyDictionaryChanged();
+    } catch (e, st) {
+      debugPrint('[DictionaryProvider] addQth failed: $e\n$st');
+      rethrow;
     }
   }
 

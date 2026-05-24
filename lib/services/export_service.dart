@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/models/log_entry.dart';
@@ -85,7 +86,7 @@ class ExportService {
       return const ExportSaveResult();
     }
 
-    final file = File('$exportPath/$filename');
+    final file = File(p.join(exportPath, filename));
     await file.writeAsBytes(bytes);
     return ExportSaveResult(path: file.path, usedSaf: false);
   }
@@ -200,70 +201,31 @@ class ExportService {
     });
     sheet.setRowHeight(1, 25);
 
-    // Group by controller
-    final grouped = <String, List<LogEntry>>{};
-    for (final log in logs) {
-      grouped.putIfAbsent(log.controller, () => []).add(log);
-    }
-
+    // Walk logs in natural order. When the controller changes from
+    // the previous log, print a new controller header row.
     int globalIndex = 1;
     int currentRow = 2;
+    String? lastController;
+    int blockRowColorIndex = 0;
 
-    for (final controller in grouped.keys) {
-      final controllerLogs = grouped[controller]!;
-      final firstTime =
-          controllerLogs.isNotEmpty ? controllerLogs.first.time : '';
-      final controllerTime = calculateControllerTime(firstTime);
+    for (final log in logs) {
+      if (log.controller != lastController) {
+        lastController = log.controller;
+        blockRowColorIndex = 0;
+        final controllerTime = calculateControllerTime(log.time);
 
-      final controllerRow = <String>[
-        '点名主控:', controllerTime, controller, '', '', '', '', '', '', ''];
-      sheet.insertRowIterables(
-        controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(),
-        currentRow,
-      );
-      sheet.row(currentRow).forEach((cell) {
-        if (cell != null) {
-          cell.cellStyle = excel_lib.CellStyle(
-            backgroundColorHex: controllerColor,
-            fontSize: 11,
-            bold: true,
-            fontFamily: excelFontFamily,
-            horizontalAlign: excel_lib.HorizontalAlign.Center,
-            verticalAlign: excel_lib.VerticalAlign.Center,
-            topBorder: borderStyle,
-            bottomBorder: borderStyle,
-            leftBorder: borderStyle,
-            rightBorder: borderStyle,
-          );
-        }
-      });
-      sheet.setRowHeight(currentRow, 20);
-      currentRow++;
-
-      for (int i = 0; i < controllerLogs.length; i++) {
-        final log = controllerLogs[i];
-        final rowColor = settings.useAlternateColors && i % 2 == 1
-            ? alternateColor
-            : whiteColor;
-
-        final rowData = [
-          excel_lib.TextCellValue(globalIndex.toString()),
-          excel_lib.TextCellValue(log.time),
-          excel_lib.TextCellValue(log.callsign),
-          excel_lib.TextCellValue(log.report),
-          excel_lib.TextCellValue(log.qth),
-          excel_lib.TextCellValue(log.device),
-          excel_lib.TextCellValue(log.power),
-          excel_lib.TextCellValue(log.antenna),
-          excel_lib.TextCellValue(log.height),
-          excel_lib.TextCellValue(''),
-        ];
-        sheet.insertRowIterables(rowData, currentRow);
+        final controllerRow = <String>[
+          '点名主控:', controllerTime, log.controller, '', '', '', '', '', '', ''];
+        sheet.insertRowIterables(
+          controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(),
+          currentRow,
+        );
         sheet.row(currentRow).forEach((cell) {
           if (cell != null) {
             cell.cellStyle = excel_lib.CellStyle(
-              backgroundColorHex: rowColor,
+              backgroundColorHex: controllerColor,
               fontSize: 11,
+              bold: true,
               fontFamily: excelFontFamily,
               horizontalAlign: excel_lib.HorizontalAlign.Center,
               verticalAlign: excel_lib.VerticalAlign.Center,
@@ -275,9 +237,45 @@ class ExportService {
           }
         });
         sheet.setRowHeight(currentRow, 20);
-        globalIndex++;
         currentRow++;
       }
+
+      final rowColor = settings.useAlternateColors && blockRowColorIndex % 2 == 1
+          ? alternateColor
+          : whiteColor;
+      blockRowColorIndex++;
+
+      final rowData = [
+        excel_lib.TextCellValue(globalIndex.toString()),
+        excel_lib.TextCellValue(log.time),
+        excel_lib.TextCellValue(log.callsign),
+        excel_lib.TextCellValue(log.report),
+        excel_lib.TextCellValue(log.qth),
+        excel_lib.TextCellValue(log.device),
+        excel_lib.TextCellValue(log.power),
+        excel_lib.TextCellValue(log.antenna),
+        excel_lib.TextCellValue(log.height),
+        excel_lib.TextCellValue(''),
+      ];
+      sheet.insertRowIterables(rowData, currentRow);
+      sheet.row(currentRow).forEach((cell) {
+        if (cell != null) {
+          cell.cellStyle = excel_lib.CellStyle(
+            backgroundColorHex: rowColor,
+            fontSize: 11,
+            fontFamily: excelFontFamily,
+            horizontalAlign: excel_lib.HorizontalAlign.Center,
+            verticalAlign: excel_lib.VerticalAlign.Center,
+            topBorder: borderStyle,
+            bottomBorder: borderStyle,
+            leftBorder: borderStyle,
+            rightBorder: borderStyle,
+          );
+        }
+      });
+      sheet.setRowHeight(currentRow, 20);
+      globalIndex++;
+      currentRow++;
     }
 
     // Footer

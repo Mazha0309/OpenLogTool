@@ -146,6 +146,7 @@ final GlobalKey<QthFieldWithHistoryState> _qthFieldKey =
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
 
     return LayoutBuilder(

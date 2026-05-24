@@ -18,6 +18,8 @@ class _LogTableState extends State<LogTable> {
   int _currentPage = 0;
   static const int _itemsPerPage = 5;
 
+  final ScrollController _horizontalController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -29,6 +31,7 @@ class _LogTableState extends State<LogTable> {
     for (var controller in _controllers.values) {
       controller.dispose();
     }
+    _horizontalController.dispose();
     super.dispose();
   }
 
@@ -50,6 +53,7 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _cancelEditing() {
+    if (!mounted) return;
     setState(() {
       _editingIndex = null;
       for (var controller in _controllers.values) {
@@ -61,7 +65,10 @@ class _LogTableState extends State<LogTable> {
 
   Future<void> _saveEditing(int index) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final updatedLog = LogEntry(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    // updateLog preserves sync_id / localId / sessionId / createdAt — only the
+    // text fields below are taken from the form.
+    final patch = LogEntry(
       time: _controllers['time']?.text ?? '',
       controller: _controllers['controller']?.text ?? '',
       callsign: _controllers['callsign']?.text ?? '',
@@ -72,8 +79,14 @@ class _LogTableState extends State<LogTable> {
       antenna: _controllers['antenna']?.text ?? '',
       height: _controllers['height']?.text ?? '',
     );
-    logProvider.updateLog(index, updatedLog);
-    _cancelEditing();
+    try {
+      await logProvider.updateLog(index, patch);
+    } catch (e) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('保存失败: $e')),
+      );
+    }
+    if (mounted) _cancelEditing();
   }
 
   @override
@@ -118,7 +131,7 @@ class _LogTableState extends State<LogTable> {
       );
     }
 
-    final horizontalController = ScrollController();
+    final horizontalController = _horizontalController;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -223,6 +236,13 @@ class _LogTableState extends State<LogTable> {
     // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
     List<MapEntry<int, LogEntry>> displayEntries;
     if (settingsProvider.paginationEnabled) {
+      final totalPages =
+          (indexedLogs.length / _itemsPerPage).ceil().clamp(1, 1 << 30);
+      if (_currentPage >= totalPages) {
+        // Logs got shorter (session switch / clear / undo) — snap back to a
+        // valid page instead of showing an empty slice.
+        _currentPage = totalPages - 1;
+      }
       final startIndex = _currentPage * _itemsPerPage;
       final endIndex = (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
       displayEntries = indexedLogs.sublist(startIndex, endIndex);
@@ -486,67 +506,6 @@ class _LogTableState extends State<LogTable> {
                 ? () => setState(() => _currentPage++)
                 : null,
           ),
-        ],
-      ),
-    );
-  }
-
-  void _showHistoryDialog(BuildContext context) async {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final sessions = await logProvider.getHistory();
-
-    if (sessions.isEmpty) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('暂无历史记录')));
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('历史记录'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: sessions.length,
-            itemBuilder: (_, index) {
-              final item = sessions[index];
-              final sessionId = item['session_id'] as String;
-              final name = item['title'] as String;
-              final createdAt = DateTime.parse(item['created_at'] as String);
-
-              return ListTile(
-                title: Text(name),
-                subtitle: Text(
-                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.open_in_new),
-                      tooltip: '打开',
-                      onPressed: () async {
-                        await logProvider.switchToSession(sessionId);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (context.mounted) {
-                          context.showLoggedSnackBar(
-                            SnackBar(content: Text('已切换到: $name')),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          FilledButton(child: const Text('关闭'), onPressed: () => Navigator.pop(ctx)),
         ],
       ),
     );

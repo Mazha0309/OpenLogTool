@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class CollaborationService {
+  static const Duration _timeout = Duration(seconds: 10);
+
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
   String? _serverWsUrl;
@@ -26,7 +29,7 @@ class CollaborationService {
     _deviceId = deviceId;
     _serverWsUrl = serverUrl
         .replaceAll(RegExp(r'^http'), 'ws')
-        .replaceAll(RegExp(r'/\$'), '');
+        .replaceAll(RegExp(r'/$'), '');
     _connectWs();
   }
 
@@ -39,12 +42,19 @@ class CollaborationService {
           try {
             final msg = json.decode(data as String);
             _handleMessage(msg);
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('[Collaboration] decode failed: $e');
+          }
         },
-        onError: (_) => _scheduleReconnect(),
+        onError: (e) {
+          debugPrint('[Collaboration] ws error: $e');
+          _scheduleReconnect();
+        },
         onDone: () => _scheduleReconnect(),
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Collaboration] connect failed: $e');
+    }
   }
 
   void _handleMessage(Map<String, dynamic> msg) {
@@ -67,32 +77,65 @@ class CollaborationService {
     });
   }
 
-  Future<void> pushLogUpsert(String sessionId, Map<String, dynamic> log, String deviceId) async {
+  Future<bool> pushLogUpsert(
+      String sessionId, Map<String, dynamic> log, String deviceId) async {
+    if (_serverWsUrl == null) return false;
     try {
-      final uri = Uri.parse('$_serverWsUrl/api/v1/logs/sessions/$sessionId/logs/upsert');
-      await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: json.encode({'deviceId': deviceId, 'log': log}),
-      );
-    } catch (_) {}
+      final baseUrl = _serverWsUrl!.replaceAll(RegExp(r'^ws'), 'http');
+      final uri = Uri.parse(
+          '$baseUrl/api/v1/logs/sessions/$sessionId/logs/upsert');
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+            body: json.encode({'deviceId': deviceId, 'log': log}),
+          )
+          .timeout(_timeout);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      }
+      debugPrint(
+          '[Collaboration] pushLogUpsert failed: ${response.statusCode}');
+      return false;
+    } catch (e) {
+      debugPrint('[Collaboration] pushLogUpsert error: $e');
+      return false;
+    }
   }
 
-  Future<void> pushLogDelete(String sessionId, String syncId, String deviceId) async {
+  Future<bool> pushLogDelete(
+      String sessionId, String syncId, String deviceId) async {
+    if (_serverWsUrl == null) return false;
     try {
-      final uri = Uri.parse('$_serverWsUrl/api/v1/logs/sessions/$sessionId/logs/$syncId');
-      await http.delete(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: json.encode({'deviceId': deviceId, 'deleted_at': DateTime.now().toUtc().toIso8601String()}),
-      );
-    } catch (_) {}
+      final baseUrl = _serverWsUrl!.replaceAll(RegExp(r'^ws'), 'http');
+      final uri =
+          Uri.parse('$baseUrl/api/v1/logs/sessions/$sessionId/logs/$syncId');
+      final response = await http
+          .delete(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+            body: json.encode({
+              'deviceId': deviceId,
+              'deleted_at': DateTime.now().toUtc().toIso8601String(),
+            }),
+          )
+          .timeout(_timeout);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      }
+      debugPrint(
+          '[Collaboration] pushLogDelete failed: ${response.statusCode}');
+      return false;
+    } catch (e) {
+      debugPrint('[Collaboration] pushLogDelete error: $e');
+      return false;
+    }
   }
 
   void disconnect() {
