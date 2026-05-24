@@ -1680,6 +1680,33 @@ class DatabaseHelper {
     };
   }
 
+  Future<LogEntry?> getLatestLogByCallsign(String callsign) async {
+    if (callsign.isEmpty) return null;
+    final db = await database;
+    final rows = await db.query(
+      _logsTable,
+      where: 'callsign = ? AND deleted_at IS NULL',
+      whereArgs: [callsign.toUpperCase()],
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return LogEntry.fromMap(rows.first);
+  }
+
+  Future<List<LogEntry>> getLogsByCallsign(String callsign, {int limit = 5}) async {
+    if (callsign.isEmpty) return [];
+    final db = await database;
+    final rows = await db.query(
+      _logsTable,
+      where: 'callsign = ? AND deleted_at IS NULL',
+      whereArgs: [callsign.toUpperCase()],
+      orderBy: 'id DESC',
+      limit: limit,
+    );
+    return rows.map((m) => LogEntry.fromMap(m)).toList();
+  }
+
   Future<void> addCallsignQthRecord(String callsign, String qth) async {
     if (callsign.isEmpty || qth.isEmpty) {
       return;
