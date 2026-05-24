@@ -653,23 +653,31 @@ class AddRecordPage extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Chip(label: Text('${logProvider.logCount} 条记录')),
+        Flexible(
+          child: Consumer<LogProvider>(
+            builder: (_, lp, __) => Chip(label: Text('${lp.logCount} 条记录')),
+          ),
+        ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FilledButton(
-              onPressed: logProvider.canUndo
-                  ? () => _showUndoConfirmation(context)
-                  : null,
-              child: const Text('撤销'),
+            Consumer<LogProvider>(
+              builder: (_, lp, __) => FilledButton(
+                onPressed: lp.canUndo
+                    ? () => _showUndoConfirmation(context)
+                    : null,
+                child: const Text('撤销'),
+              ),
             ),
             const SizedBox(width: 8),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-              onPressed: logProvider.logCount > 0
-                  ? () => _showClearConfirmation(context)
-                  : null,
-              child: const Text('清空'),
+            Consumer<LogProvider>(
+              builder: (_, lp, __) => FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+                onPressed: lp.logCount > 0
+                    ? () => _showClearConfirmation(context)
+                    : null,
+                child: const Text('清空'),
+              ),
             ),
             const SizedBox(width: 4),
             IconButton(
