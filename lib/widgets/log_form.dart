@@ -78,6 +78,7 @@ final _controllerController = TextEditingController();
     final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
 
     if (_deviceController.text.isNotEmpty) {
       await dictionaryProvider.addDevice(_deviceController.text);
@@ -111,14 +112,12 @@ final _controllerController = TextEditingController();
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
     _resetForm();
 
-    if (context.mounted) {
-        context.showLoggedSnackBar(
-          const SnackBar(
-            content: Text('记录已添加'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-    }
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('记录已添加'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   void _resetForm() {

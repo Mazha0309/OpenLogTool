@@ -49,6 +49,8 @@ class _DictionaryManagerState extends State<DictionaryManager> {
   }
 
   Future<void> _importFromFile(String dictType) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final provider = Provider.of<DictionaryProvider>(context, listen: false);
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -60,8 +62,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         final content = String.fromCharCodes(file.bytes!);
         final lines = content.split('\n').map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
 
-        final provider = Provider.of<DictionaryProvider>(context, listen: false);
-        
+
         switch (dictType) {
           case 'device':
             await provider.importDevices(lines);
@@ -77,7 +78,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
             break;
         }
 
-        context.showLoggedSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('已导入 ${lines.length} 条${_getDictName(dictType)}'),
             duration: const Duration(seconds: 2),
@@ -85,7 +86,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         );
       }
     } catch (e) {
-      context.showLoggedSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('导入失败: $e'),
           backgroundColor: Colors.red,
@@ -290,8 +291,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           items: dictionaryProvider.deviceDict,
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
+            final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addDevice(value);
-            context.showLoggedSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('已添加设备: $value'),
                 duration: const Duration(seconds: 2),
@@ -309,8 +311,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           items: dictionaryProvider.antennaDict,
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
+            final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addAntenna(value);
-            context.showLoggedSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('已添加天线: $value'),
                 duration: const Duration(seconds: 2),
@@ -328,8 +331,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           items: dictionaryProvider.callsignDict,
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
+            final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addCallsign(value);
-            context.showLoggedSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('已添加呼号: $value'),
                 duration: const Duration(seconds: 2),
@@ -347,8 +351,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           items: dictionaryProvider.qthDict,
           cardPadding: isNarrow ? 12.0 : 16.0,
           onAdd: (value) async {
+            final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addQth(value);
-            context.showLoggedSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('已添加QTH: $value'),
                 duration: const Duration(seconds: 2),

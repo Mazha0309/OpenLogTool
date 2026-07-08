@@ -13,9 +13,14 @@ import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
 
-class ExportPanel extends StatelessWidget {
+class ExportPanel extends StatefulWidget {
   const ExportPanel({super.key});
 
+  @override
+  State<ExportPanel> createState() => _ExportPanelState();
+}
+
+class _ExportPanelState extends State<ExportPanel> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -998,7 +1003,7 @@ class ExportPanel extends StatelessWidget {
     final logs = logProvider.logs;
 
     if (logs.isEmpty) {
-      _showSnackBar(context, '没有数据可以导出');
+      _showSnackBar('没有数据可以导出');
       return;
     }
 
@@ -1021,18 +1026,18 @@ class ExportPanel extends StatelessWidget {
 
       if (saveResult.cancelled) return;
       if (saveResult.path == null) {
-        _showSnackBar(context, '无法访问下载目录');
+        _showSnackBar('无法访问下载目录');
         return;
       }
 
       if (saveResult.usedSaf) {
-        _showSnackBar(context, 'JSON导出成功，已通过系统文件选择器保存');
+        _showSnackBar('JSON导出成功，已通过系统文件选择器保存');
       } else {
         _showSuccessDialog(
-            context, 'JSON导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+            'JSON导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
       }
     } catch (e) {
-      _showSnackBar(context, '导出失败: $e');
+      _showSnackBar('导出失败: $e');
     }
   }
 
@@ -1043,7 +1048,7 @@ class ExportPanel extends StatelessWidget {
     final logs = logProvider.logs;
 
     if (logs.isEmpty) {
-      _showSnackBar(context, '没有数据可以导出');
+      _showSnackBar('没有数据可以导出');
       return;
     }
 
@@ -1051,7 +1056,7 @@ class ExportPanel extends StatelessWidget {
       final now = DateTime.now();
       final bytes = ExportService.generateExcelBytes(logs, settings, now);
       if (bytes == null) {
-        _showSnackBar(context, '导出失败: 无法生成Excel文件');
+        _showSnackBar('导出失败: 无法生成Excel文件');
         return;
       }
 
@@ -1071,22 +1076,26 @@ class ExportPanel extends StatelessWidget {
 
       if (saveResult.cancelled) return;
       if (saveResult.path == null) {
-        _showSnackBar(context, '无法访问下载目录');
+        _showSnackBar('无法访问下载目录');
         return;
       }
 
       if (saveResult.usedSaf) {
-        _showSnackBar(context, 'Excel导出成功，已通过系统文件选择器保存');
+        _showSnackBar('Excel导出成功，已通过系统文件选择器保存');
       } else {
         _showSuccessDialog(
-            context, 'Excel导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+            'Excel导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
       }
     } catch (e) {
-      _showSnackBar(context, '导出失败: $e');
+      _showSnackBar('导出失败: $e');
     }
   }
 
   Future<void> _importJSON(BuildContext context) async {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -1097,10 +1106,6 @@ class ExportPanel extends StatelessWidget {
 
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
-
-      final logProvider = Provider.of<LogProvider>(context, listen: false);
-      final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
       final importResult = parseJsonImport(
         content,
@@ -1115,18 +1120,23 @@ class ExportPanel extends StatelessWidget {
         }
       }
 
-      logProvider.importLogs(importResult.logs, sessionId: sessionProvider.currentSessionId);
-      _showSnackBar(context, '导入成功: ${importResult.logs.length} 条记录');
+      await logProvider.importLogs(importResult.logs, sessionId: sessionProvider.currentSessionId);
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('导入成功: ${importResult.logs.length} 条记录')),
+      );
     } catch (e) {
-      _showSnackBar(context, '导入失败: $e');
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('导入失败: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
   Future<void> _importExcel(BuildContext context) async {
-    _showSnackBar(context, 'Excel导入功能开发中');
+    _showSnackBar('Excel导入功能开发中');
   }
 
-  void _showSnackBar(BuildContext context, String message) {
+  void _showSnackBar(String message) {
+    if (!mounted) return;
     context.showLoggedSnackBar(
       SnackBar(
         content: Text(message),
@@ -1135,7 +1145,9 @@ class ExportPanel extends StatelessWidget {
     );
   }
 
-  void _showSuccessDialog(BuildContext context, String title, String message, String path) {
+  void _showSuccessDialog(String title, String content, String path) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1144,7 +1156,7 @@ class ExportPanel extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
+            Text(content),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1162,7 +1174,7 @@ class ExportPanel extends StatelessWidget {
                   icon: const Icon(Icons.copy, size: 20),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: path));
-                    context.showLoggedSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(content: Text('路径已复制')),
                     );
                   },

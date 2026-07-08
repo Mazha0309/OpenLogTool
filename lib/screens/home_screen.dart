@@ -811,9 +811,11 @@ class AddRecordPage extends StatelessWidget {
               if (sessionProvider.currentSessionId == sessionId) {
                 await sessionProvider.handleSessionDeleted(sessionId);
               }
-              Navigator.pop(ctx);
-              Navigator.pop(context); // close history dialog
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+              }
               if (context.mounted) {
+                Navigator.pop(context); // close history dialog
                 _showHistoryDialog(context);
               }
             },
@@ -883,7 +885,9 @@ class AddRecordPage extends StatelessWidget {
                 }
               } catch (e, st) {
                 debugPrint('[SessionDialog] ERROR: $e\n$st');
-                Navigator.pop(ctx);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
                 if (context.mounted) {
                   context.showLoggedSnackBar(
                     SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Colors.red),
