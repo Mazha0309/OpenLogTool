@@ -82,7 +82,7 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> setThemeColor(Color color) async {
     _themeColor = color;
-    await _saveSetting(_themeColorKey, color.value);
+    await _saveSetting(_themeColorKey, color.toARGB32());
     notifyListeners();
   }
 

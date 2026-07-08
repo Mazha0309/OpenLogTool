@@ -171,7 +171,11 @@ class SettingsPanel extends StatelessWidget {
                                 value: 'manual', child: Text('手动同步')),
                           ],
                           onChanged: (value) {
-                            if (value != null) syncProvider.setSyncMode(value);
+                            if (value != null) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                syncProvider.setSyncMode(value);
+                              });
+                            }
                           },
                         ),
                         if (syncProvider.settings.syncMode == 'interval') ...[
@@ -201,9 +205,13 @@ class SettingsPanel extends StatelessWidget {
                                         value: 60, child: Text('1 小时')),
                                   ],
                                   onChanged: (value) {
-                                    if (value != null)
-                                      syncProvider
-                                          .setSyncIntervalMinutes(value);
+                                    if (value != null) {
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                        syncProvider
+                                            .setSyncIntervalMinutes(value);
+                                      });
+                                    }
                                   },
                                 ),
                               ),
@@ -389,7 +397,7 @@ class SettingsPanel extends StatelessWidget {
           decoration: BoxDecoration(
             color: Theme.of(context)
                 .colorScheme
-                .surfaceVariant
+                .surfaceContainerHighest
                 .withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
           ),
