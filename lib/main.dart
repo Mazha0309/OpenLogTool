@@ -8,6 +8,10 @@ import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
+import 'package:openlogtool/providers/rust_log_provider.dart';
+import 'package:openlogtool/providers/rust_session_provider.dart';
+import 'package:openlogtool/providers/rust_dict_provider.dart';
+import 'package:openlogtool/providers/rust_settings_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
@@ -39,6 +43,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        // Existing providers (kept for backward compatibility)
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
@@ -87,6 +92,11 @@ void main() async {
             return provider;
           },
         ),
+        // Rust providers (for new UI)
+        ChangeNotifierProvider(create: (_) => RustLogProvider()),
+        ChangeNotifierProvider(create: (_) => RustSessionProvider()),
+        ChangeNotifierProvider(create: (_) => RustDictProvider()),
+        ChangeNotifierProvider(create: (_) => RustSettingsProvider()..load()),
       ],
       child: const MyApp(),
     ),
