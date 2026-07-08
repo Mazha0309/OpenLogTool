@@ -70,8 +70,8 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   }
 
   void _onFocusChanged() {
-    if (_effFocus.hasFocus) {
-      _loadHistory();
+    if (_effFocus.hasFocus && _history.isNotEmpty) {
+      _showOverlay();
     } else {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
@@ -234,21 +234,10 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
           border: const OutlineInputBorder(),
           isDense: true,
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: widget.isCompact ? 10 : 14),
-        suffixIcon: _history.isNotEmpty
-            ? Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: IconButton(
-                  icon: Icon(Icons.auto_fix_high,
-                      size: 18, color: Theme.of(context).colorScheme.primary),
-                  tooltip: '一键复用数据库信息',
-                  onPressed: _showOverlay,
-                ),
-              )
-            : Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(Icons.search,
-                    size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+        suffixIcon: Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
         ),
         textInputAction: widget.textInputAction ?? TextInputAction.next,
         textCapitalization: TextCapitalization.characters,
