@@ -224,14 +224,23 @@ class _RustHomeScreenState extends State<RustHomeScreen> {
                         : null,
                   ),
                   const Spacer(),
-                  if (session != null)
+                  if (session != null) ...[
                     ShButton(
-                      label: '导出 JSON',
+                      label: 'JSON',
                       variant: ShButtonVariant.secondary,
                       onPressed: () async {
                         await RustApi.exportJson(sessionId: session.sessionId);
                       },
                     ),
+                    const SizedBox(width: 8),
+                    ShButton(
+                      label: 'Excel',
+                      variant: ShButtonVariant.secondary,
+                      onPressed: () async {
+                        await RustApi.exportExcel(sessionId: session.sessionId);
+                      },
+                    ),
+                  ],
                 ],
               ),
             ],

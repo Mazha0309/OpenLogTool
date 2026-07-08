@@ -8,3 +8,6 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 Future<Uint8List> exportJson({required String sessionId}) =>
     RustLib.instance.api.crateApiExportExportJson(sessionId: sessionId);
+
+Future<Uint8List> exportExcel({required String sessionId}) =>
+    RustLib.instance.api.crateApiExportExportExcel(sessionId: sessionId);

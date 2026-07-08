@@ -131,4 +131,8 @@ class RustApi {
   static Future<Uint8List> exportJson({required String sessionId}) {
     return export_api.exportJson(sessionId: sessionId);
   }
+
+  static Future<Uint8List> exportExcel({required String sessionId}) {
+    return export_api.exportExcel(sessionId: sessionId);
+  }
 }
