@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:openlogtool/src/widgets/shadcn/mod.dart';
 import 'package:openlogtool/providers/rust_log_provider.dart';
 import 'package:openlogtool/providers/rust_session_provider.dart';
 import 'package:openlogtool/providers/rust_dict_provider.dart';
 import 'package:openlogtool/providers/rust_settings_provider.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart';
-import 'package:openlogtool/src/bridge/models/dict_item.dart';
 
 class RustHomeScreen extends StatefulWidget {
   const RustHomeScreen({super.key});
@@ -17,17 +15,8 @@ class RustHomeScreen extends StatefulWidget {
 }
 
 class _RustHomeScreenState extends State<RustHomeScreen> {
-  final _callsignCtrl = TextEditingController();
-  final _rstSentCtrl = TextEditingController();
-  final _rstRcvdCtrl = TextEditingController();
-  final _deviceCtrl = TextEditingController();
-  final _antennaCtrl = TextEditingController();
-  final _qthCtrl = TextEditingController();
-  final _powerCtrl = TextEditingController();
-  final _heightCtrl = TextEditingController();
-  final _controllerCtrl = TextEditingController(text: 'BG7XXX');
-  bool _ready = false;
   int _tab = 0;
+  bool _ready = false;
 
   @override
   void initState() {
@@ -44,7 +33,7 @@ class _RustHomeScreenState extends State<RustHomeScreen> {
     await rsp.loadSessions();
 
     if (rsp.sessions.isEmpty) {
-      await rsp.createSession('2026-07-08 晚点名');
+      await rsp.createSession('晚点名');
     } else {
       rsp.selectSession(rsp.sessions.first);
     }
@@ -54,83 +43,27 @@ class _RustHomeScreenState extends State<RustHomeScreen> {
       await rlp.loadLogs(session.sessionId);
     }
 
-    setState(() => _ready = true);
-  }
-
-  Future<void> _submit() async {
-    final rsp = context.read<RustSessionProvider>();
-    final rlp = context.read<RustLogProvider>();
-    final rdp = context.read<RustDictProvider>();
-    final session = rsp.currentSession;
-    if (session == null) return;
-
-    final callsign = _callsignCtrl.text.trim();
-    if (callsign.isEmpty) return;
-
-    await rlp.addLog(
-      sessionId: session.sessionId,
-      controller: _controllerCtrl.text.trim(),
-      callsign: callsign,
-      rstSent: _rstSentCtrl.text.trim(),
-      rstRcvd: _rstRcvdCtrl.text.trim(),
-      device: _deviceCtrl.text.trim(),
-      antenna: _antennaCtrl.text.trim(),
-      qth: _qthCtrl.text.trim(),
-      power: _powerCtrl.text.trim(),
-      height: _heightCtrl.text.trim(),
-    );
-
-    await rdp.addDictItem('callsign', callsign);
-    if (_deviceCtrl.text.trim().isNotEmpty) {
-      await rdp.addDictItem('device', _deviceCtrl.text.trim());
-    }
-    if (_antennaCtrl.text.trim().isNotEmpty) {
-      await rdp.addDictItem('antenna', _antennaCtrl.text.trim());
-    }
-    if (_qthCtrl.text.trim().isNotEmpty) {
-      await rdp.addDictItem('qth', _qthCtrl.text.trim());
-    }
-
-    _callsignCtrl.clear();
-    _rstSentCtrl.clear();
-    _rstRcvdCtrl.clear();
-    _deviceCtrl.clear();
-    _antennaCtrl.clear();
-    _qthCtrl.clear();
-    _powerCtrl.clear();
-    _heightCtrl.clear();
-  }
-
-  @override
-  void dispose() {
-    _callsignCtrl.dispose();
-    _rstSentCtrl.dispose();
-    _rstRcvdCtrl.dispose();
-    _deviceCtrl.dispose();
-    _antennaCtrl.dispose();
-    _qthCtrl.dispose();
-    _powerCtrl.dispose();
-    _heightCtrl.dispose();
-    _controllerCtrl.dispose();
-    super.dispose();
+    if (mounted) setState(() => _ready = true);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('OpenLogTool')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('OpenLogTool'),
-        centerTitle: false,
-        actions: [
-          Consumer<RustSettingsProvider>(
-            builder: (_, sp, __) => ShIconButton(
-              icon: sp.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              onPressed: () => sp.setDarkMode(!sp.isDarkMode),
-            ),
-          ),
+      appBar: AppBar(title: const Text('OpenLogTool')),
+      body: IndexedStack(
+        index: _tab,
+        children: [
+          _LogPage(),
+          _DictPage(),
+          _SettingsPage(),
         ],
       ),
-      body: _ready ? _buildBody() : const Center(child: CircularProgressIndicator()),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _tab,
         onTap: (i) => setState(() => _tab = i),
@@ -142,232 +75,384 @@ class _RustHomeScreenState extends State<RustHomeScreen> {
       ),
     );
   }
+}
 
-  Widget _buildBody() {
-    switch (_tab) {
-      case 0: return _buildLogPage();
-      case 1: return _buildDictPage();
-      case 2: return _buildSettingsPage();
-      default: return const SizedBox();
-    }
+// ─── Log Page ─────────────────────────────────────────────────
+
+class _LogPage extends StatefulWidget {
+  @override
+  State<_LogPage> createState() => _LogPageState();
+}
+
+class _LogPageState extends State<_LogPage> {
+  final _callsignCtrl = TextEditingController();
+  final _controllerCtrl = TextEditingController(text: 'BG7XXX');
+  final _rstSentCtrl = TextEditingController();
+  final _rstRcvdCtrl = TextEditingController();
+  final _deviceCtrl = TextEditingController();
+  final _antennaCtrl = TextEditingController();
+  final _qthCtrl = TextEditingController();
+  final _powerCtrl = TextEditingController();
+  final _heightCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _callsignCtrl.dispose();
+    _controllerCtrl.dispose();
+    _rstSentCtrl.dispose();
+    _rstRcvdCtrl.dispose();
+    _deviceCtrl.dispose();
+    _antennaCtrl.dispose();
+    _qthCtrl.dispose();
+    _powerCtrl.dispose();
+    _heightCtrl.dispose();
+    super.dispose();
   }
 
-  Widget _buildLogPage() {
-    final rsp = context.watch<RustSessionProvider>();
-    final rlp = context.watch<RustLogProvider>();
+  Future<void> _submit() async {
+    final rsp = context.read<RustSessionProvider>();
+    final rlp = context.read<RustLogProvider>();
+    final rdp = context.read<RustDictProvider>();
     final session = rsp.currentSession;
+    if (session == null || _callsignCtrl.text.trim().isEmpty) return;
+
+    await rlp.addLog(
+      sessionId: session.sessionId,
+      controller: _controllerCtrl.text.trim(),
+      callsign: _callsignCtrl.text.trim(),
+      rstSent: _rstSentCtrl.text.trim(),
+      rstRcvd: _rstRcvdCtrl.text.trim(),
+      device: _deviceCtrl.text.trim(),
+      antenna: _antennaCtrl.text.trim(),
+      qth: _qthCtrl.text.trim(),
+      power: _powerCtrl.text.trim(),
+      height: _heightCtrl.text.trim(),
+    );
+
+    for (final entry in [
+      ('callsign', _callsignCtrl.text.trim()),
+      ('device', _deviceCtrl.text.trim()),
+      ('antenna', _antennaCtrl.text.trim()),
+      ('qth', _qthCtrl.text.trim()),
+    ]) {
+      if (entry.$2.isNotEmpty) await rdp.addDictItem(entry.$1, entry.$2);
+    }
+
+    _callsignCtrl.clear();
+    _rstSentCtrl.clear();
+    _rstRcvdCtrl.clear();
+    _deviceCtrl.clear();
+    _antennaCtrl.clear();
+    _qthCtrl.clear();
+    _powerCtrl.clear();
+    _heightCtrl.clear();
+    FocusScope.of(context).requestFocus(FocusNode());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rlp = context.watch<RustLogProvider>();
+    final rsp = context.watch<RustSessionProvider>();
+    final session = rsp.currentSession;
+    final theme = Theme.of(context);
 
     return Column(
       children: [
-        // Session bar
+        // Stats bar
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color!)),
+            border: Border(bottom: BorderSide(color: theme.dividerTheme.color!)),
           ),
           child: Row(
             children: [
-              Text(session?.title ?? '未选择会话', style: Theme.of(context).textTheme.titleMedium),
-              const Spacer(),
+              Expanded(
+                child: Text(session?.title ?? '未选择会话', style: theme.textTheme.titleLarge),
+              ),
               if (rlp.stats != null) ...[
-                _StatChip(label: '总计', value: '${rlp.stats!.total}'),
+                _chip(context, '总计', '${rlp.stats!.total}'),
                 const SizedBox(width: 8),
-                _StatChip(label: '今日', value: '${rlp.stats!.today}'),
+                _chip(context, '今日', '${rlp.stats!.today}'),
+                const SizedBox(width: 8),
+                _chip(context, '7日', '${rlp.stats!.last7Days}'),
               ],
             ],
           ),
         ),
         // Form
-        ShCard(
-          margin: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(child: ShInput(label: '主控', controller: _controllerCtrl)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: '呼号', controller: _callsignCtrl, autofocus: true)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: 'RST 发', controller: _rstSentCtrl)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: 'RST 收', controller: _rstRcvdCtrl)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: ShInput(label: '设备', controller: _deviceCtrl)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: '天线', controller: _antennaCtrl)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: 'QTH', controller: _qthCtrl)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: '功率', controller: _powerCtrl)),
-                  const SizedBox(width: 8),
-                  Expanded(child: ShInput(label: '高度', controller: _heightCtrl)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  ShButton(label: '录入', icon: Icons.add, onPressed: _submit),
-                  const SizedBox(width: 8),
-                  ShButton(
-                    label: '撤销',
-                    variant: ShButtonVariant.outline,
-                    onPressed: rlp.logs.isNotEmpty
-                        ? () async {
-                            if (session != null) {
-                              await rlp.undoLastLog(session.sessionId);
-                            }
-                          }
-                        : null,
-                  ),
-                  const Spacer(),
-                  if (session != null) ...[
-                    ShButton(
-                      label: 'JSON',
-                      variant: ShButtonVariant.secondary,
-                      onPressed: () async {
-                        await RustApi.exportJson(sessionId: session.sessionId);
-                      },
+        Card(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(flex: 3, child: _field('主控呼号', _controllerCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 4, child: _field('点名呼号', _callsignCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: _field('RST发', _rstSentCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: _field('RST收', _rstRcvdCtrl)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: _field('设备', _deviceCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _field('天线', _antennaCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _field('QTH', _qthCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _field('功率', _powerCtrl)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _field('高度', _heightCtrl)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _submit,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('添加记录'),
                     ),
                     const SizedBox(width: 8),
-                    ShButton(
-                      label: 'Excel',
-                      variant: ShButtonVariant.secondary,
-                      onPressed: () async {
-                        await RustApi.exportExcel(sessionId: session.sessionId);
-                      },
+                    OutlinedButton(
+                      onPressed: rlp.logs.isNotEmpty
+                          ? () async {
+                              if (session != null) await rlp.undoLastLog(session.sessionId);
+                            }
+                          : null,
+                      child: const Text('撤销'),
                     ),
+                    const Spacer(),
+                    if (session != null) ...[
+                      OutlinedButton.icon(
+                        onPressed: () => RustApi.exportJson(sessionId: session.sessionId),
+                        icon: const Icon(Icons.code, size: 16),
+                        label: const Text('JSON'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => RustApi.exportExcel(sessionId: session.sessionId),
+                        icon: const Icon(Icons.table_chart, size: 16),
+                        label: const Text('Excel'),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
         // Table
         Expanded(
-          child: ShCard(
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            padding: EdgeInsets.zero,
-            child: ShTable(
-              columns: [
-                ShColumn(label: '时间', flex: 1.5, cellBuilder: (r) => (r as LogEntry).time.substring(11, 16)),
-                ShColumn(label: '呼号', flex: 2, cellBuilder: (r) => (r as LogEntry).callsign),
-                ShColumn(label: '发/收', flex: 2, cellBuilder: (r) {
-                  final e = r as LogEntry;
-                  return '${e.rstSent ?? ""}/${e.rstRcvd ?? ""}';
-                }),
-                ShColumn(label: '设备', flex: 2.5, cellBuilder: (r) => (r as LogEntry).device ?? ''),
-                ShColumn(label: 'QTH', flex: 2, cellBuilder: (r) => (r as LogEntry).qth ?? ''),
+          child: Card(
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: rlp.logs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.list_alt, size: 48, color: theme.colorScheme.onSurface.withAlpha(60)),
+                        const SizedBox(height: 12),
+                        Text('暂无记录', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withAlpha(100))),
+                        const SizedBox(height: 4),
+                        Text('在上方表单中添加第一条记录', style: theme.textTheme.bodySmall),
+                      ],
+                    ),
+                  )
+                : ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      // Table header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: theme.dividerTheme.color!)),
+                          color: theme.colorScheme.surface.withAlpha(180),
+                        ),
+                        child: Row(
+                          children: [
+                            _hCell('时间', 1.2),
+                            _hCell('主控', 1.5),
+                            _hCell('呼号', 1.8),
+                            _hCell('RST', 1.5),
+                            _hCell('设备', 2),
+                            _hCell('QTH', 1.5),
+                          ],
+                        ),
+                      ),
+                      // Table rows
+                      ...rlp.logs.asMap().entries.map((entry) {
+                        final log = entry.value;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: theme.dividerTheme.color!.withAlpha(80))),
+                          ),
+                          child: Row(
+                            children: [
+                              _cell(log.time.length >= 16 ? log.time.substring(11, 16) : log.time, 1.2, theme),
+                              _cell(log.controller, 1.5, theme),
+                              _cell(log.callsign, 1.8, theme, bold: true),
+                              _cell('${log.rstSent ?? ""}/${log.rstRcvd ?? ""}', 1.5, theme),
+                              _cell(log.device ?? '', 2, theme),
+                              _cell(log.qth ?? '', 1.5, theme),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _hCell(String label, double flex) {
+    final theme = Theme.of(context);
+    return Expanded(
+      flex: (flex * 10).round(),
+      child: Text(label, style: theme.textTheme.labelSmall),
+    );
+  }
+
+  Widget _cell(String text, double flex, ThemeData theme, {bool bold = false}) {
+    return Expanded(
+      flex: (flex * 10).round(),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+          color: theme.colorScheme.onSurface,
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController ctrl) {
+    return TextField(
+      controller: ctrl,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(labelText: label, isDense: true),
+    );
+  }
+}
+
+Widget _chip(BuildContext context, String label, String value) {
+  final theme = Theme.of(context);
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: theme.colorScheme.secondary.withAlpha(120),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: theme.textTheme.bodySmall),
+        const SizedBox(width: 4),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface)),
+      ],
+    ),
+  );
+}
+
+// ─── Dict Page ────────────────────────────────────────────────
+
+class _DictPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final rdp = context.watch<RustDictProvider>();
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        _dictSection(context, '设备', rdp.deviceDict),
+        const SizedBox(height: 8),
+        _dictSection(context, '天线', rdp.antennaDict),
+        const SizedBox(height: 8),
+        _dictSection(context, '呼号', rdp.callsignDict),
+        const SizedBox(height: 8),
+        _dictSection(context, 'QTH', rdp.qthDict),
+      ],
+    );
+  }
+
+  Widget _dictSection(BuildContext context, String title, List items) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: items.take(30).map((item) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondary.withAlpha(100),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(item.raw, style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface)),
+              )).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Settings Page ────────────────────────────────────────────
+
+class _SettingsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final rsp = context.watch<RustSettingsProvider>();
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('主题设置', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  title: const Text('暗色模式'),
+                  subtitle: const Text('切换深色/浅色主题'),
+                  value: rsp.isDarkMode,
+                  onChanged: (v) => rsp.setDarkMode(v),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('版本'),
+                  subtitle: const Text('1.0.0'),
+                  contentPadding: EdgeInsets.zero,
+                ),
               ],
-              rows: rlp.logs,
-              emptyMessage: '暂无记录，请添加',
             ),
           ),
         ),
-        const SizedBox(height: 8),
       ],
-    );
-  }
-
-  Widget _buildDictPage() {
-    final rdp = context.watch<RustDictProvider>();
-
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        _DictSection(title: '设备', items: rdp.deviceDict),
-        const SizedBox(height: 8),
-        _DictSection(title: '天线', items: rdp.antennaDict),
-        const SizedBox(height: 8),
-        _DictSection(title: '呼号', items: rdp.callsignDict),
-        const SizedBox(height: 8),
-        _DictSection(title: 'QTH', items: rdp.qthDict),
-      ],
-    );
-  }
-
-  Widget _buildSettingsPage() {
-    final rsp = context.watch<RustSettingsProvider>();
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        ShCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const ShCardHeader(title: '主题'),
-              SwitchListTile(
-                title: const Text('暗色模式'),
-                value: rsp.isDarkMode,
-                onChanged: (v) => rsp.setDarkMode(v),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatChip({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondary.withAlpha(80),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: theme.textTheme.bodySmall),
-          const SizedBox(width: 4),
-          Text(value, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-}
-
-class _DictSection extends StatelessWidget {
-  final String title;
-  final List<DictItem> items;
-
-  const _DictSection({required this.title, required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ShCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: items.take(20).map((item) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondary.withAlpha(60),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(item.raw, style: theme.textTheme.bodySmall),
-            )).toList(),
-          ),
-        ],
-      ),
     );
   }
 }

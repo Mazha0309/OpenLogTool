@@ -13,7 +13,7 @@ import 'package:openlogtool/providers/rust_session_provider.dart';
 import 'package:openlogtool/providers/rust_dict_provider.dart';
 import 'package:openlogtool/providers/rust_settings_provider.dart';
 import 'package:openlogtool/screens/rust_home_screen.dart';
-import 'package:openlogtool/src/theme/shadcn_theme.dart';
+import 'package:openlogtool/src/theme/app_theme.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/providers/rust_settings_provider.dart';
@@ -124,8 +124,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
-      theme: shadcnTheme(dark: false),
-      darkTheme: shadcnTheme(dark: true),
+      theme: AppTheme.build(dark: false),
+      darkTheme: AppTheme.build(dark: true),
       themeMode: sp.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: const RustHomeScreen(),
     );
