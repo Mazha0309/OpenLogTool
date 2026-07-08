@@ -80,6 +80,7 @@ class LogProvider with ChangeNotifier {
         controller: log.controller,
         callsign: log.callsign,
         rstSent: log.report,
+        rstRcvd: log.rstRcvd,
         qth: log.qth,
         device: log.device,
         power: log.power,
@@ -110,6 +111,7 @@ class LogProvider with ChangeNotifier {
         controller: log.controller,
         callsign: log.callsign,
         rstSent: log.report,
+        rstRcvd: log.rstRcvd,
         qth: log.qth,
         device: log.device,
         power: log.power,
@@ -218,6 +220,7 @@ class LogProvider with ChangeNotifier {
           controller: log.controller,
           callsign: log.callsign,
           rstSent: log.report,
+          rstRcvd: log.rstRcvd,
           qth: log.qth,
           device: log.device,
           power: log.power,
@@ -240,7 +243,7 @@ class LogProvider with ChangeNotifier {
   }
 
   old.LogEntry _toOldLog(bridge.LogEntry b) {
-    return old.LogEntry(
+    final entry = old.LogEntry(
       time: b.time.length >= 16 ? b.time.substring(11, 16) : b.time,
       controller: b.controller,
       callsign: b.callsign,
@@ -251,5 +254,7 @@ class LogProvider with ChangeNotifier {
       antenna: b.antenna ?? '',
       height: b.height ?? '',
     );
+    entry.rstRcvd = b.rstRcvd ?? '';
+    return entry;
   }
 }

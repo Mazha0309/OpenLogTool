@@ -8,6 +8,7 @@ class LogEntry {
   final String controller;
   final String callsign;
   final String report;
+  String rstRcvd = '';
   final String qth;
   final String device;
   final String power;
@@ -60,7 +61,7 @@ class LogEntry {
     );
   }
 
-  const LogEntry._internal({
+  LogEntry._internal({
     required this.localId,
     required this.id,
     required this.hasExplicitSyncId,

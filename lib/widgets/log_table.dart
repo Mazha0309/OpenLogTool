@@ -43,6 +43,7 @@ class _LogTableState extends State<LogTable> {
         'controller': TextEditingController(text: log.controller),
         'callsign': TextEditingController(text: log.callsign),
         'report': TextEditingController(text: log.report),
+        'rstRcvd': TextEditingController(text: log.rstRcvd),
         'qth': TextEditingController(text: log.qth),
         'device': TextEditingController(text: log.device),
         'power': TextEditingController(text: log.power),
@@ -79,6 +80,7 @@ class _LogTableState extends State<LogTable> {
       antenna: _controllers['antenna']?.text ?? '',
       height: _controllers['height']?.text ?? '',
     );
+    patch.rstRcvd = _controllers['rstRcvd']?.text ?? '';
     try {
       await logProvider.updateLog(index, patch);
     } catch (e) {
@@ -191,7 +193,7 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('呼号'), 120),
                             ),
                             DataColumn(
-                              label: _buildCenteredCell(const Text('信号报告'), 100),
+                              label: _buildCenteredCell(const Text('RST发/收'), 100),
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('QTH'), 150),
@@ -312,19 +314,36 @@ class _LogTableState extends State<LogTable> {
           ),
           DataCell(
             isEditing
-                ? SizedBox(
-                    width: 100,
-                    child: TextField(
-                      controller: _controllers['report'],
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                ? Row(
+                    children: [
+                      SizedBox(
+                        width: 48,
+                        child: TextField(
+                          controller: _controllers['report'],
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
+                      Text('/', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      SizedBox(
+                        width: 48,
+                        child: TextField(
+                          controller: _controllers['rstRcvd'],
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   )
-                : _buildCenteredCell(Text(log.report), 100),
+                : _buildCenteredCell(Text(log.rstRcvd.isEmpty ? log.report : '${log.report}/${log.rstRcvd}'), 100),
           ),
           DataCell(
             isEditing

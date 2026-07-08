@@ -31,10 +31,10 @@ final _controllerController = TextEditingController();
   final _qthController = TextEditingController();
   final _heightController = TextEditingController();
   final _timeController = TextEditingController();
-  final _reportController = TextEditingController(text: '59');
+  final _reportController = TextEditingController();
+  final _rstRcvdController = TextEditingController();
 
   String? _controllerError;
-  String? _reportError;
 
   @override
   bool get wantKeepAlive => true;
@@ -51,6 +51,7 @@ final _controllerController = TextEditingController();
     _heightController.dispose();
     _timeController.dispose();
     _reportController.dispose();
+    _rstRcvdController.dispose();
     super.dispose();
   }
 
@@ -66,12 +67,6 @@ final _controllerController = TextEditingController();
       isValid = false;
     } else {
       setState(() => _controllerError = null);
-    }
-    if (_reportController.text.isEmpty) {
-      setState(() => _reportError = '请输入信号报告');
-      isValid = false;
-    } else {
-      setState(() => _reportError = null);
     }
     return isValid;
   }
@@ -111,6 +106,7 @@ final _controllerController = TextEditingController();
       antenna: _antennaController.text,
       height: _heightController.text,
     );
+    log.rstRcvd = _rstRcvdController.text;
 
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
     _resetForm();
@@ -133,10 +129,10 @@ final _controllerController = TextEditingController();
     _qthController.clear();
     _heightController.clear();
     _timeController.clear();
-    _reportController.text = '59';
+    _reportController.clear();
+    _rstRcvdController.clear();
     setState(() {
       _controllerError = null;
-      _reportError = null;
     });
     FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
@@ -193,6 +189,8 @@ final _controllerController = TextEditingController();
                       qthController: _qthController,
                       powerController: _powerController,
                       heightController: _heightController,
+                      reportController: _reportController,
+                      rstRcvdController: _rstRcvdController,
                       label: '点名呼号',
                       hintText: '输入呼号',
                       focusNode: _callsignFocusNode,
@@ -275,14 +273,19 @@ final _controllerController = TextEditingController();
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _reportController,
-                      label: '信号报告',
-                      hintText: '输入信号报告',
-                      error: _reportError,
-                      onChanged: (value) {
-                        if (_reportError != null) {
-                          setState(() => _reportError = null);
-                        }
-                      },
+                      label: 'RST发',
+                      hintText: '59',
+                      upperCase: false,
+                      isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _rstRcvdController,
+                      label: 'RST收',
+                      hintText: '59',
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.done,
