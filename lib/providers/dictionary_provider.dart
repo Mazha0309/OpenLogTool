@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
+import 'package:openlogtool/src/bridge/models/dict_item.dart' as bridge;
 import 'package:openlogtool/models/dictionary_item.dart';
 
 class DictionaryProvider with ChangeNotifier {
@@ -43,22 +44,46 @@ class DictionaryProvider with ChangeNotifier {
 
   Future<void> _loadDictionaries() async {
     try {
-      final db = DatabaseHelper();
-      _deviceDict = await db.getDictionaryItems('device_dictionary');
-      _antennaDict = await db.getDictionaryItems('antenna_dictionary');
-      _callsignDict = await db.getDictionaryItems('callsign_dictionary');
-      _qthDict = await db.getDictionaryItems('qth_dictionary');
+      _deviceDict = await _getDictItems('device_dictionary');
+      _antennaDict = await _getDictItems('antenna_dictionary');
+      _callsignDict = await _getDictItems('callsign_dictionary');
+      _qthDict = await _getDictItems('qth_dictionary');
 
       if (_deviceDict.isEmpty && _antennaDict.isEmpty && _qthDict.isEmpty) {
-        await db.loadInitialDictionaries();
-        _deviceDict = await db.getDictionaryItems('device_dictionary');
-        _antennaDict = await db.getDictionaryItems('antenna_dictionary');
-        _qthDict = await db.getDictionaryItems('qth_dictionary');
+        await _seedInitialDictionaries();
+        _deviceDict = await _getDictItems('device_dictionary');
+        _antennaDict = await _getDictItems('antenna_dictionary');
+        _qthDict = await _getDictItems('qth_dictionary');
       }
     } catch (e, st) {
       debugPrint('[DictionaryProvider] _loadDictionaries failed: $e\n$st');
     }
     _safeNotify();
+  }
+
+  Future<List<DictionaryItem>> _getDictItems(String dictType) async {
+    final items = await RustApi.getDictItems(dictType: dictType);
+    return items.map(_toOldDictItem).toList();
+  }
+
+  Future<void> _seedInitialDictionaries() async {
+    await RustApi.seedDict(dictType: 'device_dictionary', items: _defaultDevices);
+    await RustApi.seedDict(dictType: 'antenna_dictionary', items: _defaultAntennas);
+    await RustApi.seedDict(dictType: 'qth_dictionary', items: _defaultQths);
+  }
+
+  DictionaryItem _toOldDictItem(bridge.DictItem b) {
+    return DictionaryItem(
+      id: b.id?.toInt(),
+      raw: b.raw,
+      pinyin: b.pinyin ?? '',
+      abbreviation: b.abbreviation ?? '',
+      syncId: b.syncId,
+      type: b.dictType,
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt,
+      deletedAt: b.deletedAt,
+    );
   }
 
   List<DictionaryItem> filterDevices(String query) {
@@ -82,212 +107,142 @@ class DictionaryProvider with ChangeNotifier {
   }
 
   Future<void> addDevice(String device) async {
-    if (device.isEmpty || _deviceDict.any((d) => d.raw == device)) return;
-    try {
-      final db = DatabaseHelper();
-      await db.insertDictionaryItem('device_dictionary', {
-        'raw': device,
-        'pinyin': '',
-        'abbreviation': '',
-      });
-      final persisted = await db.getDictionaryItemByRaw('device_dictionary', device);
-      _deviceDict.add(persisted ?? DictionaryItem(raw: device, pinyin: '', abbreviation: '', type: 'device'));
-      _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
-      _safeNotify();
-      await _notifyDictionaryChanged();
-    } catch (e, st) {
-      debugPrint('[DictionaryProvider] addDevice failed: $e\n$st');
-      rethrow;
-    }
+    await _addDictItem('device_dictionary', device, _deviceDict);
   }
 
   Future<void> addAntenna(String antenna) async {
-    if (antenna.isEmpty || _antennaDict.any((a) => a.raw == antenna)) return;
-    try {
-      final db = DatabaseHelper();
-      await db.insertDictionaryItem('antenna_dictionary', {
-        'raw': antenna,
-        'pinyin': '',
-        'abbreviation': '',
-      });
-      final persisted = await db.getDictionaryItemByRaw('antenna_dictionary', antenna);
-      _antennaDict.add(persisted ?? DictionaryItem(raw: antenna, pinyin: '', abbreviation: '', type: 'antenna'));
-      _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
-      _safeNotify();
-      await _notifyDictionaryChanged();
-    } catch (e, st) {
-      debugPrint('[DictionaryProvider] addAntenna failed: $e\n$st');
-      rethrow;
-    }
+    await _addDictItem('antenna_dictionary', antenna, _antennaDict);
   }
 
   Future<void> addCallsign(String callsign) async {
-    if (callsign.isEmpty || _callsignDict.any((c) => c.raw == callsign)) return;
-    try {
-      final db = DatabaseHelper();
-      await db.insertDictionaryItem('callsign_dictionary', {
-        'raw': callsign,
-        'pinyin': '',
-        'abbreviation': '',
-      });
-      final persisted = await db.getDictionaryItemByRaw('callsign_dictionary', callsign);
-      _callsignDict.add(persisted ?? DictionaryItem(raw: callsign, pinyin: '', abbreviation: '', type: 'callsign'));
-      _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
-      _safeNotify();
-      await _notifyDictionaryChanged();
-    } catch (e, st) {
-      debugPrint('[DictionaryProvider] addCallsign failed: $e\n$st');
-      rethrow;
-    }
+    await _addDictItem('callsign_dictionary', callsign, _callsignDict);
   }
 
   Future<void> addQth(String qth) async {
-    if (qth.isEmpty || _qthDict.any((q) => q.raw == qth)) return;
+    await _addDictItem('qth_dictionary', qth, _qthDict);
+  }
+
+  Future<void> _addDictItem(
+    String dictType,
+    String raw,
+    List<DictionaryItem> target,
+  ) async {
+    if (raw.isEmpty || target.any((d) => d.raw == raw)) return;
     try {
-      final db = DatabaseHelper();
-      await db.insertDictionaryItem('qth_dictionary', {
-        'raw': qth,
-        'pinyin': '',
-        'abbreviation': '',
-      });
-      final persisted = await db.getDictionaryItemByRaw('qth_dictionary', qth);
-      _qthDict.add(persisted ?? DictionaryItem(raw: qth, pinyin: '', abbreviation: '', type: 'qth'));
-      _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
+      await RustApi.addDictItem(dictType: dictType, raw: raw);
+      final persisted = await RustApi.getDictItemByRaw(dictType: dictType, raw: raw);
+      target.add(persisted != null
+          ? _toOldDictItem(persisted)
+          : DictionaryItem(raw: raw, pinyin: '', abbreviation: '', type: dictType));
+      target.sort((a, b) => a.raw.compareTo(b.raw));
       _safeNotify();
       await _notifyDictionaryChanged();
     } catch (e, st) {
-      debugPrint('[DictionaryProvider] addQth failed: $e\n$st');
+      debugPrint('[DictionaryProvider] _addDictItem failed: $e\n$st');
       rethrow;
     }
   }
 
   Future<void> importDevices(List<String> devices) async {
-    final db = DatabaseHelper();
-    for (final device in devices) {
-      if (!_deviceDict.any((d) => d.raw == device)) {
-        await db.insertDictionaryItem('device_dictionary', {
-          'raw': device,
-          'pinyin': '',
-          'abbreviation': '',
-        });
-        final persisted = await db.getDictionaryItemByRaw('device_dictionary', device);
-        _deviceDict.add(persisted ?? DictionaryItem(raw: device, pinyin: '', abbreviation: '', type: 'device'));
-      }
-    }
-    _deviceDict.sort((a, b) => a.raw.compareTo(b.raw));
-    notifyListeners();
-    await _notifyDictionaryChanged();
+    await _importDictItems('device_dictionary', devices, _deviceDict);
   }
 
   Future<void> importAntennas(List<String> antennas) async {
-    final db = DatabaseHelper();
-    for (final antenna in antennas) {
-      if (!_antennaDict.any((a) => a.raw == antenna)) {
-        await db.insertDictionaryItem('antenna_dictionary', {
-          'raw': antenna,
-          'pinyin': '',
-          'abbreviation': '',
-        });
-        final persisted = await db.getDictionaryItemByRaw('antenna_dictionary', antenna);
-        _antennaDict.add(persisted ?? DictionaryItem(raw: antenna, pinyin: '', abbreviation: '', type: 'antenna'));
-      }
-    }
-    _antennaDict.sort((a, b) => a.raw.compareTo(b.raw));
-    notifyListeners();
-    await _notifyDictionaryChanged();
+    await _importDictItems('antenna_dictionary', antennas, _antennaDict);
   }
 
   Future<void> importCallsigns(List<String> callsigns) async {
-    final db = DatabaseHelper();
-    for (final callsign in callsigns) {
-      if (!_callsignDict.any((c) => c.raw == callsign)) {
-        await db.insertDictionaryItem('callsign_dictionary', {
-          'raw': callsign,
-          'pinyin': '',
-          'abbreviation': '',
-        });
-        final persisted = await db.getDictionaryItemByRaw('callsign_dictionary', callsign);
-        _callsignDict.add(persisted ?? DictionaryItem(raw: callsign, pinyin: '', abbreviation: '', type: 'callsign'));
-      }
-    }
-    _callsignDict.sort((a, b) => a.raw.compareTo(b.raw));
-    notifyListeners();
-    await _notifyDictionaryChanged();
+    await _importDictItems('callsign_dictionary', callsigns, _callsignDict);
   }
 
   Future<void> importQths(List<String> qths) async {
-    final db = DatabaseHelper();
-    for (final qth in qths) {
-      if (!_qthDict.any((q) => q.raw == qth)) {
-        await db.insertDictionaryItem('qth_dictionary', {
-          'raw': qth,
-          'pinyin': '',
-          'abbreviation': '',
-        });
-        final persisted = await db.getDictionaryItemByRaw('qth_dictionary', qth);
-        _qthDict.add(persisted ?? DictionaryItem(raw: qth, pinyin: '', abbreviation: '', type: 'qth'));
-      }
+    await _importDictItems('qth_dictionary', qths, _qthDict);
+  }
+
+  Future<void> _importDictItems(
+    String dictType,
+    List<String> items,
+    List<DictionaryItem> target,
+  ) async {
+    for (final raw in items) {
+      if (target.any((d) => d.raw == raw)) continue;
+      await RustApi.addDictItem(dictType: dictType, raw: raw);
+      final persisted = await RustApi.getDictItemByRaw(dictType: dictType, raw: raw);
+      target.add(persisted != null
+          ? _toOldDictItem(persisted)
+          : DictionaryItem(raw: raw, pinyin: '', abbreviation: '', type: dictType));
     }
-    _qthDict.sort((a, b) => a.raw.compareTo(b.raw));
-    notifyListeners();
+    target.sort((a, b) => a.raw.compareTo(b.raw));
+    _safeNotify();
     await _notifyDictionaryChanged();
   }
 
   Future<void> clearDeviceDict() async {
-    final db = DatabaseHelper();
-    final deletedAt = DateTime.now().toUtc().toIso8601String();
-    for (final item in _deviceDict) {
-      await db.softDeleteDictionaryItem('device_dictionary', item.syncId, deletedAt);
-    }
-    _deviceDict.clear();
-    notifyListeners();
-    await _notifyDictionaryChanged();
+    await _clearDict('device_dictionary', _deviceDict);
   }
 
   Future<void> clearAntennaDict() async {
-    final db = DatabaseHelper();
-    final deletedAt = DateTime.now().toUtc().toIso8601String();
-    for (final item in _antennaDict) {
-      await db.softDeleteDictionaryItem('antenna_dictionary', item.syncId, deletedAt);
-    }
-    _antennaDict.clear();
-    notifyListeners();
-    await _notifyDictionaryChanged();
+    await _clearDict('antenna_dictionary', _antennaDict);
   }
 
   Future<void> clearCallsignDict() async {
-    final db = DatabaseHelper();
-    final deletedAt = DateTime.now().toUtc().toIso8601String();
-    for (final item in _callsignDict) {
-      await db.softDeleteDictionaryItem('callsign_dictionary', item.syncId, deletedAt);
-    }
-    _callsignDict.clear();
-    notifyListeners();
-    await _notifyDictionaryChanged();
+    await _clearDict('callsign_dictionary', _callsignDict);
   }
 
   Future<void> clearQthDict() async {
-    final db = DatabaseHelper();
-    final deletedAt = DateTime.now().toUtc().toIso8601String();
-    for (final item in _qthDict) {
-      await db.softDeleteDictionaryItem('qth_dictionary', item.syncId, deletedAt);
-    }
-    _qthDict.clear();
-    notifyListeners();
+    await _clearDict('qth_dictionary', _qthDict);
+  }
+
+  Future<void> _clearDict(String dictType, List<DictionaryItem> target) async {
+    await RustApi.softDeleteDictItems(dictType: dictType);
+    target.clear();
+    _safeNotify();
     await _notifyDictionaryChanged();
   }
 
   Future<void> resetDictionaries() async {
-    final db = DatabaseHelper();
-    await db.resetDictionaries();
+    await RustApi.resetDictionaries();
     await _loadDictionaries();
     await _notifyDictionaryChanged();
   }
 
   Future<void> resetAllData() async {
-    final db = DatabaseHelper();
-    await db.resetAllData();
-    await _loadDictionaries();
-    await _notifyDictionaryChanged();
+    // TODO: implement full data reset via Rust API
+    await resetDictionaries();
   }
+
+  static const List<String> _defaultDevices = [
+    'ICOM 7300',
+    'ICOM 7610',
+    'Yaesu FT-817',
+    'Yaesu FT-857',
+    'Yaesu FT-891',
+    'Yaesu FT-991A',
+    'Kenwood TS-590',
+    'Kenwood TS-890',
+    'FlexRadio 6400',
+    'Anan 7000',
+  ];
+
+  static const List<String> _defaultAntennas = [
+    'Dipole',
+    'Vertical',
+    'Yagi',
+    'Loop',
+    'Long Wire',
+    'End Fed',
+    'GP',
+    'DP',
+  ];
+
+  static const List<String> _defaultQths = [
+    '北京',
+    '上海',
+    '广州',
+    '深圳',
+    '成都',
+    '杭州',
+    '南京',
+    '武汉',
+  ];
 }

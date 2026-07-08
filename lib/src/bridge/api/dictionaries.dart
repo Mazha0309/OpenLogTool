@@ -18,6 +18,21 @@ Future<void> addDictItem({required String dictType, required String raw}) =>
     RustLib.instance.api
         .crateApiDictionariesAddDictItem(dictType: dictType, raw: raw);
 
+Future<List<DictItem>> getDictItems({required String dictType}) =>
+    RustLib.instance.api.crateApiDictionariesGetDictItems(dictType: dictType);
+
+Future<DictItem?> getDictItemByRaw(
+        {required String dictType, required String raw}) =>
+    RustLib.instance.api
+        .crateApiDictionariesGetDictItemByRaw(dictType: dictType, raw: raw);
+
+Future<void> softDeleteDictItems({required String dictType}) =>
+    RustLib.instance.api
+        .crateApiDictionariesSoftDeleteDictItems(dictType: dictType);
+
+Future<void> resetDictionaries() =>
+    RustLib.instance.api.crateApiDictionariesResetDictionaries();
+
 Future<BigInt> seedDict(
         {required String dictType, required List<String> items}) =>
     RustLib.instance.api

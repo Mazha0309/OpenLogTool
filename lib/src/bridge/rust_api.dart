@@ -133,6 +133,25 @@ class RustApi {
     return dict.addDictItem(dictType: dictType, raw: raw);
   }
 
+  static Future<List<DictItem>> getDictItems({required String dictType}) {
+    return dict.getDictItems(dictType: dictType);
+  }
+
+  static Future<DictItem?> getDictItemByRaw({
+    required String dictType,
+    required String raw,
+  }) {
+    return dict.getDictItemByRaw(dictType: dictType, raw: raw);
+  }
+
+  static Future<void> softDeleteDictItems({required String dictType}) {
+    return dict.softDeleteDictItems(dictType: dictType);
+  }
+
+  static Future<void> resetDictionaries() {
+    return dict.resetDictionaries();
+  }
+
   static Future<BigInt> seedDict({
     required String dictType,
     required List<String> items,

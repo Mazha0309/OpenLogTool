@@ -42,6 +42,56 @@ pub async fn add_dict_item(item: &DictItem) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn get_dict_items(dict_type: &str) -> anyhow::Result<Vec<DictItem>> {
+    let pool = get_db()?;
+    let rows = sqlx::query_as::<_, DictItemRow>(
+        "SELECT * FROM dictionary_items
+         WHERE dict_type = ? AND deleted_at IS NULL
+         ORDER BY raw ASC",
+    )
+    .bind(dict_type)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.into_item()).collect())
+}
+
+pub async fn get_dict_item_by_raw(
+    dict_type: &str,
+    raw: &str,
+) -> anyhow::Result<Option<DictItem>> {
+    let pool = get_db()?;
+    let row = sqlx::query_as::<_, DictItemRow>(
+        "SELECT * FROM dictionary_items
+         WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+    )
+    .bind(dict_type)
+    .bind(raw)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.into_item()))
+}
+
+pub async fn soft_delete_dict_items(dict_type: &str) -> anyhow::Result<()> {
+    let pool = get_db()?;
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "UPDATE dictionary_items SET deleted_at = ?, updated_at = ?
+         WHERE dict_type = ? AND deleted_at IS NULL",
+    )
+    .bind(&now)
+    .bind(&now)
+    .bind(dict_type)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn reset_dictionaries() -> anyhow::Result<()> {
+    let pool = get_db()?;
+    sqlx::query("DELETE FROM dictionary_items").execute(pool).await?;
+    Ok(())
+}
+
 pub async fn seed_dict(dict_type: &str, items: Vec<String>) -> anyhow::Result<usize> {
     let pool = get_db()?;
     let count: (i64,) = sqlx::query_as(

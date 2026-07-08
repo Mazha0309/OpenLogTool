@@ -38,6 +38,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 
 @protected String dco_decode_String(dynamic raw);
 
+@protected DictItem dco_decode_box_autoadd_dict_item(dynamic raw);
+
 @protected PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
 @protected DictItem dco_decode_dict_item(dynamic raw);
@@ -62,6 +64,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 
 @protected String? dco_decode_opt_String(dynamic raw);
 
+@protected DictItem? dco_decode_opt_box_autoadd_dict_item(dynamic raw);
+
 @protected PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
 @protected (String,String) dco_decode_record_string_string(dynamic raw);
@@ -77,6 +81,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 @protected AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
 @protected String sse_decode_String(SseDeserializer deserializer);
+
+@protected DictItem sse_decode_box_autoadd_dict_item(SseDeserializer deserializer);
 
 @protected PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
@@ -102,6 +108,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 
 @protected String? sse_decode_opt_String(SseDeserializer deserializer);
 
+@protected DictItem? sse_decode_opt_box_autoadd_dict_item(SseDeserializer deserializer);
+
 @protected PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
 @protected (String,String) sse_decode_record_string_string(SseDeserializer deserializer);
@@ -121,6 +129,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 @protected void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer);
 
 @protected void sse_encode_String(String self, SseSerializer serializer);
+
+@protected void sse_encode_box_autoadd_dict_item(DictItem self, SseSerializer serializer);
 
 @protected void sse_encode_box_autoadd_i_64(PlatformInt64 self, SseSerializer serializer);
 
@@ -145,6 +155,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 @protected void sse_encode_log_stats(LogStats self, SseSerializer serializer);
 
 @protected void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+@protected void sse_encode_opt_box_autoadd_dict_item(DictItem? self, SseSerializer serializer);
 
 @protected void sse_encode_opt_box_autoadd_i_64(PlatformInt64? self, SseSerializer serializer);
 
