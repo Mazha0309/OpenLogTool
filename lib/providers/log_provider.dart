@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:openlogtool/models/log_entry.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/models/log_entry.dart' as old;
+import 'package:openlogtool/src/bridge/rust_api.dart';
+import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 
 class LogProvider with ChangeNotifier {
   static const int _maxUndoStack = 50;
 
   bool _disposed = false;
-  List<LogEntry> _logs = [];
-  final List<LogEntry> _undoStack = [];
+  List<old.LogEntry> _logs = [];
+  final List<old.LogEntry> _undoStack = [];
   Future<void> Function()? _onDataChanged;
-  Future<void> Function(LogEntry log, bool isDelete)? _onLogChanged;
+  Future<void> Function(old.LogEntry log, bool isDelete)? _onLogChanged;
   String? _currentSessionId;
 
-  List<LogEntry> get logs => _logs;
+  List<old.LogEntry> get logs => _logs;
   int get logCount => _logs.length;
   bool get canUndo => _undoStack.isNotEmpty;
 
@@ -21,10 +22,9 @@ class LogProvider with ChangeNotifier {
     _onDataChanged = callback;
   }
 
-  void setOnLogChanged(Future<void> Function(LogEntry log, bool isDelete)? callback) {
+  void setOnLogChanged(Future<void> Function(old.LogEntry log, bool isDelete)? callback) {
     _onLogChanged = callback;
   }
-
 
   Future<void> reloadForSession(String? sessionId) async {
     _currentSessionId = sessionId;
@@ -42,17 +42,10 @@ class LogProvider with ChangeNotifier {
     }
   }
 
-  int get todayLogCount {
-    return _logs.length;
-  }
-
-  int get last7DaysCount {
-    return _logs.length ~/ 2;
-  }
+  int get todayLogCount => _logs.length;
+  int get last7DaysCount => _logs.length ~/ 2;
 
   LogProvider() {
-    // Defer first load to next microtask so Provider tree is constructed
-    // before any notifyListeners fires.
     scheduleMicrotask(_loadLogs);
   }
 
@@ -64,8 +57,14 @@ class LogProvider with ChangeNotifier {
 
   Future<void> _loadLogs() async {
     try {
-      final db = DatabaseHelper();
-      _logs = await db.getVisibleLogs(_currentSessionId);
+      final sid = _currentSessionId;
+      if (sid == null) {
+        _logs = [];
+        _safeNotify();
+        return;
+      }
+      final bridgeLogs = await RustApi.getLogs(sessionId: sid, page: 1, pageSize: 500);
+      _logs = bridgeLogs.map(_toOldLog).toList();
     } catch (e, st) {
       debugPrint('[LogProvider] _loadLogs failed: $e\n$st');
       _logs = [];
@@ -73,20 +72,25 @@ class LogProvider with ChangeNotifier {
     _safeNotify();
   }
 
-  Future<void> addLog(LogEntry log, {String? sessionId}) async {
-    final effectiveSessionId = sessionId ?? _currentSessionId;
-    final effectiveLog = effectiveSessionId != null && effectiveSessionId != log.sessionId
-        ? log.copyWith(sessionId: effectiveSessionId)
-        : log;
+  Future<void> addLog(old.LogEntry log, {String? sessionId}) async {
+    final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
     try {
-      final db = DatabaseHelper();
-      final localId = await db.insertLog(effectiveLog);
-      final persistedLog = await db.getLogByLocalId(localId);
-      _logs.add(persistedLog ?? effectiveLog);
+      await RustApi.addLog(
+        sessionId: effectiveSessionId,
+        controller: log.controller,
+        callsign: log.callsign,
+        rstSent: log.report,
+        qth: log.qth,
+        device: log.device,
+        power: log.power,
+        antenna: log.antenna,
+        height: log.height,
+      );
+      await _loadLogs();
       _safeNotify();
       await _notifyDataChanged();
       if (_onLogChanged != null) {
-        await _onLogChanged!(effectiveLog, false);
+        await _onLogChanged!(log, false);
       }
     } catch (e, st) {
       debugPrint('[LogProvider] addLog failed: $e\n$st');
@@ -94,38 +98,27 @@ class LogProvider with ChangeNotifier {
     }
   }
 
-  Future<void> updateLog(int index, LogEntry log) async {
+  Future<void> updateLog(int index, old.LogEntry log) async {
     if (index < 0 || index >= _logs.length) return;
-    final db = DatabaseHelper();
     final original = _logs[index];
-    final localId = original.localId;
-    if (localId == null) return;
-
-    // Preserve identity fields from the original record so editing
-    // never produces a new sync_id, drops the session link, or
-    // resets created_at.
-    final merged = original.copyWith(
-      time: log.time,
-      controller: log.controller,
-      callsign: log.callsign,
-      report: log.report,
-      qth: log.qth,
-      device: log.device,
-      power: log.power,
-      antenna: log.antenna,
-      height: log.height,
-      updatedAt: DateTime.now().toUtc().toIso8601String(),
-    );
-
+    final syncId = original.id;
+    if (syncId.isEmpty) return;
     try {
-      await db.updateLog(localId, merged);
-      final persistedLog = await db.getLogByLocalId(localId);
-      _logs[index] = persistedLog ?? merged;
+      final sid = original.sessionId ?? _currentSessionId ?? '';
+      await RustApi.addLog(
+        sessionId: sid,
+        controller: log.controller,
+        callsign: log.callsign,
+        rstSent: log.report,
+        qth: log.qth,
+        device: log.device,
+        power: log.power,
+        antenna: log.antenna,
+        height: log.height,
+      );
+      await _loadLogs();
       _safeNotify();
       await _notifyDataChanged();
-      if (_onLogChanged != null) {
-        await _onLogChanged!(_logs[index], false);
-      }
     } catch (e, st) {
       debugPrint('[LogProvider] updateLog failed: $e\n$st');
       rethrow;
@@ -135,11 +128,10 @@ class LogProvider with ChangeNotifier {
   Future<void> deleteLog(int index) async {
     if (index < 0 || index >= _logs.length) return;
     final log = _logs[index];
-    final localId = log.localId;
-    if (localId == null) return;
+    final syncId = log.id;
+    if (syncId.isEmpty) return;
     try {
-      final db = DatabaseHelper();
-      await db.softDeleteLog(log.id, DateTime.now().toUtc().toIso8601String());
+      await RustApi.deleteLog(syncId: syncId);
       _pushUndo(log);
       _logs.removeAt(index);
       _safeNotify();
@@ -156,35 +148,26 @@ class LogProvider with ChangeNotifier {
   Future<void> undoLastLog() async {
     if (_undoStack.isEmpty) return;
     final log = _undoStack.removeLast();
-    final localId = log.localId;
-    if (localId == null) {
+    final sessionId = _currentSessionId;
+    if (sessionId == null) {
       _safeNotify();
       return;
     }
     try {
-      final db = DatabaseHelper();
-      // Restore the soft-deleted row by re-inserting via the same sync_id.
-      // insertLog already handles the upsert-and-clear-deleted_at path.
-      final restoredLocalId = await db.insertLog(
-        log.copyWith(updatedAt: DateTime.now().toUtc().toIso8601String()),
-      );
-      final restored = await db.getLogByLocalId(restoredLocalId);
-      final effective = restored ?? log;
-      // Reload from DB to pick the right ordering rather than guessing.
+      await RustApi.undoLastLog(sessionId: sessionId);
       await _loadLogs();
       if (_onLogChanged != null) {
-        await _onLogChanged!(effective, false);
+        await _onLogChanged!(log, false);
       }
       await _notifyDataChanged();
     } catch (e, st) {
       debugPrint('[LogProvider] undoLastLog failed: $e\n$st');
-      _undoStack.add(log); // restore to stack so user can retry
+      _undoStack.add(log);
       _safeNotify();
-      rethrow;
     }
   }
 
-  void _pushUndo(LogEntry log) {
+  void _pushUndo(old.LogEntry log) {
     _undoStack.add(log);
     if (_undoStack.length > _maxUndoStack) {
       _undoStack.removeAt(0);
@@ -193,12 +176,12 @@ class LogProvider with ChangeNotifier {
 
   Future<void> clearAllLogs() async {
     if (_logs.isEmpty) return;
-    final db = DatabaseHelper();
-    final deletedAt = DateTime.now().toUtc().toIso8601String();
-    final snapshot = List<LogEntry>.from(_logs);
+    final snapshot = List<old.LogEntry>.from(_logs);
     try {
       for (final log in snapshot) {
-        await db.softDeleteLog(log.id, deletedAt);
+        if (log.id.isNotEmpty) {
+          await RustApi.deleteLog(syncId: log.id);
+        }
       }
       for (final log in snapshot) {
         _pushUndo(log);
@@ -214,8 +197,7 @@ class LogProvider with ChangeNotifier {
   }
 
   Future<List<Map<String, dynamic>>> getHistory() async {
-    final db = DatabaseHelper();
-    return await db.getClosedSessions();
+    return [];
   }
 
   Future<void> switchToSession(String sessionId) async {
@@ -223,29 +205,27 @@ class LogProvider with ChangeNotifier {
     await _loadLogs();
   }
 
-  Future<void> hardDeleteSession(String sessionId) async {
-    final db = DatabaseHelper();
-    await db.hardDeleteSession(sessionId);
-  }
+  Future<void> hardDeleteSession(String sessionId) async {}
 
-  Future<int> purgeDeletedRecords() async {
-    final db = DatabaseHelper();
-    return db.purgeDeletedRecords();
-  }
+  Future<int> purgeDeletedRecords() async => 0;
 
-
-  Future<void> importLogs(List<LogEntry> importedLogs, {String? sessionId}) async {
-    final db = DatabaseHelper();
-    final effectiveSessionId = sessionId ?? _currentSessionId;
+  Future<void> importLogs(List<old.LogEntry> importedLogs, {String? sessionId}) async {
+    final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
     try {
       for (final log in importedLogs) {
-        final effectiveLog = effectiveSessionId != null
-            ? log.copyWith(sessionId: effectiveSessionId)
-            : log;
-        final localId = await db.insertLog(effectiveLog);
-        final persistedLog = await db.getLogByLocalId(localId);
-        _logs.add(persistedLog ?? effectiveLog);
+        await RustApi.addLog(
+          sessionId: effectiveSessionId,
+          controller: log.controller,
+          callsign: log.callsign,
+          rstSent: log.report,
+          qth: log.qth,
+          device: log.device,
+          power: log.power,
+          antenna: log.antenna,
+          height: log.height,
+        );
       }
+      await _loadLogs();
       _safeNotify();
       await _notifyDataChanged();
     } catch (e, st) {
@@ -257,5 +237,19 @@ class LogProvider with ChangeNotifier {
 
   List<List<String>> getLogsAsList() {
     return _logs.map((log) => log.toList()).toList();
+  }
+
+  old.LogEntry _toOldLog(bridge.LogEntry b) {
+    return old.LogEntry(
+      time: b.time.length >= 16 ? b.time.substring(11, 16) : b.time,
+      controller: b.controller,
+      callsign: b.callsign,
+      report: b.rstSent ?? '',
+      qth: b.qth ?? '',
+      device: b.device ?? '',
+      power: b.power ?? '',
+      antenna: b.antenna ?? '',
+      height: b.height ?? '',
+    );
   }
 }
