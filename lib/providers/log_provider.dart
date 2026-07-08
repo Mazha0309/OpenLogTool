@@ -199,7 +199,18 @@ class LogProvider with ChangeNotifier {
   }
 
   Future<List<Map<String, dynamic>>> getHistory() async {
-    return [];
+    try {
+      final sessions = await RustApi.listSessions();
+      return sessions.where((s) => s.deletedAt == null).map((s) => {
+        'session_id': s.sessionId,
+        'title': s.title,
+        'status': s.status,
+        'created_at': s.createdAt,
+      }).toList();
+    } catch (e, st) {
+      debugPrint('[LogProvider] getHistory failed: $e\n$st');
+      return [];
+    }
   }
 
   Future<void> switchToSession(String sessionId) async {
@@ -207,7 +218,19 @@ class LogProvider with ChangeNotifier {
     await _loadLogs();
   }
 
-  Future<void> hardDeleteSession(String sessionId) async {}
+  Future<void> hardDeleteSession(String sessionId) async {
+    try {
+      await RustApi.closeSession(sessionId: sessionId);
+      if (_currentSessionId == sessionId) {
+        _currentSessionId = null;
+        _logs = [];
+        _safeNotify();
+      }
+    } catch (e, st) {
+      debugPrint('[LogProvider] hardDeleteSession failed: $e\n$st');
+      rethrow;
+    }
+  }
 
   Future<int> purgeDeletedRecords() async => 0;
 

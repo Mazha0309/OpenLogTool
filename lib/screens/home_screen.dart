@@ -720,6 +720,7 @@ class AddRecordPage extends StatelessWidget {
 
   void _showHistoryDialog(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
     final sessions = await logProvider.getHistory();
 
     if (sessions.isEmpty) {
@@ -746,41 +747,38 @@ class AddRecordPage extends StatelessWidget {
               final name = item['title'] as String;
               final status = item['status'] as String;
               final createdAt = DateTime.parse(item['created_at'] as String);
+              final isCurrent = sessionProvider.currentSessionId == sessionId;
 
               return ListTile(
                 title: Text(name),
                 subtitle: Text(
                   '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
-                  ' · ${status == "active" ? "进行中" : "已关闭"}'),
+                  ' · ${status == "active" ? "进行中" : "已关闭"}${isCurrent ? ' · 当前' : ''}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.open_in_new),
                       tooltip: '打开',
-                      onPressed: () async {
-                        await logProvider.switchToSession(sessionId);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (context.mounted) {
-                          context.showLoggedSnackBar(
-                            SnackBar(content: Text('已切换到: $name')),
-                          );
-                        }
-                      },
+                      onPressed: isCurrent
+                          ? null
+                          : () async {
+                              await sessionProvider.switchToSession(sessionId);
+                              await logProvider.reloadForSession(sessionId);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (context.mounted) {
+                                context.showLoggedSnackBar(
+                                  SnackBar(content: Text('已切换到: $name')),
+                                );
+                              }
+                            },
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
-                      tooltip: '删除',
-                      onPressed: () => _showDeleteSessionConfirmation(ctx, logProvider, sessionId, name),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_forever, color: Colors.red),
-                      tooltip: '彻底删除',
-                      onPressed: () async {
-                        await logProvider.hardDeleteSession(sessionId);
-                        Navigator.pop(ctx);
-                        if (context.mounted) _showHistoryDialog(context);
-                      },
+                      tooltip: '关闭',
+                      onPressed: isCurrent
+                          ? null
+                          : () => _showDeleteSessionConfirmation(ctx, logProvider, sessionProvider, sessionId, name),
                     ),
                   ],
                 ),
@@ -798,18 +796,21 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  void _showDeleteSessionConfirmation(BuildContext context, LogProvider logProvider, String sessionId, String name) {
+  void _showDeleteSessionConfirmation(BuildContext context, LogProvider logProvider, SessionProvider sessionProvider, String sessionId, String name) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除 "$name" 吗？'),
+        title: const Text('确认关闭'),
+        content: Text('确定要关闭 "$name" 吗？关闭后可在历史记录中查看，但无法再添加记录。'),
         actions: [
           TextButton(child: const Text('取消'), onPressed: () => Navigator.pop(ctx)),
           TextButton(
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: const Text('关闭', style: TextStyle(color: Colors.red)),
             onPressed: () async {
               await logProvider.hardDeleteSession(sessionId);
+              if (sessionProvider.currentSessionId == sessionId) {
+                await sessionProvider.handleSessionDeleted(sessionId);
+              }
               Navigator.pop(ctx);
               Navigator.pop(context); // close history dialog
               if (context.mounted) {
