@@ -31,13 +31,42 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initSession() async {
-    final session = context.read<SessionProvider>();
+    final sessionProvider = context.read<SessionProvider>();
     final logProvider = context.read<LogProvider>();
     for (int i = 0; i < 50; i++) {
-      if (session.currentSessionId != null) break;
+      if (sessionProvider.currentSessionId != null) break;
       await Future.delayed(const Duration(milliseconds: 100));
     }
-    logProvider.reloadForSession(session.currentSessionId);
+    if (sessionProvider.currentSessionId == null && mounted) {
+      final ctrl = TextEditingController();
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('新记录名称'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: '输入本次记录名称（可留空）',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              child: const Text('开始新记录'),
+              onPressed: () async {
+                final name = ctrl.text.trim();
+                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
+                await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    logProvider.reloadForSession(sessionProvider.currentSessionId);
   }
 
   void _onScroll(ScrollNotification notification) {
