@@ -8,21 +8,14 @@ import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
-import 'package:openlogtool/providers/rust_log_provider.dart';
-import 'package:openlogtool/providers/rust_session_provider.dart';
-import 'package:openlogtool/providers/rust_dict_provider.dart';
-import 'package:openlogtool/providers/rust_settings_provider.dart';
-import 'package:openlogtool/screens/rust_home_screen.dart' as rust;
-import 'package:openlogtool/src/theme/app_theme.dart';
+import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
-import 'package:openlogtool/providers/rust_settings_provider.dart';
-import 'dart:io' as io;
+import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'dart:io' as io;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,21 +26,18 @@ void main() async {
     final dir = await getApplicationSupportDirectory();
     await dir.create(recursive: true);
     dbPath = p.join(dir.path, 'openlogtool_rust.db');
-    debugPrint('Rust DB path: $dbPath');
   } catch (e) {
-    debugPrint('Failed to get support dir: $e, using fallback');
-    dbPath = p.join(io.Directory.current.path, 'openlogtool_rust.db');
+    dbPath = 'openlogtool_rust.db';
   }
   try {
     await RustApi.init(dbPath: dbPath);
-    debugPrint('Rust DB initialized: $dbPath');
   } catch (e) {
-    debugPrint('Rust DB init error: $e');
+    debugPrint('Rust DB init: $e');
   }
 
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWebBasicWebWorker;
-  } else if (io.Platform.isWindows || io.Platform.isLinux || io.Platform.isMacOS) {
+  } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
@@ -55,7 +45,6 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        // Existing providers (kept for backward compatibility)
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
@@ -104,11 +93,6 @@ void main() async {
             return provider;
           },
         ),
-        // Rust providers (for new UI)
-        ChangeNotifierProvider(create: (_) => RustLogProvider()),
-        ChangeNotifierProvider(create: (_) => RustSessionProvider()),
-        ChangeNotifierProvider(create: (_) => RustDictProvider()),
-        ChangeNotifierProvider(create: (_) => RustSettingsProvider()..load()),
       ],
       child: const MyApp(),
     ),
@@ -120,14 +104,73 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sp = Provider.of<RustSettingsProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final themeColor = settingsProvider.themeColor;
+    final fontFamily = settingsProvider.fontFamily;
+
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
-      theme: buildLightTheme(),
-      darkTheme: buildDarkTheme(),
-      themeMode: sp.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: const rust.RustHomeScreen(),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: themeColor,
+          brightness: Brightness.light,
+        ),
+        fontFamily: fontFamily,
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: themeColor,
+          brightness: Brightness.dark,
+        ),
+        fontFamily: fontFamily,
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade800),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      themeMode: settingsProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      home: const HomeScreen(),
     );
   }
 }
