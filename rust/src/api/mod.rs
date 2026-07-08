@@ -1,3 +1,4 @@
+pub mod callsign_qth;
 pub mod dictionaries;
 pub mod export;
 pub mod logs;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 
@@ -85,10 +85,17 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
       _hideOverlay();
       return;
     }
-    final db = DatabaseHelper();
-    final history = await db.getCallsignQthHistory(_lastCallsign);
+    final history = await RustApi.getCallsignQthHistory(
+      callsign: _lastCallsign,
+      limit: 3,
+    );
     if (mounted) {
-      setState(() => _history = history);
+      setState(() => _history = history
+          .map((r) => {
+                'qth': r.qth,
+                'recorded_at': r.recordedAt,
+              })
+          .toList());
       if (_focusNode.hasFocus &&
           widget.controller.text.isEmpty &&
           _history.isNotEmpty &&

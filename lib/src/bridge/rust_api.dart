@@ -5,9 +5,11 @@ import 'api/sessions.dart' as sessions;
 import 'api/dictionaries.dart' as dict;
 import 'api/settings.dart' as settings;
 import 'api/export.dart' as export_api;
+import 'api/callsign_qth.dart' as callsign_qth;
 import 'models/log_entry.dart';
 import 'models/session.dart';
 import 'models/dict_item.dart';
+import 'models/callsign_qth_record.dart';
 
 class RustApi {
   static Future<void> init({required String dbPath}) async {
@@ -181,5 +183,31 @@ class RustApi {
 
   static Future<Uint8List> exportExcel({required String sessionId}) {
     return export_api.exportExcel(sessionId: sessionId);
+  }
+
+  // Callsign-QTH history
+  static Future<void> addCallsignQthRecord({
+    required String callsign,
+    required String qth,
+  }) {
+    return callsign_qth.addCallsignQthRecord(callsign: callsign, qth: qth);
+  }
+
+  static Future<List<CallsignQthRecord>> getCallsignQthHistory({
+    required String callsign,
+    int? limit,
+  }) {
+    return callsign_qth.getCallsignQthHistory(callsign: callsign, limit: limit);
+  }
+
+  static Future<String?> getLastRecordedTime({
+    required String callsign,
+    required String qth,
+  }) {
+    return callsign_qth.getLastRecordedTime(callsign: callsign, qth: qth);
+  }
+
+  static Future<void> clearCallsignQthHistory() {
+    return callsign_qth.clearCallsignQthHistory();
   }
 }

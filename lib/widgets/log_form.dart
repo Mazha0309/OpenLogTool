@@ -7,7 +7,7 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 
 /// 日志表单组件
@@ -77,12 +77,15 @@ final _controllerController = TextEditingController();
     if (_callsignController.text.isNotEmpty) {
       await dictionaryProvider.addCallsign(_callsignController.text);
     }
-    if (_qthController.text.isNotEmpty) {
-      await dictionaryProvider.addQth(_qthController.text);
-      if (settingsProvider.callSignQthLinkEnabled) {
-        await DatabaseHelper().addCallsignQthRecord(_callsignController.text, _qthController.text);
+      if (_qthController.text.isNotEmpty) {
+        await dictionaryProvider.addQth(_qthController.text);
+        if (settingsProvider.callSignQthLinkEnabled) {
+          await RustApi.addCallsignQthRecord(
+            callsign: _callsignController.text,
+            qth: _qthController.text,
+          );
+        }
       }
-    }
 
     final log = LogEntry(
       time: _timeController.text.isNotEmpty ? _timeController.text : _getCurrentTime(),

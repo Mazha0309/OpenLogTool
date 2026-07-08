@@ -1,6 +1,6 @@
 use sqlx::SqlitePool;
 
-const CURRENT_SCHEMA_VERSION: i32 = 1;
+const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
@@ -19,6 +19,9 @@ pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
 
     if version < 1 {
         migrate_v1(pool).await?;
+    }
+    if version < 2 {
+        migrate_v2(pool).await?;
     }
 
     sqlx::query("INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, ?)")
@@ -124,6 +127,32 @@ async fn migrate_v1(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_oplog_session ON oplog(session_id)")
         .execute(pool)
         .await?;
+
+    Ok(())
+}
+
+async fn migrate_v2(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS callsign_qth_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sync_id TEXT UNIQUE,
+            callsign TEXT NOT NULL,
+            qth TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            source_device_id TEXT
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_callsign_qth_callsign ON callsign_qth_history(callsign)",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

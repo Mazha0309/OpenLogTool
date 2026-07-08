@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 463587873;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 750027644;
 
 // Section: executor
 
@@ -46,6 +46,47 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__callsign_qth__add_callsign_qth_record_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "add_callsign_qth_record",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_callsign = <String>::sse_decode(&mut deserializer);
+            let api_qth = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::callsign_qth::add_callsign_qth_record(
+                            api_callsign,
+                            api_qth,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__dictionaries__add_dict_item_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -133,6 +174,42 @@ fn wire__crate__api__logs__add_log_impl(
                             api_height,
                         )
                         .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__callsign_qth__clear_callsign_qth_history_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "clear_callsign_qth_history",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::callsign_qth::clear_callsign_qth_history().await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -356,6 +433,47 @@ fn wire__crate__api__settings__get_all_settings_impl(
         },
     )
 }
+fn wire__crate__api__callsign_qth__get_callsign_qth_history_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_callsign_qth_history",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_callsign = <String>::sse_decode(&mut deserializer);
+            let api_limit = <Option<i64>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::callsign_qth::get_callsign_qth_history(
+                            api_callsign,
+                            api_limit,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__dictionaries__get_dict_item_by_raw_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -424,6 +542,45 @@ fn wire__crate__api__dictionaries__get_dict_items_impl(
                     (move || async move {
                         let output_ok =
                             crate::api::dictionaries::get_dict_items(api_dict_type).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__callsign_qth__get_last_recorded_time_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_last_recorded_time",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_callsign = <String>::sse_decode(&mut deserializer);
+            let api_qth = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::callsign_qth::get_last_recorded_time(api_callsign, api_qth)
+                                .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1000,6 +1157,32 @@ impl SseDecode for String {
     }
 }
 
+impl SseDecode for crate::models::callsign_qth_record::CallsignQthRecord {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <Option<i64>>::sse_decode(deserializer);
+        let mut var_syncId = <String>::sse_decode(deserializer);
+        let mut var_callsign = <String>::sse_decode(deserializer);
+        let mut var_qth = <String>::sse_decode(deserializer);
+        let mut var_recordedAt = <String>::sse_decode(deserializer);
+        let mut var_createdAt = <String>::sse_decode(deserializer);
+        let mut var_updatedAt = <String>::sse_decode(deserializer);
+        let mut var_deletedAt = <Option<String>>::sse_decode(deserializer);
+        let mut var_sourceDeviceId = <Option<String>>::sse_decode(deserializer);
+        return crate::models::callsign_qth_record::CallsignQthRecord {
+            id: var_id,
+            sync_id: var_syncId,
+            callsign: var_callsign,
+            qth: var_qth,
+            recorded_at: var_recordedAt,
+            created_at: var_createdAt,
+            updated_at: var_updatedAt,
+            deleted_at: var_deletedAt,
+            source_device_id: var_sourceDeviceId,
+        };
+    }
+}
+
 impl SseDecode for crate::models::dict_item::DictItem {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1040,6 +1223,20 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::models::callsign_qth_record::CallsignQthRecord> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(
+                <crate::models::callsign_qth_record::CallsignQthRecord>::sse_decode(deserializer),
+            );
         }
         return ans_;
     }
@@ -1275,49 +1472,73 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__dictionaries__add_dict_item_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__logs__add_log_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__sessions__close_session_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__sessions__create_session_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__logs__delete_log_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__export__export_excel_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__export__export_json_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__settings__get_all_settings_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__dictionaries__get_dict_item_by_raw_impl(
+        1 => wire__crate__api__callsign_qth__add_callsign_qth_record_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => {
+        2 => wire__crate__api__dictionaries__add_dict_item_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__logs__add_log_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__callsign_qth__clear_callsign_qth_history_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        5 => wire__crate__api__sessions__close_session_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__sessions__create_session_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__logs__delete_log_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__export__export_excel_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__export__export_json_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__settings__get_all_settings_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__callsign_qth__get_callsign_qth_history_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        12 => wire__crate__api__dictionaries__get_dict_item_by_raw_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        13 => {
             wire__crate__api__dictionaries__get_dict_items_impl(port, ptr, rust_vec_len, data_len)
         }
-        11 => wire__crate__api__logs__get_log_stats_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__logs__get_logs_impl(port, ptr, rust_vec_len, data_len),
-        13 => {
+        14 => wire__crate__api__callsign_qth__get_last_recorded_time_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        15 => wire__crate__api__logs__get_log_stats_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__logs__get_logs_impl(port, ptr, rust_vec_len, data_len),
+        17 => {
             wire__crate__api__logs__get_recent_by_callsign_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__init_database_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__sessions__join_session_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__sessions__list_sessions_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__dictionaries__reset_dictionaries_impl(
+        18 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__init_database_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__sessions__join_session_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__sessions__list_sessions_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__dictionaries__reset_dictionaries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        19 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
+        23 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        23 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1336,6 +1557,34 @@ fn pde_ffi_dispatcher_sync_impl(
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::models::callsign_qth_record::CallsignQthRecord {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.sync_id.into_into_dart().into_dart(),
+            self.callsign.into_into_dart().into_dart(),
+            self.qth.into_into_dart().into_dart(),
+            self.recorded_at.into_into_dart().into_dart(),
+            self.created_at.into_into_dart().into_dart(),
+            self.updated_at.into_into_dart().into_dart(),
+            self.deleted_at.into_into_dart().into_dart(),
+            self.source_device_id.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::models::callsign_qth_record::CallsignQthRecord
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::models::callsign_qth_record::CallsignQthRecord>
+    for crate::models::callsign_qth_record::CallsignQthRecord
+{
+    fn into_into_dart(self) -> crate::models::callsign_qth_record::CallsignQthRecord {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::models::dict_item::DictItem {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -1464,6 +1713,21 @@ impl SseEncode for String {
     }
 }
 
+impl SseEncode for crate::models::callsign_qth_record::CallsignQthRecord {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<i64>>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.sync_id, serializer);
+        <String>::sse_encode(self.callsign, serializer);
+        <String>::sse_encode(self.qth, serializer);
+        <String>::sse_encode(self.recorded_at, serializer);
+        <String>::sse_encode(self.created_at, serializer);
+        <String>::sse_encode(self.updated_at, serializer);
+        <Option<String>>::sse_encode(self.deleted_at, serializer);
+        <Option<String>>::sse_encode(self.source_device_id, serializer);
+    }
+}
+
 impl SseEncode for crate::models::dict_item::DictItem {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1492,6 +1756,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::models::callsign_qth_record::CallsignQthRecord> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::models::callsign_qth_record::CallsignQthRecord>::sse_encode(item, serializer);
         }
     }
 }

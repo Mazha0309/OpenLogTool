@@ -7,7 +7,7 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
@@ -1113,9 +1113,8 @@ class _ExportPanelState extends State<ExportPanel> {
 
       // Insert callsign-qth history records
       if (importResult.callsignQthPairs.isNotEmpty) {
-        final db = DatabaseHelper();
         for (final pair in importResult.callsignQthPairs) {
-          await db.addCallsignQthRecord(pair[0], pair[1]);
+          await RustApi.addCallsignQthRecord(callsign: pair[0], qth: pair[1]);
         }
       }
 
