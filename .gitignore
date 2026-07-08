@@ -50,3 +50,6 @@ app.*.map.json
 # Rust
 /rust/target/
 /rust/Cargo.lock
+
+# Superpowers (brainstorming artifacts)
+.superpowers/

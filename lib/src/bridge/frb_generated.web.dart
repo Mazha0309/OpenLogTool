@@ -9,6 +9,7 @@
 
 import 'api.dart';
 import 'api/dictionaries.dart';
+import 'api/export.dart';
 import 'api/logs.dart';
 import 'api/sessions.dart';
 import 'api/settings.dart';

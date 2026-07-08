@@ -12,9 +12,11 @@ import 'package:openlogtool/providers/rust_log_provider.dart';
 import 'package:openlogtool/providers/rust_session_provider.dart';
 import 'package:openlogtool/providers/rust_dict_provider.dart';
 import 'package:openlogtool/providers/rust_settings_provider.dart';
-import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/screens/rust_home_screen.dart';
+import 'package:openlogtool/src/theme/shadcn_theme.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
+import 'package:openlogtool/providers/rust_settings_provider.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
@@ -108,75 +110,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-    final themeColor = settingsProvider.themeColor;
-    final fontFamily = settingsProvider.fontFamily;
-
-    const vividRed = Color(0xFFDC2626);
-
+    final sp = Provider.of<RustSettingsProvider>(context);
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.light,
-        ).copyWith(error: vividRed),
-        fontFamily: fontFamily,
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.dark,
-        ).copyWith(error: vividRed),
-        fontFamily: fontFamily,
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade800),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ),
-      themeMode: settingsProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: const HomeScreen(),
+      theme: shadcnTheme(dark: false),
+      darkTheme: shadcnTheme(dark: true),
+      themeMode: sp.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      home: const RustHomeScreen(),
     );
   }
 }

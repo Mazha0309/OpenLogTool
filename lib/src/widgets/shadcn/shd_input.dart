@@ -85,7 +85,7 @@ class ShDropdown extends StatelessWidget {
               items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: theme.textTheme.bodyMedium))).toList(),
               onChanged: onChanged,
               isExpanded: true,
-              icon: const Icon(Icons.chevron_round_down, size: 18),
+              icon: const Icon(Icons.expand_more, size: 18),
             ),
           ),
         ),
