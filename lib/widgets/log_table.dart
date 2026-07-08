@@ -193,7 +193,10 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('呼号'), 120),
                             ),
                             DataColumn(
-                              label: _buildCenteredCell(const Text('RST发/收'), 100),
+                              label: _buildCenteredCell(const Text('RST发'), 60),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('RST收'), 60),
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('QTH'), 150),
@@ -314,36 +317,35 @@ class _LogTableState extends State<LogTable> {
           ),
           DataCell(
             isEditing
-                ? Row(
-                    children: [
-                      SizedBox(
-                        width: 48,
-                        child: TextField(
-                          controller: _controllers['report'],
-                          style: const TextStyle(fontSize: 13),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
+                ? SizedBox(
+                    width: 60,
+                    child: TextField(
+                      controller: _controllers['report'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
-                      Text('/', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      SizedBox(
-                        width: 48,
-                        child: TextField(
-                          controller: _controllers['rstRcvd'],
-                          style: const TextStyle(fontSize: 13),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
+                      textAlign: TextAlign.center,
+                    ),
                   )
-                : _buildCenteredCell(Text(log.rstRcvd.isEmpty ? log.report : '${log.report}/${log.rstRcvd}'), 100),
+                : _buildCenteredCell(Text(log.report), 60),
+          ),
+          DataCell(
+            isEditing
+                ? SizedBox(
+                    width: 60,
+                    child: TextField(
+                      controller: _controllers['rstRcvd'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.rstRcvd), 60),
           ),
           DataCell(
             isEditing
