@@ -8,7 +8,7 @@ license = "AGPL-3.0"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-flutter_rust_bridge = "=2.9.0"
+flutter_rust_bridge = "=2.12.0"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
