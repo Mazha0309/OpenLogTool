@@ -66,7 +66,7 @@ class LogProvider with ChangeNotifier {
     // Prefer creation timestamp; fall back to QSO time if it is a full ISO/RFC3339 string.
     final candidates = [log.createdAt, log.time];
     for (final value in candidates) {
-      if (value == null || value.isEmpty) continue;
+      if (value.isEmpty) continue;
       final dt = DateTime.tryParse(value);
       if (dt != null) return dt;
     }

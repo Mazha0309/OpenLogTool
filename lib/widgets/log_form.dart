@@ -8,7 +8,6 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/database/database_helper.dart';
-import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 
 /// 日志表单组件

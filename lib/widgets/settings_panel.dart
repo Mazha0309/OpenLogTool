@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -142,7 +141,6 @@ class SettingsPanel extends StatelessWidget {
                             ),
                             const Spacer(),
                             FilledButton(
-                              child: const Text('退出登录'),
                               style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
                               onPressed: () async {
                                 await syncProvider.logout();
@@ -152,6 +150,7 @@ class SettingsPanel extends StatelessWidget {
                                   );
                                 }
                               },
+                              child: const Text('退出登录'),
                             ),
                           ],
                         ),
@@ -161,7 +160,7 @@ class SettingsPanel extends StatelessWidget {
                             labelText: '同步方式',
                             border: OutlineInputBorder(),
                           ),
-                          value: syncProvider.settings.syncMode,
+                          initialValue: syncProvider.settings.syncMode,
                           items: const [
                             DropdownMenuItem(
                                 value: 'realtime', child: Text('实时同步')),
@@ -188,7 +187,7 @@ class SettingsPanel extends StatelessWidget {
                                     labelText: '同步间隔',
                                     border: OutlineInputBorder(),
                                   ),
-                                  value:
+                                  initialValue:
                                       syncProvider.settings.syncIntervalMinutes,
                                   items: const [
                                     DropdownMenuItem(
@@ -235,7 +234,6 @@ class SettingsPanel extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             FilledButton(
-                              child: const Text('重置同步基线'),
                               onPressed: syncProvider.isConfigured
                                   ? () async {
                                       await syncProvider.resetSyncBaseline();
@@ -248,6 +246,7 @@ class SettingsPanel extends StatelessWidget {
                                       }
                                     }
                                   : null,
+                              child: const Text('重置同步基线'),
                             ),
                             const SizedBox(width: 8),
                             if (syncProvider.settings.syncMode != 'manual')
@@ -283,10 +282,10 @@ class SettingsPanel extends StatelessWidget {
                               )
                             else
                               FilledButton(
-                                child: const Text('立即同步'),
                                 onPressed: syncProvider.isConfigured
                                     ? () => _performSync(context, syncProvider)
                                     : null,
+                                child: const Text('立即同步'),
                               ),
                           ],
                         ),
@@ -374,9 +373,9 @@ class SettingsPanel extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton(
-                child: const Text('恢复默认设置'),
                 onPressed: () => _showResetConfirmation(context),
                 style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+                child: const Text('恢复默认设置'),
               ),
             ),
             const SizedBox(width: 12),
@@ -817,7 +816,6 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            child: const Text('确认恢复'),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () {
               Provider.of<SettingsProvider>(context, listen: false)
@@ -830,6 +828,7 @@ class SettingsPanel extends StatelessWidget {
                 ),
               );
             },
+            child: const Text('确认恢复'),
           ),
         ],
       ),
@@ -848,7 +847,6 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            child: const Text('确认清空'),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
@@ -875,6 +873,7 @@ class SettingsPanel extends StatelessWidget {
                 }
               }
             },
+            child: const Text('确认清空'),
           ),
         ],
       ),
@@ -940,12 +939,12 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(dialogContext),
           ),
           FilledButton(
-            child: const Text('继续导入'),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await _importDatabase(context);
             },
+            child: const Text('继续导入'),
           ),
         ],
       ),

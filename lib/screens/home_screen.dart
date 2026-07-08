@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('分享码: ${result.shareCode}'),
                 if (result.expiresAt != null) ...[
                   const SizedBox(height: 4),
-                  Text('过期时间: ${result.expiresAt}', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text('过期时间: ${result.expiresAt}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ],
             ),
@@ -231,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Wrap(
                 spacing: 8,
                 children: [1, 3, 6, 12, 24, 0].map((h) => ChoiceChip(
-                  label: Text(h == 0 ? '永不过期' : '${h}小时'),
+                  label: Text(h == 0 ? '永不过期' : '$h小时'),
                   selected: selectedHours == h,
                   onSelected: (_) => setState(() => selectedHours = h),
                 )).toList(),
@@ -837,12 +837,12 @@ class AddRecordPage extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            child: const Text('确认清空'),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
               _showNewSessionNameDialog(context);
             },
+            child: const Text('确认清空'),
           ),
         ],
       ),
@@ -938,24 +938,24 @@ class ImportExportPage extends StatelessWidget {
             constraints.maxWidth > 900 && settingsProvider.wideLayoutEnabled;
 
         if (isWideScreen) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
+          return const SingleChildScrollView(
+            padding: EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
                   child: Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: EdgeInsets.all(16.0),
                       child: ExportPanel(),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Flexible(
                   child: Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: EdgeInsets.all(16.0),
                       child: DictionaryManager(),
                     ),
                   ),
@@ -964,21 +964,21 @@ class ImportExportPage extends StatelessWidget {
             ),
           );
         } else {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          return const SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(12.0),
+                    padding: EdgeInsets.all(12.0),
                     child: ExportPanel(),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(12.0),
+                    padding: EdgeInsets.all(12.0),
                     child: DictionaryManager(),
                   ),
                 ),
@@ -1001,7 +1001,7 @@ class SettingsPage extends StatelessWidget {
         final isNarrow = constraints.maxWidth < 600;
         return SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 16, vertical: isNarrow ? 12 : 16),
-          child: SettingsPanel(),
+          child: const SettingsPanel(),
         );
       },
     );

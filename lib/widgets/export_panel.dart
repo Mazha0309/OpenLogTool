@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -120,7 +119,7 @@ class _ExportPanelState extends State<ExportPanel> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                const Text(
                   '导出数据',
                   style: TextStyle(
                     fontSize: 16,
@@ -177,7 +176,7 @@ class _ExportPanelState extends State<ExportPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               '导入数据',
               style: TextStyle(
                 fontSize: 16,

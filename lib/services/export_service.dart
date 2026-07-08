@@ -469,7 +469,7 @@ ImportResult parseJsonImport(
       );
     }).toList();
   } else {
-    throw FormatException('未知的JSON格式');
+    throw const FormatException('未知的JSON格式');
   }
 
   return ImportResult(logs: importedLogs, callsignQthPairs: callsignQthPairs);

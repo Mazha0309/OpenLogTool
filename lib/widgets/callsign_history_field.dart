@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
-import 'package:openlogtool/providers/settings_provider.dart';
 
 class CallsignHistoryField extends StatefulWidget {
   final TextEditingController callsignController;
@@ -46,7 +44,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _ownFocusNode = FocusNode();
-  bool _isSelecting = false;
+  final bool _isSelecting = false;
 
   FocusNode get _effFocus => widget.focusNode ?? _ownFocusNode;
 

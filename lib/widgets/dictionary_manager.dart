@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
-import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class DictionaryManager extends StatefulWidget {
   const DictionaryManager({super.key});
@@ -29,7 +28,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
 
   @override
   void dispose() {
-    _controllers.values.forEach((controller) => controller.dispose());
+    for (var controller in _controllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 

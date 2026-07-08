@@ -1,6 +1,6 @@
 [package]
 name = "openlogtool_core"
-version = "0.1.0-R"
+version = "1.0.0-R"
 edition = "2021"
 license = "AGPL-3.0"
 
