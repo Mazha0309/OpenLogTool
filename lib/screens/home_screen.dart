@@ -31,13 +31,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initSession() async {
-    final sessionProvider = context.read<SessionProvider>();
-    final logProvider = context.read<LogProvider>();
-    for (int i = 0; i < 50; i++) {
-      if (sessionProvider.currentSessionId != null) break;
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-    if (sessionProvider.currentSessionId == null && mounted) {
+    final sp = context.read<SessionProvider>();
+    final lp = context.read<LogProvider>();
+    await sp.ready;
+    if (!mounted) return;
+    if (sp.currentSessionId == null) {
       final ctrl = TextEditingController();
       showDialog(
         context: context,
@@ -56,8 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Text('开始新记录'),
               onPressed: () async {
                 final name = ctrl.text.trim();
-                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
-                await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                await sp.startNewSession(title: name.isEmpty ? null : name);
+                await lp.reloadForSession(sp.currentSessionId);
                 if (ctx.mounted) Navigator.pop(ctx);
               },
             ),
@@ -66,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
-    logProvider.reloadForSession(sessionProvider.currentSessionId);
+    lp.reloadForSession(sp.currentSessionId);
   }
 
   void _onScroll(ScrollNotification notification) {
