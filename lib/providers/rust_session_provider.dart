@@ -40,7 +40,7 @@ class RustSessionProvider extends ChangeNotifier {
   Future<void> closeSession(String sessionId) async {
     try {
       await RustApi.closeSession(sessionId: sessionId);
-      if (_currentSession?.session_id == sessionId) {
+      if (_currentSession?.sessionId == sessionId) {
         _currentSession = null;
       }
       await loadSessions();
