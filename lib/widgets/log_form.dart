@@ -7,7 +7,6 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
-import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 
 /// 日志表单组件
@@ -32,8 +31,6 @@ final _controllerController = TextEditingController();
   final _timeController = TextEditingController();
   final _reportController = TextEditingController();
   final _rstRcvdController = TextEditingController();
-
-  String? _controllerError;
 
   @override
   bool get wantKeepAlive => true;
@@ -65,7 +62,6 @@ final _controllerController = TextEditingController();
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
 
     if (_deviceController.text.isNotEmpty) {
@@ -79,12 +75,6 @@ final _controllerController = TextEditingController();
     }
       if (_qthController.text.isNotEmpty) {
         await dictionaryProvider.addQth(_qthController.text);
-        if (settingsProvider.callSignQthLinkEnabled) {
-          await RustApi.addCallsignQthRecord(
-            callsign: _callsignController.text,
-            qth: _qthController.text,
-          );
-        }
       }
 
     final log = LogEntry(
@@ -122,9 +112,6 @@ final _controllerController = TextEditingController();
     _timeController.clear();
     _reportController.clear();
     _rstRcvdController.clear();
-    setState(() {
-      _controllerError = null;
-    });
     FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 

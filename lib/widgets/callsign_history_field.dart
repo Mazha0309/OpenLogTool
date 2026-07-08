@@ -70,8 +70,8 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   }
 
   void _onFocusChanged() {
-    if (_effFocus.hasFocus && _history.isNotEmpty) {
-      _showOverlay();
+    if (_effFocus.hasFocus) {
+      _loadHistory();
     } else {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
@@ -98,16 +98,16 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   }
 
   void _fillFromRecord(bridge.LogEntry log) {
-    if (widget.deviceController.text.isEmpty) widget.deviceController.text = log.device ?? '';
-    if (widget.antennaController.text.isEmpty) widget.antennaController.text = log.antenna ?? '';
-    if (widget.qthController.text.isEmpty) widget.qthController.text = log.qth ?? '';
-    if (widget.powerController.text.isEmpty) widget.powerController.text = log.power ?? '';
-    if (widget.heightController.text.isEmpty) widget.heightController.text = log.height ?? '';
-    if (widget.reportController != null && widget.reportController!.text.isEmpty) {
-      widget.reportController!.text = log.rstSent ?? '';
+    if (log.device?.isNotEmpty ?? false) widget.deviceController.text = log.device!;
+    if (log.antenna?.isNotEmpty ?? false) widget.antennaController.text = log.antenna!;
+    if (log.qth?.isNotEmpty ?? false) widget.qthController.text = log.qth!;
+    if (log.power?.isNotEmpty ?? false) widget.powerController.text = log.power!;
+    if (log.height?.isNotEmpty ?? false) widget.heightController.text = log.height!;
+    if (widget.reportController != null && (log.rstSent?.isNotEmpty ?? false)) {
+      widget.reportController!.text = log.rstSent!;
     }
-    if (widget.rstRcvdController != null && widget.rstRcvdController!.text.isEmpty) {
-      widget.rstRcvdController!.text = log.rstRcvd ?? '';
+    if (widget.rstRcvdController != null && (log.rstRcvd?.isNotEmpty ?? false)) {
+      widget.rstRcvdController!.text = log.rstRcvd!;
     }
     _hideOverlay();
   }
@@ -147,7 +147,13 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
                     decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: Theme.of(ctx).colorScheme.outlineVariant)),
                     ),
-                    child: Text('最近记录', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_fix_high, size: 14, color: Theme.of(ctx).colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Text('一键复用数据库信息', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
                   ),
                   Flexible(
                     child: ListView.builder(
@@ -228,10 +234,21 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
           border: const OutlineInputBorder(),
           isDense: true,
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: widget.isCompact ? 10 : 14),
-          suffixIcon: Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
+        suffixIcon: _history.isNotEmpty
+            ? Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: IconButton(
+                  icon: Icon(Icons.auto_fix_high,
+                      size: 18, color: Theme.of(context).colorScheme.primary),
+                  tooltip: '一键复用数据库信息',
+                  onPressed: _showOverlay,
+                ),
+              )
+            : Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(Icons.search,
+                    size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
         ),
         textInputAction: widget.textInputAction ?? TextInputAction.next,
         textCapitalization: TextCapitalization.characters,

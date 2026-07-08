@@ -381,24 +381,15 @@ class ExportService {
 /// JSON 导入解析结果。
 class ImportResult {
   final List<LogEntry> logs;
-  final List<List<String>> callsignQthPairs;
 
-  const ImportResult({
-    required this.logs,
-    required this.callsignQthPairs,
-  });
+  const ImportResult({required this.logs});
 }
 
 /// 从 JSON 字符串解析导入数据。
 /// 支持两种格式：OpenLogTool 原生 JSON（数组）和 HamTool 导出格式（含 `currentRecords` 的 Map）。
-/// [recordCallsignQth] 决定是否收集呼号-QTH 对用于后续历史记录。
-ImportResult parseJsonImport(
-  String jsonString, {
-  bool recordCallsignQth = true,
-}) {
+ImportResult parseJsonImport(String jsonString) {
   final jsonData = json.decode(jsonString);
   final List<LogEntry> importedLogs;
-  final List<List<String>> callsignQthPairs = [];
 
   if (jsonData is Map && jsonData.containsKey('currentRecords')) {
     // HamTool format compatibility
@@ -421,10 +412,6 @@ ImportResult parseJsonImport(
       }
       if (item['qth'] != null) {
         qth = item['qth'].toString();
-      }
-
-      if (recordCallsignQth && callsign.isNotEmpty && qth.isNotEmpty) {
-        callsignQthPairs.add([callsign, qth]);
       }
 
       String report = '59';
@@ -452,10 +439,6 @@ ImportResult parseJsonImport(
       if (item['callsign'] != null) callsign = item['callsign'].toString();
       if (item['qth'] != null) qth = item['qth'].toString();
 
-      if (recordCallsignQth && callsign.isNotEmpty && qth.isNotEmpty) {
-        callsignQthPairs.add([callsign, qth]);
-      }
-
       return LogEntry(
         time: item['time']?.toString() ?? '',
         controller: item['controller']?.toString() ?? '',
@@ -472,5 +455,5 @@ ImportResult parseJsonImport(
     throw const FormatException('未知的JSON格式');
   }
 
-  return ImportResult(logs: importedLogs, callsignQthPairs: callsignQthPairs);
+  return ImportResult(logs: importedLogs);
 }

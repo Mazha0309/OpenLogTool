@@ -7,7 +7,6 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
-import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
@@ -1093,7 +1092,6 @@ class _ExportPanelState extends State<ExportPanel> {
   Future<void> _importJSON(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -1106,17 +1104,7 @@ class _ExportPanelState extends State<ExportPanel> {
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
 
-      final importResult = parseJsonImport(
-        content,
-        recordCallsignQth: settingsProvider.importCallsignQthHistoryEnabled,
-      );
-
-      // Insert callsign-qth history records
-      if (importResult.callsignQthPairs.isNotEmpty) {
-        for (final pair in importResult.callsignQthPairs) {
-          await RustApi.addCallsignQthRecord(callsign: pair[0], qth: pair[1]);
-        }
-      }
+      final importResult = parseJsonImport(content);
 
       await logProvider.importLogs(importResult.logs, sessionId: sessionProvider.currentSessionId);
       scaffoldMessenger.showSnackBar(

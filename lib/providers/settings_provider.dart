@@ -12,7 +12,6 @@ class SettingsProvider with ChangeNotifier {
   static const String _exportSettingsKey = 'exportSettings';
   static const String _callSignQthLinkKey = 'callSignQthLinkEnabled';
   static const String _paginationEnabledKey = 'paginationEnabled';
-  static const String _importCallsignQthHistoryKey = 'importCallsignQthHistoryEnabled';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
@@ -22,7 +21,6 @@ class SettingsProvider with ChangeNotifier {
   ExportSettings _exportSettings = ExportSettings();
   bool _callSignQthLinkEnabled = true;
   bool _paginationEnabled = false;
-  bool _importCallsignQthHistoryEnabled = true;
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
@@ -32,7 +30,6 @@ class SettingsProvider with ChangeNotifier {
   ExportSettings get exportSettings => _exportSettings;
   bool get callSignQthLinkEnabled => _callSignQthLinkEnabled;
   bool get paginationEnabled => _paginationEnabled;
-  bool get importCallsignQthHistoryEnabled => _importCallsignQthHistoryEnabled;
 
   SettingsProvider() {
     _loadSettings();
@@ -63,7 +60,6 @@ class SettingsProvider with ChangeNotifier {
 
     _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
     _paginationEnabled = prefs.getBool(_paginationEnabledKey) ?? false;
-    _importCallsignQthHistoryEnabled = prefs.getBool(_importCallsignQthHistoryKey) ?? true;
 
     notifyListeners();
   }
@@ -113,12 +109,6 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setPaginationEnabled(bool enabled) async {
     _paginationEnabled = enabled;
     await _saveSetting(_paginationEnabledKey, enabled);
-    notifyListeners();
-  }
-
-  Future<void> setImportCallsignQthHistory(bool enabled) async {
-    _importCallsignQthHistoryEnabled = enabled;
-    await _saveSetting(_importCallsignQthHistoryKey, enabled);
     notifyListeners();
   }
 
