@@ -947,6 +947,7 @@ fn wire__crate__api__logs__update_log_impl(
             let api_sync_id = <String>::sse_decode(&mut deserializer);
             let api_controller = <String>::sse_decode(&mut deserializer);
             let api_callsign = <String>::sse_decode(&mut deserializer);
+            let api_time = <String>::sse_decode(&mut deserializer);
             let api_rst_sent = <Option<String>>::sse_decode(&mut deserializer);
             let api_rst_rcvd = <Option<String>>::sse_decode(&mut deserializer);
             let api_qth = <Option<String>>::sse_decode(&mut deserializer);
@@ -962,6 +963,7 @@ fn wire__crate__api__logs__update_log_impl(
                             api_sync_id,
                             api_controller,
                             api_callsign,
+                            api_time,
                             api_rst_sent,
                             api_rst_rcvd,
                             api_qth,

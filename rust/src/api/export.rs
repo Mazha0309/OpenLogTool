@@ -56,7 +56,14 @@ pub async fn export_excel(session_id: String) -> anyhow::Result<Vec<u8>> {
         let r = (row + 1) as u32;
         let fmt = if row % 2 == 1 { &alt_fmt } else { &cell_fmt };
 
-        worksheet.write_with_format(r, 0, &entry.time[11..16], fmt)?;
+        let display_time = if entry.time.len() >= 16 {
+            &entry.time[11..16]
+        } else if entry.time.len() >= 5 {
+            &entry.time[..5]
+        } else {
+            &entry.time
+        };
+        worksheet.write_with_format(r, 0, display_time, fmt)?;
         worksheet.write_with_format(r, 1, &entry.controller, fmt)?;
         worksheet.write_with_format(r, 2, &entry.callsign, fmt)?;
         worksheet.write_with_format(r, 3, entry.rst_sent.as_deref().unwrap_or(""), fmt)?;

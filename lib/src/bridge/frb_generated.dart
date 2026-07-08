@@ -160,6 +160,7 @@ abstract class RustLibApi extends BaseApi {
       {required String syncId,
       required String controller,
       required String callsign,
+      required String time,
       String? rstSent,
       String? rstRcvd,
       String? qth,
@@ -807,6 +808,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       {required String syncId,
       required String controller,
       required String callsign,
+      required String time,
       String? rstSent,
       String? rstRcvd,
       String? qth,
@@ -820,6 +822,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(syncId, serializer);
         sse_encode_String(controller, serializer);
         sse_encode_String(callsign, serializer);
+        sse_encode_String(time, serializer);
         sse_encode_opt_String(rstSent, serializer);
         sse_encode_opt_String(rstRcvd, serializer);
         sse_encode_opt_String(qth, serializer);
@@ -839,6 +842,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         syncId,
         controller,
         callsign,
+        time,
         rstSent,
         rstRcvd,
         qth,
@@ -857,6 +861,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "syncId",
           "controller",
           "callsign",
+          "time",
           "rstSent",
           "rstRcvd",
           "qth",

@@ -89,9 +89,11 @@ pub async fn get_log_stats(session_id: &str) -> anyhow::Result<LogStats> {
     .fetch_one(pool)
     .await?;
 
-    let today_start = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    // Stats are based on created_at (reliable RFC3339 timestamp) instead of the user-editable
+    // time field which may only store HH:mm.
+    let today_start = chrono::Utc::now().date_naive().to_string();
     let today: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM logs WHERE session_id = ? AND deleted_at IS NULL AND time >= ?",
+        "SELECT COUNT(*) FROM logs WHERE session_id = ? AND deleted_at IS NULL AND date(created_at) >= ?",
     )
     .bind(session_id)
     .bind(&today_start)
@@ -100,7 +102,7 @@ pub async fn get_log_stats(session_id: &str) -> anyhow::Result<LogStats> {
 
     let week_ago = (chrono::Utc::now() - chrono::Duration::days(7)).to_rfc3339();
     let last_7: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM logs WHERE session_id = ? AND deleted_at IS NULL AND time >= ?",
+        "SELECT COUNT(*) FROM logs WHERE session_id = ? AND deleted_at IS NULL AND created_at >= ?",
     )
     .bind(session_id)
     .bind(&week_ago)
@@ -118,6 +120,7 @@ pub async fn update_log(
     sync_id: &str,
     controller: &str,
     callsign: &str,
+    time: &str,
     rst_sent: Option<&str>,
     rst_rcvd: Option<&str>,
     qth: Option<&str>,
@@ -128,14 +131,15 @@ pub async fn update_log(
 ) -> anyhow::Result<LogEntry> {
     let pool = get_db()?;
     let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE logs SET
-            controller = ?, callsign = ?, rst_sent = ?, rst_rcvd = ?,
+            controller = ?, callsign = ?, time = ?, rst_sent = ?, rst_rcvd = ?,
             qth = ?, device = ?, power = ?, antenna = ?, height = ?, updated_at = ?
          WHERE sync_id = ? AND deleted_at IS NULL",
     )
     .bind(controller)
     .bind(callsign)
+    .bind(time)
     .bind(rst_sent)
     .bind(rst_rcvd)
     .bind(qth)
@@ -147,6 +151,9 @@ pub async fn update_log(
     .bind(sync_id)
     .execute(pool)
     .await?;
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Log not found or already deleted"));
+    }
     get_log_by_sync_id(sync_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Updated log not found"))

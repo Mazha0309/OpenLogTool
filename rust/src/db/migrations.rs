@@ -1,6 +1,36 @@
 use sqlx::SqlitePool;
 
+const CURRENT_SCHEMA_VERSION: i32 = 1;
+
 pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    let current: Option<(i32,)> = sqlx::query_as("SELECT version FROM schema_version")
+        .fetch_optional(pool)
+        .await?;
+    let version = current.map(|r| r.0).unwrap_or(0);
+
+    if version < 1 {
+        migrate_v1(pool).await?;
+    }
+
+    sqlx::query("INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, ?)")
+        .bind(CURRENT_SCHEMA_VERSION)
+        .bind(chrono::Utc::now().to_rfc3339())
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+async fn migrate_v1(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

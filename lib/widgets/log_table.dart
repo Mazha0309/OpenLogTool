@@ -287,7 +287,7 @@ class _LogTableState extends State<LogTable> {
                       textAlign: TextAlign.center,
                     ),
                   )
-                : _buildCenteredCell(Text(log.time), 100),
+                : _buildCenteredCell(Text(log.time.length >= 16 ? log.time.substring(11, 16) : log.time), 100),
           ),
           DataCell(
             isEditing

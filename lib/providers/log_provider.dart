@@ -46,7 +46,7 @@ class LogProvider with ChangeNotifier {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return _logs.where((log) {
-      final dt = _parseLogTime(log.time);
+      final dt = _parseLogTimestamp(log);
       if (dt == null) return false;
       return dt.year == today.year && dt.month == today.month && dt.day == today.day;
     }).length;
@@ -56,26 +56,19 @@ class LogProvider with ChangeNotifier {
     final now = DateTime.now();
     final weekAgo = now.subtract(const Duration(days: 7));
     return _logs.where((log) {
-      final dt = _parseLogTime(log.time);
+      final dt = _parseLogTimestamp(log);
       if (dt == null) return false;
       return dt.isAfter(weekAgo) || dt.isAtSameMomentAs(weekAgo);
     }).length;
   }
 
-  DateTime? _parseLogTime(String time) {
-    if (time.isEmpty) return null;
-    // time stored in DB as RFC3339, displayed as HH:mm in UI.
-    // Try full ISO first, then HH:mm with today's date.
-    final iso = DateTime.tryParse(time);
-    if (iso != null) return iso;
-    final parts = time.split(':');
-    if (parts.length == 2) {
-      final hour = int.tryParse(parts[0]);
-      final minute = int.tryParse(parts[1]);
-      if (hour != null && minute != null) {
-        final now = DateTime.now();
-        return DateTime(now.year, now.month, now.day, hour, minute);
-      }
+  DateTime? _parseLogTimestamp(old.LogEntry log) {
+    // Prefer creation timestamp; fall back to QSO time if it is a full ISO/RFC3339 string.
+    final candidates = [log.createdAt, log.time];
+    for (final value in candidates) {
+      if (value == null || value.isEmpty) continue;
+      final dt = DateTime.tryParse(value);
+      if (dt != null) return dt;
     }
     return null;
   }
@@ -137,13 +130,14 @@ class LogProvider with ChangeNotifier {
   Future<void> updateLog(int index, old.LogEntry log) async {
     if (index < 0 || index >= _logs.length) return;
     final original = _logs[index];
-    final syncId = log.id.isNotEmpty ? log.id : original.id;
+    final syncId = original.id;
     if (syncId.isEmpty) return;
     try {
       await RustApi.updateLog(
         syncId: syncId,
         controller: log.controller,
         callsign: log.callsign,
+        time: log.time,
         rstSent: log.report,
         rstRcvd: log.rstRcvd,
         qth: log.qth,
@@ -303,7 +297,7 @@ class LogProvider with ChangeNotifier {
     final entry = old.LogEntry(
       id: b.syncId,
       sessionId: b.sessionId,
-      time: b.time.length >= 16 ? b.time.substring(11, 16) : b.time,
+      time: b.time,
       controller: b.controller,
       callsign: b.callsign,
       report: b.rstSent ?? '',
