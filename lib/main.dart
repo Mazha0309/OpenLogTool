@@ -73,17 +73,17 @@ void main() async {
                 await syncProvider.triggerSyncAndWait();
               }
             });
+            final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
             provider.setOnLogChanged((log, isDelete) async {
-              final sp = Provider.of<SyncProvider>(context, listen: false);
-              final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-              if (sp.settings.syncEnabled && sessionProvider.currentSessionId != null) {
+              if (syncProvider.settings.syncEnabled &&
+                  sessionProvider.currentSessionId != null) {
                 if (isDelete) {
-                  await sp.pushLogDeleteToCollab(
+                  await syncProvider.pushLogDeleteToCollab(
                     sessionProvider.currentSessionId!,
                     log.id,
                   );
                 } else {
-                  await sp.pushLogUpsertToCollab(
+                  await syncProvider.pushLogUpsertToCollab(
                     sessionProvider.currentSessionId!,
                     log.toJson(),
                   );

@@ -15,17 +15,22 @@ class AuthService {
       final response = await http
           .get(uri, headers: {'Authorization': 'Bearer $token'})
           .timeout(_timeout);
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) {
+        throw AuthException('获取用户信息失败: HTTP ${response.statusCode}');
+      }
       final result = json.decode(response.body) as Map<String, dynamic>;
-      if (result['success'] != true || result['data'] == null) return null;
+      if (result['success'] != true || result['data'] == null) {
+        throw AuthException(result['message']?.toString() ?? '获取用户信息失败');
+      }
       return Map<String, dynamic>.from(result['data']);
-    } catch (_) {
-      return null;
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException('网络错误: $e');
     }
   }
 
-  Future<Map<String, dynamic>?> login(String token, String username,
-      String password) async {
+  Future<Map<String, dynamic>?> login(String username, String password) async {
     final uri = Uri.parse('$_baseUrl/api/v1/auth/login');
     try {
       final response = await http
@@ -35,14 +40,22 @@ class AuthService {
             body: json.encode({'username': username, 'password': password}),
           )
           .timeout(_timeout);
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) {
+        throw AuthException('登录失败: HTTP ${response.statusCode}');
+      }
       final result = json.decode(response.body) as Map<String, dynamic>;
-      if (result['success'] != true) return null;
+      if (result['success'] != true) {
+        throw AuthException(result['message']?.toString() ?? '登录失败');
+      }
       final newToken = result['data']['token']?.toString();
-      if (newToken == null || newToken.isEmpty) return null;
+      if (newToken == null || newToken.isEmpty) {
+        throw AuthException('服务端未返回有效令牌');
+      }
       return {'token': newToken, 'result': result};
-    } catch (_) {
-      return null;
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException('网络错误: $e');
     }
   }
 
@@ -61,9 +74,12 @@ class AuthService {
                 .encode({'oldPassword': oldPassword, 'newPassword': newPassword}),
           )
           .timeout(_timeout);
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
+      if (response.statusCode != 200) {
+        throw AuthException('修改密码失败: HTTP ${response.statusCode}');
+      }
+      return true;
+    } catch (e) {
+      throw AuthException('修改密码失败: $e');
     }
   }
 
@@ -80,9 +96,20 @@ class AuthService {
             body: json.encode({'theme': theme}),
           )
           .timeout(_timeout);
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
+      if (response.statusCode != 200) {
+        throw AuthException('设置主题失败: HTTP ${response.statusCode}');
+      }
+      return true;
+    } catch (e) {
+      throw AuthException('设置主题失败: $e');
     }
   }
+}
+
+class AuthException implements Exception {
+  final String message;
+  AuthException(this.message);
+
+  @override
+  String toString() => message;
 }

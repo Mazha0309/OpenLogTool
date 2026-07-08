@@ -17,6 +17,7 @@ class _LogTableState extends State<LogTable> {
   late Map<String, TextEditingController> _controllers;
   int _currentPage = 0;
   static const int _itemsPerPage = 5;
+  List<LogEntry> _lastSeenLogs = [];
 
   final ScrollController _horizontalController = ScrollController();
 
@@ -243,6 +244,13 @@ class _LogTableState extends State<LogTable> {
   List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider, SettingsProvider settingsProvider) {
     final logs = logProvider.logs;
     final indexedLogs = logs.asMap().entries.toList().reversed.toList();
+
+    // Reset page when underlying log list is replaced (e.g. session switch).
+    // Use identity comparison because LogProvider rebuilds the list on every load.
+    if (!identical(_lastSeenLogs, logs)) {
+      _lastSeenLogs = logs;
+      _currentPage = 0;
+    }
 
     // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
     List<MapEntry<int, LogEntry>> displayEntries;

@@ -59,19 +59,8 @@ final _controllerController = TextEditingController();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
-  bool _validateForm() {
-    bool isValid = true;
-    if (_controllerController.text.isEmpty) {
-      setState(() => _controllerError = '请输入主控呼号');
-      isValid = false;
-    } else {
-      setState(() => _controllerError = null);
-    }
-    return isValid;
-  }
-
   Future<void> _submitForm() async {
-    if (!_validateForm()) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
@@ -120,6 +109,7 @@ final _controllerController = TextEditingController();
   }
 
   void _resetForm() {
+    _formKey.currentState?.reset();
     _callsignController.clear();
     _deviceController.clear();
     _antennaController.clear();
@@ -168,14 +158,14 @@ final _controllerController = TextEditingController();
                       controller: _controllerController,
                       label: '主控呼号 *',
                       hintText: '输入主控呼号',
-                      error: _controllerError,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '请输入主控呼号';
+                        }
+                        return null;
+                      },
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
-                      onChanged: (value) {
-                        if (_controllerError != null) {
-                          setState(() => _controllerError = null);
-                        }
-                      },
                     ),
                   ),
                   SizedBox(
@@ -320,6 +310,7 @@ final _controllerController = TextEditingController();
     required String hintText,
     TextInputType? keyboardType,
     String? error,
+    String? Function(String?)? validator,
     void Function(String)? onChanged,
     void Function(String)? onSubmitted,
     TextInputAction? textInputAction,
@@ -337,6 +328,7 @@ final _controllerController = TextEditingController();
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 10 : 14),
       ),
       keyboardType: keyboardType,
+      validator: validator,
       onChanged: onChanged,
       onFieldSubmitted: onSubmitted,
       textInputAction: textInputAction ?? TextInputAction.next,

@@ -692,8 +692,7 @@ class SyncProvider with ChangeNotifier {
 
     try {
       await _clearAuthState();
-      final authResult = await _authService.login(
-          _settings.token ?? '', username, password);
+      final authResult = await _authService.login(username, password);
       if (authResult == null) {
         _lastError = '登录失败: 服务端未返回有效令牌';
         _isLoggingIn = false;
