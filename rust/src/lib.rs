@@ -5,13 +5,22 @@ pub mod dict;
 pub mod models;
 
 use once_cell::sync::OnceCell;
+use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
+use std::str::FromStr;
 
 static DB_POOL: OnceCell<SqlitePool> = OnceCell::new();
 
 pub async fn init_database(db_path: &str) -> anyhow::Result<()> {
-    let pool = SqlitePool::connect(db_path).await?;
-    sqlx::query("PRAGMA journal_mode=WAL").execute(&pool).await?;
+    let conn_str = if db_path.starts_with("sqlite:") || db_path.starts_with("file:") {
+        db_path.to_string()
+    } else {
+        format!("sqlite://{}", db_path)
+    };
+    let opts = SqliteConnectOptions::from_str(&conn_str)?
+        .create_if_missing(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
+    let pool = SqlitePool::connect_with(opts).await?;
     sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
     db::migrations::run(&pool).await?;
     DB_POOL

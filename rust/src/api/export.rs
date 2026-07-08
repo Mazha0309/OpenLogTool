@@ -30,7 +30,7 @@ pub async fn export_excel(session_id: String) -> anyhow::Result<Vec<u8>> {
         .set_background_color(Color::RGB(0xF4F4F5))
         .set_align(FormatAlign::Left);
 
-    let mut worksheet = workbook.add_worksheet();
+    let worksheet = workbook.add_worksheet();
     worksheet.set_name("Logs")?;
 
     // Column widths
