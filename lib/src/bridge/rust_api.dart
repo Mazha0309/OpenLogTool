@@ -66,6 +66,32 @@ class RustApi {
     return logs.getRecentByCallsign(callsign: callsign, limit: limit);
   }
 
+  static Future<LogEntry> updateLog({
+    required String syncId,
+    required String controller,
+    required String callsign,
+    String? rstSent,
+    String? rstRcvd,
+    String? qth,
+    String? device,
+    String? power,
+    String? antenna,
+    String? height,
+  }) {
+    return logs.updateLog(
+      syncId: syncId,
+      controller: controller,
+      callsign: callsign,
+      rstSent: rstSent,
+      rstRcvd: rstRcvd,
+      qth: qth,
+      device: device,
+      power: power,
+      antenna: antenna,
+      height: height,
+    );
+  }
+
   static Future<void> deleteLog({required String syncId}) {
     return logs.deleteLog(syncId: syncId);
   }

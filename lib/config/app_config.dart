@@ -27,21 +27,9 @@ class AppConfig {
     return parts.isNotEmpty ? parts[0] : appVersion;
   }
   
-  static String get commitHash {
-    final parts = appVersion.split('-');
-    if (parts.length >= 2) {
-      return parts[1];
-    }
-    return _commitHash;
-  }
-  
-  static String get buildNumber {
-    final parts = appVersion.split('-');
-    if (parts.length >= 3) {
-      return parts[2];
-    }
-    return _buildNumber;
-  }
+  static String get commitHash => _commitHash;
+
+  static String get buildNumber => _buildNumber;
   
   static String get fullVersion => appVersion;
 
@@ -55,12 +43,12 @@ class AppConfig {
     return 'local';
   }
 
-  static List<String> getSystemFonts() {
+  static Future<List<String>> getSystemFonts() async {
     final List<String> fonts = [];
-    
+
     try {
       if (Platform.isLinux) {
-        final result = Process.runSync('fc-list', ['--format=%{family}\n']);
+        final result = await Process.run('fc-list', ['--format=%{family}\n']);
         if (result.exitCode == 0) {
           final output = (result.stdout as String).trim();
           final lines = output.split('\n');
@@ -72,7 +60,7 @@ class AppConfig {
           }
         }
       } else if (Platform.isMacOS) {
-        final result = Process.runSync('system_profiler', ['SPFontsDataType']);
+        final result = await Process.run('system_profiler', ['SPFontsDataType']);
         if (result.exitCode == 0) {
           final regex = RegExp(r'^\s*(.+?):\s*$', multiLine: true);
           final matches = regex.allMatches(result.stdout as String);
@@ -84,7 +72,7 @@ class AppConfig {
           }
         }
       } else if (Platform.isWindows) {
-        final regResult = Process.runSync(
+        final regResult = await Process.run(
           'reg',
           ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'],
         );
@@ -101,7 +89,6 @@ class AppConfig {
       }
     } catch (_) {}
 
-    // 添加内置更纱黑体作为默认选项
     if (!fonts.contains('SarasaGothicSC')) {
       fonts.insert(0, 'SarasaGothicSC');
     }
@@ -111,7 +98,6 @@ class AppConfig {
     }
 
     fonts.sort();
-    // 将更纱黑体和系统默认移到最前面
     fonts.remove('SarasaGothicSC');
     fonts.insert(0, 'SarasaGothicSC');
     return fonts;

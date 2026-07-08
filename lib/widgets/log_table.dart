@@ -49,6 +49,9 @@ class _LogTableState extends State<LogTable> {
         'power': TextEditingController(text: log.power),
         'antenna': TextEditingController(text: log.antenna),
         'height': TextEditingController(text: log.height),
+        '_id': TextEditingController(text: log.id),
+        '_sessionId': TextEditingController(text: log.sessionId ?? ''),
+        '_createdAt': TextEditingController(text: log.createdAt),
       };
     });
   }
@@ -70,6 +73,8 @@ class _LogTableState extends State<LogTable> {
     // updateLog preserves sync_id / localId / sessionId / createdAt — only the
     // text fields below are taken from the form.
     final patch = LogEntry(
+      id: _controllers['_id']?.text ?? '',
+      sessionId: _controllers['_sessionId']?.text,
       time: _controllers['time']?.text ?? '',
       controller: _controllers['controller']?.text ?? '',
       callsign: _controllers['callsign']?.text ?? '',
@@ -79,6 +84,7 @@ class _LogTableState extends State<LogTable> {
       power: _controllers['power']?.text ?? '',
       antenna: _controllers['antenna']?.text ?? '',
       height: _controllers['height']?.text ?? '',
+      createdAt: _controllers['_createdAt']?.text,
     );
     patch.rstRcvd = _controllers['rstRcvd']?.text ?? '';
     try {

@@ -76,7 +76,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -484984236;
+  int get rustContentHash => 474302334;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -144,6 +144,18 @@ abstract class RustLibApi extends BaseApi {
       {required String key, required String value});
 
   Future<void> crateApiLogsUndoLastLog({required String sessionId});
+
+  Future<LogEntry> crateApiLogsUpdateLog(
+      {required String syncId,
+      required String controller,
+      required String callsign,
+      String? rstSent,
+      String? rstRcvd,
+      String? qth,
+      String? device,
+      String? power,
+      String? antenna,
+      String? height});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -674,6 +686,71 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiLogsUndoLastLogConstMeta => const TaskConstMeta(
         debugName: "undo_last_log",
         argNames: ["sessionId"],
+      );
+
+  @override
+  Future<LogEntry> crateApiLogsUpdateLog(
+      {required String syncId,
+      required String controller,
+      required String callsign,
+      String? rstSent,
+      String? rstRcvd,
+      String? qth,
+      String? device,
+      String? power,
+      String? antenna,
+      String? height}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(syncId, serializer);
+        sse_encode_String(controller, serializer);
+        sse_encode_String(callsign, serializer);
+        sse_encode_opt_String(rstSent, serializer);
+        sse_encode_opt_String(rstRcvd, serializer);
+        sse_encode_opt_String(qth, serializer);
+        sse_encode_opt_String(device, serializer);
+        sse_encode_opt_String(power, serializer);
+        sse_encode_opt_String(antenna, serializer);
+        sse_encode_opt_String(height, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 20, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_log_entry,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateApiLogsUpdateLogConstMeta,
+      argValues: [
+        syncId,
+        controller,
+        callsign,
+        rstSent,
+        rstRcvd,
+        qth,
+        device,
+        power,
+        antenna,
+        height
+      ],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiLogsUpdateLogConstMeta => const TaskConstMeta(
+        debugName: "update_log",
+        argNames: [
+          "syncId",
+          "controller",
+          "callsign",
+          "rstSent",
+          "rstRcvd",
+          "qth",
+          "device",
+          "power",
+          "antenna",
+          "height"
+        ],
       );
 
   @protected

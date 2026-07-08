@@ -46,6 +46,29 @@ Future<List<LogEntry>> getRecentByCallsign(
     RustLib.instance.api
         .crateApiLogsGetRecentByCallsign(callsign: callsign, limit: limit);
 
+Future<LogEntry> updateLog(
+        {required String syncId,
+        required String controller,
+        required String callsign,
+        String? rstSent,
+        String? rstRcvd,
+        String? qth,
+        String? device,
+        String? power,
+        String? antenna,
+        String? height}) =>
+    RustLib.instance.api.crateApiLogsUpdateLog(
+        syncId: syncId,
+        controller: controller,
+        callsign: callsign,
+        rstSent: rstSent,
+        rstRcvd: rstRcvd,
+        qth: qth,
+        device: device,
+        power: power,
+        antenna: antenna,
+        height: height);
+
 Future<void> deleteLog({required String syncId}) =>
     RustLib.instance.api.crateApiLogsDeleteLog(syncId: syncId);
 

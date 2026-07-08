@@ -9,6 +9,15 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  errors:
+    # Generated web bridge uses experimental inline-class features; project does not target web.
+    undefined_class: ignore
+    experiment_not_enabled: ignore
+  exclude:
+    - lib/src/bridge/frb_generated.web.dart
+    - "**/*.g.dart"
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

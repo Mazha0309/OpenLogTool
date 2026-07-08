@@ -50,6 +50,33 @@ pub async fn get_recent_by_callsign(
     db::logs::get_recent_by_callsign(&callsign.to_uppercase(), limit.unwrap_or(3)).await
 }
 
+pub async fn update_log(
+    sync_id: String,
+    controller: String,
+    callsign: String,
+    rst_sent: Option<String>,
+    rst_rcvd: Option<String>,
+    qth: Option<String>,
+    device: Option<String>,
+    power: Option<String>,
+    antenna: Option<String>,
+    height: Option<String>,
+) -> anyhow::Result<LogEntry> {
+    db::logs::update_log(
+        &sync_id,
+        &controller,
+        &callsign,
+        rst_sent.as_deref(),
+        rst_rcvd.as_deref(),
+        qth.as_deref(),
+        device.as_deref(),
+        power.as_deref(),
+        antenna.as_deref(),
+        height.as_deref(),
+    )
+    .await
+}
+
 pub async fn delete_log(sync_id: String) -> anyhow::Result<()> {
     db::logs::soft_delete_log(&sync_id).await
 }

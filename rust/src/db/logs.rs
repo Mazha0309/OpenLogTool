@@ -114,6 +114,44 @@ pub async fn get_log_stats(session_id: &str) -> anyhow::Result<LogStats> {
     })
 }
 
+pub async fn update_log(
+    sync_id: &str,
+    controller: &str,
+    callsign: &str,
+    rst_sent: Option<&str>,
+    rst_rcvd: Option<&str>,
+    qth: Option<&str>,
+    device: Option<&str>,
+    power: Option<&str>,
+    antenna: Option<&str>,
+    height: Option<&str>,
+) -> anyhow::Result<LogEntry> {
+    let pool = get_db()?;
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "UPDATE logs SET
+            controller = ?, callsign = ?, rst_sent = ?, rst_rcvd = ?,
+            qth = ?, device = ?, power = ?, antenna = ?, height = ?, updated_at = ?
+         WHERE sync_id = ? AND deleted_at IS NULL",
+    )
+    .bind(controller)
+    .bind(callsign)
+    .bind(rst_sent)
+    .bind(rst_rcvd)
+    .bind(qth)
+    .bind(device)
+    .bind(power)
+    .bind(antenna)
+    .bind(height)
+    .bind(&now)
+    .bind(sync_id)
+    .execute(pool)
+    .await?;
+    get_log_by_sync_id(sync_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Updated log not found"))
+}
+
 pub async fn soft_delete_log(sync_id: &str) -> anyhow::Result<()> {
     let pool = get_db()?;
     let now = chrono::Utc::now().to_rfc3339();

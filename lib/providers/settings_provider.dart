@@ -39,8 +39,8 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> _loadSettings() async {
-    _availableFonts = AppConfig.getSystemFonts();
-    
+    _availableFonts = await AppConfig.getSystemFonts();
+
     final prefs = await SharedPreferences.getInstance();
     
     _wideLayoutEnabled = prefs.getBool(_wideLayoutKey) ?? false;

@@ -42,8 +42,43 @@ class LogProvider with ChangeNotifier {
     }
   }
 
-  int get todayLogCount => _logs.length;
-  int get last7DaysCount => _logs.length ~/ 2;
+  int get todayLogCount {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _logs.where((log) {
+      final dt = _parseLogTime(log.time);
+      if (dt == null) return false;
+      return dt.year == today.year && dt.month == today.month && dt.day == today.day;
+    }).length;
+  }
+
+  int get last7DaysCount {
+    final now = DateTime.now();
+    final weekAgo = now.subtract(const Duration(days: 7));
+    return _logs.where((log) {
+      final dt = _parseLogTime(log.time);
+      if (dt == null) return false;
+      return dt.isAfter(weekAgo) || dt.isAtSameMomentAs(weekAgo);
+    }).length;
+  }
+
+  DateTime? _parseLogTime(String time) {
+    if (time.isEmpty) return null;
+    // time stored in DB as RFC3339, displayed as HH:mm in UI.
+    // Try full ISO first, then HH:mm with today's date.
+    final iso = DateTime.tryParse(time);
+    if (iso != null) return iso;
+    final parts = time.split(':');
+    if (parts.length == 2) {
+      final hour = int.tryParse(parts[0]);
+      final minute = int.tryParse(parts[1]);
+      if (hour != null && minute != null) {
+        final now = DateTime.now();
+        return DateTime(now.year, now.month, now.day, hour, minute);
+      }
+    }
+    return null;
+  }
 
   LogProvider() {
     scheduleMicrotask(_loadLogs);
@@ -102,12 +137,11 @@ class LogProvider with ChangeNotifier {
   Future<void> updateLog(int index, old.LogEntry log) async {
     if (index < 0 || index >= _logs.length) return;
     final original = _logs[index];
-    final syncId = original.id;
+    final syncId = log.id.isNotEmpty ? log.id : original.id;
     if (syncId.isEmpty) return;
     try {
-      final sid = original.sessionId ?? _currentSessionId ?? '';
-      await RustApi.addLog(
-        sessionId: sid,
+      await RustApi.updateLog(
+        syncId: syncId,
         controller: log.controller,
         callsign: log.callsign,
         rstSent: log.report,
@@ -267,6 +301,8 @@ class LogProvider with ChangeNotifier {
 
   old.LogEntry _toOldLog(bridge.LogEntry b) {
     final entry = old.LogEntry(
+      id: b.syncId,
+      sessionId: b.sessionId,
       time: b.time.length >= 16 ? b.time.substring(11, 16) : b.time,
       controller: b.controller,
       callsign: b.callsign,
@@ -276,6 +312,10 @@ class LogProvider with ChangeNotifier {
       power: b.power ?? '',
       antenna: b.antenna ?? '',
       height: b.height ?? '',
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt,
+      deletedAt: b.deletedAt,
+      sourceDeviceId: b.sourceDeviceId,
     );
     entry.rstRcvd = b.rstRcvd ?? '';
     return entry;
