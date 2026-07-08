@@ -1,0 +1,23 @@
+[package]
+name = "openlogtool_core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.9.0"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+rand = "0.8"
+sha2 = "0.10"
+once_cell = "1"
+log = "0.4"

@@ -46,3 +46,7 @@ app.*.map.json
 
 # Keystore files
 *.jks
+
+# Rust
+/rust/target/
+/rust/Cargo.lock
