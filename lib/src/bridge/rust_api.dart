@@ -105,7 +105,7 @@ class RustApi {
     return dict.addDictItem(dictType: dictType, raw: raw);
   }
 
-  static Future<int> seedDict({
+  static Future<BigInt> seedDict({
     required String dictType,
     required List<String> items,
   }) {
