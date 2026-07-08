@@ -1,8 +1,10 @@
+import 'dart:typed_data';
 import 'api.dart' as api;
 import 'api/logs.dart' as logs;
 import 'api/sessions.dart' as sessions;
 import 'api/dictionaries.dart' as dict;
 import 'api/settings.dart' as settings;
+import 'api/export.dart' as export_api;
 import 'models/log_entry.dart';
 import 'models/session.dart';
 import 'models/dict_item.dart';
@@ -123,5 +125,10 @@ class RustApi {
 
   static Future<List<(String, String)>> getAllSettings() {
     return settings.getAllSettings();
+  }
+
+  // Export
+  static Future<Uint8List> exportJson({required String sessionId}) {
+    return export_api.exportJson(sessionId: sessionId);
   }
 }

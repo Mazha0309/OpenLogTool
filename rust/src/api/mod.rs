@@ -1,4 +1,5 @@
 pub mod dictionaries;
+pub mod export;
 pub mod logs;
 pub mod sessions;
 pub mod settings;

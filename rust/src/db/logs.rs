@@ -142,6 +142,17 @@ pub async fn get_recent_by_callsign(
     Ok(rows.into_iter().map(|r| r.into_entry()).collect())
 }
 
+pub async fn get_all_logs_in_session(session_id: &str) -> anyhow::Result<Vec<LogEntry>> {
+    let pool = get_db()?;
+    let rows = sqlx::query_as::<_, LogEntryRow>(
+        "SELECT * FROM logs WHERE session_id = ? AND deleted_at IS NULL ORDER BY time ASC",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.into_entry()).collect())
+}
+
 pub async fn undo_last_log(session_id: &str) -> anyhow::Result<()> {
     let pool = get_db()?;
     let row = sqlx::query_as::<_, LogEntryRow>(
