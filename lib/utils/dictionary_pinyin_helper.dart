@@ -12,17 +12,41 @@ class DictionaryPinyinHelper {
     if (raw.trim().isEmpty) {
       return const PinyinResult(pinyin: '', abbreviation: '');
     }
+
     try {
-      final pinyin = PinyinHelper.getPinyinE(
-        raw,
-        separator: ' ',
-        format: PinyinFormat.WITHOUT_TONE,
-      ).toLowerCase();
-      final abbreviation = PinyinHelper.getShortPinyin(raw).toLowerCase();
-      return PinyinResult(pinyin: pinyin, abbreviation: abbreviation);
+      final tokens = raw.trim().split(RegExp(r'\s+'));
+
+      final pinyinParts = <String>[];
+      final abbreviationParts = <String>[];
+
+      for (final token in tokens) {
+        final pinyin = PinyinHelper.getPinyinE(
+          token,
+          separator: '',
+          format: PinyinFormat.WITHOUT_TONE,
+        ).toLowerCase();
+        pinyinParts.add(pinyin);
+
+        final abbreviation = PinyinHelper.getShortPinyin(
+          token,
+        ).toLowerCase().replaceAll(RegExp(r'[\s-]'), '');
+        abbreviationParts.add(abbreviation);
+      }
+
+      return PinyinResult(
+        pinyin: pinyinParts.join(' '),
+        abbreviation: abbreviationParts.join(),
+      );
     } catch (_) {
-      final fallback = raw.toLowerCase();
-      return PinyinResult(pinyin: fallback, abbreviation: fallback);
+      final fallbackPinyin = raw.toLowerCase();
+      final fallbackAbbreviation = raw.toLowerCase().replaceAll(
+        RegExp(r'\s+'),
+        '',
+      );
+      return PinyinResult(
+        pinyin: fallbackPinyin,
+        abbreviation: fallbackAbbreviation,
+      );
     }
   }
 }
