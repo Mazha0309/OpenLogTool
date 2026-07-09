@@ -35,6 +35,13 @@ final _controllerController = TextEditingController();
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    _reportController.text = '59';
+    _rstRcvdController.text = '59';
+  }
+
+  @override
   void dispose() {
     _controllerController.dispose();
     _callsignController.dispose();
@@ -101,7 +108,10 @@ final _controllerController = TextEditingController();
   }
 
   void _resetForm() {
+    // 主控呼号在连续添加时应保留，先保存再恢复。
+    final controllerCallsign = _controllerController.text;
     _formKey.currentState?.reset();
+    _controllerController.text = controllerCallsign;
     _callsignController.clear();
     _deviceController.clear();
     _antennaController.clear();
@@ -109,8 +119,8 @@ final _controllerController = TextEditingController();
     _qthController.clear();
     _heightController.clear();
     _timeController.clear();
-    _reportController.clear();
-    _rstRcvdController.clear();
+    _reportController.text = '59';
+    _rstRcvdController.text = '59';
     FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 
@@ -344,9 +354,38 @@ final _controllerController = TextEditingController();
         if (textEditingValue.text.isEmpty) {
           return const Iterable<DictionaryItem>.empty();
         }
-        return options.where((option) =>
-            option.matches(textEditingValue.text));
+        final query = textEditingValue.text.toLowerCase();
+        final scored = <_ScoredOption>[];
+        for (final option in options) {
+          if (!option.matches(textEditingValue.text)) continue;
+          var score = 0;
+          final raw = option.raw.toLowerCase();
+          final pinyin = option.pinyin.toLowerCase();
+          final abbr = option.abbreviation.toLowerCase();
+          if (abbr.startsWith(query)) {
+            score += 1000;
+          } else if (abbr.contains(query)) {
+            score += 500;
+          }
+          if (raw.startsWith(query)) {
+            score += 300;
+          } else if (raw.contains(query)) {
+            score += 100;
+          }
+          if (pinyin.startsWith(query)) {
+            score += 200;
+          } else if (pinyin.contains(query)) {
+            score += 50;
+          }
+          scored.add(_ScoredOption(option, score));
+        }
+        scored.sort((a, b) {
+          if (b.score != a.score) return b.score.compareTo(a.score);
+          return a.option.raw.compareTo(b.option.raw);
+        });
+        return scored.take(20).map((s) => s.option);
       },
+      displayStringForOption: (option) => option.raw,
       onSelected: (DictionaryItem selection) {
         controller.text = selection.raw;
       },
@@ -385,13 +424,14 @@ final _controllerController = TextEditingController();
         AutocompleteOnSelected<DictionaryItem> onSelected,
         Iterable<DictionaryItem> options,
       ) {
+        final theme = Theme.of(context);
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
             elevation: 4.0,
             borderRadius: BorderRadius.circular(8),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
+              constraints: const BoxConstraints(maxHeight: 260, maxWidth: 320),
               child: ListView.builder(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
@@ -399,8 +439,21 @@ final _controllerController = TextEditingController();
                 itemBuilder: (BuildContext context, int index) {
                   final DictionaryItem item = options.elementAt(index);
                   return ListTile(
-                    title: Text(item.raw),
                     dense: true,
+                    title: Text(item.raw),
+                    subtitle: item.abbreviation.isNotEmpty || item.pinyin.isNotEmpty
+                        ? Text(
+                            [
+                              if (item.abbreviation.isNotEmpty) item.abbreviation,
+                              if (item.pinyin.isNotEmpty) item.pinyin,
+                            ].join(' · '),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : null,
                     onTap: () => onSelected(item),
                   );
                 },
@@ -411,6 +464,13 @@ final _controllerController = TextEditingController();
       },
     );
   }
+}
+
+class _ScoredOption {
+  final DictionaryItem option;
+  final int score;
+
+  _ScoredOption(this.option, this.score);
 }
 
 class UpperCaseTextFormatter extends TextInputFormatter {
