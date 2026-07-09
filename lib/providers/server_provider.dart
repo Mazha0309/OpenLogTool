@@ -84,6 +84,41 @@ class ServerProvider with ChangeNotifier {
     if (_token != null) 'Authorization': 'Bearer $_token',
   };
 
+  /// 生成分享码
+  Future<Map<String, dynamic>> generateShareCode(String sessionId, {int? expiresInHours}) async {
+    final res = await http.post(
+      Uri.parse('$_serverUrl/api/shares/generate'),
+      headers: _headers,
+      body: jsonEncode({'sessionId': sessionId, 'expiresInHours': expiresInHours ?? 24}),
+    );
+    if (res.statusCode != 201) throw Exception(jsonDecode(res.body)['error'] ?? '生成失败');
+    return jsonDecode(res.body);
+  }
+
+  /// 通过分享码加入
+  Future<Map<String, dynamic>> joinByCode(String code) async {
+    final res = await http.post(
+      Uri.parse('$_serverUrl/api/shares/join'),
+      headers: _headers,
+      body: jsonEncode({'code': code}),
+    );
+    if (res.statusCode != 200) throw Exception(jsonDecode(res.body)['error'] ?? '加入失败');
+    return jsonDecode(res.body);
+  }
+
+  /// 我的分享码列表
+  Future<List<Map<String, dynamic>>> listShareCodes() async {
+    final res = await http.get(Uri.parse('$_serverUrl/api/shares'), headers: _headers);
+    if (res.statusCode != 200) throw Exception('获取列表失败');
+    return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 撤销分享码
+  Future<void> revokeShareCode(String id) async {
+    final res = await http.delete(Uri.parse('$_serverUrl/api/shares/$id'), headers: _headers);
+    if (res.statusCode != 200) throw Exception('撤销失败');
+  }
+
   Future<void> uploadSession(String sessionId, String title, List<Map<String, dynamic>> logs) async {
     await http.post(
       Uri.parse('$_serverUrl/api/sessions'),

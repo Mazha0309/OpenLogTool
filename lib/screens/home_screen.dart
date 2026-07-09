@@ -121,31 +121,223 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.cloud_upload),
-              title: const Text('上传到服务器'),
-              subtitle: const Text('上传当前会话，其他人可通过 Liveshare 查看'),
+              leading: const Icon(Icons.qr_code),
+              title: const Text('生成分享码'),
+              subtitle: const Text('生成8位分享码，对方凭码加入后可下载会话'),
               onTap: () {
                 Navigator.pop(ctx);
-                _shareSession(context, sessionId);
+                _showGenerateShareCode(context, sessionId);
               },
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.cloud_download),
-              title: const Text('从服务器下载'),
-              subtitle: const Text('查看服务器上的其他会话'),
+              leading: const Icon(Icons.login),
+              title: const Text('加入协作'),
+              subtitle: const Text('输入分享码，加入他人的会话'),
               onTap: () {
                 Navigator.pop(ctx);
-                _showJoinShareDialog(context);
+                _showJoinByCodeDialog(context);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.manage_search),
+              title: const Text('管理分享码'),
+              subtitle: const Text('查看/撤销已生成的分享码'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showManageSharesDialog(context);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('Liveshare 链接'),
+              subtitle: const Text('获取实时查看链接'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showLiveshareLink(context, sessionId);
               },
             ),
           ],
         ),
         actions: [
-          TextButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(ctx),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+        ],
+      ),
+    );
+  }
+
+  void _showGenerateShareCode(BuildContext context, String sessionId) async {
+    final sv = Provider.of<ServerProvider>(context, listen: false);
+    if (!sv.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
+      return;
+    }
+    try {
+      final share = await sv.generateShareCode(sessionId);
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('分享码已生成'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    share['code'] as String,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text('此码一次性使用，使用后自动失效'),
+                if (share['expires_at'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text('过期时间: ${share['expires_at']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+            ],
           ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('生成失败: $e')));
+    }
+  }
+
+  void _showJoinByCodeDialog(BuildContext context) {
+    final sv = Provider.of<ServerProvider>(context, listen: false);
+    if (!sv.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
+      return;
+    }
+    final codeController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('输入分享码'),
+        content: TextField(
+          controller: codeController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '8位分享码',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(
+            onPressed: () async {
+              final code = codeController.text.trim();
+              if (code.length != 8) return;
+              try {
+                final data = await sv.joinByCode(code);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  final sp = Provider.of<SessionProvider>(context, listen: false);
+                  final lp = Provider.of<LogProvider>(context, listen: false);
+                  await sp.startNewSession(title: data['title'] ?? '');
+                  if (data['logs'] is List) {
+                    for (final logData in data['logs']) {
+                      await lp.addLog(LogEntry.fromJson(logData as Map<String, dynamic>), sessionId: sp.currentSessionId);
+                    }
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入协作')));
+                }
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('加入失败: $e')));
+              }
+            },
+            child: const Text('加入'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showManageSharesDialog(BuildContext context) async {
+    final sv = Provider.of<ServerProvider>(context, listen: false);
+    try {
+      final shares = await sv.listShareCodes();
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('我的分享码'),
+          content: SizedBox(
+            width: 300,
+            child: shares.isEmpty
+                ? const Text('暂无分享码')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: shares.length,
+                    itemBuilder: (_, i) {
+                      final s = shares[i];
+                      return ListTile(
+                        title: Text(s['code']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('${s['session_title'] ?? ''}\n${s['created_at'] ?? ''}'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () async {
+                            try {
+                              await sv.revokeShareCode(s['id']);
+                              if (context.mounted) {
+                                Navigator.pop(ctx);
+                                _showManageSharesDialog(context);
+                              }
+                            } catch (e) {
+                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('撤销失败: $e')));
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('获取列表失败: $e')));
+    }
+  }
+
+  void _showLiveshareLink(BuildContext context, String sessionId) {
+    final sv = Provider.of<ServerProvider>(context, listen: false);
+    if (!sv.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
+      return;
+    }
+    final url = '${sv.serverUrl}/live/$sessionId';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Liveshare 链接'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('在浏览器中打开此链接可实时查看：'),
+            const SizedBox(height: 8),
+            SelectableText(url, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
         ],
       ),
     );
