@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/sync_provider.dart';
+import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
@@ -107,328 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _showShareOptions(BuildContext context) {
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final sessionId = sessionProvider.currentSessionId;
-    if (sessionId == null) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('分享'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.group_add),
-              title: const Text('协作分享'),
-              subtitle: const Text('生成邀请码，凭码加入后双向同步'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _shareSession(context, sessionId);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text('公开链接'),
-              subtitle: const Text('生成只读链接，无需登录查看'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showLiveShareTimeDialog(context);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _generateAndShowLink(BuildContext context, SyncProvider syncProvider, String sessionId, int expiresIn) async {
-    showDialog(
-      context: context,
-      builder: (ctx) => const AlertDialog(
-        title: Text('Live Share'),
-        content: Text('正在生成分享链接...'),
-        actions: [],
-      ),
-    );
-
-    final result = await syncProvider.createLiveShareLink(sessionId, expiresIn: expiresIn);
-
-    if (context.mounted) {
-      Navigator.pop(context);
-      if (result != null) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('分享链接'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(result.url, style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 8),
-                Text('分享码: ${result.shareCode}'),
-                if (result.expiresAt != null) ...[
-                  const SizedBox(height: 4),
-                  Text('过期时间: ${result.expiresAt}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                child: const Text('复制链接'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: result.url));
-                  ctx.showLoggedSnackBar(const SnackBar(content: Text('链接已复制')));
-                  Navigator.pop(ctx);
-                },
-              ),
-              TextButton(
-                child: const Text('复制分享码'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: result.shareCode));
-                  ctx.showLoggedSnackBar(const SnackBar(content: Text('已复制')));
-                },
-              ),
-              FilledButton(
-                child: const Text('关闭'),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ],
-          ),
-        );
-      } else {
-        context.showLoggedSnackBar(const SnackBar(content: Text('获取分享链接失败')));
-      }
-    }
-  }
-
-  void _showLiveShareTimeDialog(BuildContext context) async {
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-    final sessionId = sessionProvider.currentSessionId;
-    if (sessionId == null) return;
-
-    int selectedHours = 24;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('公开链接'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('选择过期时间：'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [1, 3, 6, 12, 24, 0].map((h) => ChoiceChip(
-                  label: Text(h == 0 ? '永不过期' : '$h小时'),
-                  selected: selectedHours == h,
-                  onSelected: (_) => setState(() => selectedHours = h),
-                )).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('取消'),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-            FilledButton(
-              child: const Text('生成链接'),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await _generateAndShowLink(context, syncProvider, sessionId, selectedHours);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _shareSession(BuildContext ctx, String sessionId) async {
-    final syncProvider = Provider.of<SyncProvider>(ctx, listen: false);
-    if (!syncProvider.isLoggedIn) {
-      if (ctx.mounted) {
-        ctx.showLoggedSnackBar(const SnackBar(content: Text('请先在同步设置中登录账号')));
-      }
-      return;
-    }
-    await syncProvider.refreshShares();
-    final existing = syncProvider.shares
-        .where((s) => s.sessionId == sessionId && s.isPending)
-        .toList();
-    final shareCode = existing.isNotEmpty
-        ? existing.first.shareCode
-        : await syncProvider.createShareForSession(sessionId);
-    if (!ctx.mounted) return;
-    if (shareCode != null) {
-      showDialog(
-        context: ctx,
-        builder: (dCtx) => AlertDialog(
-          title: const Text('协作分享码'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('将此分享码发给合作方:'),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(dCtx).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  shareCode,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 4,
-                    fontFamily: 'monospace',
-                    color: Theme.of(dCtx).colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('复制'),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: shareCode));
-                dCtx.showLoggedSnackBar(const SnackBar(content: Text('已复制')));
-              },
-            ),
-            FilledButton(
-              child: const Text('关闭'),
-              onPressed: () => Navigator.pop(dCtx),
-            ),
-          ],
-        ),
-      );
-    } else {
-      ctx.showLoggedSnackBar(const SnackBar(content: Text('分享创建失败，请检查网络连接')));
-    }
-  }
-
-  void _showJoinShareDialog(BuildContext context) {
-    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-    if (!syncProvider.isLoggedIn) {
-      context.showLoggedSnackBar(const SnackBar(content: Text('请先在同步设置中登录账号')));
-      return;
-    }
-    syncProvider.refreshShares();
-    final codeController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          final joined = syncProvider.activeShares
-              .where((s) => s.shareCode.isNotEmpty)
-              .toList();
-          return AlertDialog(
-            title: const Text('合作管理'),
-            content: SizedBox(
-              width: 300,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (joined.isNotEmpty) ...[
-                    const Text('当前合作:',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ...joined.map((s) => ListTile(
-                          dense: true,
-                          leading: const Icon(Icons.group, size: 20),
-                          title: Text(s.shareCode,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontWeight: FontWeight.bold)),
-                          subtitle: Text(s.sessionId),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.exit_to_app,
-                                color: Colors.red, size: 20),
-                            tooltip: '退出',
-                            onPressed: () async {
-                              await syncProvider.revokeShare(s.shareId);
-                              await syncProvider.refreshShares();
-                              setState(() {});
-                            },
-                          ),
-                        )),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                  ],
-                  const Text('输入分享码加入新的合作:'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: codeController,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      hintText: '6位分享码',
-                      border: OutlineInputBorder(),
-                    ),
-                    style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 18,
-                        letterSpacing: 4),
-                    maxLength: 6,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                child: const Text('关闭'),
-                onPressed: () {
-                  codeController.dispose();
-                  Navigator.pop(ctx);
-                },
-              ),
-              FilledButton(
-                child: const Text('加入'),
-                onPressed: () async {
-                  final code = codeController.text.trim().toUpperCase();
-                  if (code.length < 6) {
-                    ctx.showLoggedSnackBar(
-                        const SnackBar(content: Text('请输入有效的6位分享码')));
-                    return;
-                  }
-                  final result = await syncProvider.joinShare(code);
-                  if (!ctx.mounted) return;
-                  if (result.success) {
-                    codeController.clear();
-                    syncProvider.triggerSync();
-                    await syncProvider.refreshShares();
-                    setState(() {});
-                    if (ctx.mounted) {
-                      ctx.showLoggedSnackBar(
-                          const SnackBar(content: Text('已加入合作')));
-                    }
-                  } else {
-                    ctx.showLoggedSnackBar(
-                        SnackBar(content: Text(result.error ?? '加入失败')));
-                  }
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -443,10 +121,10 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: IndexedStack(
           index: _selectedIndex,
-          children: [
-            AddRecordPage(onSharePressed: () => _showShareOptions(context), onJoinPressed: () => _showJoinShareDialog(context)),
-            const ImportExportPage(),
-            const SettingsPage(),
+          children: const [
+            AddRecordPage(),
+            ImportExportPage(),
+            SettingsPage(),
           ],
         ),
       ),
@@ -479,10 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class AddRecordPage extends StatelessWidget {
-  final VoidCallback? onSharePressed;
-  final VoidCallback? onJoinPressed;
-
-  const AddRecordPage({super.key, this.onSharePressed, this.onJoinPressed});
+  const AddRecordPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -531,24 +206,22 @@ class AddRecordPage extends StatelessWidget {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (onSharePressed != null)
-                                IconButton(
-                                  icon: const Icon(Icons.share, size: 20),
-                                  tooltip: '分享',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  onPressed: onSharePressed,
-                                ),
-                              if (onJoinPressed != null)
-                                IconButton(
-                                  icon: const Icon(Icons.group_add, size: 20),
-                                  tooltip: '加入合作',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  onPressed: onJoinPressed,
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.cloud_upload_outlined, size: 20),
+                                tooltip: '上传到服务器',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                onPressed: () => _uploadToServer(context),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.cloud_download_outlined, size: 20),
+                                tooltip: '从服务器下载',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                onPressed: () => _downloadFromServer(context),
+                              ),
                             ],
                           ),
                         ],
@@ -620,24 +293,22 @@ class AddRecordPage extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (onSharePressed != null)
-                            IconButton(
-                              icon: const Icon(Icons.share, size: 20),
-                              tooltip: '分享',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              onPressed: onSharePressed,
-                            ),
-                          if (onJoinPressed != null)
-                            IconButton(
-                              icon: const Icon(Icons.group_add, size: 20),
-                              tooltip: '加入合作',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              onPressed: onJoinPressed,
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.cloud_upload_outlined, size: 20),
+                            tooltip: '上传到服务器',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            onPressed: () => _uploadToServer(context),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.cloud_download_outlined, size: 20),
+                            tooltip: '从服务器下载',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            onPressed: () => _downloadFromServer(context),
+                          ),
                         ],
                       ),
                     ],
@@ -922,6 +593,112 @@ class AddRecordPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _uploadToServer(BuildContext context) async {
+    final serverProvider = Provider.of<ServerProvider>(context, listen: false);
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final session = sessionProvider.currentSession;
+    if (session == null) {
+      if (context.mounted) {
+        context.showLoggedSnackBar(const SnackBar(content: Text('没有当前记录')));
+      }
+      return;
+    }
+    if (!serverProvider.isLoggedIn) {
+      if (context.mounted) {
+        context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中配置服务器')));
+      }
+      return;
+    }
+    try {
+      await serverProvider.uploadSession(
+        session.sessionId,
+        session.title,
+        logProvider.logs.map((log) => log.toMap()).toList(),
+      );
+      if (context.mounted) {
+        context.showLoggedSnackBar(const SnackBar(content: Text('上传成功')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        context.showLoggedSnackBar(SnackBar(content: Text('上传失败: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _downloadFromServer(BuildContext context) async {
+    final serverProvider = Provider.of<ServerProvider>(context, listen: false);
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    if (!serverProvider.isLoggedIn) {
+      if (context.mounted) {
+        context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中配置服务器')));
+      }
+      return;
+    }
+    try {
+      final sessions = await serverProvider.listSessions();
+      if (!context.mounted) return;
+      if (sessions.isEmpty) {
+        context.showLoggedSnackBar(const SnackBar(content: Text('服务器上没有记录')));
+        return;
+      }
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('从服务器下载'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: sessions.length,
+              itemBuilder: (_, i) {
+                final s = sessions[i];
+                return ListTile(
+                  title: Text(s['title'] as String? ?? '无标题'),
+                  subtitle: Text(s['id'] as String? ?? ''),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      final data = await serverProvider.downloadSession(s['id'] as String);
+                      final logsMap = data['logs'] as List<dynamic>? ?? [];
+                      final title = data['title'] as String? ?? s['title'] as String? ?? '下载记录';
+                      await sessionProvider.startNewSession(title: title);
+                      if (logsMap.isNotEmpty) {
+                        final importedLogs = logsMap
+                            .map((m) => LogEntry.fromMap(m as Map<String, dynamic>))
+                            .toList();
+                        await logProvider.importLogs(importedLogs);
+                      }
+                      await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                      if (context.mounted) {
+                        context.showLoggedSnackBar(const SnackBar(content: Text('下载成功')));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        context.showLoggedSnackBar(SnackBar(content: Text('下载失败: $e'), backgroundColor: Colors.red));
+                      }
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('关闭'),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        context.showLoggedSnackBar(SnackBar(content: Text('获取服务器列表失败: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 }
 
