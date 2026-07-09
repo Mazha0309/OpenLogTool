@@ -14,6 +14,16 @@ pub async fn add_dict_item(dict_type: String, raw: String) -> anyhow::Result<()>
     dict::search::add_dict_item(&item).await
 }
 
+pub async fn upsert_dict_item(
+    dict_type: String,
+    raw: String,
+    pinyin: Option<String>,
+    abbreviation: Option<String>,
+) -> anyhow::Result<()> {
+    let item = DictItem::with_pinyin_abbrev(dict_type, raw, pinyin, abbreviation);
+    dict::search::upsert_dict_item(&item).await
+}
+
 pub async fn get_dict_items(dict_type: String) -> anyhow::Result<Vec<DictItem>> {
     dict::search::get_dict_items(&dict_type).await
 }

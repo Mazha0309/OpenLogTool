@@ -9,6 +9,7 @@
 
 import 'api.dart';
 import 'api/callsign_qth.dart';
+import 'api/database.dart';
 import 'api/dictionaries.dart';
 import 'api/export.dart';
 import 'api/logs.dart';

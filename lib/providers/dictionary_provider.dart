@@ -51,12 +51,12 @@ class DictionaryProvider with ChangeNotifier {
       _callsignDict = await _getDictItems('callsign_dictionary');
       _qthDict = await _getDictItems('qth_dictionary');
 
-      if (_deviceDict.isEmpty && _antennaDict.isEmpty && _qthDict.isEmpty) {
-        await _seedInitialDictionaries();
-        _deviceDict = await _getDictItems('device_dictionary');
-        _antennaDict = await _getDictItems('antenna_dictionary');
-        _qthDict = await _getDictItems('qth_dictionary');
-      }
+      // 每次启动都同步内置词库，补全缺失的拼音/缩写，同时保留用户自定义内容。
+      await _syncBuiltinDictionaries();
+      _deviceDict = await _getDictItems('device_dictionary');
+      _antennaDict = await _getDictItems('antenna_dictionary');
+      _callsignDict = await _getDictItems('callsign_dictionary');
+      _qthDict = await _getDictItems('qth_dictionary');
     } catch (e, st) {
       debugPrint('[DictionaryProvider] _loadDictionaries failed: $e\n$st');
     }
@@ -68,43 +68,37 @@ class DictionaryProvider with ChangeNotifier {
     return items.map(_toOldDictItem).toList();
   }
 
-  Future<void> _seedInitialDictionaries() async {
-    await _seedFromAsset('device_dictionary', 'assets/dictionaries/device.json');
-    await _seedFromAsset('antenna_dictionary', 'assets/dictionaries/antenna.json');
-    await _seedFromAsset('qth_dictionary', 'assets/dictionaries/qth.json');
+  Future<void> _syncBuiltinDictionaries() async {
+    await _syncBuiltinFromAsset(
+        'device_dictionary', 'assets/dictionaries/device.json');
+    await _syncBuiltinFromAsset(
+        'antenna_dictionary', 'assets/dictionaries/antenna.json');
+    await _syncBuiltinFromAsset(
+        'qth_dictionary', 'assets/dictionaries/qth.json');
   }
 
-  Future<void> _seedFromAsset(String dictType, String assetPath) async {
+  Future<void> _syncBuiltinFromAsset(String dictType, String assetPath) async {
     try {
       final jsonString = await rootBundle.loadString(assetPath);
-      final items = _parseDictItemsJson(jsonString);
-      for (final item in items) {
-        await RustApi.addDictItem(dictType: dictType, raw: item);
+      final jsonData = json.decode(jsonString);
+      if (jsonData is! List) return;
+      for (final item in jsonData) {
+        if (item is! Map) continue;
+        final raw = item['raw']?.toString().trim();
+        if (raw == null || raw.isEmpty) continue;
+        final pinyin = item['pinyin']?.toString().trim();
+        final abbreviation = item['abbreviation']?.toString().trim();
+        await RustApi.upsertDictItem(
+          dictType: dictType,
+          raw: raw,
+          pinyin: pinyin?.isNotEmpty == true ? pinyin : null,
+          abbreviation: abbreviation?.isNotEmpty == true ? abbreviation : null,
+        );
       }
     } catch (e, st) {
-      debugPrint('[DictionaryProvider] seed from $assetPath failed: $e\n$st');
+      debugPrint(
+          '[DictionaryProvider] sync builtin from $assetPath failed: $e\n$st');
     }
-  }
-
-  /// 解析词库 JSON。
-  /// 支持两种格式：
-  /// - 字符串数组：["a", "b"]
-  /// - 对象数组（取 raw 字段）：[{"raw": "a", ...}]
-  List<String> _parseDictItemsJson(String jsonString) {
-    final jsonData = json.decode(jsonString);
-    if (jsonData is! List) return [];
-    final result = <String>[];
-    for (final item in jsonData) {
-      if (item is String) {
-        result.add(item.trim());
-      } else if (item is Map) {
-        final raw = item['raw']?.toString().trim();
-        if (raw != null && raw.isNotEmpty) {
-          result.add(raw);
-        }
-      }
-    }
-    return result;
   }
 
   DictionaryItem _toOldDictItem(bridge.DictItem b) {

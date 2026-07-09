@@ -28,4 +28,16 @@ impl DictItem {
             deleted_at: None,
         }
     }
+
+    pub fn with_pinyin_abbrev(
+        dict_type: String,
+        raw: String,
+        pinyin: Option<String>,
+        abbreviation: Option<String>,
+    ) -> Self {
+        let mut item = Self::new(dict_type, raw);
+        item.pinyin = pinyin;
+        item.abbreviation = abbreviation;
+        item
+    }
 }

@@ -18,6 +18,17 @@ Future<void> addDictItem({required String dictType, required String raw}) =>
     RustLib.instance.api
         .crateApiDictionariesAddDictItem(dictType: dictType, raw: raw);
 
+Future<void> upsertDictItem(
+        {required String dictType,
+        required String raw,
+        String? pinyin,
+        String? abbreviation}) =>
+    RustLib.instance.api.crateApiDictionariesUpsertDictItem(
+        dictType: dictType,
+        raw: raw,
+        pinyin: pinyin,
+        abbreviation: abbreviation);
+
 Future<List<DictItem>> getDictItems({required String dictType}) =>
     RustLib.instance.api.crateApiDictionariesGetDictItems(dictType: dictType);
 

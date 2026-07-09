@@ -6,6 +6,7 @@ import 'api/dictionaries.dart' as dict;
 import 'api/settings.dart' as settings;
 import 'api/export.dart' as export_api;
 import 'api/callsign_qth.dart' as callsign_qth;
+import 'api/database.dart' as database;
 import 'models/log_entry.dart';
 import 'models/session.dart';
 import 'models/dict_item.dart';
@@ -137,6 +138,20 @@ class RustApi {
     return dict.addDictItem(dictType: dictType, raw: raw);
   }
 
+  static Future<void> upsertDictItem({
+    required String dictType,
+    required String raw,
+    String? pinyin,
+    String? abbreviation,
+  }) {
+    return dict.upsertDictItem(
+      dictType: dictType,
+      raw: raw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+    );
+  }
+
   static Future<List<DictItem>> getDictItems({required String dictType}) {
     return dict.getDictItems(dictType: dictType);
   }
@@ -209,5 +224,22 @@ class RustApi {
 
   static Future<void> clearCallsignQthHistory() {
     return callsign_qth.clearCallsignQthHistory();
+  }
+
+  // Database operations
+  static Future<String> getDatabaseStatus() {
+    return database.getDatabaseStatus();
+  }
+
+  static Future<String> exportDatabase() {
+    return database.exportDatabase();
+  }
+
+  static Future<void> importDatabase({required String jsonData}) {
+    return database.importDatabase(jsonData: jsonData);
+  }
+
+  static Future<void> clearAllData() {
+    return database.clearAllData();
   }
 }

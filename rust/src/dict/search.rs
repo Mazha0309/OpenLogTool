@@ -42,6 +42,29 @@ pub async fn add_dict_item(item: &DictItem) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn upsert_dict_item(item: &DictItem) -> anyhow::Result<()> {
+    let pool = get_db()?;
+    sqlx::query(
+        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(dict_type, raw) DO UPDATE SET
+             pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
+             abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
+             updated_at = excluded.updated_at
+         WHERE deleted_at IS NULL",
+    )
+    .bind(&item.dict_type)
+    .bind(&item.raw)
+    .bind(&item.pinyin)
+    .bind(&item.abbreviation)
+    .bind(&item.sync_id)
+    .bind(&item.created_at)
+    .bind(&item.updated_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn get_dict_items(dict_type: &str) -> anyhow::Result<Vec<DictItem>> {
     let pool = get_db()?;
     let rows = sqlx::query_as::<_, DictItemRow>(
