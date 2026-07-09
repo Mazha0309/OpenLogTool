@@ -13,6 +13,8 @@ class CallsignHistoryField extends StatefulWidget {
   final TextEditingController heightController;
   final TextEditingController? reportController;
   final TextEditingController? rstRcvdController;
+  final TextEditingController? timeController;
+  final TextEditingController? controllerController;
   final String label;
   final String hintText;
   final TextInputAction? textInputAction;
@@ -29,6 +31,8 @@ class CallsignHistoryField extends StatefulWidget {
     required this.heightController,
     this.reportController,
     this.rstRcvdController,
+    this.timeController,
+    this.controllerController,
     required this.label,
     required this.hintText,
     this.textInputAction,
@@ -127,6 +131,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     }
     if (widget.rstRcvdController != null && (log.rstRcvd?.isNotEmpty ?? false)) {
       widget.rstRcvdController!.text = log.rstRcvd!;
+    }
+    if (widget.timeController != null && log.time.isNotEmpty) {
+      widget.timeController!.text = log.time.length >= 16 ? log.time.substring(11, 16) : log.time;
+    }
+    if (widget.controllerController != null && log.controller.isNotEmpty) {
+      widget.controllerController!.text = log.controller;
     }
     _hideOverlay();
   }

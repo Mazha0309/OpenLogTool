@@ -30,6 +30,7 @@ final _controllerController = TextEditingController();
   final _timeController = TextEditingController();
   final _reportController = TextEditingController();
   final _rstRcvdController = TextEditingController();
+  final _remarksController = TextEditingController();
 
   @override
   bool get wantKeepAlive => true;
@@ -54,6 +55,7 @@ final _controllerController = TextEditingController();
     _timeController.dispose();
     _reportController.dispose();
     _rstRcvdController.dispose();
+    _remarksController.dispose();
     super.dispose();
   }
 
@@ -95,6 +97,7 @@ final _controllerController = TextEditingController();
       height: _heightController.text,
     );
     log.rstRcvd = _rstRcvdController.text;
+    log.remarks = _remarksController.text;
 
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
     _resetForm();
@@ -121,6 +124,7 @@ final _controllerController = TextEditingController();
     _timeController.clear();
     _reportController.text = '59';
     _rstRcvdController.text = '59';
+    _remarksController.clear();
     FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 
@@ -169,16 +173,18 @@ final _controllerController = TextEditingController();
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
-                    child: CallsignHistoryField(
-                      callsignController: _callsignController,
-                      deviceController: _deviceController,
-                      antennaController: _antennaController,
-                      qthController: _qthController,
-                      powerController: _powerController,
-                      heightController: _heightController,
-                      reportController: _reportController,
-                      rstRcvdController: _rstRcvdController,
-                      label: '点名呼号',
+                      child: CallsignHistoryField(
+                        callsignController: _callsignController,
+                        deviceController: _deviceController,
+                        antennaController: _antennaController,
+                        qthController: _qthController,
+                        powerController: _powerController,
+                        heightController: _heightController,
+                        reportController: _reportController,
+                        rstRcvdController: _rstRcvdController,
+                        timeController: _timeController,
+                        controllerController: _controllerController,
+                        label: '点名呼号',
                       hintText: '输入呼号',
                       focusNode: _callsignFocusNode,
                       isCompact: isNarrow,
@@ -240,6 +246,17 @@ final _controllerController = TextEditingController();
                       label: '高度',
                       hintText: '输入高度',
                       keyboardType: TextInputType.number,
+                      upperCase: false,
+                      isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _remarksController,
+                      label: '备注',
+                      hintText: '可选备注',
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,

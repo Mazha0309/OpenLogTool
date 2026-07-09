@@ -50,6 +50,7 @@ class _LogTableState extends State<LogTable> {
         'power': TextEditingController(text: log.power),
         'antenna': TextEditingController(text: log.antenna),
         'height': TextEditingController(text: log.height),
+        'remarks': TextEditingController(text: log.remarks),
         '_id': TextEditingController(text: log.id),
         '_sessionId': TextEditingController(text: log.sessionId ?? ''),
         '_createdAt': TextEditingController(text: log.createdAt),
@@ -88,6 +89,7 @@ class _LogTableState extends State<LogTable> {
       createdAt: _controllers['_createdAt']?.text,
     );
     patch.rstRcvd = _controllers['rstRcvd']?.text ?? '';
+    patch.remarks = _controllers['remarks']?.text ?? '';
     try {
       await logProvider.updateLog(index, patch);
     } catch (e) {
@@ -219,6 +221,9 @@ class _LogTableState extends State<LogTable> {
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('高度'), 80),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('备注'), 120),
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('操作'), 120),
@@ -440,6 +445,23 @@ class _LogTableState extends State<LogTable> {
                     ),
                   )
                 : _buildCenteredCell(Text(log.height), 80),
+          ),
+          DataCell(
+            _buildCenteredCell(
+              isEditing
+                  ? SizedBox(
+                      width: 110,
+                      child: TextField(
+                        controller: _controllers['remarks'],
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        ),
+                      ),
+                    )
+                  : Text(log.remarks),
+              110,
+            ),
           ),
           DataCell(
             _buildCenteredCell(
