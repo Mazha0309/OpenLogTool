@@ -5,6 +5,15 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/dict_item.dart' as bridge;
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/utils/dictionary_pinyin_helper.dart';
+
+class _RawPinyinAbbrev {
+  final String raw;
+  final String? pinyin;
+  final String? abbreviation;
+
+  _RawPinyinAbbrev(this.raw, {this.pinyin, this.abbreviation});
+}
 
 class DictionaryProvider with ChangeNotifier {
   bool _disposed = false;
@@ -53,6 +62,7 @@ class DictionaryProvider with ChangeNotifier {
 
       // 每次启动都同步内置词库，补全缺失的拼音/缩写，同时保留用户自定义内容。
       await _syncBuiltinDictionaries();
+      await _backfillMissingPinyin();
       _deviceDict = await _getDictItems('device_dictionary');
       _antennaDict = await _getDictItems('antenna_dictionary');
       _callsignDict = await _getDictItems('callsign_dictionary');
@@ -75,6 +85,28 @@ class DictionaryProvider with ChangeNotifier {
         'antenna_dictionary', 'assets/dictionaries/antenna.json');
     await _syncBuiltinFromAsset(
         'qth_dictionary', 'assets/dictionaries/qth.json');
+  }
+
+  Future<void> _backfillMissingPinyin() async {
+    await _backfillDict('device_dictionary', _deviceDict);
+    await _backfillDict('antenna_dictionary', _antennaDict);
+    await _backfillDict('qth_dictionary', _qthDict);
+  }
+
+  Future<void> _backfillDict(
+    String dictType,
+    List<DictionaryItem> target,
+  ) async {
+    for (final item in target) {
+      if (item.abbreviation.isNotEmpty && item.pinyin.isNotEmpty) continue;
+      final generated = DictionaryPinyinHelper.generate(item.raw);
+      await RustApi.upsertDictItem(
+        dictType: dictType,
+        raw: item.raw,
+        pinyin: generated.pinyin,
+        abbreviation: generated.abbreviation,
+      );
+    }
   }
 
   Future<void> _syncBuiltinFromAsset(String dictType, String assetPath) async {
@@ -158,11 +190,22 @@ class DictionaryProvider with ChangeNotifier {
   ) async {
     if (raw.isEmpty || target.any((d) => d.raw == raw)) return;
     try {
-      await RustApi.addDictItem(dictType: dictType, raw: raw);
+      final generated = DictionaryPinyinHelper.generate(raw);
+      await RustApi.upsertDictItem(
+        dictType: dictType,
+        raw: raw,
+        pinyin: generated.pinyin,
+        abbreviation: generated.abbreviation,
+      );
       final persisted = await RustApi.getDictItemByRaw(dictType: dictType, raw: raw);
       target.add(persisted != null
           ? _toOldDictItem(persisted)
-          : DictionaryItem(raw: raw, pinyin: '', abbreviation: '', type: dictType));
+          : DictionaryItem(
+              raw: raw,
+              pinyin: generated.pinyin,
+              abbreviation: generated.abbreviation,
+              type: dictType,
+            ));
       target.sort((a, b) => a.raw.compareTo(b.raw));
       _safeNotify();
       await _notifyDictionaryChanged();
@@ -195,46 +238,41 @@ class DictionaryProvider with ChangeNotifier {
   ) async {
     for (final raw in items) {
       if (target.any((d) => d.raw == raw)) continue;
-      await RustApi.addDictItem(dictType: dictType, raw: raw);
+      final generated = DictionaryPinyinHelper.generate(raw);
+      await RustApi.upsertDictItem(
+        dictType: dictType,
+        raw: raw,
+        pinyin: generated.pinyin,
+        abbreviation: generated.abbreviation,
+      );
       final persisted = await RustApi.getDictItemByRaw(dictType: dictType, raw: raw);
       target.add(persisted != null
           ? _toOldDictItem(persisted)
-          : DictionaryItem(raw: raw, pinyin: '', abbreviation: '', type: dictType));
+          : DictionaryItem(
+              raw: raw,
+              pinyin: generated.pinyin,
+              abbreviation: generated.abbreviation,
+              type: dictType,
+            ));
     }
     target.sort((a, b) => a.raw.compareTo(b.raw));
     _safeNotify();
     await _notifyDictionaryChanged();
   }
 
-  /// 从 JSON 文件批量导入词库。
-  /// 支持两种格式：
-  /// 1. 单类数组：["a", "b"] 或 [{"raw":"a"}, ...]
-  /// 2. 合并对象：{"devices": [...], "antennas": [...], "callsigns": [...], "qths": [...]}
   Future<Map<String, int>> importFromJson(String jsonString) async {
     final jsonData = json.decode(jsonString);
     final counts = <String, int>{};
 
     if (jsonData is Map) {
-      final deviceItems = _extractItems(jsonData['devices']);
-      if (deviceItems.isNotEmpty) {
-        await importDevices(deviceItems);
-        counts['device'] = deviceItems.length;
-      }
-      final antennaItems = _extractItems(jsonData['antennas']);
-      if (antennaItems.isNotEmpty) {
-        await importAntennas(antennaItems);
-        counts['antenna'] = antennaItems.length;
-      }
-      final callsignItems = _extractItems(jsonData['callsigns']);
-      if (callsignItems.isNotEmpty) {
-        await importCallsigns(callsignItems);
-        counts['callsign'] = callsignItems.length;
-      }
-      final qthItems = _extractItems(jsonData['qths']);
-      if (qthItems.isNotEmpty) {
-        await importQths(qthItems);
-        counts['qth'] = qthItems.length;
-      }
+      counts['device'] = await _importTypedJson(
+          'device_dictionary', jsonData['devices'], _deviceDict);
+      counts['antenna'] = await _importTypedJson(
+          'antenna_dictionary', jsonData['antennas'], _antennaDict);
+      counts['callsign'] = await _importTypedJson(
+          'callsign_dictionary', jsonData['callsigns'], _callsignDict);
+      counts['qth'] = await _importTypedJson(
+          'qth_dictionary', jsonData['qths'], _qthDict);
     } else if (jsonData is List) {
       final items = _extractItems(jsonData);
       if (items.isNotEmpty) {
@@ -244,6 +282,60 @@ class DictionaryProvider with ChangeNotifier {
     }
 
     return counts;
+  }
+
+  Future<int> _importTypedJson(
+    String dictType,
+    dynamic data,
+    List<DictionaryItem> target,
+  ) async {
+    final items = _extractTypedItems(data);
+    if (items.isEmpty) return 0;
+    for (final item in items) {
+      if (target.any((d) => d.raw == item.raw)) continue;
+      final pinyin = item.pinyin?.isNotEmpty == true
+          ? item.pinyin!
+          : DictionaryPinyinHelper.generate(item.raw).pinyin;
+      final abbreviation = item.abbreviation?.isNotEmpty == true
+          ? item.abbreviation!
+          : DictionaryPinyinHelper.generate(item.raw).abbreviation;
+      await RustApi.upsertDictItem(
+        dictType: dictType,
+        raw: item.raw,
+        pinyin: pinyin,
+        abbreviation: abbreviation,
+      );
+      target.add(DictionaryItem(
+        raw: item.raw,
+        pinyin: pinyin,
+        abbreviation: abbreviation,
+        type: dictType,
+      ));
+    }
+    target.sort((a, b) => a.raw.compareTo(b.raw));
+    _safeNotify();
+    await _notifyDictionaryChanged();
+    return items.length;
+  }
+
+  List<_RawPinyinAbbrev> _extractTypedItems(dynamic data) {
+    if (data is! List) return [];
+    final result = <_RawPinyinAbbrev>[];
+    for (final item in data) {
+      if (item is String) {
+        final trimmed = item.trim();
+        if (trimmed.isNotEmpty) result.add(_RawPinyinAbbrev(trimmed));
+      } else if (item is Map) {
+        final raw = item['raw']?.toString().trim();
+        if (raw == null || raw.isEmpty) continue;
+        result.add(_RawPinyinAbbrev(
+          raw,
+          pinyin: item['pinyin']?.toString().trim(),
+          abbreviation: item['abbreviation']?.toString().trim(),
+        ));
+      }
+    }
+    return result;
   }
 
   List<String> _extractItems(dynamic data) {
