@@ -6,13 +6,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
-import 'package:openlogtool/providers/sync_provider.dart';
+import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
-import 'package:openlogtool/widgets/settings/subwidgets.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
 
 class SettingsPanel extends StatelessWidget {
@@ -53,20 +52,8 @@ class SettingsPanel extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // 服务器同步设置
-        Consumer<SyncProvider>(
-          builder: (context, syncProvider, _) {
-            if (syncProvider.settings.syncEnabled && syncProvider.isLoggedIn) {
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                if (!context.mounted) return;
-                final stillValid = await syncProvider.validateCurrentLogin();
-                if (!stillValid && context.mounted) {
-                  context.showLoggedSnackBar(
-                    const SnackBar(content: Text('登录状态已失效，请重新登录')),
-                  );
-                }
-              });
-            }
+        Consumer<ServerProvider>(
+          builder: (context, serverProvider, _) {
             return Card(
               child: Padding(
                 padding: EdgeInsets.all(cardPadding),
@@ -74,276 +61,65 @@ class SettingsPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Icon(Icons.cloud, size: 18, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 8),
                         Text(
-                          '服务器同步',
-                          style: TextStyle(
-                            fontSize: isNarrow ? 14 : 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Switch(
-                          value: syncProvider.settings.syncEnabled,
-                          onChanged: (value) =>
-                              syncProvider.setSyncEnabled(value),
+                          '服务器设置',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                    if (syncProvider.settings.syncEnabled) ...[
-                      const SizedBox(height: 12),
-                      ServerSettingsFields(syncProvider: syncProvider),
-                      const SizedBox(height: 8),
-                      if (!syncProvider.isLoggedIn) ...[
-                        if (syncProvider.isLoggingIn)
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else
-                          FilledButton(
-                            child: const Text('子账号登录'),
-                            onPressed: () async {
-                              final result = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => const LoginDialog(),
-                              );
-                              if (result == true) {
-                                final ok = await syncProvider.login(
-                                  LoginDialog.username ?? '',
-                                  LoginDialog.password ?? '',
-                                );
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    SnackBar(
-                                      content: Text(ok
-                                          ? '登录成功'
-                                          : '登录失败: ${syncProvider.lastError ?? "未知错误"}'),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                      ] else ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                color: Colors.green, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              '已登录 (${syncProvider.settings.userId ?? ""})',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.green),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: serverProvider.serverUrl,
+                      decoration: const InputDecoration(
+                        labelText: '服务器地址',
+                        hintText: 'http://your-server:3000',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.link, size: 18),
+                      ),
+                      onChanged: (value) => serverProvider.setServerUrl(value),
+                    ),
+                    const SizedBox(height: 12),
+                    if (!serverProvider.isLoggedIn) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.login, size: 16),
+                              label: const Text('登录'),
+                              onPressed: () => _showLoginDialog(context, serverProvider),
                             ),
-                            const Spacer(),
-                            FilledButton(
-                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-                              onPressed: () async {
-                                await syncProvider.logout();
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    const SnackBar(content: Text('已退出登录')),
-                                  );
-                                }
-                              },
-                              child: const Text('退出登录'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
-                            labelText: '同步方式',
-                            border: OutlineInputBorder(),
                           ),
-                          initialValue: syncProvider.settings.syncMode,
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'realtime', child: Text('实时同步')),
-                            DropdownMenuItem(
-                                value: 'interval', child: Text('间隔同步')),
-                            DropdownMenuItem(
-                                value: 'manual', child: Text('手动同步')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                syncProvider.setSyncMode(value);
-                              });
-                            }
-                          },
-                        ),
-                        if (syncProvider.settings.syncMode == 'interval') ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<int>(
-                                  decoration: const InputDecoration(
-                                    labelText: '同步间隔',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  initialValue:
-                                      syncProvider.settings.syncIntervalMinutes,
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: 1, child: Text('1 分钟')),
-                                    DropdownMenuItem(
-                                        value: 5, child: Text('5 分钟')),
-                                    DropdownMenuItem(
-                                        value: 10, child: Text('10 分钟')),
-                                    DropdownMenuItem(
-                                        value: 15, child: Text('15 分钟')),
-                                    DropdownMenuItem(
-                                        value: 30, child: Text('30 分钟')),
-                                    DropdownMenuItem(
-                                        value: 60, child: Text('1 小时')),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) {
-                                        syncProvider
-                                            .setSyncIntervalMinutes(value);
-                                      });
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.person_add, size: 16),
+                              label: const Text('注册'),
+                              onPressed: () => _showRegisterDialog(context, serverProvider),
+                            ),
                           ),
                         ],
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            FilledButton(
-                              child: const Text('测试连接'),
-                              onPressed: () async {
-                                final ok = await syncProvider.testConnection();
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    SnackBar(
-                                        content: Text(ok ? '连接成功' : '连接失败')),
-                                  );
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: syncProvider.isConfigured
-                                  ? () async {
-                                      await syncProvider.resetSyncBaseline();
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text('已重置同步基线，下次同步将重新上传本地增量')),
-                                        );
-                                      }
-                                    }
-                                  : null,
-                              child: const Text('重置同步基线'),
-                            ),
-                            const SizedBox(width: 8),
-                            if (syncProvider.settings.syncMode != 'manual')
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: syncProvider.settings.syncMode ==
-                                          'realtime'
-                                      ? Colors.green.withValues(alpha: 0.2)
-                                      : Colors.blue.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  syncProvider.settings.syncMode == 'realtime'
-                                      ? '实时同步'
-                                      : '间隔 ${syncProvider.settings.syncIntervalMinutes} 分钟',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: syncProvider.settings.syncMode ==
-                                            'realtime'
-                                        ? Colors.green
-                                        : Colors.blue,
-                                  ),
-                                ),
-                              )
-                            else if (syncProvider.isSyncing)
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            else
-                              FilledButton(
-                                onPressed: syncProvider.isConfigured
-                                    ? () => _performSync(context, syncProvider)
-                                    : null,
-                                child: const Text('立即同步'),
-                              ),
-                          ],
-                        ),
-                        if (syncProvider.settings.lastSyncTime != null) ...[
-                          const SizedBox(height: 8),
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Icon(Icons.person, size: 16, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 6),
                           Text(
-                            '上次同步: ${_formatDateTime(syncProvider.settings.lastSyncTime!)}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey),
+                            serverProvider.username ?? '',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          TextButton.icon(
+                            icon: const Icon(Icons.logout, size: 16),
+                            label: const Text('退出'),
+                            onPressed: () => serverProvider.logout(),
                           ),
                         ],
-                        if (syncProvider.lastSyncSummary != null) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: syncProvider.lastSyncConflicts > 0
-                                  ? Colors.orange.withValues(alpha: 0.12)
-                                  : Colors.green.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: syncProvider.lastSyncConflicts > 0
-                                    ? Colors.orange.withValues(alpha: 0.35)
-                                    : Colors.green.withValues(alpha: 0.28),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  syncProvider.lastSyncConflicts > 0
-                                      ? '最近一次同步存在冲突'
-                                      : '最近一次同步结果',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: syncProvider.lastSyncConflicts > 0
-                                        ? Colors.orange.shade800
-                                        : Colors.green.shade800,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  syncProvider.lastSyncSummaryText,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        if (syncProvider.lastError != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            syncProvider.lastError!,
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.red),
-                          ),
-                        ],
-                      ],
+                      ),
                     ],
                   ],
                 ),
@@ -1078,27 +854,84 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  Future<void> _performSync(
-      BuildContext context, SyncProvider syncProvider) async {
-    final ok = await syncProvider.runBidirectionalSync();
-
-    if (context.mounted) {
-      if (ok) {
-        context.showLoggedSnackBar(
-          SnackBar(content: Text('同步成功：${syncProvider.lastSyncSummaryText}')),
-        );
-      } else {
-        context.showLoggedSnackBar(
-          SnackBar(content: Text('同步失败: ${syncProvider.lastError ?? "未知错误"}')),
-        );
-      }
-    }
+  void _showLoginDialog(BuildContext context, ServerProvider serverProvider) {
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('登录'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: usernameController,
+              decoration: const InputDecoration(labelText: '用户名', border: OutlineInputBorder(), isDense: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              decoration: const InputDecoration(labelText: '密码', border: OutlineInputBorder(), isDense: true),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await serverProvider.login(usernameController.text, passwordController.text);
+                if (ctx.mounted) Navigator.pop(ctx);
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('登录失败: $e')));
+              }
+            },
+            child: const Text('登录'),
+          ),
+        ],
+      ),
+    );
   }
 
-  String _formatDateTime(DateTime dt) {
-    final local = dt.toLocal();
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
-        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  void _showRegisterDialog(BuildContext context, ServerProvider serverProvider) {
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('注册'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: usernameController,
+              decoration: const InputDecoration(labelText: '用户名', border: OutlineInputBorder(), isDense: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              decoration: const InputDecoration(labelText: '密码', border: OutlineInputBorder(), isDense: true),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await serverProvider.register(usernameController.text, passwordController.text);
+                if (ctx.mounted) Navigator.pop(ctx);
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('注册失败: $e')));
+              }
+            },
+            child: const Text('注册'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
