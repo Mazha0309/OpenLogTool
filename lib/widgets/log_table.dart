@@ -223,6 +223,9 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('高度'), 80),
                             ),
                             DataColumn(
+                              label: _buildCenteredCell(const Text('备注'), 120),
+                            ),
+                            DataColumn(
                               label: _buildCenteredCell(const Text('操作'), 120),
                             ),
                           ],
