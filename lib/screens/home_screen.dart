@@ -457,6 +457,13 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('OpenLogTool'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: '分享',
+            onPressed: () => _showShareOptions(context),
+          ),
+        ],
       ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
@@ -466,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: IndexedStack(
           index: _selectedIndex,
           children: [
-            AddRecordPage(onSharePressed: () => _showShareOptions(context), onJoinPressed: () => _showJoinShareDialog(context)),
+            AddRecordPage(),
             const ImportExportPage(),
             const SettingsPage(),
           ],
@@ -501,10 +508,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class AddRecordPage extends StatelessWidget {
-  final VoidCallback? onSharePressed;
-  final VoidCallback? onJoinPressed;
-
-  const AddRecordPage({super.key, this.onSharePressed, this.onJoinPressed});
+  const AddRecordPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -550,29 +554,7 @@ class AddRecordPage extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (onSharePressed != null)
-                                IconButton(
-                                  icon: const Icon(Icons.share, size: 20),
-                                  tooltip: '分享',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  onPressed: onSharePressed,
-                                ),
-                              if (onJoinPressed != null)
-                                IconButton(
-                                  icon: const Icon(Icons.group_add, size: 20),
-                                  tooltip: '加入合作',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  onPressed: onJoinPressed,
-                                ),
-                            ],
-                          ),
+                          const Spacer(),
                         ],
                         ),
                       const SizedBox(height: 16),
@@ -639,29 +621,7 @@ class AddRecordPage extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (onSharePressed != null)
-                            IconButton(
-                              icon: const Icon(Icons.share, size: 20),
-                              tooltip: '分享',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              onPressed: onSharePressed,
-                            ),
-                          if (onJoinPressed != null)
-                            IconButton(
-                              icon: const Icon(Icons.group_add, size: 20),
-                              tooltip: '加入合作',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              onPressed: onJoinPressed,
-                            ),
-                        ],
-                      ),
+                      const Spacer(),
                     ],
                   ),
                   const SizedBox(height: 12),
