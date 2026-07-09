@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 
@@ -70,9 +71,17 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   }
 
   void _onFocusChanged() {
-    if (_effFocus.hasFocus && _history.isNotEmpty) {
+    final callsign = widget.callsignController.text.trim().toUpperCase();
+    if (callsign.length < 2) {
+      if (mounted) setState(() => _history = []);
+      _hideOverlay();
+      return;
+    }
+    if (_effFocus.hasFocus &&
+        _history.isNotEmpty &&
+        _history.first.callsign.toUpperCase() == callsign) {
       _showOverlay();
-    } else {
+    } else if (!_effFocus.hasFocus) {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
       });
@@ -88,11 +97,21 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     }
     try {
       final rows = await RustApi.getRecentByCallsign(callsign: callsign, limit: 3);
-      if (mounted) {
-        setState(() => _history = rows);
-        if (_effFocus.hasFocus && _history.isNotEmpty && _overlayEntry == null) {
-          _showOverlay();
-        }
+      if (!mounted) return;
+      final current = widget.callsignController.text.trim().toUpperCase();
+      if (current != callsign) {
+        // 输入在异步过程中已变化，使用最新内容重新加载。
+        _loadHistory();
+        return;
+      }
+      setState(() => _history = rows);
+      if (_effFocus.hasFocus &&
+          _history.isNotEmpty &&
+          _history.first.callsign.toUpperCase() == current &&
+          _overlayEntry == null) {
+        _showOverlay();
+      } else if (_history.isEmpty) {
+        _hideOverlay();
       }
     } catch (_) {}
   }
@@ -185,7 +204,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        log.time.length >= 16 ? log.time.substring(11, 16) : log.time,
+                                        _formatTime(log.time),
                                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Theme.of(ctx).colorScheme.primary),
                                       ),
                                       if (details.isNotEmpty)
@@ -245,6 +264,15 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
       ),
     );
   }
+}
+
+String _formatTime(String time) {
+  if (time.isEmpty) return '';
+  final parsed = DateTime.tryParse(time);
+  if (parsed != null) {
+    return DateFormat('yyyy-MM-dd HH:mm').format(parsed);
+  }
+  return time;
 }
 
 class UpperCaseTextFormatter extends TextInputFormatter {
