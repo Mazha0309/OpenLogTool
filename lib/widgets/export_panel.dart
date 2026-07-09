@@ -24,7 +24,6 @@ class _ExportPanelState extends State<ExportPanel> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWideScreen = constraints.maxWidth > 700;
         final isNarrow = constraints.maxWidth < 400;
         final cardPadding = isNarrow ? 16.0 : 20.0;
         final sectionSpacing = isNarrow ? 16.0 : 20.0;
@@ -45,24 +44,9 @@ class _ExportPanelState extends State<ExportPanel> {
               ),
               SizedBox(height: sectionSpacing),
 
-              if (isWideScreen)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _buildQuickActionsCard(context, cardPadding),
-                    ),
-                    SizedBox(width: sectionSpacing),
-                    Expanded(
-                      child: _buildExcelSettingsCard(context, cardPadding),
-                    ),
-                  ],
-                )
-              else ...[
-                _buildQuickActionsCard(context, cardPadding),
-                SizedBox(height: sectionSpacing),
-                _buildExcelSettingsCard(context, cardPadding),
-              ],
+              SizedBox(height: sectionSpacing),
+
+              _buildQuickActionsCard(context, cardPadding),
 
               SizedBox(height: sectionSpacing),
 
@@ -219,97 +203,6 @@ class _ExportPanelState extends State<ExportPanel> {
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-
-  Widget _buildExcelSettingsCard(BuildContext context, double cardPadding) {
-    final theme = Theme.of(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-    final settings = settingsProvider.exportSettings;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.settings, color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Excel 导出设置',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => _showExportSettingsDialog(context),
-                  icon: const Icon(Icons.open_in_full, size: 16),
-                  label: const Text('高级设置'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '预览并快速调整最常用的导出选项，完整选项请进入高级设置。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            SizedBox(height: cardPadding),
-
-            _buildSettingRow(
-              context,
-              label: '文件名模板',
-              value: settings.fileNameTemplate,
-              icon: Icons.insert_drive_file,
-            ),
-            const Divider(height: 24),
-            _buildSettingRow(
-              context,
-              label: 'Excel 抬头',
-              value: settings.headerText,
-              icon: Icons.title,
-            ),
-            const Divider(height: 24),
-            _buildSettingRow(
-              context,
-              label: '导出路径',
-              value: settings.exportPath.isEmpty ? '默认下载文件夹' : settings.exportPath,
-              icon: Icons.folder,
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                _buildColorChip(context, '抬头背景', settings.headerBackgroundColor),
-                const SizedBox(width: 12),
-                _buildColorChip(context, '表头背景', settings.headerRowBackgroundColor),
-                const SizedBox(width: 12),
-                _buildColorChip(context, '主控栏', settings.controllerBackgroundColor),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildToggleChip(
-                    context,
-                    label: '交替行',
-                    value: settings.useAlternateColors,
-                    onChanged: (v) {
-                      final updated = settings.copyWith(useAlternateColors: v);
-                      settingsProvider.updateExportSettings(updated);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
