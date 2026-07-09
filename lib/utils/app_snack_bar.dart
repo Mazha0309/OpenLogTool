@@ -21,7 +21,7 @@ extension LoggedSnackBarContext on BuildContext {
     read<SnackbarLogProvider>().add(
       message: message,
       type: resolvedType,
-      source: source ?? widget.runtimeType.toString(),
+      source: source ?? 'showLoggedSnackBar',
     );
 
     return ScaffoldMessenger.of(this).showSnackBar(snackBar);
