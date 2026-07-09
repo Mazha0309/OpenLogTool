@@ -7,6 +7,7 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
+import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
@@ -48,6 +49,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => SessionProvider()),
+        ChangeNotifierProvider(create: (_) => ServerProvider()),
         ChangeNotifierProvider(create: (_) => DictionaryProvider()),
         ChangeNotifierProvider(create: (_) => LogProvider()),
       ],
