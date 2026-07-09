@@ -254,17 +254,6 @@ final _controllerController = TextEditingController();
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
-                      controller: _remarksController,
-                      label: '备注',
-                      hintText: '可选备注',
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                    ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
                       controller: _timeController,
                       label: '时间',
                       hintText: 'HH:mm',
@@ -294,6 +283,17 @@ final _controllerController = TextEditingController();
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _submitForm(),
+                    ),
+                  ),
+                  SizedBox(
+                    width: calculatedFieldWidth,
+                    child: _buildMaterialTextField(
+                      controller: _remarksController,
+                      label: '备注',
+                      hintText: '可选备注',
+                      upperCase: false,
+                      isCompact: isNarrow,
+                      textInputAction: TextInputAction.next,
                     ),
                   ),
                 ],

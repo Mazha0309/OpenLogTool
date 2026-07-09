@@ -223,9 +223,6 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('高度'), 80),
                             ),
                             DataColumn(
-                              label: _buildCenteredCell(const Text('备注'), 120),
-                            ),
-                            DataColumn(
                               label: _buildCenteredCell(const Text('操作'), 120),
                             ),
                           ],
@@ -449,23 +446,6 @@ class _LogTableState extends State<LogTable> {
           DataCell(
             _buildCenteredCell(
               isEditing
-                  ? SizedBox(
-                      width: 110,
-                      child: TextField(
-                        controller: _controllers['remarks'],
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                        ),
-                      ),
-                    )
-                  : Text(log.remarks),
-              110,
-            ),
-          ),
-          DataCell(
-            _buildCenteredCell(
-              isEditing
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -523,6 +503,23 @@ class _LogTableState extends State<LogTable> {
                       ],
                     ),
               120,
+            ),
+          ),
+          DataCell(
+            _buildCenteredCell(
+              isEditing
+                  ? SizedBox(
+                      width: 110,
+                      child: TextField(
+                        controller: _controllers['remarks'],
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        ),
+                      ),
+                    )
+                  : Text(log.remarks),
+              110,
             ),
           ),
         ],
