@@ -44,7 +44,7 @@ class AppConfig {
   }
 
   static Future<List<String>> getSystemFonts() async {
-    final List<String> fonts = [];
+    final Set<String> fonts = {};
 
     try {
       if (Platform.isLinux) {
@@ -53,9 +53,9 @@ class AppConfig {
           final output = (result.stdout as String).trim();
           final lines = output.split('\n');
           for (final line in lines) {
-            final font = line.trim();
-            if (font.isNotEmpty && !fonts.contains(font)) {
-              fonts.add(font);
+            final primary = _extractPrimaryFamily(line);
+            if (primary != null) {
+              fonts.add(primary);
             }
           }
         }
@@ -66,7 +66,7 @@ class AppConfig {
           final matches = regex.allMatches(result.stdout as String);
           for (final match in matches) {
             final font = match.group(1)?.trim();
-            if (font != null && font.isNotEmpty && !fonts.contains(font)) {
+            if (font != null && font.isNotEmpty && !_isStyleVariant(font)) {
               fonts.add(font);
             }
           }
@@ -81,7 +81,7 @@ class AppConfig {
           final matches = regex.allMatches(regResult.stdout as String);
           for (final match in matches) {
             final font = match.group(1)?.trim();
-            if (font != null && font.isNotEmpty && !fonts.contains(font)) {
+            if (font != null && font.isNotEmpty && !_isStyleVariant(font)) {
               fonts.add(font);
             }
           }
@@ -89,17 +89,50 @@ class AppConfig {
       }
     } catch (_) {}
 
-    if (!fonts.contains('SarasaGothicSC')) {
-      fonts.insert(0, 'SarasaGothicSC');
-    }
-
     if (fonts.isEmpty) {
       fonts.addAll(['SarasaGothicSC', 'Roboto', 'Arial', 'sans-serif']);
     }
 
-    fonts.sort();
-    fonts.remove('SarasaGothicSC');
-    fonts.insert(0, 'SarasaGothicSC');
-    return fonts;
+    fonts.add('SarasaGothicSC');
+
+    final sorted = fonts.toList()..sort();
+    sorted.remove('SarasaGothicSC');
+    sorted.insert(0, 'SarasaGothicSC');
+    return sorted;
+  }
+
+  /// 从 fc-list 的一行输出里提取主 family 名。
+  /// 例如 "Inter,Inter ExtraLight" 只保留 "Inter"；过滤掉变体。
+  static String? _extractPrimaryFamily(String line) {
+    final raw = line.trim();
+    if (raw.isEmpty) return null;
+
+    final parts = raw.split(',');
+    for (final part in parts) {
+      final family = part.trim();
+      if (family.isEmpty) continue;
+      if (_isStyleVariant(family)) continue;
+      return family;
+    }
+    return null;
+  }
+
+  /// 把用户保存的字体名标准化为主 family。
+  /// 例如 "更纱黑体 SC,Sarasa Gothic SC" -> "更纱黑体 SC"。
+  static String normalizeFontFamily(String? font) {
+    if (font == null || font.isEmpty) return '';
+    final primary = _extractPrimaryFamily(font);
+    return primary ?? font;
+  }
+
+  /// 判断是否像 "Bold" / "Italic" / "Light" 等字重/样式变体。
+  static bool _isStyleVariant(String name) {
+    final lower = name.toLowerCase();
+    const variants = [
+      'bold', 'italic', 'oblique', 'light', 'regular',
+      'medium', 'black', 'thin', 'heavy', 'condensed',
+      'expanded', 'semi', 'extra', 'ultra', 'narrow',
+    ];
+    return variants.any((v) => lower.contains(v));
   }
 }

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/dict_item.dart' as bridge;
 import 'package:openlogtool/models/dictionary_item.dart';
@@ -67,9 +69,42 @@ class DictionaryProvider with ChangeNotifier {
   }
 
   Future<void> _seedInitialDictionaries() async {
-    await RustApi.seedDict(dictType: 'device_dictionary', items: _defaultDevices);
-    await RustApi.seedDict(dictType: 'antenna_dictionary', items: _defaultAntennas);
-    await RustApi.seedDict(dictType: 'qth_dictionary', items: _defaultQths);
+    await _seedFromAsset('device_dictionary', 'assets/dictionaries/device.json');
+    await _seedFromAsset('antenna_dictionary', 'assets/dictionaries/antenna.json');
+    await _seedFromAsset('qth_dictionary', 'assets/dictionaries/qth.json');
+  }
+
+  Future<void> _seedFromAsset(String dictType, String assetPath) async {
+    try {
+      final jsonString = await rootBundle.loadString(assetPath);
+      final items = _parseDictItemsJson(jsonString);
+      for (final item in items) {
+        await RustApi.addDictItem(dictType: dictType, raw: item);
+      }
+    } catch (e, st) {
+      debugPrint('[DictionaryProvider] seed from $assetPath failed: $e\n$st');
+    }
+  }
+
+  /// 解析词库 JSON。
+  /// 支持两种格式：
+  /// - 字符串数组：["a", "b"]
+  /// - 对象数组（取 raw 字段）：[{"raw": "a", ...}]
+  List<String> _parseDictItemsJson(String jsonString) {
+    final jsonData = json.decode(jsonString);
+    if (jsonData is! List) return [];
+    final result = <String>[];
+    for (final item in jsonData) {
+      if (item is String) {
+        result.add(item.trim());
+      } else if (item is Map) {
+        final raw = item['raw']?.toString().trim();
+        if (raw != null && raw.isNotEmpty) {
+          result.add(raw);
+        }
+      }
+    }
+    return result;
   }
 
   DictionaryItem _toOldDictItem(bridge.DictItem b) {
@@ -177,6 +212,61 @@ class DictionaryProvider with ChangeNotifier {
     await _notifyDictionaryChanged();
   }
 
+  /// 从 JSON 文件批量导入词库。
+  /// 支持两种格式：
+  /// 1. 单类数组：["a", "b"] 或 [{"raw":"a"}, ...]
+  /// 2. 合并对象：{"devices": [...], "antennas": [...], "callsigns": [...], "qths": [...]}
+  Future<Map<String, int>> importFromJson(String jsonString) async {
+    final jsonData = json.decode(jsonString);
+    final counts = <String, int>{};
+
+    if (jsonData is Map) {
+      final deviceItems = _extractItems(jsonData['devices']);
+      if (deviceItems.isNotEmpty) {
+        await importDevices(deviceItems);
+        counts['device'] = deviceItems.length;
+      }
+      final antennaItems = _extractItems(jsonData['antennas']);
+      if (antennaItems.isNotEmpty) {
+        await importAntennas(antennaItems);
+        counts['antenna'] = antennaItems.length;
+      }
+      final callsignItems = _extractItems(jsonData['callsigns']);
+      if (callsignItems.isNotEmpty) {
+        await importCallsigns(callsignItems);
+        counts['callsign'] = callsignItems.length;
+      }
+      final qthItems = _extractItems(jsonData['qths']);
+      if (qthItems.isNotEmpty) {
+        await importQths(qthItems);
+        counts['qth'] = qthItems.length;
+      }
+    } else if (jsonData is List) {
+      final items = _extractItems(jsonData);
+      if (items.isNotEmpty) {
+        await importDevices(items);
+        counts['device'] = items.length;
+      }
+    }
+
+    return counts;
+  }
+
+  List<String> _extractItems(dynamic data) {
+    if (data is! List) return [];
+    final result = <String>[];
+    for (final item in data) {
+      if (item is String) {
+        final trimmed = item.trim();
+        if (trimmed.isNotEmpty) result.add(trimmed);
+      } else if (item is Map) {
+        final raw = item['raw']?.toString().trim();
+        if (raw != null && raw.isNotEmpty) result.add(raw);
+      }
+    }
+    return result;
+  }
+
   Future<void> clearDeviceDict() async {
     await _clearDict('device_dictionary', _deviceDict);
   }
@@ -207,42 +297,6 @@ class DictionaryProvider with ChangeNotifier {
   }
 
   Future<void> resetAllData() async {
-    // TODO: implement full data reset via Rust API
     await resetDictionaries();
   }
-
-  static const List<String> _defaultDevices = [
-    'ICOM 7300',
-    'ICOM 7610',
-    'Yaesu FT-817',
-    'Yaesu FT-857',
-    'Yaesu FT-891',
-    'Yaesu FT-991A',
-    'Kenwood TS-590',
-    'Kenwood TS-890',
-    'FlexRadio 6400',
-    'Anan 7000',
-  ];
-
-  static const List<String> _defaultAntennas = [
-    'Dipole',
-    'Vertical',
-    'Yagi',
-    'Loop',
-    'Long Wire',
-    'End Fed',
-    'GP',
-    'DP',
-  ];
-
-  static const List<String> _defaultQths = [
-    '北京',
-    '上海',
-    '广州',
-    '深圳',
-    '成都',
-    '杭州',
-    '南京',
-    '武汉',
-  ];
 }

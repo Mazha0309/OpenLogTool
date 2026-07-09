@@ -55,34 +55,33 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['txt'],
+        allowedExtensions: ['json'],
       );
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         final content = String.fromCharCodes(file.bytes!);
-        final lines = content.split('\n').map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
+        final counts = await provider.importFromJson(content);
 
-
-        switch (dictType) {
-          case 'device':
-            await provider.importDevices(lines);
-            break;
-          case 'antenna':
-            await provider.importAntennas(lines);
-            break;
-          case 'callsign':
-            await provider.importCallsigns(lines);
-            break;
-          case 'qth':
-            await provider.importQths(lines);
-            break;
+        final total = counts.values.fold(0, (a, b) => a + b);
+        if (total == 0) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('文件中没有可导入的词库数据'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
         }
 
+        final parts = <String>[];
+        counts.forEach((key, count) {
+          parts.add('${_getDictName(key)} $count 条');
+        });
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('已导入 ${lines.length} 条${_getDictName(dictType)}'),
-            duration: const Duration(seconds: 2),
+            content: Text('已导入：${parts.join('，')}'),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -112,6 +111,21 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     }
   }
 
+  IconData _getDictIcon(String type) {
+    switch (type) {
+      case 'device':
+        return Icons.radio;
+      case 'antenna':
+        return Icons.settings_input_antenna;
+      case 'callsign':
+        return Icons.badge;
+      case 'qth':
+        return Icons.place;
+      default:
+        return Icons.folder;
+    }
+  }
+
   Widget _buildDictionaryCard({
     required String type,
     required String title,
@@ -119,28 +133,82 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     required Function(String) onAdd,
     double cardPadding = 16.0,
   }) {
+    final theme = Theme.of(context);
+    final isExpanded = _expandedStates[type]!;
+
     return Card(
-      child: ExpansionPanelList(
-        elevation: 0,
-        expandedHeaderPadding: EdgeInsets.zero,
-        expansionCallback: (int index, bool isExpanded) {
-          _toggleDictionary(type);
-        },
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ExpansionPanel(
-            headerBuilder: (context, isExpanded) {
-              return ListTile(
-                title: Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: cardPadding == 12.0 ? 14 : 16,
+          InkWell(
+            onTap: () => _toggleDictionary(type),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: cardPadding,
+                vertical: cardPadding * 0.75,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      _getDictIcon(type),
+                      size: 20,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
                   ),
-                ),
-              );
-            },
-            body: Padding(
-              padding: EdgeInsets.all(cardPadding),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '共 ${items.length} 条',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: EdgeInsets.fromLTRB(
+                cardPadding,
+                0,
+                cardPadding,
+                cardPadding,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -154,6 +222,11 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                             labelText: '添加${_getDictName(type)}',
                             hintText: '输入${_getDictName(type)}名称',
                             border: const OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 14,
+                            ),
                           ),
                           onSubmitted: (value) {
                             if (value.isNotEmpty) {
@@ -165,8 +238,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                       ),
                       const SizedBox(width: 12),
                       FilledButton.icon(
-                        icon: const Icon(Icons.add),
+                        icon: const Icon(Icons.add, size: 18),
                         label: const Text('添加'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                        ),
                         onPressed: () {
                           final value = _controllers[type]!.text.trim();
                           if (value.isNotEmpty) {
@@ -178,20 +257,13 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                     ],
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // 导入文件按钮
-                  FilledButton.icon(
-                    icon: const Icon(Icons.file_upload),
-                    label: const Text('从文件导入'),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.file_upload, size: 18),
+                    label: const Text('从文件导入 (.json)'),
                     onPressed: () => _importFromFile(type),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context)
-                          .colorScheme
-                          .secondaryContainer,
-                      foregroundColor:
-                          Theme.of(context).colorScheme.onSecondaryContainer,
-                    ),
                   ),
 
                   const SizedBox(height: 16),
@@ -199,50 +271,75 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                   // 项目列表
                   if (items.isNotEmpty)
                     Container(
-                      constraints: const BoxConstraints(maxHeight: 200),
+                      constraints: const BoxConstraints(maxHeight: 220),
                       decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.3),
                         border: Border.all(
-                          color: Theme.of(context).dividerColor,
+                          color: theme.colorScheme.outlineVariant,
                           width: 1,
                         ),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: ListView.builder(
+                      child: ListView.separated(
                         shrinkWrap: true,
+                        padding: const EdgeInsets.all(8),
                         itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final item = items[index];
                           return ListTile(
-                            title: Text(item.raw),
                             dense: true,
                             visualDensity: VisualDensity.compact,
+                            leading: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            title: Text(
+                              item.raw,
+                              style: theme.textTheme.bodyMedium,
+                            ),
                           );
                         },
                       ),
                     )
                   else
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
+                        color: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
-                        child: Text(
-                          '暂无${_getDictName(type)}数据',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.inbox_outlined,
+                              size: 32,
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withAlpha(180),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '暂无${_getDictName(type)}数据',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                 ],
               ),
             ),
-            isExpanded: _expandedStates[type]!,
+            crossFadeState:
+                isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
           ),
         ],
       ),
@@ -254,7 +351,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
     final allExpanded = _expandedStates.values.every((state) => state);
     final isNarrow = MediaQuery.of(context).size.width < 600;
-    final cardSpacing = isNarrow ? 8.0 : 12.0;
+    final cardSpacing = isNarrow ? 12.0 : 16.0;
+    final cardPadding = isNarrow ? 12.0 : 16.0;
+    final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -265,32 +364,29 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           children: [
             Text(
               '词库管理器',
-              style: TextStyle(
-                fontSize: isNarrow ? 18 : 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
-            FilledButton.icon(
-              icon: Icon(allExpanded ? Icons.expand_less : Icons.expand_more, size: isNarrow ? 18 : null),
+            TextButton.icon(
+              icon: Icon(
+                allExpanded ? Icons.unfold_less : Icons.unfold_more,
+                size: 18,
+              ),
               label: Text(allExpanded ? '折叠全部' : '展开全部'),
               onPressed: _toggleAll,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-                padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 12, vertical: isNarrow ? 6 : 8),
-              ),
             ),
           ],
         ),
 
-        SizedBox(height: isNarrow ? 12 : 16),
+        SizedBox(height: cardSpacing),
 
         // 设备词典
         _buildDictionaryCard(
           type: 'device',
           title: '设备词典管理',
           items: dictionaryProvider.deviceDict,
-          cardPadding: isNarrow ? 12.0 : 16.0,
+          cardPadding: cardPadding,
           onAdd: (value) async {
             final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addDevice(value);
@@ -310,7 +406,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           type: 'antenna',
           title: '天线词典管理',
           items: dictionaryProvider.antennaDict,
-          cardPadding: isNarrow ? 12.0 : 16.0,
+          cardPadding: cardPadding,
           onAdd: (value) async {
             final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addAntenna(value);
@@ -330,7 +426,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           type: 'callsign',
           title: '呼号词典管理',
           items: dictionaryProvider.callsignDict,
-          cardPadding: isNarrow ? 12.0 : 16.0,
+          cardPadding: cardPadding,
           onAdd: (value) async {
             final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addCallsign(value);
@@ -348,15 +444,15 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         // QTH词典
         _buildDictionaryCard(
           type: 'qth',
-          title: 'QTH词典管理',
+          title: 'QTH 词典管理',
           items: dictionaryProvider.qthDict,
-          cardPadding: isNarrow ? 12.0 : 16.0,
+          cardPadding: cardPadding,
           onAdd: (value) async {
             final messenger = ScaffoldMessenger.of(context);
             await dictionaryProvider.addQth(value);
             messenger.showSnackBar(
               SnackBar(
-                content: Text('已添加QTH: $value'),
+                content: Text('已添加 QTH: $value'),
                 duration: const Duration(seconds: 2),
               ),
             );

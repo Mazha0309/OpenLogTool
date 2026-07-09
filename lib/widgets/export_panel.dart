@@ -10,6 +10,7 @@ import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
+import 'package:openlogtool/config/app_config.dart';
 
 class ExportPanel extends StatefulWidget {
   const ExportPanel({super.key});
@@ -23,141 +24,286 @@ class _ExportPanelState extends State<ExportPanel> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWideScreen = constraints.maxWidth > 600;
+        final isWideScreen = constraints.maxWidth > 700;
         final isNarrow = constraints.maxWidth < 400;
-        final cardPadding = isNarrow ? 12.0 : 16.0;
-        final screenPadding = isNarrow ? 8.0 : 16.0;
+        final cardPadding = isNarrow ? 16.0 : 20.0;
+        final sectionSpacing = isNarrow ? 16.0 : 20.0;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(left: isNarrow ? 4 : 0),
-              child: Text(
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: isNarrow ? 12 : 16,
+            vertical: isNarrow ? 8 : 12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
                 '数据导入导出',
-                style: TextStyle(
-                  fontSize: isNarrow ? 18 : 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
-            ),
+              SizedBox(height: sectionSpacing),
 
-            SizedBox(height: isNarrow ? 16 : 24),
-
-            if (isWideScreen)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: screenPadding),
-                child: Row(
+              if (isWideScreen)
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildExportCard(context, cardPadding)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildImportCard(context, cardPadding)),
-                  ],
-                ),
-              )
-            else
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: screenPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildExportCard(context, cardPadding),
-                    SizedBox(height: isNarrow ? 12 : 16),
-                    _buildImportCard(context, cardPadding),
-                  ],
-                ),
-              ),
-
-            SizedBox(height: isNarrow ? 12 : 16),
-
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: screenPadding),
-              child: Container(
-                padding: EdgeInsets.all(cardPadding),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '文件格式说明',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isNarrow ? 13 : 14,
-                      ),
+                    Expanded(
+                      child: _buildQuickActionsCard(context, cardPadding),
                     ),
-                    SizedBox(height: isNarrow ? 6 : 8),
-                    Text(
-                      '• JSON: 标准JSON格式，包含所有记录数据\n'
-                      '• Excel: 使用Excel格式，包含分组和样式',
-                      style: TextStyle(
-                        fontSize: isNarrow ? 12 : 14,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    SizedBox(width: sectionSpacing),
+                    Expanded(
+                      child: _buildExcelSettingsCard(context, cardPadding),
                     ),
                   ],
-                ),
-              ),
-            ),
-          ],
+                )
+              else ...[
+                _buildQuickActionsCard(context, cardPadding),
+                SizedBox(height: sectionSpacing),
+                _buildExcelSettingsCard(context, cardPadding),
+              ],
+
+              SizedBox(height: sectionSpacing),
+
+              _buildFormatInfoCard(context, cardPadding),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildExportCard(BuildContext context, double cardPadding) {
+  Widget _buildQuickActionsCard(BuildContext context, double cardPadding) {
+    final theme = Theme.of(context);
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  '导出数据',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () => _showExportSettingsDialog(context),
-                  tooltip: 'Excel导出设置',
+                Icon(Icons.swap_horiz, color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '导入 / 导出',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  icon: const Icon(Icons.file_download),
-                  label: const Text('导出 JSON'),
-                  onPressed: () => _exportJSON(context),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
+            const SizedBox(height: 4),
+            Text(
+              '支持 JSON（完整数据）和 Excel（可视化表格）两种格式。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
+            ),
+            SizedBox(height: cardPadding),
+
+            // Export section
+            _buildActionGroup(
+              context,
+              title: '导出数据',
+              icon: Icons.file_download,
+              description: '将当前会话中的点名记录导出为文件',
+              children: [
+                _buildActionButton(
+                  context,
+                  label: '导出 JSON',
+                  icon: Icons.code,
+                  color: theme.colorScheme.primary,
+                  onPressed: () => _exportJSON(context),
                 ),
-                FilledButton.icon(
-                  icon: const Icon(Icons.table_chart),
-                  label: const Text('导出 Excel'),
+                const SizedBox(width: 12),
+                _buildActionButton(
+                  context,
+                  label: '导出 Excel',
+                  icon: Icons.table_chart,
+                  color: theme.colorScheme.secondary,
                   onPressed: () => _exportExcel(context),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
+                ),
+              ],
+            ),
+            SizedBox(height: cardPadding),
+
+            // Import section
+            _buildActionGroup(
+              context,
+              title: '导入数据',
+              icon: Icons.file_upload,
+              description: '从文件导入点名记录到当前会话',
+              children: [
+                _buildActionButton(
+                  context,
+                  label: '导入 JSON',
+                  icon: Icons.code,
+                  color: theme.colorScheme.tertiary,
+                  onPressed: () => _importJSON(context),
+                ),
+                const SizedBox(width: 12),
+                _buildActionButton(
+                  context,
+                  label: '导入 Excel',
+                  icon: Icons.table_chart,
+                  color: theme.colorScheme.outline,
+                  onPressed: () => _importExcel(context),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionGroup(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required String description,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 22),
+          child: Text(
+            description,
+            style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: children,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        foregroundColor: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+        backgroundColor: color,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  Widget _buildExcelSettingsCard(BuildContext context, double cardPadding) {
+    final theme = Theme.of(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settings = settingsProvider.exportSettings;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(cardPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.settings, color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Excel 导出设置',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _showExportSettingsDialog(context),
+                  icon: const Icon(Icons.open_in_full, size: 16),
+                  label: const Text('高级设置'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '预览并快速调整最常用的导出选项，完整选项请进入高级设置。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            SizedBox(height: cardPadding),
+
+            _buildSettingRow(
+              context,
+              label: '文件名模板',
+              value: settings.fileNameTemplate,
+              icon: Icons.insert_drive_file,
+            ),
+            const Divider(height: 24),
+            _buildSettingRow(
+              context,
+              label: 'Excel 抬头',
+              value: settings.headerText,
+              icon: Icons.title,
+            ),
+            const Divider(height: 24),
+            _buildSettingRow(
+              context,
+              label: '导出路径',
+              value: settings.exportPath.isEmpty ? '默认下载文件夹' : settings.exportPath,
+              icon: Icons.folder,
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                _buildColorChip(context, '抬头背景', settings.headerBackgroundColor),
+                const SizedBox(width: 12),
+                _buildColorChip(context, '表头背景', settings.headerRowBackgroundColor),
+                const SizedBox(width: 12),
+                _buildColorChip(context, '主控栏', settings.controllerBackgroundColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildToggleChip(
+                    context,
+                    label: '交替行',
+                    value: settings.useAlternateColors,
+                    onChanged: (v) {
+                      final updated = settings.copyWith(useAlternateColors: v);
+                      settingsProvider.updateExportSettings(updated);
+                    },
                   ),
                 ),
               ],
@@ -168,62 +314,141 @@ class _ExportPanelState extends State<ExportPanel> {
     );
   }
 
-  Widget _buildImportCard(BuildContext context, double cardPadding) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '导入数据',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
+  Widget _buildSettingRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    final theme = Theme.of(context);
 
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  icon: const Icon(Icons.file_upload),
-                  label: const Text('导入 JSON'),
-                  onPressed: () => _importJSON(context),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: theme.textTheme.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildColorChip(BuildContext context, String label, Color color) {
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: 40,
+          height: 24,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToggleChip(
+    BuildContext context, {
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(value: value, onChanged: onChanged, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ),
-                FilledButton.icon(
-                  icon: const Icon(Icons.table_chart),
-                  label: const Text('导入 Excel'),
-                  onPressed: () => _importExcel(context),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFormatInfoCard(BuildContext context, double cardPadding) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: EdgeInsets.all(cardPadding),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                '文件格式说明',
+                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '• JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。\n'
+            '• Excel：使用 .xlsx 格式，包含分组主控栏、颜色样式和底部信息，适合分享与打印。',
+            style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+          ),
+        ],
       ),
     );
   }
 
   void _showExportSettingsDialog(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    // 创建设置的副本，避免直接修改原设置
     ExportSettings settings = ExportSettings.fromJson(settingsProvider.exportSettings.toJson());
-    
-    // 创建持久的文本控制器
+
     final exportPathController = TextEditingController(text: settings.exportPath);
     final fileNameController = TextEditingController(text: settings.fileNameTemplate);
     final headerTextController = TextEditingController(text: settings.headerText);
@@ -235,334 +460,35 @@ class _ExportPanelState extends State<ExportPanel> {
           const dialogFont = TextStyle(fontSize: 14);
 
           return AlertDialog(
-            title: const Text('Excel导出设置', style: dialogFont),
+            title: const Text('Excel 导出设置', style: dialogFont),
+            contentPadding: EdgeInsets.zero,
             content: SizedBox(
-              width: 500,
-              height: 600,
+              width: 520,
+              height: 620,
               child: DefaultTabController(
                 length: 3,
                 child: Column(
                   children: [
                     const TabBar(
                       tabs: [
-                        Tab(text: '文件设置'),
-                        Tab(text: '样式设置'),
-                        Tab(text: '模板说明'),
+                        Tab(icon: Icon(Icons.folder_outlined), text: '文件'),
+                        Tab(icon: Icon(Icons.palette_outlined), text: '样式'),
+                        Tab(icon: Icon(Icons.help_outline), text: '模板'),
                       ],
                     ),
                     Expanded(
                       child: TabBarView(
                         children: [
-                          // 文件设置
-                          SingleChildScrollView(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // 导出路径
-                                const Text('导出路径', style: dialogFont),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: exportPathController,
-                                        decoration: InputDecoration(
-                                          hintText: '默认使用下载文件夹',
-                                          border: const OutlineInputBorder(),
-                                          suffixIcon: exportPathController.text.isNotEmpty
-                                            ? IconButton(
-                                                icon: const Icon(Icons.clear, size: 18),
-                                                onPressed: () {
-                                                  exportPathController.text = '';
-                                                  settings.exportPath = '';
-                                                  setState(() {});
-                                                },
-                                              )
-                                            : null,
-                                        ),
-                                        readOnly: true,
-                                        onTap: null,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton(
-                                      child: const Text('选择'),
-                                      onPressed: () async {
-                                        final result = await FilePicker.platform.getDirectoryPath();
-                                        if (result != null) {
-                                          exportPathController.text = result;
-                                          settings.exportPath = result;
-                                          setState(() {});
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-
-                                // 文件名模板
-                                const Text('文件名模板', style: dialogFont),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: fileNameController,
-                                  decoration: const InputDecoration(
-                                    hintText: '如: 点名记录_{yyyy}-{MM}-{dd}',
-                                    border: OutlineInputBorder(),
-                                    helperText: '使用模板变量自动生成文件名',
-                                  ),
-                                  onChanged: (value) {
-                                    settings.fileNameTemplate = value;
-                                  },
-                                ),
-                                const SizedBox(height: 24),
-
-                                // 抬头文字
-                                const Text('Excel抬头文字', style: dialogFont),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: headerTextController,
-                                  decoration: const InputDecoration(
-                                    hintText: '如: {yyyy}-{MM}-{dd}日点名记录',
-                                    border: OutlineInputBorder(),
-                                    helperText: '支持模板变量',
-                                  ),
-                                  onChanged: (value) {
-                                    settings.headerText = value;
-                                  },
-                                ),
-                              ],
-                            ),
+                          _buildFileSettingsTab(
+                            context,
+                            settings,
+                            exportPathController,
+                            fileNameController,
+                            headerTextController,
+                            setState,
                           ),
-
-                          // 样式设置
-                          SingleChildScrollView(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // 颜色设置
-                                _buildColorSetting(
-                                  context,
-                                  '抬头背景色',
-                                  settings.headerBackgroundColor,
-                                  (color) => setState(() => settings.headerBackgroundColor = color),
-                                  settings.fontFamily,
-                                ),
-                                const SizedBox(height: 16),
-
-                                _buildColorSetting(
-                                  context,
-                                  '表头背景色',
-                                  settings.headerRowBackgroundColor,
-                                  (color) => setState(() => settings.headerRowBackgroundColor = color),
-                                  settings.fontFamily,
-                                ),
-                                const SizedBox(height: 16),
-
-                                _buildColorSetting(
-                                  context,
-                                  '主控栏背景色',
-                                  settings.controllerBackgroundColor,
-                                  (color) => setState(() => settings.controllerBackgroundColor = color),
-                                  settings.fontFamily,
-                                ),
-                                const SizedBox(height: 16),
-
-                                _buildColorSetting(
-                                  context,
-                                  '普通背景色',
-                                  settings.tableBackgroundColor,
-                                  (color) => setState(() => settings.tableBackgroundColor = color),
-                                  settings.fontFamily,
-                                ),
-
-                                if (settings.useAlternateColors) ...[
-                                  const SizedBox(height: 16),
-                                  _buildColorSetting(
-                                    context,
-                                    '交替行颜色',
-                                    settings.alternateRowColor,
-                                    (color) => setState(() => settings.alternateRowColor = color),
-                                    settings.fontFamily,
-                                  ),
-                                ],
-
-                                const SizedBox(height: 16),
-
-                                // 开关设置
-                                Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('双色交替', style: dialogFont),
-                                          Text(
-                                            '启用交替行颜色',
-                                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: settings.useAlternateColors,
-                                      onChanged: (value) {
-                                        setState(() => settings.useAlternateColors = value);
-                                      },
-                                    ),
-                                  ],
-                                ),
-
-                                Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('底部信息', style: dialogFont),
-                                          Text(
-                                            '在表格底部显示导出信息',
-                                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: settings.showFooter,
-                                      onChanged: (value) {
-                                        setState(() => settings.showFooter = value);
-                                      },
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // 字体选择
-                                const Text('表格字体', style: dialogFont),
-                                const SizedBox(height: 8),
-                                DropdownButton<String>(
-                                  value: settings.fontFamily.isEmpty ? 'SarasaGothicSC' : settings.fontFamily,
-                                  isExpanded: true,
-                                  items: [
-                                    // 系统默认选项
-                                    const DropdownMenuItem(
-                                      value: '',
-                                      child: Text('系统默认'),
-                                    ),
-                                    // 可用字体列表
-                                    ...Provider.of<SettingsProvider>(context, listen: false)
-                                        .availableFonts
-                                        .map((font) => DropdownMenuItem(
-                                              value: font,
-                                              child: Text(font == 'SarasaGothicSC' ? '$font (内置)' : font),
-                                            )),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() => settings.fontFamily = value);
-                                    }
-                                  },
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // 恢复默认颜色
-                                OutlinedButton.icon(
-                                  icon: const Icon(Icons.restore, size: 18),
-                                  label: const Text('恢复默认颜色'),
-                                  onPressed: () {
-                                    setState(() {
-                                      settings.headerBackgroundColor = const Color(0xFF1E84D2);
-                                      settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
-                                      settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
-                                      settings.tableBackgroundColor = Colors.white;
-                                      settings.alternateRowColor = const Color(0xFFC0E5F2);
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // 模板说明
-                          SingleChildScrollView(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '模板变量说明',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                _buildTemplateHelpItem(context, '{yyyy}', '四位年份，如: 2024'),
-                                _buildTemplateHelpItem(context, '{MM}', '两位月份，如: 01, 12'),
-                                _buildTemplateHelpItem(context, '{dd}', '两位日期，如: 01, 31'),
-                                _buildTemplateHelpItem(context, '{HH}', '两位小时(24h)，如: 14'),
-                                _buildTemplateHelpItem(context, '{mm}', '两位分钟，如: 30'),
-                                _buildTemplateHelpItem(context, '{ss}', '两位秒数，如: 45'),
-
-                                const SizedBox(height: 16),
-                                const Divider(),
-                                const SizedBox(height: 16),
-
-                                const Text(
-                                  '使用示例',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-
-                                _buildExampleItem(
-                                  context,
-                                  '文件名: 点名记录_{yyyy}-{MM}-{dd}',
-                                  '点名记录_2024-03-28.xlsx',
-                                ),
-                                _buildExampleItem(
-                                  context,
-                                  '文件名: 通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}',
-                                  '通联_2024-03-28_143045.xlsx',
-                                ),
-                                _buildExampleItem(
-                                  context,
-                                  '抬头: {yyyy}年{MM}月{dd}日点名记录',
-                                  '2024年03月28日点名记录',
-                                ),
-
-                                const SizedBox(height: 16),
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primaryContainer.withAlpha(128),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.info_outline,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Expanded(
-                                        child: Text(
-                                          '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          _buildStyleSettingsTab(context, settings, setState),
+                          _buildTemplateHelpTab(context),
                         ],
                       ),
                     ),
@@ -582,7 +508,6 @@ class _ExportPanelState extends State<ExportPanel> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  // 从控制器获取最新值，确保所有更改都被保存
                   settings.exportPath = exportPathController.text;
                   settings.fileNameTemplate = fileNameController.text;
                   settings.headerText = headerTextController.text;
@@ -600,6 +525,307 @@ class _ExportPanelState extends State<ExportPanel> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildFileSettingsTab(
+    BuildContext context,
+    ExportSettings settings,
+    TextEditingController exportPathController,
+    TextEditingController fileNameController,
+    TextEditingController headerTextController,
+    StateSetter setState,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTextFieldGroup(
+            context,
+            label: '导出路径',
+            controller: exportPathController,
+            hintText: '默认使用下载文件夹',
+            readOnly: true,
+            helperText: '留空则自动使用系统下载目录',
+            trailing: FilledButton(
+              onPressed: () async {
+                final result = await FilePicker.platform.getDirectoryPath();
+                if (result != null) {
+                  exportPathController.text = result;
+                  settings.exportPath = result;
+                  setState(() {});
+                }
+              },
+              child: const Text('选择'),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildTextFieldGroup(
+            context,
+            label: '文件名模板',
+            controller: fileNameController,
+            hintText: '如：点名记录_{yyyy}-{MM}-{dd}',
+            helperText: '使用模板变量自动生成文件名',
+          ),
+          const SizedBox(height: 20),
+          _buildTextFieldGroup(
+            context,
+            label: 'Excel 抬头文字',
+            controller: headerTextController,
+            hintText: '如：{yyyy}-{MM}-{dd}日点名记录',
+            helperText: '支持模板变量',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextFieldGroup(
+    BuildContext context, {
+    required String label,
+    required TextEditingController controller,
+    String? hintText,
+    String? helperText,
+    bool readOnly = false,
+    Widget? trailing,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                readOnly: readOnly,
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  helperText: helperText,
+                  border: const OutlineInputBorder(),
+                  suffixIcon: controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            controller.text = '';
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                ),
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing,
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStyleSettingsTab(BuildContext context, ExportSettings settings, StateSetter setState) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildColorSetting(
+            context,
+            '抬头背景色',
+            settings.headerBackgroundColor,
+            (color) => setState(() => settings.headerBackgroundColor = color),
+            settings.fontFamily,
+          ),
+          const SizedBox(height: 16),
+          _buildColorSetting(
+            context,
+            '表头背景色',
+            settings.headerRowBackgroundColor,
+            (color) => setState(() => settings.headerRowBackgroundColor = color),
+            settings.fontFamily,
+          ),
+          const SizedBox(height: 16),
+          _buildColorSetting(
+            context,
+            '主控栏背景色',
+            settings.controllerBackgroundColor,
+            (color) => setState(() => settings.controllerBackgroundColor = color),
+            settings.fontFamily,
+          ),
+          const SizedBox(height: 16),
+          _buildColorSetting(
+            context,
+            '普通背景色',
+            settings.tableBackgroundColor,
+            (color) => setState(() => settings.tableBackgroundColor = color),
+            settings.fontFamily,
+          ),
+          if (settings.useAlternateColors) ...[
+            const SizedBox(height: 16),
+            _buildColorSetting(
+              context,
+              '交替行颜色',
+              settings.alternateRowColor,
+              (color) => setState(() => settings.alternateRowColor = color),
+              settings.fontFamily,
+            ),
+          ],
+          const SizedBox(height: 20),
+          _buildSwitchTile(
+            context,
+            title: '双色交替',
+            subtitle: '启用交替行颜色',
+            value: settings.useAlternateColors,
+            onChanged: (value) => setState(() => settings.useAlternateColors = value),
+          ),
+          _buildSwitchTile(
+            context,
+            title: '底部信息',
+            subtitle: '在表格底部显示导出信息',
+            value: settings.showFooter,
+            onChanged: (value) => setState(() => settings.showFooter = value),
+          ),
+          const SizedBox(height: 16),
+          _buildFontDropdown(context, settings, setState),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.restore, size: 18),
+            label: const Text('恢复默认颜色'),
+            onPressed: () {
+              setState(() {
+                settings.headerBackgroundColor = const Color(0xFF1E84D2);
+                settings.headerRowBackgroundColor = const Color(0xFFCFE7FF);
+                settings.controllerBackgroundColor = const Color(0xFFFFFFC3);
+                settings.tableBackgroundColor = Colors.white;
+                settings.alternateRowColor = const Color(0xFFC0E5F2);
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 14)),
+              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        ),
+        Switch(value: value, onChanged: onChanged),
+      ],
+    );
+  }
+
+  Widget _buildFontDropdown(BuildContext context, ExportSettings settings, StateSetter setState) {
+    final availableFonts = Provider.of<SettingsProvider>(context, listen: false).availableFonts;
+    final normalizedFamily = AppConfig.normalizeFontFamily(settings.fontFamily);
+    final initialValue = normalizedFamily.isEmpty ? 'SarasaGothicSC' : normalizedFamily;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('表格字体', style: TextStyle(fontSize: 14)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: initialValue,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+          items: [
+            const DropdownMenuItem(value: '', child: Text('系统默认', overflow: TextOverflow.ellipsis)),
+            ...availableFonts.map((font) => DropdownMenuItem(
+                  value: font,
+                  child: Text(
+                    font == 'SarasaGothicSC' ? '$font (内置)' : font,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              setState(() => settings.fontFamily = value);
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplateHelpTab(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '模板变量说明',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          _buildTemplateHelpItem(context, '{yyyy}', '四位年份，如：2024'),
+          _buildTemplateHelpItem(context, '{MM}', '两位月份，如：01, 12'),
+          _buildTemplateHelpItem(context, '{dd}', '两位日期，如：01, 31'),
+          _buildTemplateHelpItem(context, '{HH}', '两位小时（24h），如：14'),
+          _buildTemplateHelpItem(context, '{mm}', '两位分钟，如：30'),
+          _buildTemplateHelpItem(context, '{ss}', '两位秒数，如：45'),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 16),
+          Text(
+            '使用示例',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          _buildExampleItem(context, '文件名：点名记录_{yyyy}-{MM}-{dd}', '点名记录_2024-03-28.xlsx'),
+          _buildExampleItem(context, '文件名：通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}', '通联_2024-03-28_143045.xlsx'),
+          _buildExampleItem(context, '抬头：{yyyy}年{MM}月{dd}日点名记录', '2024年03月28日点名记录'),
+          const SizedBox(height: 16),
+          _buildInfoBox(
+            context,
+            '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBox(BuildContext context, String text) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withAlpha(128),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: theme.colorScheme.primary, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: const TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
@@ -762,7 +988,7 @@ class _ExportPanelState extends State<ExportPanel> {
     String fontFamily,
   ) async {
     HSVColor hsvColor = HSVColor.fromColor(initialColor);
-    
+
     return showDialog<Color>(
       context: context,
       builder: (context) {
@@ -770,7 +996,7 @@ class _ExportPanelState extends State<ExportPanel> {
           builder: (context, setState) {
             const dialogFont = TextStyle(fontSize: 14);
             Color currentColor = hsvColor.toColor();
-            
+
             return AlertDialog(
               title: Text(title, style: dialogFont),
               content: SizedBox(
@@ -860,13 +1086,13 @@ class _ExportPanelState extends State<ExportPanel> {
                                 ),
                               ),
                               SliderTheme(
-                                 data: SliderThemeData(
-                                   trackHeight: 20,
-                                   thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-                                   overlayShape: SliderComponentShape.noOverlay,
-                                   activeTrackColor: Colors.transparent,
-                                   inactiveTrackColor: Colors.transparent,
-                                 ),
+                                data: SliderThemeData(
+                                  trackHeight: 20,
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                  overlayShape: SliderComponentShape.noOverlay,
+                                  activeTrackColor: Colors.transparent,
+                                  inactiveTrackColor: Colors.transparent,
+                                ),
                                 child: Slider(
                                   value: hsvColor.hue,
                                   min: 0,
@@ -1008,8 +1234,7 @@ class _ExportPanelState extends State<ExportPanel> {
     try {
       final jsonBytes = ExportService.generateJsonBytes(logs);
       final now = DateTime.now();
-      String filename = ExportService.generateFileName(
-          settings.fileNameTemplate, now);
+      String filename = ExportService.generateFileName(settings.fileNameTemplate, now);
       if (!filename.endsWith('.json')) {
         filename += '.json';
       }
@@ -1029,10 +1254,13 @@ class _ExportPanelState extends State<ExportPanel> {
       }
 
       if (saveResult.usedSaf) {
-        _showSnackBar('JSON导出成功，已通过系统文件选择器保存');
+        _showSnackBar('JSON 导出成功，已通过系统文件选择器保存');
       } else {
         _showSuccessDialog(
-            'JSON导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+          'JSON 导出成功',
+          '文件已保存到:\n${saveResult.path}',
+          saveResult.path!,
+        );
       }
     } catch (e) {
       _showSnackBar('导出失败: $e');
@@ -1054,12 +1282,11 @@ class _ExportPanelState extends State<ExportPanel> {
       final now = DateTime.now();
       final bytes = ExportService.generateExcelBytes(logs, settings, now);
       if (bytes == null) {
-        _showSnackBar('导出失败: 无法生成Excel文件');
+        _showSnackBar('导出失败: 无法生成 Excel 文件');
         return;
       }
 
-      String filename = ExportService.generateFileName(
-          settings.fileNameTemplate, now);
+      String filename = ExportService.generateFileName(settings.fileNameTemplate, now);
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';
       }
@@ -1079,10 +1306,13 @@ class _ExportPanelState extends State<ExportPanel> {
       }
 
       if (saveResult.usedSaf) {
-        _showSnackBar('Excel导出成功，已通过系统文件选择器保存');
+        _showSnackBar('Excel 导出成功，已通过系统文件选择器保存');
       } else {
         _showSuccessDialog(
-            'Excel导出成功', '文件已保存到:\n${saveResult.path}', saveResult.path!);
+          'Excel 导出成功',
+          '文件已保存到:\n${saveResult.path}',
+          saveResult.path!,
+        );
       }
     } catch (e) {
       _showSnackBar('导出失败: $e');
@@ -1118,7 +1348,7 @@ class _ExportPanelState extends State<ExportPanel> {
   }
 
   Future<void> _importExcel(BuildContext context) async {
-    _showSnackBar('Excel导入功能开发中');
+    _showSnackBar('Excel 导入功能开发中');
   }
 
   void _showSnackBar(String message) {
