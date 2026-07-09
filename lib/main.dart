@@ -6,7 +6,6 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
-import 'package:openlogtool/providers/sync_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
@@ -48,51 +47,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => SyncProvider()),
         ChangeNotifierProvider(create: (_) => SessionProvider()),
-        ChangeNotifierProxyProvider<SyncProvider, DictionaryProvider>(
-          create: (_) => DictionaryProvider(),
-          update: (_, syncProvider, dictionaryProvider) {
-            final provider = dictionaryProvider ?? DictionaryProvider();
-            provider.setOnDictionaryChanged(() async {
-              if (syncProvider.settings.syncEnabled &&
-                  syncProvider.settings.syncMode == 'realtime') {
-                await syncProvider.triggerSyncAndWait();
-              }
-            });
-            return provider;
-          },
-        ),
-        ChangeNotifierProxyProvider<SyncProvider, LogProvider>(
-          create: (_) => LogProvider(),
-          update: (context, syncProvider, logProvider) {
-            final provider = logProvider ?? LogProvider();
-            provider.setOnDataChanged(() async {
-              if (syncProvider.settings.syncEnabled &&
-                  syncProvider.settings.syncMode == 'realtime') {
-                await syncProvider.triggerSyncAndWait();
-              }
-            });
-            final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-            provider.setOnLogChanged((log, isDelete) async {
-              if (syncProvider.settings.syncEnabled &&
-                  sessionProvider.currentSessionId != null) {
-                if (isDelete) {
-                  await syncProvider.pushLogDeleteToCollab(
-                    sessionProvider.currentSessionId!,
-                    log.id,
-                  );
-                } else {
-                  await syncProvider.pushLogUpsertToCollab(
-                    sessionProvider.currentSessionId!,
-                    log.toJson(),
-                  );
-                }
-              }
-            });
-            return provider;
-          },
-        ),
+        ChangeNotifierProvider(create: (_) => DictionaryProvider()),
+        ChangeNotifierProvider(create: (_) => LogProvider()),
       ],
       child: const MyApp(),
     ),
