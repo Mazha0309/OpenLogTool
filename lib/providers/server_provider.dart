@@ -14,6 +14,10 @@ class ServerProvider with ChangeNotifier {
   String? get username => _username;
   String? get token => _token;
 
+  ServerProvider() {
+    loadSettings();
+  }
+
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _serverUrl = prefs.getString('server_url') ?? '';
@@ -24,9 +28,9 @@ class ServerProvider with ChangeNotifier {
   }
 
   Future<void> setServerUrl(String url) async {
-    _serverUrl = url;
+    _serverUrl = url.replaceAll(RegExp(r'/$'), '');
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('server_url', url);
+    await prefs.setString('server_url', _serverUrl);
     notifyListeners();
   }
 

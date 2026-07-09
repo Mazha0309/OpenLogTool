@@ -855,6 +855,7 @@ class SettingsPanel extends StatelessWidget {
   }
 
   void _showLoginDialog(BuildContext context, ServerProvider serverProvider) {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
     showDialog(
@@ -884,7 +885,8 @@ class SettingsPanel extends StatelessWidget {
                 await serverProvider.login(usernameController.text, passwordController.text);
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('登录失败: $e')));
+                if (context.mounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text('登录失败: $e')));
+                if (ctx.mounted) Navigator.pop(ctx);
               }
             },
             child: const Text('登录'),
@@ -895,6 +897,7 @@ class SettingsPanel extends StatelessWidget {
   }
 
   void _showRegisterDialog(BuildContext context, ServerProvider serverProvider) {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
     showDialog(
@@ -924,7 +927,8 @@ class SettingsPanel extends StatelessWidget {
                 await serverProvider.register(usernameController.text, passwordController.text);
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('注册失败: $e')));
+                if (context.mounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text('注册失败: $e')));
+                if (ctx.mounted) Navigator.pop(ctx);
               }
             },
             child: const Text('注册'),
