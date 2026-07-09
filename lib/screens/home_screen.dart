@@ -171,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showGenerateShareCode(BuildContext context, String sessionId) async {
     final sv = Provider.of<ServerProvider>(context, listen: false);
     if (!sv.isLoggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
+      context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
       return;
     }
     try {
@@ -213,14 +213,14 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('生成失败: $e')));
+      if (context.mounted) context.showLoggedSnackBar(SnackBar(content: Text('生成失败: $e')));
     }
   }
 
   void _showJoinByCodeDialog(BuildContext context) {
     final sv = Provider.of<ServerProvider>(context, listen: false);
     if (!sv.isLoggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
+      context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
       return;
     }
     final codeController = TextEditingController();
@@ -255,10 +255,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       await lp.addLog(LogEntry.fromJson(logData as Map<String, dynamic>), sessionId: sp.currentSessionId);
                     }
                   }
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入协作')));
+                  context.showLoggedSnackBar(const SnackBar(content: Text('已加入协作')));
                 }
               } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('加入失败: $e')));
+                if (ctx.mounted) context.showLoggedSnackBar(SnackBar(content: Text('加入失败: $e')));
               }
             },
             child: const Text('加入'),
@@ -299,7 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 _showManageSharesDialog(context);
                               }
                             } catch (e) {
-                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('撤销失败: $e')));
+                              if (context.mounted) context.showLoggedSnackBar(SnackBar(content: Text('撤销失败: $e')));
                             }
                           },
                         ),
@@ -313,14 +313,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('获取列表失败: $e')));
+      if (context.mounted) context.showLoggedSnackBar(SnackBar(content: Text('获取列表失败: $e')));
     }
   }
 
   void _showLiveshareLink(BuildContext context, String sessionId) {
     final sv = Provider.of<ServerProvider>(context, listen: false);
     if (!sv.isLoggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
+      context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
       return;
     }
     final url = '${sv.serverUrl}/live/$sessionId';
@@ -349,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final lp = Provider.of<LogProvider>(context, listen: false);
     final sv = Provider.of<ServerProvider>(context, listen: false);
     if (!sv.isLoggedIn) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (context.mounted) context.showLoggedSnackBar(
         const SnackBar(content: Text('请先在设置中登录服务器')),
       );
       return;
@@ -378,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (context.mounted) context.showLoggedSnackBar(
         SnackBar(content: Text('分享失败: $e')),
       );
     }
@@ -387,7 +387,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showJoinShareDialog(BuildContext context) async {
     final sv = Provider.of<ServerProvider>(context, listen: false);
     if (!sv.isLoggedIn) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (context.mounted) context.showLoggedSnackBar(
         const SnackBar(content: Text('请先在设置中登录服务器')),
       );
       return;
@@ -396,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final sessions = await sv.listSessions();
       if (!context.mounted) return;
       if (sessions.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        context.showLoggedSnackBar(
           const SnackBar(content: Text('服务器上没有会话')),
         );
         return;
@@ -427,11 +427,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           await lp.addLog(LogEntry.fromJson(logData as Map<String, dynamic>), sessionId: sp.currentSessionId);
                         }
                       }
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                      if (context.mounted) context.showLoggedSnackBar(
                         const SnackBar(content: Text('已下载并切换到该会话')),
                       );
                     } catch (e) {
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                      if (context.mounted) context.showLoggedSnackBar(
                         SnackBar(content: Text('下载失败: $e')),
                       );
                     }
@@ -446,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (context.mounted) context.showLoggedSnackBar(
         SnackBar(content: Text('获取会话列表失败: $e')),
       );
     }
