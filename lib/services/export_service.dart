@@ -155,7 +155,7 @@ class ExportService {
     sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
     sheet.merge(
       excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
-      excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 0),
+      excel_lib.CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: 0),
       customValue: excel_lib.TextCellValue(headerText),
     );
     sheet.row(0).forEach((cell) {
@@ -178,7 +178,7 @@ class ExportService {
     sheet.setRowHeight(0, 30);
 
     // Column headers
-    final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+    final headers = ['#', '时间', '主控', '呼号', 'RST发', 'RST收', 'QTH', '设备', '功率', '天线', '高度', '备注'];
     sheet.insertRowIterables(
       headers.map((e) => excel_lib.TextCellValue(e)).toList(),
       1,
@@ -215,7 +215,7 @@ class ExportService {
         final controllerTime = calculateControllerTime(log.time);
 
         final controllerRow = <String>[
-          '点名主控:', controllerTime, log.controller, '', '', '', '', '', '', ''];
+          '点名主控:', controllerTime, log.controller, '', '', '', '', '', '', '', '', ''];
         sheet.insertRowIterables(
           controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(),
           currentRow,
@@ -245,17 +245,22 @@ class ExportService {
           : whiteColor;
       blockRowColorIndex++;
 
+      final displayTime = log.time.length >= 16
+          ? log.time.substring(11, 16)
+          : (log.time.length >= 5 ? log.time.substring(0, 5) : log.time);
       final rowData = [
         excel_lib.TextCellValue(globalIndex.toString()),
-        excel_lib.TextCellValue(log.time),
+        excel_lib.TextCellValue(displayTime),
+        excel_lib.TextCellValue(log.controller),
         excel_lib.TextCellValue(log.callsign),
         excel_lib.TextCellValue(log.report),
+        excel_lib.TextCellValue(log.rstRcvd),
         excel_lib.TextCellValue(log.qth),
         excel_lib.TextCellValue(log.device),
         excel_lib.TextCellValue(log.power),
         excel_lib.TextCellValue(log.antenna),
         excel_lib.TextCellValue(log.height),
-        excel_lib.TextCellValue(''),
+        excel_lib.TextCellValue(log.remarks),
       ];
       sheet.insertRowIterables(rowData, currentRow);
       sheet.row(currentRow).forEach((cell) {
@@ -303,7 +308,7 @@ class ExportService {
           excel_lib.CellIndex.indexByColumnRow(
               columnIndex: 0, rowIndex: currentRow),
           excel_lib.CellIndex.indexByColumnRow(
-              columnIndex: 9, rowIndex: currentRow),
+              columnIndex: 11, rowIndex: currentRow),
           customValue: excel_lib.TextCellValue(text),
         );
         sheet.row(currentRow).forEach((cell) {
@@ -338,7 +343,12 @@ class ExportService {
   /// 计算控制器时间显示值（比第一条记录早一分钟并取整）。
   static String calculateControllerTime(String timeStr) {
     if (timeStr.isEmpty) return '';
-
+    // Handle ISO timestamp: "2026-07-09T14:30:00" → "14:30"
+    if (timeStr.length >= 16) {
+      timeStr = timeStr.substring(11, 16);
+    } else if (timeStr.length >= 5) {
+      timeStr = timeStr.substring(0, 5);
+    }
     final parts = timeStr.split(':');
     if (parts.length < 2) return timeStr;
 
