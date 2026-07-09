@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -107,7 +108,158 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  @override
+  void _showShareOptions(BuildContext context) {
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final sessionId = sessionProvider.currentSessionId;
+    if (sessionId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('分享'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.cloud_upload),
+              title: const Text('上传到服务器'),
+              subtitle: const Text('上传当前会话，其他人可通过 Liveshare 查看'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _shareSession(context, sessionId);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.cloud_download),
+              title: const Text('从服务器下载'),
+              subtitle: const Text('查看服务器上的其他会话'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showJoinShareDialog(context);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Future<void> _shareSession(BuildContext context, String sessionId) async {
+    final sp = Provider.of<SessionProvider>(context, listen: false);
+    final lp = Provider.of<LogProvider>(context, listen: false);
+    final sv = Provider.of<ServerProvider>(context, listen: false);
+    if (!sv.isLoggedIn) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在设置中登录服务器')),
+      );
+      return;
+    }
+    try {
+      await sv.uploadSession(sessionId, sp.currentSession?.title ?? '', lp.logs.map((l) => l.toMap()).toList());
+      if (context.mounted) {
+        final url = '${sv.serverUrl}/live/$sessionId';
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('已分享'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('其他人可通过以下链接实时查看：'),
+                const SizedBox(height: 8),
+                SelectableText(url, style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('分享失败: $e')),
+      );
+    }
+  }
+
+  void _showJoinShareDialog(BuildContext context) async {
+    final sv = Provider.of<ServerProvider>(context, listen: false);
+    if (!sv.isLoggedIn) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在设置中登录服务器')),
+      );
+      return;
+    }
+    try {
+      final sessions = await sv.listSessions();
+      if (!context.mounted) return;
+      if (sessions.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('服务器上没有会话')),
+        );
+        return;
+      }
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('服务器上的会话'),
+          content: SizedBox(
+            width: 300,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: sessions.length,
+              itemBuilder: (_, i) {
+                final s = sessions[i];
+                return ListTile(
+                  title: Text(s['title']?.toString() ?? ''),
+                  subtitle: Text(s['created_at']?.toString() ?? ''),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      final data = await sv.downloadSession(s['id']);
+                      final sp = Provider.of<SessionProvider>(context, listen: false);
+                      final lp = Provider.of<LogProvider>(context, listen: false);
+                      await sp.startNewSession(title: data['title'] ?? '');
+                      if (data['logs'] is List) {
+                        for (final logData in data['logs']) {
+                          await lp.addLog(LogEntry.fromJson(logData as Map<String, dynamic>), sessionId: sp.currentSessionId);
+                        }
+                      }
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('已下载并切换到该会话')),
+                      );
+                    } catch (e) {
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('下载失败: $e')),
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('获取会话列表失败: $e')),
+      );
+    }
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -121,10 +273,10 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: IndexedStack(
           index: _selectedIndex,
-          children: const [
-            AddRecordPage(),
-            ImportExportPage(),
-            SettingsPage(),
+          children: [
+            AddRecordPage(onSharePressed: () => _showShareOptions(context), onJoinPressed: () => _showJoinShareDialog(context)),
+            const ImportExportPage(),
+            const SettingsPage(),
           ],
         ),
       ),
@@ -157,7 +309,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class AddRecordPage extends StatelessWidget {
-  const AddRecordPage({super.key});
+  final VoidCallback? onSharePressed;
+  final VoidCallback? onJoinPressed;
+
+  const AddRecordPage({super.key, this.onSharePressed, this.onJoinPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -206,22 +361,24 @@ class AddRecordPage extends StatelessWidget {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.cloud_upload_outlined, size: 20),
-                                tooltip: '上传到服务器',
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                onPressed: () => _uploadToServer(context),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.cloud_download_outlined, size: 20),
-                                tooltip: '从服务器下载',
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                onPressed: () => _downloadFromServer(context),
-                              ),
+                              if (onSharePressed != null)
+                                IconButton(
+                                  icon: const Icon(Icons.share, size: 20),
+                                  tooltip: '分享',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  onPressed: onSharePressed,
+                                ),
+                              if (onJoinPressed != null)
+                                IconButton(
+                                  icon: const Icon(Icons.group_add, size: 20),
+                                  tooltip: '加入合作',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  onPressed: onJoinPressed,
+                                ),
                             ],
                           ),
                         ],
@@ -293,22 +450,24 @@ class AddRecordPage extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.cloud_upload_outlined, size: 20),
-                            tooltip: '上传到服务器',
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            onPressed: () => _uploadToServer(context),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.cloud_download_outlined, size: 20),
-                            tooltip: '从服务器下载',
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            onPressed: () => _downloadFromServer(context),
-                          ),
+                          if (onSharePressed != null)
+                            IconButton(
+                              icon: const Icon(Icons.share, size: 20),
+                              tooltip: '分享',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: onSharePressed,
+                            ),
+                          if (onJoinPressed != null)
+                            IconButton(
+                              icon: const Icon(Icons.group_add, size: 20),
+                              tooltip: '加入合作',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: onJoinPressed,
+                            ),
                         ],
                       ),
                     ],
@@ -593,112 +752,6 @@ class AddRecordPage extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _uploadToServer(BuildContext context) async {
-    final serverProvider = Provider.of<ServerProvider>(context, listen: false);
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final session = sessionProvider.currentSession;
-    if (session == null) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('没有当前记录')));
-      }
-      return;
-    }
-    if (!serverProvider.isLoggedIn) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中配置服务器')));
-      }
-      return;
-    }
-    try {
-      await serverProvider.uploadSession(
-        session.sessionId,
-        session.title,
-        logProvider.logs.map((log) => log.toMap()).toList(),
-      );
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('上传成功')));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(SnackBar(content: Text('上传失败: $e'), backgroundColor: Colors.red));
-      }
-    }
-  }
-
-  Future<void> _downloadFromServer(BuildContext context) async {
-    final serverProvider = Provider.of<ServerProvider>(context, listen: false);
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    if (!serverProvider.isLoggedIn) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中配置服务器')));
-      }
-      return;
-    }
-    try {
-      final sessions = await serverProvider.listSessions();
-      if (!context.mounted) return;
-      if (sessions.isEmpty) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('服务器上没有记录')));
-        return;
-      }
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('从服务器下载'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: sessions.length,
-              itemBuilder: (_, i) {
-                final s = sessions[i];
-                return ListTile(
-                  title: Text(s['title'] as String? ?? '无标题'),
-                  subtitle: Text(s['id'] as String? ?? ''),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    try {
-                      final data = await serverProvider.downloadSession(s['id'] as String);
-                      final logsMap = data['logs'] as List<dynamic>? ?? [];
-                      final title = data['title'] as String? ?? s['title'] as String? ?? '下载记录';
-                      await sessionProvider.startNewSession(title: title);
-                      if (logsMap.isNotEmpty) {
-                        final importedLogs = logsMap
-                            .map((m) => LogEntry.fromMap(m as Map<String, dynamic>))
-                            .toList();
-                        await logProvider.importLogs(importedLogs);
-                      }
-                      await logProvider.reloadForSession(sessionProvider.currentSessionId);
-                      if (context.mounted) {
-                        context.showLoggedSnackBar(const SnackBar(content: Text('下载成功')));
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        context.showLoggedSnackBar(SnackBar(content: Text('下载失败: $e'), backgroundColor: Colors.red));
-                      }
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: const Text('关闭'),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(SnackBar(content: Text('获取服务器列表失败: $e'), backgroundColor: Colors.red));
-      }
-    }
   }
 }
 
