@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ServerProvider with ChangeNotifier {
   String _serverUrl = '';
   String? _token;
-  String? _userId;
   String? _username;
   bool _isLoggedIn = false;
 
@@ -19,7 +18,6 @@ class ServerProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _serverUrl = prefs.getString('server_url') ?? '';
     _token = prefs.getString('server_token');
-    _userId = prefs.getString('server_user_id');
     _username = prefs.getString('server_username');
     _isLoggedIn = _token != null;
     notifyListeners();
@@ -58,12 +56,10 @@ class ServerProvider with ChangeNotifier {
 
   void _saveAuth(String token, String userId, String username) {
     _token = token;
-    _userId = userId;
     _username = username;
     _isLoggedIn = true;
     SharedPreferences.getInstance().then((prefs) {
       prefs.setString('server_token', token);
-      prefs.setString('server_user_id', userId);
       prefs.setString('server_username', username);
     });
     notifyListeners();
@@ -71,12 +67,10 @@ class ServerProvider with ChangeNotifier {
 
   Future<void> logout() async {
     _token = null;
-    _userId = null;
     _username = null;
     _isLoggedIn = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('server_token');
-    await prefs.remove('server_user_id');
     await prefs.remove('server_username');
     notifyListeners();
   }
