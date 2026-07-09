@@ -1,6 +1,6 @@
 use sqlx::SqlitePool;
 
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
@@ -22,6 +22,9 @@ pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     }
     if version < 2 {
         migrate_v2(pool).await?;
+    }
+    if version < 3 {
+        migrate_v3(pool).await?;
     }
 
     sqlx::query("INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, ?)")
@@ -154,5 +157,19 @@ async fn migrate_v2(pool: &SqlitePool) -> anyhow::Result<()> {
     .execute(pool)
     .await?;
 
+    Ok(())
+}
+
+async fn migrate_v3(pool: &SqlitePool) -> anyhow::Result<()> {
+    // 备注列可能已存在（之前手动添加），忽略重复列错误。
+    let result = sqlx::query("ALTER TABLE logs ADD COLUMN remarks TEXT")
+        .execute(pool)
+        .await;
+    if let Err(e) = &result {
+        let msg = format!("{e}");
+        if !msg.contains("duplicate column") {
+            result?;
+        }
+    }
     Ok(())
 }
