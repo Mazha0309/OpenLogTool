@@ -53,3 +53,4 @@ app.*.map.json
 
 # Superpowers (brainstorming artifacts)
 .superpowers/
+.worktrees/
