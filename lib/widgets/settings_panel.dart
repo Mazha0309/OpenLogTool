@@ -6,10 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
-import 'package:openlogtool/providers/log_provider.dart';
-import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/sync_provider.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
@@ -851,14 +849,12 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(context);
               try {
-                final dictionaryProvider =
-                    Provider.of<DictionaryProvider>(context, listen: false);
-                await dictionaryProvider.resetAllData();
+                await RustApi.clearAllData();
                 if (context.mounted) {
                   context.showLoggedSnackBar(
                     const SnackBar(
-                      content: Text('已清空所有数据'),
-                      duration: Duration(seconds: 2),
+                      content: Text('已清空所有数据，请重启应用以重新加载。'),
+                      duration: Duration(seconds: 3),
                     ),
                   );
                 }
@@ -882,9 +878,7 @@ class SettingsPanel extends StatelessWidget {
 
   void _exportDatabase(BuildContext context) async {
     try {
-      final db = DatabaseHelper();
-      final jsonData = await db.exportDatabase();
-      final stats = await db.getDatabaseStats();
+      final jsonData = await RustApi.exportDatabase();
 
       final now = DateTime.now();
       final fileName =
@@ -906,10 +900,9 @@ class SettingsPanel extends StatelessWidget {
 
         if (context.mounted) {
           context.showLoggedSnackBar(
-            SnackBar(
-              content: Text(
-                  '数据库已导出！\n记录: ${stats['logs']} 条\n设备: ${stats['device_dictionary']} 个\n天线: ${stats['antenna_dictionary']} 个\nQTH: ${stats['qth_dictionary']} 个\n呼号: ${stats['callsign_dictionary']} 个\n历史: ${stats['history']} 条'),
-              duration: const Duration(seconds: 5),
+            const SnackBar(
+              content: Text('数据库已导出！'),
+              duration: Duration(seconds: 3),
             ),
           );
         }
@@ -962,14 +955,13 @@ class SettingsPanel extends StatelessWidget {
 
       if (result != null && result.files.single.bytes != null) {
         final jsonData = utf8.decode(result.files.single.bytes!);
-        final db = DatabaseHelper();
-        await db.importDatabase(jsonData);
+        await RustApi.importDatabase(jsonData: jsonData);
 
         if (context.mounted) {
           context.showLoggedSnackBar(
             const SnackBar(
-              content: Text('数据库导入成功！'),
-              duration: Duration(seconds: 3),
+              content: Text('数据库导入成功！请重启应用以重新加载数据。'),
+              duration: Duration(seconds: 5),
             ),
           );
         }
@@ -1013,43 +1005,11 @@ class SettingsPanel extends StatelessWidget {
   }
 
   Future<String> _buildDatabaseStatus(BuildContext ctx) async {
-    final StringBuffer info = StringBuffer();
-    info.writeln('=== 应用状态 ===');
-
     try {
-      final logProvider = Provider.of<LogProvider>(ctx, listen: false);
-      final dictProvider = Provider.of<DictionaryProvider>(ctx, listen: false);
-
-      info.writeln('点名记录数: ${logProvider.logs.length}');
-      info.writeln('设备词典数: ${dictProvider.deviceDict.length}');
-      info.writeln('天线词典数: ${dictProvider.antennaDict.length}');
-      info.writeln('QTH词典数: ${dictProvider.qthDict.length}');
-      info.writeln('呼号词典数: ${dictProvider.callsignDict.length}');
-
-      final db = DatabaseHelper();
-      final database = await db.database;
-      final tables = await database.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-      info.writeln('');
-      info.writeln('=== 数据库表 ===');
-      for (final table in tables) {
-        final name = table['name'] as String;
-        info.writeln('表: $name');
-        try {
-          final count =
-              await database.rawQuery('SELECT COUNT(*) as c FROM "$name"');
-          info.writeln('  行数: ${count.first['c']}');
-        } catch (_) {
-          info.writeln('  无法读取行数');
-        }
-      }
+      return await RustApi.getDatabaseStatus();
     } catch (e) {
-      info.writeln('');
-      info.writeln('=== 错误 ===');
-      info.writeln('$e');
+      return '读取数据库状态失败: $e';
     }
-
-    return info.toString();
   }
 
   void _showAboutDialog(BuildContext context) {
