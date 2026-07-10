@@ -220,7 +220,7 @@ class SettingsPanel extends StatelessWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        SelectableText(
                           entry.message,
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                         ),
