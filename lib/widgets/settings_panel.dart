@@ -72,7 +72,7 @@ class SettingsPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
-                      initialValue: serverProvider.serverUrl,
+                      controller: TextEditingController(text: serverProvider.serverUrl),
                       decoration: const InputDecoration(
                         labelText: '服务器地址',
                         hintText: 'http://your-server:3000',
