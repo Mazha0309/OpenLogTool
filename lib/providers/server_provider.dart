@@ -15,7 +15,7 @@ class ServerProvider with ChangeNotifier {
   String? get token => _token;
 
   ServerProvider() {
-    scheduleMicrotask(() async {
+    Future.microtask(() async {
       try {
         await loadSettings();
       } catch (e) {
