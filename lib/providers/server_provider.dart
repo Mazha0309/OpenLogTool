@@ -15,7 +15,13 @@ class ServerProvider with ChangeNotifier {
   String? get token => _token;
 
   ServerProvider() {
-    loadSettings();
+    scheduleMicrotask(() async {
+      try {
+        await loadSettings();
+      } catch (e) {
+        debugPrint('[ServerProvider] loadSettings error: $e');
+      }
+    });
   }
 
   Future<void> loadSettings() async {
