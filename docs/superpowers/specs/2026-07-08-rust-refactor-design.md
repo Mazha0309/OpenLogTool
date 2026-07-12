@@ -1,5 +1,7 @@
 # OpenLogTool Rust 重构设计文档
 
+> 实施修订（2026-07-12）：JSON/Excel 导出统一保留在 Dart `ExportService`。当前导出需要主题色、字体、交替行、主控分组、文件名模板和跨平台保存设置，Rust 的固定样式导出与实际 UI 重复，相关 Rust 模块、依赖和 bridge 已移除。本文后续 Rust 导出章节仅保留为早期设计记录。
+
 ## 概述
 
 将 OpenLogTool 从纯 Flutter/Dart 重构为 **Flutter + Rust** 混合架构。Flutter 仅负责 UI 层，所有核心逻辑（数据库、业务逻辑、网络同步、导入导出）迁移到 Rust。
