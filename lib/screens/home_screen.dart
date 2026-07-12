@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/screens/collaboration_screen.dart';
+import 'package:openlogtool/screens/session_hub_page.dart';
+import 'package:openlogtool/services/controller_window_service.dart';
+import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
@@ -22,13 +25,27 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  bool _isBottomNavVisible = true;
-  double _lastScrollOffset = 0;
+
+  static const _destinations = <_AppDestination>[
+    _AppDestination(_AppSection.workbench, Icons.radio_outlined, Icons.radio),
+    _AppDestination(_AppSection.sessions, Icons.groups_outlined, Icons.groups),
+    _AppDestination(_AppSection.data, Icons.storage_outlined, Icons.storage),
+    _AppDestination(
+        _AppSection.settings, Icons.settings_outlined, Icons.settings),
+  ];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
+  }
+
+  @override
+  void dispose() {
+    ControllerWindowService.closeAll().catchError((Object error) {
+      debugPrint('[ControllerWindow] close failed: $error');
+    });
+    super.dispose();
   }
 
   Future<void> _initSession() async {
@@ -68,105 +85,242 @@ class _HomeScreenState extends State<HomeScreen> {
     lp.reloadForSession(sp.currentSessionId);
   }
 
-  void _onScroll(ScrollNotification notification) {
-    if (notification is ScrollUpdateNotification) {
-      final currentOffset = notification.metrics.pixels;
-      if (currentOffset > _lastScrollOffset && currentOffset > 50) {
-        if (_isBottomNavVisible) {
-          setState(() => _isBottomNavVisible = false);
-        }
-      } else if (currentOffset < _lastScrollOffset - 10) {
-        if (!_isBottomNavVisible) {
-          setState(() => _isBottomNavVisible = true);
-        }
-      }
-      _lastScrollOffset = currentOffset;
-    }
-  }
-
-  static const List<BottomNavigationBarItem> _navItems =
-      <BottomNavigationBarItem>[
-    BottomNavigationBarItem(
-      icon: Icon(Icons.add_circle_outline, size: 24),
-      activeIcon: Icon(Icons.add_circle, size: 24),
-      label: '添加记录',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.import_export, size: 24),
-      activeIcon: Icon(Icons.import_export, size: 24),
-      label: '导入导出',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.settings, size: 24),
-      activeIcon: Icon(Icons.settings, size: 24),
-      label: '设置',
-    ),
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  void _onItemTapped(int index) => setState(() => _selectedIndex = index);
 
   @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      const _WorkbenchPage(),
+      const SessionHubPage(),
+      const ImportExportPage(),
+      const SettingsPage(),
+    ];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OpenLogTool'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cloud_sync),
-            tooltip: '协作会话',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const CollaborationScreen(),
+        title: Text(_destinations[_selectedIndex].label(context.l10n)),
+        centerTitle: false,
+        actions: const [_AppBarSyncStatus(), SizedBox(width: 8)],
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = IndexedStack(
+            index: _selectedIndex,
+            children: pages,
+          );
+          if (constraints.maxWidth < 720) return content;
+          final expanded = constraints.maxWidth >= 1200;
+          return Row(
+            children: [
+              NavigationRail(
+                key: Key(expanded ? 'desktop-navigation' : 'tablet-navigation'),
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: _onItemTapped,
+                extended: expanded,
+                labelType: expanded
+                    ? NavigationRailLabelType.none
+                    : NavigationRailLabelType.selected,
+                leading: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: expanded
+                      ? const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.graphic_eq, size: 28),
+                            SizedBox(width: 10),
+                            Text(
+                              'OpenLogTool',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        )
+                      : const Icon(Icons.graphic_eq, size: 28),
+                ),
+                destinations: [
+                  for (final destination in _destinations)
+                    NavigationRailDestination(
+                      icon: Icon(destination.icon),
+                      selectedIcon: Icon(destination.selectedIcon),
+                      label: Text(destination.label(context.l10n)),
+                    ),
+                ],
               ),
-            ),
-          ),
-        ],
-      ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          _onScroll(notification);
-          return false;
-        },
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: const [
-            AddRecordPage(),
-            ImportExportPage(),
-            SettingsPage(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0, end: _isBottomNavVisible ? 1 : 0),
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        builder: (context, value, child) {
-          return ClipRect(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              heightFactor: value,
-              child: child,
-            ),
+              const VerticalDivider(width: 1),
+              Expanded(child: content),
+            ],
           );
         },
-        child: BottomNavigationBar(
-          items: _navItems,
-          currentIndex: _selectedIndex,
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          unselectedItemColor:
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-          onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed,
-          showUnselectedLabels: true,
+      ),
+      bottomNavigationBar: MediaQuery.sizeOf(context).width < 720
+          ? NavigationBar(
+              key: const Key('mobile-navigation'),
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onItemTapped,
+              destinations: [
+                for (final destination in _destinations)
+                  NavigationDestination(
+                    icon: Icon(destination.icon),
+                    selectedIcon: Icon(destination.selectedIcon),
+                    label: destination.label(context.l10n),
+                  ),
+              ],
+            )
+          : null,
+    );
+  }
+}
+
+enum _AppSection { workbench, sessions, data, settings }
+
+class _AppDestination {
+  const _AppDestination(this.section, this.icon, this.selectedIcon);
+
+  final _AppSection section;
+  final IconData icon;
+  final IconData selectedIcon;
+
+  String label(AppLocalizations l10n) => switch (section) {
+        _AppSection.workbench => l10n.navWorkbench,
+        _AppSection.sessions => l10n.navSessions,
+        _AppSection.data => l10n.navData,
+        _AppSection.settings => l10n.navSettings,
+      };
+}
+
+class _WorkbenchPage extends StatelessWidget {
+  const _WorkbenchPage();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+        children: [
+          _WorkbenchStatusBar(),
+          Expanded(child: AddRecordPage()),
+        ],
+      );
+}
+
+class _WorkbenchStatusBar extends StatelessWidget {
+  const _WorkbenchStatusBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionProvider>().currentSession;
+    final collaboration = context.watch<CollaborationProvider>();
+    final theme = Theme.of(context);
+    return Container(
+      key: const Key('workbench-status-bar'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _StatusLabel(
+            icon: Icons.event_note,
+            text: session?.title ?? context.l10n.workbenchNoSession,
+          ),
+          _StatusLabel(
+            icon: collaboration.binding == null
+                ? Icons.person_outline
+                : Icons.groups_outlined,
+            text: collaboration.binding == null
+                ? context.l10n.workbenchLocalRecording
+                : context.l10n.collaborationState(
+                    collaborationStateLabel(
+                      context.l10n,
+                      collaboration.state.name,
+                    ),
+                  ),
+          ),
+          if (collaboration.binding != null) ...[
+            _StatusLabel(
+              icon: Icons.sync,
+              text: context.l10n.pendingSyncCount(collaboration.pendingCount),
+            ),
+            _StatusLabel(
+              icon: Icons.warning_amber,
+              text: context.l10n.conflictCount(collaboration.conflictCount),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AppBarSyncStatus extends StatelessWidget {
+  const _AppBarSyncStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final collaboration = context.watch<CollaborationProvider>();
+    final local = collaboration.binding == null;
+    final online =
+        collaboration.transportPhase == CollaborationTransportPhase.online;
+    final reconnecting = collaboration.transportPhase ==
+            CollaborationTransportPhase.connecting ||
+        collaboration.transportPhase == CollaborationTransportPhase.backingOff;
+    final statusLabel = collaboration.state == CollaborationState.ready
+        ? online
+            ? context.l10n.connectionConnected
+            : reconnecting
+                ? context.l10n.connectionReconnecting
+                : context.l10n.connectionOffline
+        : collaborationStateLabel(
+            context.l10n,
+            collaboration.state.name,
+          );
+    return Tooltip(
+      message: local
+          ? context.l10n.localSessionTooltip
+          : context.l10n.collaborationStatusTooltip(
+              statusLabel,
+              collaboration.pendingCount,
+            ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Icon(
+          local
+              ? Icons.cloud_off_outlined
+              : online
+                  ? Icons.cloud_done_outlined
+                  : reconnecting
+                      ? Icons.sync
+                      : Icons.cloud_off,
+          color: local
+              ? null
+              : online
+                  ? Colors.green
+                  : reconnecting
+                      ? Colors.orange
+                      : Theme.of(context).colorScheme.error,
         ),
       ),
     );
   }
+}
+
+class _StatusLabel extends StatelessWidget {
+  const _StatusLabel({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 5),
+          Text(text, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
 }
 
 class AddRecordPage extends StatelessWidget {
@@ -196,12 +350,12 @@ class AddRecordPage extends StatelessWidget {
               width: double.infinity,
               color: Theme.of(context).colorScheme.secondaryContainer,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.lock_outline, size: 18),
-                  SizedBox(width: 8),
+                  const Icon(Icons.lock_outline, size: 18),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text('当前协作会话为只读；请在协作页查看角色、会话与同步状态。'),
+                    child: Text(context.l10n.sharedDraftReadOnly),
                   ),
                 ],
               ),
@@ -232,17 +386,18 @@ class AddRecordPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '添加点名记录',
-                          style: TextStyle(
+                          context.l10n.currentRecord,
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Spacer(),
+                        const Spacer(),
+                        _currentOrdinalBadge(context, logProvider.logCount),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -308,17 +463,18 @@ class AddRecordPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '添加点名记录',
-                        style: TextStyle(
+                        context.l10n.currentRecord,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Spacer(),
+                      const Spacer(),
+                      _currentOrdinalBadge(context, logProvider.logCount),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -354,6 +510,30 @@ class AddRecordPage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _currentOrdinalBadge(BuildContext context, int savedCount) {
+    final colors = Theme.of(context).colorScheme;
+    final ordinal = context
+            .watch<CollaborationProvider>()
+            .liveDraftSnapshot
+            ?.currentOrdinal ??
+        savedCount + 1;
+    return Container(
+      key: const Key('current-ordinal-badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        context.l10n.currentOrdinal(ordinal),
+        style: TextStyle(
+          color: colors.onPrimaryContainer,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }

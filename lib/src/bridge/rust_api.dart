@@ -445,6 +445,66 @@ class RustApi {
     );
   }
 
+  static Future<String> saveCollaborationLiveDraftCache({
+    required String requestJson,
+  }) {
+    return collaboration.saveCollaborationLiveDraftCache(
+      requestJson: requestJson,
+    );
+  }
+
+  static Future<String?> getCollaborationLiveDraftCache({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.getCollaborationLiveDraftCache(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<void> clearCollaborationLiveDraftCache({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.clearCollaborationLiveDraftCache(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<String> queueCollaborationOfflineRecord({
+    required String requestJson,
+  }) {
+    return collaboration.queueCollaborationOfflineRecord(
+      requestJson: requestJson,
+    );
+  }
+
+  static Future<String> listCollaborationOfflineRecords({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.listCollaborationOfflineRecords(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<String> updateCollaborationOfflineRecord({
+    required String requestJson,
+  }) {
+    return collaboration.updateCollaborationOfflineRecord(
+      requestJson: requestJson,
+    );
+  }
+
   // Database operations
   static Future<String> getDatabaseStatus() {
     return database.getDatabaseStatus();

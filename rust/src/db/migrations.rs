@@ -1,6 +1,6 @@
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-const CURRENT_SCHEMA_VERSION: i32 = 5;
+const CURRENT_SCHEMA_VERSION: i32 = 6;
 
 pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
@@ -40,6 +40,9 @@ pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     }
     if version < 5 {
         migrate_v5(pool).await?;
+    }
+    if version < 6 {
+        migrate_v6(pool).await?;
     }
 
     let mut tx = pool.begin().await?;
@@ -408,6 +411,83 @@ async fn migrate_v5(pool: &SqlitePool) -> anyhow::Result<()> {
             server_instance_id, account_id, session_id, state, created_at
          )",
     )
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_v6(pool: &SqlitePool) -> anyhow::Result<()> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS collaboration_live_drafts (
+            server_instance_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            draft_id TEXT NOT NULL,
+            draft_version INTEGER NOT NULL CHECK (draft_version >= 1),
+            remote_json TEXT NOT NULL CHECK (json_valid(remote_json)),
+            local_fields_json TEXT NOT NULL CHECK (
+                json_valid(local_fields_json) AND json_type(local_fields_json) = 'object'
+            ),
+            field_revisions_json TEXT NOT NULL CHECK (
+                json_valid(field_revisions_json) AND json_type(field_revisions_json) = 'object'
+            ),
+            dirty_fields_json TEXT NOT NULL DEFAULT '[]' CHECK (
+                json_valid(dirty_fields_json) AND json_type(dirty_fields_json) = 'array'
+            ),
+            client_seq INTEGER NOT NULL DEFAULT 0 CHECK (client_seq >= 0),
+            remote_updated_at TEXT,
+            local_updated_at TEXT NOT NULL,
+            PRIMARY KEY (server_instance_id, account_id, session_id),
+            FOREIGN KEY (server_instance_id, account_id, session_id)
+                REFERENCES collaboration_bindings(
+                    server_instance_id, account_id, session_id
+                ) ON DELETE CASCADE
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS collaboration_offline_records (
+            mutation_id TEXT PRIMARY KEY,
+            server_instance_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            draft_id TEXT NOT NULL,
+            expected_draft_version INTEGER NOT NULL CHECK (expected_draft_version >= 1),
+            provisional_ordinal INTEGER NOT NULL CHECK (provisional_ordinal >= 1),
+            record_json TEXT NOT NULL CHECK (
+                json_valid(record_json) AND json_type(record_json) = 'object'
+            ),
+            state TEXT NOT NULL CHECK (
+                state IN ('pending', 'submitting', 'reviewing', 'resolved', 'discarded')
+            ),
+            resolution TEXT CHECK (
+                resolution IS NULL OR
+                resolution IN ('discard', 'submitAsDuplicate', 'copyToCurrentDraft')
+            ),
+            last_error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (server_instance_id, account_id, session_id)
+                REFERENCES collaboration_bindings(
+                    server_instance_id, account_id, session_id
+                ) ON DELETE CASCADE
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_collaboration_offline_records_state
+         ON collaboration_offline_records(
+            server_instance_id, account_id, session_id, state, created_at, mutation_id
+         )",
+    )
+    .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;

@@ -384,6 +384,69 @@ void main() {
       await coordinator.stop();
     });
 
+    test('a live-draft close rejection can restore local write access',
+        () async {
+      final closeMutation = CollaborationMutationDto(
+        mutationId: 'close-rejected-1',
+        entityType: 'session',
+        entityId: 'session-a',
+        operation: 'close',
+        baseVersion: 1,
+        observedSeq: 0,
+        queuedAt: DateTime.utc(2026),
+      );
+      final replica = _FakeReplica(cursor: 0, pending: [closeMutation]);
+      final rejected = <MutationResultDto>[];
+      final transport = _FakeTransport(
+        membership: (sessionId) => Future.value(
+          _membership(sessionId, role: SessionRole.owner),
+        ),
+        ticket: (sessionId, afterSeq, call) => WebSocketTicketDto(
+          ticket: 'owner-ticket-$call-$afterSeq',
+          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+          sessionId: sessionId,
+          role: SessionRole.owner,
+          membershipVersion: 1,
+          afterSeq: afterSeq,
+        ),
+        submit: (_) => const MutationBatchResultDto(
+          headSeq: 0,
+          results: [
+            MutationResultDto(
+              mutationId: 'close-rejected-1',
+              status: 'rejected',
+              code: 'LIVE_DRAFT_NOT_EMPTY',
+              message: 'Commit or discard the live draft first',
+            ),
+          ],
+        ),
+      );
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(autoReady: true),
+        onLocalCloseRejected: (mutation, result) {
+          expect(mutation, same(closeMutation));
+          rejected.add(result);
+          return true;
+        },
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.owner,
+        sessionClosed: true,
+      );
+      await _waitUntil(
+        () => rejected.length == 1 && coordinator.state.canEdit,
+      );
+
+      expect(rejected.single.code, 'LIVE_DRAFT_NOT_EMPTY');
+      expect(coordinator.state.sessionClosed, isFalse);
+      expect(coordinator.state.writeSuspended, isFalse);
+      await coordinator.stop();
+    });
+
     test('canonical closed mode sends reopen but not pending Logs', () async {
       final reopenMutation = CollaborationMutationDto(
         mutationId: 'reopen-1',
@@ -570,6 +633,43 @@ void main() {
         coordinator.state.transportPhase,
         isNot(CollaborationTransportPhase.incompatible),
       );
+      await coordinator.stop();
+    });
+
+    test(
+        'delivers member-only live-draft controls without advancing event cursor',
+        () async {
+      final replica = _FakeReplica(cursor: 3);
+      final sockets = _FakeSocketConnector(autoReady: true);
+      final controls = <JsonObject>[];
+      final coordinator = CollaborationSyncCoordinator(
+        transport: _FakeTransport(),
+        replica: replica,
+        sockets: sockets,
+        onControlMessage: controls.add,
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.viewer,
+      );
+      await _waitUntil(
+        () =>
+            coordinator.state.transportPhase ==
+            CollaborationTransportPhase.online,
+      );
+      sockets.lastSocket!.add(jsonEncode({
+        'type': 'liveDraft.updated',
+        'sessionId': 'session-a',
+        'occurredAt': '2026-07-13T08:00:00.000Z',
+        'draft': {'draftId': 'draft-1', 'version': 2},
+      }));
+      await _waitUntil(() => controls.length == 1);
+
+      expect(controls.single['type'], 'liveDraft.updated');
+      expect(coordinator.state.lastAppliedSeq, 3);
+      expect(
+          coordinator.state.transportPhase, CollaborationTransportPhase.online);
       await coordinator.stop();
     });
 

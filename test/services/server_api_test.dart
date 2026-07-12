@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/services/server_api.dart';
 
 void main() {
@@ -600,6 +601,242 @@ void main() {
       expect(socketUri.queryParameters, {'ticket': 'single-use-ticket'});
       expect(socketUri.toString(), isNot(contains('access')));
     });
+
+    test('live-draft routes match the v13 DTO and mutation contract', () async {
+      final store = MemoryTokenStore(
+        AuthSessionDto.fromJson(_authJson('access', 'refresh')),
+      );
+      final lock = {
+        'leaseId': 'lease-1',
+        'sessionId': 'session-1',
+        'field': 'callsign',
+        'userId': 'user-1',
+        'username': 'alice',
+        'deviceId': 'device-1',
+        'expiresAt': '2026-07-13T08:00:30.000Z',
+      };
+      final event = {
+        'protocolVersion': 1,
+        'eventId': 'event-4',
+        'sessionId': 'session-1',
+        'seq': 4,
+        'type': 'log.created',
+        'entityType': 'log',
+        'entityId': 'log-1',
+        'entityVersion': 1,
+        'mutationId': 'commit-1',
+        'actor': {
+          'userId': 'user-1',
+          'deviceId': 'device-1',
+          'displayName': 'alice',
+        },
+        'occurredAt': _now,
+        'payload': _logJson,
+      };
+      final client = MockClient((request) async {
+        expect(request.headers['authorization'], 'Bearer access');
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /api/v1/sessions/session-1/live-draft':
+            return _jsonResponse({
+              'draft': _liveDraftJson(),
+              'locks': [lock],
+              'currentOrdinal': 1,
+              'totalRecords': 0,
+              'previousRecord': null,
+            });
+          case 'POST /api/v1/sessions/session-1/live-draft/locks':
+            expect(jsonDecode(request.body), {
+              'field': 'callsign',
+              'deviceId': 'device-1',
+            });
+            return _jsonResponse({'lock': lock}, 201);
+          case 'POST /api/v1/sessions/session-1/live-draft/locks/lease-1/renew':
+            expect(jsonDecode(request.body), {'deviceId': 'device-1'});
+            return _jsonResponse({'lock': lock});
+          case 'DELETE /api/v1/sessions/session-1/live-draft/locks/lease-1':
+            expect(jsonDecode(request.body), {'deviceId': 'device-1'});
+            return _jsonResponse({'released': true});
+          case 'PATCH /api/v1/sessions/session-1/live-draft':
+            expect(jsonDecode(request.body), {
+              'deviceId': 'device-1',
+              'clientSeq': 7,
+              'updates': [
+                {
+                  'field': 'callsign',
+                  'value': null,
+                  'expectedRevision': 0,
+                  'leaseId': 'lease-1',
+                },
+              ],
+            });
+            return _jsonResponse({
+              'draft': _liveDraftJson(version: 2),
+              'appliedClientSeq': 7,
+              'replayed': false,
+            });
+          case 'POST /api/v1/sessions/session-1/live-draft/commit':
+            expect(request.headers['idempotency-key'], 'commit-1');
+            expect(jsonDecode(request.body), {
+              'deviceId': 'device-1',
+              'expectedDraftVersion': 2,
+              'syncId': 'log-1',
+            });
+            return _jsonResponse({
+              'record': _logJson,
+              'event': event,
+              'committedDraftId': 'draft-1',
+              'nextDraft': _liveDraftJson(draftId: 'draft-2', version: 3),
+              'committedOrdinal': 1,
+              'currentOrdinal': 2,
+              'totalRecords': 1,
+            }, 201);
+          case 'DELETE /api/v1/sessions/session-1/live-draft':
+            expect(request.headers['idempotency-key'], 'discard-1');
+            expect(jsonDecode(request.body), {
+              'deviceId': 'device-1',
+              'expectedDraftVersion': 3,
+            });
+            return _jsonResponse({
+              'discardedDraftId': 'draft-2',
+              'nextDraft': _liveDraftJson(draftId: 'draft-3', version: 4),
+              'currentOrdinal': 2,
+              'totalRecords': 1,
+            });
+          default:
+            fail('Unexpected request: ${request.method} ${request.url}');
+        }
+      });
+      final api = _api(store: store, client: client);
+
+      final snapshot = await api.getLiveDraft('session-1');
+      expect(snapshot.draft.createdAt, DateTime.parse(_now));
+      expect(snapshot.locks.single.sessionId, 'session-1');
+      expect(
+        (await api.acquireLiveDraftLock(
+          sessionId: 'session-1',
+          field: 'callsign',
+          deviceId: 'device-1',
+        ))
+            .leaseId,
+        'lease-1',
+      );
+      await api.renewLiveDraftLock(
+        sessionId: 'session-1',
+        leaseId: 'lease-1',
+        deviceId: 'device-1',
+      );
+      await api.releaseLiveDraftLock(
+        sessionId: 'session-1',
+        leaseId: 'lease-1',
+        deviceId: 'device-1',
+      );
+      final patched = await api.updateLiveDraft(
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        clientSeq: 7,
+        updates: [
+          LiveDraftPatchUpdateDto(
+            field: 'callsign',
+            value: null,
+            expectedRevision: 0,
+            leaseId: 'lease-1',
+          ),
+        ],
+      );
+      expect(patched.appliedClientSeq, 7);
+      final committed = await api.commitLiveDraft(
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        expectedDraftVersion: 2,
+        syncId: 'log-1',
+        idempotencyKey: 'commit-1',
+      );
+      expect(committed.committedOrdinal, 1);
+      final discarded = await api.discardLiveDraft(
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        expectedDraftVersion: 3,
+        idempotencyKey: 'discard-1',
+      );
+      expect(discarded.currentOrdinal, 2);
+      expect(discarded.totalRecords, 1);
+    });
+
+    test('self-leave and safe public-share management preserve capabilities',
+        () async {
+      final store = MemoryTokenStore(
+        AuthSessionDto.fromJson(_authJson('access', 'refresh')),
+      );
+      final client = MockClient((request) async {
+        final route = '${request.method} ${request.url.path}';
+        switch (route) {
+          case 'DELETE /api/v1/sessions/session-1/membership':
+            expect(request.headers['idempotency-key'], 'leave-1');
+            expect(jsonDecode(request.body), <String, Object?>{});
+            return _jsonResponse({
+              'left': true,
+              'membership': {
+                ..._membershipJson(role: 'editor'),
+                'version': 2,
+                'removedAt': _now,
+              },
+            });
+          case 'POST /api/v1/sessions/session-1/public-shares':
+            expect(request.headers['idempotency-key'], 'share-1');
+            expect(jsonDecode(request.body), {'expiresInHours': 24});
+            return _jsonResponse({
+              'publicShare': _publicShareJson(secret: 'link-secret'),
+            }, 201);
+          case 'GET /api/v1/sessions/session-1/public-shares':
+            expect(request.url.queryParameters, {
+              'limit': '25',
+              'after': 'cursor-1',
+            });
+            return _jsonResponse({
+              'publicShares': [_publicShareJson()],
+              'nextCursor': null,
+            });
+          case 'DELETE /api/v1/sessions/session-1/public-shares/share-1':
+            expect(request.headers['idempotency-key'], 'revoke-share-1');
+            return _jsonResponse({
+              'publicShare': _publicShareJson(revokedAt: _now),
+            });
+          default:
+            fail('Unexpected request: $route');
+        }
+      });
+      final api = _api(store: store, client: client);
+
+      final left = await api.leaveSession(
+        sessionId: 'session-1',
+        idempotencyKey: 'leave-1',
+      );
+      expect(left.left, isTrue);
+      expect(left.membership.removedAt, isNotNull);
+      final created = await api.createPublicShare(
+        sessionId: 'session-1',
+        expiresInHours: 24,
+        idempotencyKey: 'share-1',
+      );
+      expect(created.secret, 'link-secret');
+      expect(
+        api.publicSharePageUri(created).toString(),
+        'https://example.test/live/share-1#link-secret',
+      );
+      final page = await api.listPublicShares(
+        sessionId: 'session-1',
+        limit: 25,
+        after: 'cursor-1',
+      );
+      expect(page.publicShares, hasLength(1));
+      expect(page.publicShares.single.secret, isNull);
+      final revoked = await api.revokePublicShare(
+        sessionId: 'session-1',
+        publicShareId: 'share-1',
+        idempotencyKey: 'revoke-share-1',
+      );
+      expect(revoked.revokedAt, isNotNull);
+    });
   });
 
   group('ServerApi failures', () {
@@ -746,6 +983,21 @@ Map<String, Object?> _inviteJson({
       if (includeSecret) 'linkToken': 'link-token',
     };
 
+Map<String, Object?> _publicShareJson({
+  String? secret,
+  String? revokedAt,
+}) =>
+    {
+      'publicShareId': 'share-1',
+      'sessionId': 'session-1',
+      'expiresAt': '2026-07-14T08:00:00.000Z',
+      'createdBy': 'user-1',
+      'createdAt': _now,
+      'revokedAt': revokedAt,
+      'revokedBy': revokedAt == null ? null : 'user-1',
+      if (secret != null) 'secret': secret,
+    };
+
 const _logJson = {
   'syncId': 'log-1',
   'sessionId': 'session-1',
@@ -765,6 +1017,35 @@ const _logJson = {
   'updatedAt': _now,
   'deletedAt': null,
 };
+
+Map<String, Object?> _liveDraftJson({
+  String draftId = 'draft-1',
+  int version = 1,
+}) =>
+    {
+      'draftId': draftId,
+      'sessionId': 'session-1',
+      'version': version,
+      'fields': {
+        'time': _now,
+        'controller': 'BG5CRL',
+        'callsign': 'K1ABC',
+        'rstSent': '59',
+        'rstRcvd': '59',
+        'qth': null,
+        'device': null,
+        'power': null,
+        'antenna': null,
+        'height': null,
+        'remarks': null,
+      },
+      'fieldRevisions': {
+        for (final field in liveDraftFieldNames) field: 0,
+      },
+      'lastUpdatedBy': {'userId': 'user-1', 'username': 'alice'},
+      'createdAt': _now,
+      'lastUpdatedAt': _now,
+    };
 
 ServerApi _api({
   required TokenStore store,

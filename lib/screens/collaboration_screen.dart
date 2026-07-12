@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
@@ -27,7 +30,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final collaboration = context.read<CollaborationProvider>();
-        unawaited(_run(collaboration.refreshCurrentSession));
+        unawaited(_initialize(collaboration));
       }
     });
   }
@@ -55,6 +58,10 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
               if (server.isLoggedIn) _joinCard(collaboration),
               if (sessions.currentSession != null)
                 _sessionCard(collaboration, sessions),
+              if (collaboration.offlineRecords.isNotEmpty)
+                _offlineReviewCard(collaboration),
+              if (collaboration.supportsPublicShareManagement)
+                _publicShareCard(collaboration),
               if (collaboration.binding != null &&
                   (collaboration.conflictCount > 0 ||
                       collaboration.conflictsLoading ||
@@ -103,6 +110,234 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _initialize(CollaborationProvider collaboration) async {
+    await _run(collaboration.refreshCurrentSession);
+    if (mounted && collaboration.supportsPublicShareManagement) {
+      await _run(collaboration.refreshPublicShares);
+    }
+  }
+
+  Widget _publicShareCard(CollaborationProvider collaboration) {
+    final created = collaboration.lastCreatedPublicShare;
+    final createdUri = created?.secret == null
+        ? null
+        : collaboration.publicSharePageUri(created!);
+    return Card(
+      key: const Key('public-share-management'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.publicShareManagement,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(context.l10n.publicShareManagementHint),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: collaboration.isBusy
+                      ? null
+                      : () => unawaited(
+                            _run(
+                              () async {
+                                final share =
+                                    await collaboration.createPublicShare();
+                                await _copyPublicShare(collaboration, share);
+                                return share;
+                              },
+                              success: context.l10n.publicShareLinkCopied,
+                            ),
+                          ),
+                  icon: const Icon(Icons.add_link),
+                  label: Text(context.l10n.createPublicShare),
+                ),
+                OutlinedButton.icon(
+                  onPressed: collaboration.isBusy
+                      ? null
+                      : () => unawaited(
+                            _run(collaboration.refreshPublicShares),
+                          ),
+                  icon: const Icon(Icons.refresh),
+                  label: Text(context.l10n.refresh),
+                ),
+              ],
+            ),
+            if (createdUri != null) ...[
+              const SizedBox(height: 12),
+              SelectableText(createdUri.toString()),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => unawaited(
+                    _copyPublicShare(collaboration, created!),
+                  ),
+                  icon: const Icon(Icons.copy),
+                  label: Text(context.l10n.copyPublicShareLink),
+                ),
+              ),
+            ],
+            for (final share in collaboration.publicShares)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  share.active ? Icons.public : Icons.link_off,
+                ),
+                title: SelectableText(share.publicShareId),
+                subtitle: Text(
+                  context.l10n.publicShareExpiresAt(
+                    share.expiresAt.toLocal().toString(),
+                  ),
+                ),
+                trailing: share.active
+                    ? TextButton(
+                        onPressed: collaboration.isBusy
+                            ? null
+                            : () => unawaited(
+                                  _run(
+                                    () => collaboration.revokePublicShare(
+                                      share.publicShareId,
+                                    ),
+                                  ),
+                                ),
+                        child: Text(context.l10n.revokePublicShare),
+                      )
+                    : null,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyPublicShare(
+    CollaborationProvider collaboration,
+    PublicShareDto share,
+  ) =>
+      Clipboard.setData(
+        ClipboardData(text: collaboration.publicSharePageUri(share).toString()),
+      );
+
+  Widget _offlineReviewCard(CollaborationProvider collaboration) {
+    return Card(
+      key: const Key('offline-live-draft-review'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.offlineReviewTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            for (final record in collaboration.offlineRecords)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          child: Text('${record.provisionalOrdinal}'),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                record.record['callsign'].isEmpty
+                                    ? '—'
+                                    : record.record['callsign'],
+                              ),
+                              Text(
+                                [
+                                  record.record['controller'],
+                                  if (record.lastErrorCode != null)
+                                    record.lastErrorCode!,
+                                ]
+                                    .where((value) => value.isNotEmpty)
+                                    .join(' · '),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        TextButton(
+                          onPressed: collaboration.isBusy
+                              ? null
+                              : () => unawaited(
+                                    _run(
+                                      () => collaboration.resolveOfflineRecord(
+                                        record.mutationId,
+                                        OfflineRecordResolution.discard,
+                                      ),
+                                    ),
+                                  ),
+                          child: Text(context.l10n.resolutionDiscard),
+                        ),
+                        TextButton(
+                          onPressed: collaboration.canEditLiveDraft &&
+                                  !collaboration.isBusy
+                              ? () => unawaited(
+                                    _run(
+                                      () => collaboration.resolveOfflineRecord(
+                                        record.mutationId,
+                                        OfflineRecordResolution
+                                            .copyToCurrentDraft,
+                                      ),
+                                    ),
+                                  )
+                              : null,
+                          child: Text(context.l10n.resolutionCopyCurrent),
+                        ),
+                        FilledButton.tonal(
+                          onPressed: collaboration.canEditLiveDraft &&
+                                  !collaboration.isBusy
+                              ? () => unawaited(
+                                    _run(
+                                      () => collaboration.resolveOfflineRecord(
+                                        record.mutationId,
+                                        OfflineRecordResolution
+                                            .submitAsDuplicate,
+                                      ),
+                                    ),
+                                  )
+                              : null,
+                          child: Text(context.l10n.resolutionSubmitDuplicate),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -323,6 +558,15 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                         label: const Text('重新打开'),
                       ),
                   ],
+                  if (collaboration.effectiveRole != null &&
+                      collaboration.effectiveRole != SessionRole.owner)
+                    OutlinedButton.icon(
+                      onPressed: collaboration.isBusy
+                          ? null
+                          : () => _leaveSession(collaboration),
+                      icon: const Icon(Icons.logout),
+                      label: Text(context.l10n.leaveSession),
+                    ),
                 ],
               ),
           ],
@@ -406,6 +650,29 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     } finally {
       controller.dispose();
     }
+  }
+
+  Future<void> _leaveSession(CollaborationProvider collaboration) async {
+    final accepted = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(context.l10n.leaveSession),
+            content: Text(context.l10n.leaveSessionConfirmation),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.confirm),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!accepted) return;
+    await _run(collaboration.leaveCurrentSession);
   }
 
   Future<void> _closeSession(CollaborationProvider collaboration) async {

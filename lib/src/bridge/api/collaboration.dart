@@ -172,3 +172,43 @@ Future<String> getCollaborationSyncStatus(
         serverInstanceId: serverInstanceId,
         accountId: accountId,
         sessionId: sessionId);
+
+Future<String> saveCollaborationLiveDraftCache({required String requestJson}) =>
+    RustLib.instance.api.crateApiCollaborationSaveCollaborationLiveDraftCache(
+        requestJson: requestJson);
+
+Future<String?> getCollaborationLiveDraftCache(
+        {required String serverInstanceId,
+        required String accountId,
+        required String sessionId}) =>
+    RustLib.instance.api.crateApiCollaborationGetCollaborationLiveDraftCache(
+        serverInstanceId: serverInstanceId,
+        accountId: accountId,
+        sessionId: sessionId);
+
+Future<void> clearCollaborationLiveDraftCache(
+        {required String serverInstanceId,
+        required String accountId,
+        required String sessionId}) =>
+    RustLib.instance.api.crateApiCollaborationClearCollaborationLiveDraftCache(
+        serverInstanceId: serverInstanceId,
+        accountId: accountId,
+        sessionId: sessionId);
+
+Future<String> queueCollaborationOfflineRecord({required String requestJson}) =>
+    RustLib.instance.api.crateApiCollaborationQueueCollaborationOfflineRecord(
+        requestJson: requestJson);
+
+Future<String> listCollaborationOfflineRecords(
+        {required String serverInstanceId,
+        required String accountId,
+        required String sessionId}) =>
+    RustLib.instance.api.crateApiCollaborationListCollaborationOfflineRecords(
+        serverInstanceId: serverInstanceId,
+        accountId: accountId,
+        sessionId: sessionId);
+
+Future<String> updateCollaborationOfflineRecord(
+        {required String requestJson}) =>
+    RustLib.instance.api.crateApiCollaborationUpdateCollaborationOfflineRecord(
+        requestJson: requestJson);

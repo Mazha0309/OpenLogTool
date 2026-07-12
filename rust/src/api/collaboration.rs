@@ -4,6 +4,10 @@ use crate::models::collaboration::{
     ApplyEventRequest, CollaborationRole, InstallSnapshotRequest, MutationConflictRequest,
     MutationFailureRequest, ResolveConflictRequest,
 };
+use crate::models::live_draft::{
+    LiveDraftIdentity, QueueOfflineRecordRequest, SaveLiveDraftCacheRequest,
+    UpdateOfflineRecordRequest,
+};
 
 pub async fn get_or_create_device_id() -> anyhow::Result<String> {
     db::collaboration::get_or_create_device_id(get_db()?).await
@@ -248,4 +252,78 @@ pub async fn get_collaboration_sync_status(
     )
     .await?;
     Ok(serde_json::to_string(&status)?)
+}
+
+pub async fn save_collaboration_live_draft_cache(request_json: String) -> anyhow::Result<String> {
+    let request: SaveLiveDraftCacheRequest = serde_json::from_str(&request_json)
+        .map_err(|error| anyhow::anyhow!("LIVE_DRAFT_CACHE_JSON_INVALID: {error}"))?;
+    let draft = db::live_draft::save_cache(get_db()?, request).await?;
+    Ok(serde_json::to_string(&draft)?)
+}
+
+pub async fn get_collaboration_live_draft_cache(
+    server_instance_id: String,
+    account_id: String,
+    session_id: String,
+) -> anyhow::Result<Option<String>> {
+    let draft = db::live_draft::get_cache(
+        get_db()?,
+        LiveDraftIdentity {
+            server_instance_id,
+            account_id,
+            session_id,
+        },
+    )
+    .await?;
+    draft
+        .map(|value| serde_json::to_string(&value))
+        .transpose()
+        .map_err(Into::into)
+}
+
+pub async fn clear_collaboration_live_draft_cache(
+    server_instance_id: String,
+    account_id: String,
+    session_id: String,
+) -> anyhow::Result<()> {
+    db::live_draft::clear_cache(
+        get_db()?,
+        LiveDraftIdentity {
+            server_instance_id,
+            account_id,
+            session_id,
+        },
+    )
+    .await
+}
+
+pub async fn queue_collaboration_offline_record(request_json: String) -> anyhow::Result<String> {
+    let request: QueueOfflineRecordRequest = serde_json::from_str(&request_json)
+        .map_err(|error| anyhow::anyhow!("OFFLINE_RECORD_JSON_INVALID: {error}"))?;
+    let record = db::live_draft::queue_offline_record(get_db()?, request).await?;
+    Ok(serde_json::to_string(&record)?)
+}
+
+pub async fn list_collaboration_offline_records(
+    server_instance_id: String,
+    account_id: String,
+    session_id: String,
+) -> anyhow::Result<String> {
+    let records = db::live_draft::list_offline_records(
+        get_db()?,
+        LiveDraftIdentity {
+            server_instance_id,
+            account_id,
+            session_id,
+        },
+    )
+    .await?;
+    Ok(serde_json::to_string(&records)?)
+}
+
+pub async fn update_collaboration_offline_record(request_json: String) -> anyhow::Result<String> {
+    let request: UpdateOfflineRecordRequest = serde_json::from_str(&request_json)
+        .map_err(|error| anyhow::anyhow!("OFFLINE_RECORD_UPDATE_JSON_INVALID: {error}"))?;
+    let record = db::live_draft::update_offline_record(get_db()?, request).await?;
+    Ok(serde_json::to_string(&record)?)
 }

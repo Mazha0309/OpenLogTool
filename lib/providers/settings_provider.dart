@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openlogtool/config/app_config.dart';
+import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/models/export_settings.dart';
 
 class SettingsProvider with ChangeNotifier {
@@ -12,6 +13,10 @@ class SettingsProvider with ChangeNotifier {
   static const String _exportSettingsKey = 'exportSettings';
   static const String _callSignQthLinkKey = 'callSignQthLinkEnabled';
   static const String _paginationEnabledKey = 'paginationEnabled';
+  static const String _duplicateCallsignWarningKey =
+      'duplicateCallsignWarningEnabled';
+  static const String _controllerDeviceModeEnabledKey =
+      'controllerDeviceModeEnabled';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
@@ -21,6 +26,10 @@ class SettingsProvider with ChangeNotifier {
   ExportSettings _exportSettings = ExportSettings();
   bool _callSignQthLinkEnabled = true;
   bool _paginationEnabled = false;
+  bool _duplicateCallsignWarningEnabled = true;
+  bool _controllerDeviceModeEnabled = false;
+  ControllerDisplayPreferences _controllerDisplayPreferences =
+      const ControllerDisplayPreferences();
 
   bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
@@ -30,6 +39,10 @@ class SettingsProvider with ChangeNotifier {
   ExportSettings get exportSettings => _exportSettings;
   bool get callSignQthLinkEnabled => _callSignQthLinkEnabled;
   bool get paginationEnabled => _paginationEnabled;
+  bool get duplicateCallsignWarningEnabled => _duplicateCallsignWarningEnabled;
+  bool get controllerDeviceModeEnabled => _controllerDeviceModeEnabled;
+  ControllerDisplayPreferences get controllerDisplayPreferences =>
+      _controllerDisplayPreferences;
 
   SettingsProvider() {
     _loadSettings();
@@ -39,11 +52,11 @@ class SettingsProvider with ChangeNotifier {
     _availableFonts = await AppConfig.getSystemFonts();
 
     final prefs = await SharedPreferences.getInstance();
-    
+
     _wideLayoutEnabled = prefs.getBool(_wideLayoutKey) ?? false;
     _isDarkMode = prefs.getBool(_isDarkModeKey) ?? false;
     _fontFamily = prefs.getString(_fontFamilyKey) ?? '';
-    
+
     final colorValue = prefs.getInt(_themeColorKey);
     if (colorValue != null) {
       _themeColor = Color(colorValue);
@@ -52,7 +65,8 @@ class SettingsProvider with ChangeNotifier {
     final exportSettingsJson = prefs.getString(_exportSettingsKey);
     if (exportSettingsJson != null) {
       try {
-        _exportSettings = ExportSettings.fromJson(json.decode(exportSettingsJson));
+        _exportSettings =
+            ExportSettings.fromJson(json.decode(exportSettingsJson));
       } catch (_) {
         _exportSettings = ExportSettings();
       }
@@ -60,6 +74,21 @@ class SettingsProvider with ChangeNotifier {
 
     _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
     _paginationEnabled = prefs.getBool(_paginationEnabledKey) ?? false;
+    _duplicateCallsignWarningEnabled =
+        prefs.getBool(_duplicateCallsignWarningKey) ?? true;
+    _controllerDeviceModeEnabled =
+        prefs.getBool(_controllerDeviceModeEnabledKey) ?? false;
+    final controllerPreferencesJson =
+        prefs.getString(controllerDisplayPreferencesStorageKey);
+    if (controllerPreferencesJson != null) {
+      try {
+        _controllerDisplayPreferences = ControllerDisplayPreferences.fromJson(
+          json.decode(controllerPreferencesJson),
+        );
+      } catch (_) {
+        _controllerDisplayPreferences = const ControllerDisplayPreferences();
+      }
+    }
 
     notifyListeners();
   }
@@ -112,6 +141,29 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setDuplicateCallsignWarningEnabled(bool enabled) async {
+    _duplicateCallsignWarningEnabled = enabled;
+    await _saveSetting(_duplicateCallsignWarningKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setControllerDeviceModeEnabled(bool enabled) async {
+    _controllerDeviceModeEnabled = enabled;
+    await _saveSetting(_controllerDeviceModeEnabledKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setControllerDisplayPreferences(
+    ControllerDisplayPreferences preferences,
+  ) async {
+    _controllerDisplayPreferences = preferences;
+    await _saveSetting(
+      controllerDisplayPreferencesStorageKey,
+      json.encode(preferences.toJson()),
+    );
+    notifyListeners();
+  }
+
   Future<void> updateExportSettings(ExportSettings settings) async {
     _exportSettings = settings;
     await _saveSetting(_exportSettingsKey, json.encode(settings.toJson()));
@@ -120,7 +172,7 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> _saveSetting(String key, dynamic value) async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     if (value is bool) {
       await prefs.setBool(key, value);
     } else if (value is String) {
@@ -138,14 +190,22 @@ class SettingsProvider with ChangeNotifier {
     _isDarkMode = false;
     _fontFamily = '';
     _exportSettings = ExportSettings();
-    
+    _callSignQthLinkEnabled = true;
+    _controllerDeviceModeEnabled = false;
+    _duplicateCallsignWarningEnabled = true;
+    _controllerDisplayPreferences = const ControllerDisplayPreferences();
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_wideLayoutKey);
     await prefs.remove(_themeColorKey);
     await prefs.remove(_isDarkModeKey);
     await prefs.remove(_fontFamilyKey);
     await prefs.remove(_exportSettingsKey);
-    
+    await prefs.remove(_callSignQthLinkKey);
+    await prefs.remove(_controllerDeviceModeEnabledKey);
+    await prefs.remove(_duplicateCallsignWarningKey);
+    await prefs.remove(controllerDisplayPreferencesStorageKey);
+
     notifyListeners();
   }
 }

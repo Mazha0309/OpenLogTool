@@ -9,7 +9,9 @@ import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'dart:io';
@@ -18,8 +20,16 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
-void main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 桌面子窗口只渲染主控屏，不初始化 Rust、本地数据库或主应用 Provider。
+  final controllerWindow = await ControllerWindowService.currentWindowLaunch();
+  if (controllerWindow != null) {
+    runApp(ControllerDisplayWindowApp(launch: controllerWindow));
+    return;
+  }
+
   await RustLib.init();
 
   String dbPath;
@@ -78,6 +88,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'OpenLogTool',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeResolutionCallback: resolveAppLocale,
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

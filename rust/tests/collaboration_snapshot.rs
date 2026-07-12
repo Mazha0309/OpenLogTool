@@ -274,7 +274,7 @@ async fn publish_install_preserves_ids_all_fields_remarks_and_source_device() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(version_rows, (1, 5));
+    assert_eq!(version_rows, (1, 6));
     let first_device = collaboration::get_or_create_device_id(&pool).await.unwrap();
     let second_device = collaboration::get_or_create_device_id(&pool).await.unwrap();
     assert_eq!(first_device, second_device);
@@ -1709,7 +1709,7 @@ async fn future_schema_is_rejected_without_rewriting_the_version() {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO schema_version (version, applied_at) VALUES (6, ?)")
+    sqlx::query("INSERT INTO schema_version (version, applied_at) VALUES (7, ?)")
         .bind(NOW)
         .execute(&pool)
         .await
@@ -1721,5 +1721,5 @@ async fn future_schema_is_rejected_without_rewriting_the_version() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(version.0, 6);
+    assert_eq!(version.0, 7);
 }

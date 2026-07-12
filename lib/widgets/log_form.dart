@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
@@ -33,6 +38,16 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final _reportController = TextEditingController();
   final _rstRcvdController = TextEditingController();
   final _remarksController = TextEditingController();
+  final Map<String, Timer> _draftDebounce = {};
+  late final Map<String, TextEditingController> _draftControllers;
+  late final Map<String, FocusNode> _draftFocusNodes;
+  late final Map<String, VoidCallback> _draftControllerListeners;
+  late final Map<String, VoidCallback> _draftFocusListeners;
+  final Set<String> _focusedDraftFields = <String>{};
+  Timer? _lockExpiryTimer;
+  bool _applyingSharedDraft = false;
+  String? _lastSharedDraftSignature;
+  String? _lastSharedDraftId;
 
   @override
   bool get wantKeepAlive => true;
@@ -42,10 +57,52 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     super.initState();
     _reportController.text = '59';
     _rstRcvdController.text = '59';
+    _draftControllers = {
+      'time': _timeController,
+      'controller': _controllerController,
+      'callsign': _callsignController,
+      'rstSent': _reportController,
+      'rstRcvd': _rstRcvdController,
+      'qth': _qthController,
+      'device': _deviceController,
+      'power': _powerController,
+      'antenna': _antennaController,
+      'height': _heightController,
+      'remarks': _remarksController,
+    };
+    _draftFocusNodes = {
+      for (final field in _draftControllers.keys)
+        field: field == 'callsign' ? _callsignFocusNode : FocusNode(),
+    };
+    _draftControllerListeners = {
+      for (final field in _draftControllers.keys)
+        field: () => _onDraftFieldChanged(field),
+    };
+    _draftFocusListeners = {
+      for (final field in _draftFocusNodes.keys)
+        field: () => _onDraftFocusChanged(field),
+    };
+    for (final entry in _draftControllers.entries) {
+      entry.value.addListener(_draftControllerListeners[entry.key]!);
+    }
+    for (final entry in _draftFocusNodes.entries) {
+      entry.value.addListener(_draftFocusListeners[entry.key]!);
+    }
   }
 
   @override
   void dispose() {
+    _lockExpiryTimer?.cancel();
+    for (final timer in _draftDebounce.values) {
+      timer.cancel();
+    }
+    for (final entry in _draftControllers.entries) {
+      entry.value.removeListener(_draftControllerListeners[entry.key]!);
+    }
+    for (final entry in _draftFocusNodes.entries) {
+      entry.value.removeListener(_draftFocusListeners[entry.key]!);
+      if (entry.key != 'callsign') entry.value.dispose();
+    }
     _controllerController.dispose();
     _callsignController.dispose();
     _callsignFocusNode.dispose();
@@ -61,13 +118,125 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
+  void _syncSharedDraft(CollaborationProvider collaboration) {
+    final snapshot = collaboration.liveDraftSnapshot;
+    final fields = collaboration.liveDraftFields;
+    if (snapshot == null || fields == null) {
+      _lastSharedDraftId = null;
+      _lastSharedDraftSignature = null;
+      return;
+    }
+    final signature = '${snapshot.draft.draftId}:${snapshot.draft.version}:'
+        '${fields.toJson()}';
+    if (_lastSharedDraftSignature == signature) return;
+    final draftChanged = _lastSharedDraftId != snapshot.draft.draftId;
+    _lastSharedDraftId = snapshot.draft.draftId;
+    _lastSharedDraftSignature = signature;
+    _applyingSharedDraft = true;
+    try {
+      for (final entry in _draftControllers.entries) {
+        if (!draftChanged && _focusedDraftFields.contains(entry.key)) continue;
+        final rawValue = fields[entry.key];
+        final value =
+            entry.key == 'time' ? _displayLiveDraftTime(rawValue) : rawValue;
+        if (entry.value.text == value) continue;
+        entry.value.value = TextEditingValue(
+          text: value,
+          selection: TextSelection.collapsed(offset: value.length),
+        );
+      }
+    } finally {
+      _applyingSharedDraft = false;
+    }
+  }
+
+  void _onDraftFieldChanged(String field) {
+    if (_applyingSharedDraft || !mounted) return;
+    final collaboration = context.read<CollaborationProvider>();
+    if (collaboration.liveDraftSnapshot == null ||
+        !collaboration.canEditLiveDraft) {
+      return;
+    }
+    _draftDebounce.remove(field)?.cancel();
+    _draftDebounce[field] = Timer(const Duration(milliseconds: 250), () {
+      _draftDebounce.remove(field);
+      if (!mounted) return;
+      unawaited(
+        collaboration
+            .updateLiveDraftField(field, _draftControllers[field]!.text)
+            .catchError((Object _) {}),
+      );
+    });
+  }
+
+  void _onDraftFocusChanged(String field) {
+    if (!mounted) return;
+    final collaboration = context.read<CollaborationProvider>();
+    if (collaboration.liveDraftSnapshot == null) return;
+    final focused = _draftFocusNodes[field]?.hasFocus ?? false;
+    focused
+        ? _focusedDraftFields.add(field)
+        : _focusedDraftFields.remove(field);
+    if (focused && collaboration.canEditLiveDraft) {
+      unawaited(_acquireDraftField(field, collaboration));
+      return;
+    }
+    if (!focused) unawaited(_flushAndReleaseDraftField(field, collaboration));
+  }
+
+  Future<void> _acquireDraftField(
+    String field,
+    CollaborationProvider collaboration,
+  ) async {
+    try {
+      await collaboration.acquireLiveDraftField(field);
+    } catch (_) {
+      // Refreshing exposes the holder and disables the field after a lock race.
+      try {
+        await collaboration.refreshLiveDraft();
+      } catch (_) {}
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _flushAndReleaseDraftField(
+    String field,
+    CollaborationProvider collaboration,
+  ) async {
+    _draftDebounce.remove(field)?.cancel();
+    if (collaboration.canEditLiveDraft) {
+      try {
+        await collaboration.updateLiveDraftField(
+          field,
+          _draftControllers[field]!.text,
+        );
+      } catch (_) {
+        // The provider exposes the protocol error and retains the local value.
+      }
+    }
+    await collaboration.releaseLiveDraftField(field);
+  }
+
   String _getCurrentTime() {
     final now = DateTime.now();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
+  String _displayLiveDraftTime(String value) {
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null || !value.contains('T')) return value;
+    final local = parsed.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _submitForm() async {
-    if (widget.readOnly) return;
+    final collaboration = context.read<CollaborationProvider>();
+    if (widget.readOnly ||
+        (collaboration.liveDraftSnapshot != null &&
+            !collaboration.canEditLiveDraft)) {
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final logProvider = Provider.of<LogProvider>(context, listen: false);
@@ -75,7 +244,39 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         Provider.of<SessionProvider>(context, listen: false);
     final dictionaryProvider =
         Provider.of<DictionaryProvider>(context, listen: false);
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+
+    final normalizedCallsign = _callsignController.text.trim().toUpperCase();
+    final duplicate = normalizedCallsign.isNotEmpty &&
+        logProvider.logs.any(
+          (log) => log.callsign.trim().toUpperCase() == normalizedCallsign,
+        );
+    if (settingsProvider.duplicateCallsignWarningEnabled && duplicate) {
+      final proceed = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(l10n.duplicateCallsignTitle),
+              content: Text(
+                l10n.duplicateCallsignMessage(normalizedCallsign),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(l10n.saveAnyway),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!proceed || !mounted) return;
+    }
 
     if (_deviceController.text.isNotEmpty) {
       await dictionaryProvider.addDevice(_deviceController.text);
@@ -88,6 +289,43 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
     if (_qthController.text.isNotEmpty) {
       await dictionaryProvider.addQth(_qthController.text);
+    }
+    if (!mounted) return;
+
+    if (collaboration.liveDraftSnapshot != null) {
+      if (_timeController.text.isEmpty) {
+        _timeController.text = _getCurrentTime();
+      }
+      for (final timer in _draftDebounce.values) {
+        timer.cancel();
+      }
+      _draftDebounce.clear();
+      for (final entry in _draftControllers.entries) {
+        try {
+          await collaboration.updateLiveDraftField(
+            entry.key,
+            entry.value.text,
+          );
+        } catch (_) {
+          // commitCurrentLiveDraft retries retained dirty values and decides
+          // whether a network failure should enter the offline review queue.
+        }
+      }
+      final disposition = await collaboration.commitCurrentLiveDraft();
+      if (!mounted) return;
+      _syncSharedDraft(collaboration);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            disposition == LiveDraftCommitDisposition.committed
+                ? l10n.recordAdded
+                : l10n.recordQueuedOffline,
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      FocusScope.of(context).requestFocus(_callsignFocusNode);
+      return;
     }
 
     final log = LogEntry(
@@ -107,12 +345,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     log.remarks = _remarksController.text;
 
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
+    if (!mounted) return;
     _resetForm();
 
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('记录已添加'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(l10n.recordAdded),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -139,6 +378,41 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final collaboration = Provider.of<CollaborationProvider>(context);
+    _syncSharedDraft(collaboration);
+    final sharedDraft = collaboration.liveDraftSnapshot != null;
+    final readOnly =
+        widget.readOnly || (sharedDraft && !collaboration.canEditLiveDraft);
+
+    bool isActiveForeignLock(String field) {
+      final lock = collaboration.lockForField(field);
+      return lock != null &&
+          lock.expiresAt.isAfter(DateTime.now()) &&
+          collaboration.fieldLockedByAnotherUser(field);
+    }
+
+    final activeForeignLocks = collaboration.liveDraftLocks
+        .where(
+          (lock) =>
+              lock.expiresAt.isAfter(DateTime.now()) &&
+              collaboration.fieldLockedByAnotherUser(lock.field),
+        )
+        .toList(growable: false);
+    _scheduleLockExpiryRefresh(activeForeignLocks);
+    final firstForeignLock =
+        activeForeignLocks.isEmpty ? null : activeForeignLocks.first;
+    final canSubmit = !readOnly && firstForeignLock == null;
+
+    bool fieldEnabled(String field) => !readOnly && !isActiveForeignLock(field);
+
+    String fieldLabel(String field, String fallback) {
+      final lock = collaboration.lockForField(field);
+      if (lock == null || !isActiveForeignLock(field)) {
+        return fallback;
+      }
+      return '$fallback · ${context.l10n.fieldLockedBy(lock.username)}';
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -170,7 +444,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _controllerController,
-                      label: '主控呼号 *',
+                      label: fieldLabel('controller', '主控呼号 *'),
                       hintText: '输入主控呼号',
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
@@ -180,6 +454,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       },
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      focusNode: _draftFocusNodes['controller'],
+                      enabled: fieldEnabled('controller'),
                     ),
                   ),
                   SizedBox(
@@ -195,117 +471,143 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       rstRcvdController: _rstRcvdController,
                       timeController: _timeController,
                       controllerController: _controllerController,
-                      label: '点名呼号',
+                      label: fieldLabel('callsign', '点名呼号'),
                       hintText: '输入呼号',
                       focusNode: _callsignFocusNode,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      enabled: fieldEnabled('callsign'),
+                      historyEnabled: settingsProvider.callSignQthLinkEnabled,
+                      canFillField: fieldEnabled,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return context.l10n.callsignRequired;
+                        }
+                        return null;
+                      },
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildAutocompleteField(
                       controller: _deviceController,
-                      label: '设备',
+                      label: fieldLabel('device', '设备'),
                       hintText: '输入设备名称',
                       options: dictionaryProvider.deviceDict,
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      draftField: 'device',
+                      enabled: fieldEnabled('device'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildAutocompleteField(
                       controller: _antennaController,
-                      label: '天线',
+                      label: fieldLabel('antenna', '天线'),
                       hintText: '输入天线名称',
                       options: dictionaryProvider.antennaDict,
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      draftField: 'antenna',
+                      enabled: fieldEnabled('antenna'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _powerController,
-                      label: '功率',
+                      label: fieldLabel('power', '功率'),
                       hintText: '输入功率',
                       keyboardType: TextInputType.number,
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      focusNode: _draftFocusNodes['power'],
+                      enabled: fieldEnabled('power'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildAutocompleteField(
                       controller: _qthController,
-                      label: 'QTH',
+                      label: fieldLabel('qth', 'QTH'),
                       hintText: '输入QTH',
                       options: dictionaryProvider.qthDict,
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      draftField: 'qth',
+                      enabled: fieldEnabled('qth'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _heightController,
-                      label: '高度',
+                      label: fieldLabel('height', '高度'),
                       hintText: '输入高度',
                       keyboardType: TextInputType.number,
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      focusNode: _draftFocusNodes['height'],
+                      enabled: fieldEnabled('height'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _timeController,
-                      label: '时间',
+                      label: fieldLabel('time', '时间'),
                       hintText: 'HH:mm',
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      focusNode: _draftFocusNodes['time'],
+                      enabled: fieldEnabled('time'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _reportController,
-                      label: 'RST发',
+                      label: fieldLabel('rstSent', 'RST发'),
                       hintText: '59',
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      focusNode: _draftFocusNodes['rstSent'],
+                      enabled: fieldEnabled('rstSent'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _rstRcvdController,
-                      label: 'RST收',
+                      label: fieldLabel('rstRcvd', 'RST收'),
                       hintText: '59',
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.done,
-                      onSubmitted:
-                          widget.readOnly ? null : (_) => _submitForm(),
+                      onSubmitted: canSubmit ? (_) => _submitForm() : null,
+                      focusNode: _draftFocusNodes['rstRcvd'],
+                      enabled: fieldEnabled('rstRcvd'),
                     ),
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
                     child: _buildMaterialTextField(
                       controller: _remarksController,
-                      label: '备注',
+                      label: fieldLabel('remarks', '备注'),
                       hintText: '可选备注',
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
+                      focusNode: _draftFocusNodes['remarks'],
+                      enabled: fieldEnabled('remarks'),
                     ),
                   ),
                 ],
@@ -317,9 +619,21 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
               SizedBox(
                 height: isNarrow ? 44 : 48,
                 child: FilledButton.icon(
-                  onPressed: widget.readOnly ? null : _submitForm,
-                  icon: Icon(widget.readOnly ? Icons.lock_outline : Icons.add),
-                  label: Text(widget.readOnly ? '当前协作会话只读' : '添加记录'),
+                  onPressed: canSubmit ? _submitForm : null,
+                  icon: Icon(
+                    readOnly || firstForeignLock != null
+                        ? Icons.lock_outline
+                        : Icons.add,
+                  ),
+                  label: Text(
+                    readOnly
+                        ? context.l10n.sharedDraftReadOnly
+                        : firstForeignLock != null
+                            ? context.l10n.fieldLockedBy(
+                                firstForeignLock.username,
+                              )
+                            : context.l10n.saveRecord,
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
                   ),
@@ -344,9 +658,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     TextInputAction? textInputAction,
     bool upperCase = true,
     bool isCompact = false,
+    FocusNode? focusNode,
+    bool enabled = true,
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
+      enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
@@ -376,13 +694,18 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     TextInputAction? textInputAction,
     bool upperCase = true,
     bool isCompact = false,
+    required String draftField,
+    bool enabled = true,
   }) {
     final textCapitalization =
         upperCase ? TextCapitalization.characters : TextCapitalization.none;
     final inputFormatters =
         upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
 
-    return Autocomplete<DictionaryItem>(
+    final draftFocusNode = _draftFocusNodes[draftField]!;
+    final autocomplete = Autocomplete<DictionaryItem>(
+      textEditingController: controller,
+      focusNode: draftFocusNode,
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<DictionaryItem>.empty();
@@ -428,14 +751,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         FocusNode fieldFocusNode,
         VoidCallback onFieldSubmitted,
       ) {
-        controller.addListener(() {
-          if (fieldController.text != controller.text) {
-            fieldController.text = controller.text;
-          }
-        });
         return TextFormField(
           controller: fieldController,
           focusNode: fieldFocusNode,
+          enabled: enabled,
           decoration: InputDecoration(
             labelText: label,
             hintText: hintText,
@@ -445,7 +764,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 horizontal: 12, vertical: isCompact ? 10 : 14),
           ),
           onChanged: (value) {
-            controller.text = upperCase ? value.toUpperCase() : value;
             onChanged?.call(value);
           },
           textInputAction: textInputAction ?? TextInputAction.next,
@@ -497,6 +815,25 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             ),
           ),
         );
+      },
+    );
+    return autocomplete;
+  }
+
+  void _scheduleLockExpiryRefresh(List<dynamic> activeForeignLocks) {
+    _lockExpiryTimer?.cancel();
+    _lockExpiryTimer = null;
+    if (activeForeignLocks.isEmpty) return;
+    final earliest = activeForeignLocks
+        .map((lock) => lock.expiresAt as DateTime)
+        .reduce((left, right) => left.isBefore(right) ? left : right);
+    final delay = earliest.difference(DateTime.now());
+    _lockExpiryTimer = Timer(
+      delay.isNegative
+          ? Duration.zero
+          : delay + const Duration(milliseconds: 20),
+      () {
+        if (mounted) setState(() {});
       },
     );
   }

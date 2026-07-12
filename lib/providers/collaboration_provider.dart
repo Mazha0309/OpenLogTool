@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
@@ -28,6 +29,8 @@ enum CollaborationState {
   revoked,
   failed,
 }
+
+enum LiveDraftCommitDisposition { committed, queuedOffline }
 
 final class LocalCollaborationBinding {
   const LocalCollaborationBinding({
@@ -179,6 +182,11 @@ class CollaborationProvider with ChangeNotifier {
     'collaborationWebSocket',
     'sessionSnapshotTombstones',
   };
+  static const _liveDraftFeature = 'collaborationLiveDraft';
+  static const _publicShareFeatures = {
+    'publicLiveshare',
+    'publicLivesharePage',
+  };
 
   final CollaborationReplicaPort _replica;
   final CollaborationConflictPort _conflictPort;
@@ -201,6 +209,9 @@ class CollaborationProvider with ChangeNotifier {
   int _conflictInvalidationGeneration = 0;
   bool _conflictsNeedRefresh = false;
   bool _conflictReloadScheduled = false;
+  int _liveDraftGeneration = 0;
+  Future<void> _liveDraftSerial = Future<void>.value();
+  Timer? _liveDraftRenewalTimer;
 
   CollaborationState _state = CollaborationState.localOnly;
   LocalCollaborationBinding? _binding;
@@ -218,6 +229,18 @@ class CollaborationProvider with ChangeNotifier {
   bool _conflictsLoaded = false;
   bool _conflictsLoading = false;
   String? _resolvingConflictId;
+  LiveDraftSnapshotDto? _liveDraftSnapshot;
+  LiveDraftFieldsDto? _localLiveDraftFields;
+  Set<String> _dirtyLiveDraftFields = const {};
+  Map<String, int> _liveDraftBaseRevisions = const {};
+  Map<String, LiveDraftLockDto> _ownedLiveDraftLocks = const {};
+  List<LocalOfflineRecordDto> _offlineRecords = const [];
+  int _liveDraftClientSeq = 0;
+  bool _liveDraftLoading = false;
+  String? _liveDraftErrorCode;
+  String? _liveDraftErrorMessage;
+  List<PublicShareDto> _publicShares = const [];
+  PublicShareDto? _lastCreatedPublicShare;
 
   CollaborationState get state => _state;
   LocalCollaborationBinding? get binding => _binding;
@@ -234,6 +257,19 @@ class CollaborationProvider with ChangeNotifier {
   List<CollaborationConflict> get openConflicts => _openConflicts;
   bool get conflictsLoading => _conflictsLoading;
   String? get resolvingConflictId => _resolvingConflictId;
+  LiveDraftSnapshotDto? get liveDraftSnapshot => _liveDraftSnapshot;
+  LiveDraftFieldsDto? get liveDraftFields =>
+      _localLiveDraftFields ?? _liveDraftSnapshot?.draft.fields;
+  List<LiveDraftLockDto> get liveDraftLocks =>
+      _liveDraftSnapshot?.locks ?? const [];
+  Map<String, LiveDraftLockDto> get ownedLiveDraftLocks =>
+      Map.unmodifiable(_ownedLiveDraftLocks);
+  List<LocalOfflineRecordDto> get offlineRecords => _offlineRecords;
+  bool get liveDraftLoading => _liveDraftLoading;
+  String? get liveDraftErrorCode => _liveDraftErrorCode;
+  String? get liveDraftErrorMessage => _liveDraftErrorMessage;
+  List<PublicShareDto> get publicShares => _publicShares;
+  PublicShareDto? get lastCreatedPublicShare => _lastCreatedPublicShare;
   bool get isBusy => _operationInProgress;
   CollaborationSyncState? get syncState => _syncState;
   CollaborationTransportPhase get transportPhase =>
@@ -309,6 +345,51 @@ class CollaborationProvider with ChangeNotifier {
   bool get supportsInvites =>
       isOwner &&
       (_server?.serverInfo?.features.contains('collaborationInvites') ?? false);
+
+  bool get supportsLiveDraft =>
+      _server?.serverInfo?.features.contains(_liveDraftFeature) ?? false;
+
+  bool get canViewLiveDraft {
+    final binding = _binding;
+    final membership = _membership;
+    return supportsLiveDraft &&
+        binding != null &&
+        membership != null &&
+        membership.removedAt == null &&
+        binding.sessionId == _sessions?.currentSessionId &&
+        binding.accountId == _server?.accountId;
+  }
+
+  bool get canEditLiveDraft =>
+      canViewLiveDraft &&
+      _state == CollaborationState.ready &&
+      !canonicalSessionClosed &&
+      _sessions?.currentSession?.status == 'active' &&
+      (effectiveRole == SessionRole.owner ||
+          effectiveRole == SessionRole.editor);
+
+  bool get supportsPublicShareManagement =>
+      isOwner &&
+      _publicShareFeatures
+          .difference(
+            _server?.serverInfo?.features.toSet() ?? const <String>{},
+          )
+          .isEmpty;
+
+  LiveDraftLockDto? lockForField(String field) {
+    for (final lock in liveDraftLocks) {
+      if (lock.field == field) return lock;
+    }
+    return null;
+  }
+
+  bool fieldLockedByAnotherUser(String field) {
+    final lock = lockForField(field);
+    final accountId = _server?.accountId;
+    final deviceId = _deviceId;
+    return lock != null &&
+        (lock.userId != accountId || lock.deviceId != deviceId);
+  }
 
   bool get readOnly => isCurrentSessionReadOnly;
 
@@ -499,6 +580,13 @@ class CollaborationProvider with ChangeNotifier {
           'SYNC_FEATURE_UNAVAILABLE',
           '服务器未完整启用 Stage 2 实时同步；本地副本保持只读',
         );
+      }
+      if (info.features.contains(_liveDraftFeature)) {
+        await _refreshLiveDraftForBinding(
+          currentBinding,
+          requestGeneration: ++_liveDraftGeneration,
+        );
+        if (!isCurrent()) return;
       }
     } on ServerApiException catch (error) {
       if (!isCurrent()) return;
@@ -851,6 +939,300 @@ class CollaborationProvider with ChangeNotifier {
     });
   }
 
+  Future<void> refreshLiveDraft() async {
+    final binding = _binding;
+    if (binding == null || !canViewLiveDraft) return;
+    final generation = ++_liveDraftGeneration;
+    _liveDraftLoading = true;
+    _safeNotify();
+    await _refreshLiveDraftForBinding(
+      binding,
+      requestGeneration: generation,
+    );
+  }
+
+  Future<LiveDraftLockDto> acquireLiveDraftField(String field) =>
+      _serializeLiveDraft(() async {
+        if (!liveDraftFieldNames.contains(field)) {
+          throw ArgumentError.value(field, 'field');
+        }
+        final context = _requireLiveDraftContext(requireEdit: true);
+        final current = _ownedLiveDraftLocks[field];
+        if (current != null && current.expiresAt.isAfter(DateTime.now())) {
+          return current;
+        }
+        final lock = await context.api.acquireLiveDraftLock(
+          sessionId: context.binding.sessionId,
+          field: field,
+          deviceId: context.deviceId,
+        );
+        _ownedLiveDraftLocks = {..._ownedLiveDraftLocks, field: lock};
+        _replaceLiveDraftLock(lock);
+        _ensureLiveDraftRenewalTimer();
+        _clearLiveDraftError();
+        _safeNotify();
+        return lock;
+      });
+
+  Future<void> releaseLiveDraftField(String field) =>
+      _serializeLiveDraft(() async {
+        final lock = _ownedLiveDraftLocks[field];
+        if (lock == null) return;
+        final context = _tryLiveDraftContext(requireEdit: false);
+        _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(field);
+        _removeLiveDraftLock(lock.leaseId);
+        if (_ownedLiveDraftLocks.isEmpty) {
+          _liveDraftRenewalTimer?.cancel();
+          _liveDraftRenewalTimer = null;
+        }
+        _safeNotify();
+        if (context == null) return;
+        try {
+          await context.api.releaseLiveDraftLock(
+            sessionId: context.binding.sessionId,
+            leaseId: lock.leaseId,
+            deviceId: context.deviceId,
+          );
+        } on ServerApiException catch (error) {
+          if (!{'LIVE_DRAFT_LOCK_NOT_FOUND', 'LIVE_DRAFT_LOCK_EXPIRED'}
+              .contains(error.code)) {
+            _setLiveDraftError(error.code, error.message);
+          }
+        }
+      });
+
+  Future<void> updateLiveDraftField(String field, String value) {
+    if (!liveDraftFieldNames.contains(field)) {
+      return Future<void>.error(ArgumentError.value(field, 'field'));
+    }
+    if (!canEditLiveDraft) {
+      return Future<void>.error(StateError('LIVE_DRAFT_READ_ONLY'));
+    }
+    final normalizedValue =
+        field == 'time' ? _normalizeLiveDraftTime(value) : value;
+    final current = liveDraftFields ?? LiveDraftFieldsDto.empty();
+    if (current[field] == normalizedValue &&
+        !_dirtyLiveDraftFields.contains(field)) {
+      return Future<void>.value();
+    }
+    _localLiveDraftFields = current.withField(field, normalizedValue);
+    if (!_dirtyLiveDraftFields.contains(field)) {
+      _liveDraftBaseRevisions = {
+        ..._liveDraftBaseRevisions,
+        field: _liveDraftSnapshot?.draft.fieldRevisions[field] ?? 0,
+      };
+    }
+    _dirtyLiveDraftFields = {..._dirtyLiveDraftFields, field};
+    _safeNotify();
+    return _serializeLiveDraft(() => _flushLiveDraftField(field));
+  }
+
+  Future<LiveDraftCommitDisposition> commitCurrentLiveDraft() =>
+      _serializeLiveDraft(() async {
+        final context = _requireLiveDraftContext(requireEdit: true);
+        final initialSnapshot = _liveDraftSnapshot;
+        final initialFields = liveDraftFields;
+        if (initialSnapshot == null || initialFields == null) {
+          throw StateError('LIVE_DRAFT_NOT_LOADED');
+        }
+        final mutationId = _uuidV4();
+        try {
+          await _flushDirtyLiveDraftFields();
+        } on ServerApiException catch (error) {
+          if (!error.retryable) rethrow;
+          final queued = await _queueOfflineRecord(
+            context,
+            mutationId: mutationId,
+            snapshot: initialSnapshot,
+            fields: initialFields,
+          );
+          _offlineRecords = [..._offlineRecords, queued];
+          _localLiveDraftFields = _resetFieldsAfterCommit(initialFields);
+          _dirtyLiveDraftFields = {
+            for (final field in liveDraftFieldNames)
+              if (_localLiveDraftFields![field] !=
+                  initialSnapshot.draft.fields[field])
+                field,
+          };
+          _liveDraftBaseRevisions = {
+            for (final field in _dirtyLiveDraftFields)
+              field: initialSnapshot.draft.fieldRevisions[field] ?? 0,
+          };
+          _clearOwnedLiveDraftLocks();
+          _setLiveDraftError(
+            'OFFLINE_RECORD_QUEUED',
+            '网络不可用，记录已保存到本机，恢复连接后将检查是否可安全提交',
+          );
+          await _persistLiveDraftState();
+          _safeNotify();
+          return LiveDraftCommitDisposition.queuedOffline;
+        }
+        final canonical = _liveDraftSnapshot;
+        final fields = liveDraftFields;
+        if (canonical == null || fields == null) {
+          throw StateError('LIVE_DRAFT_NOT_LOADED');
+        }
+        final required = ['time', 'controller', 'callsign']
+            .where((field) => fields[field].trim().isEmpty)
+            .toList(growable: false);
+        if (required.isNotEmpty) {
+          throw StateError('LIVE_DRAFT_INCOMPLETE:${required.join(',')}');
+        }
+        try {
+          final committed = await context.api.commitLiveDraft(
+            sessionId: context.binding.sessionId,
+            deviceId: context.deviceId,
+            expectedDraftVersion: canonical.draft.version,
+            syncId: mutationId,
+            idempotencyKey: mutationId,
+          );
+          _liveDraftSnapshot = LiveDraftSnapshotDto(
+            draft: committed.nextDraft,
+            locks: const [],
+            currentOrdinal: committed.currentOrdinal,
+            totalRecords: committed.totalRecords,
+            previousRecord: committed.record,
+          );
+          _localLiveDraftFields = committed.nextDraft.fields;
+          _dirtyLiveDraftFields = const {};
+          _liveDraftBaseRevisions = const {};
+          _clearOwnedLiveDraftLocks();
+          _clearLiveDraftError();
+          await _persistLiveDraftState();
+          _syncCoordinator?.wake();
+          _safeNotify();
+          return LiveDraftCommitDisposition.committed;
+        } on ServerApiException catch (error) {
+          if (!error.retryable) {
+            _setLiveDraftError(error.code, error.message);
+            if ({
+              'LIVE_DRAFT_ALREADY_COMMITTED',
+              'LIVE_DRAFT_VERSION_CONFLICT',
+              'LIVE_DRAFT_BUSY',
+            }.contains(error.code)) {
+              unawaited(refreshLiveDraft());
+            }
+            rethrow;
+          }
+          final queued = await _queueOfflineRecord(
+            context,
+            mutationId: mutationId,
+            snapshot: canonical,
+            fields: fields,
+          );
+          _offlineRecords = [..._offlineRecords, queued];
+          _localLiveDraftFields = _resetFieldsAfterCommit(fields);
+          _dirtyLiveDraftFields = {
+            for (final field in liveDraftFieldNames)
+              if (_localLiveDraftFields![field] !=
+                  canonical.draft.fields[field])
+                field,
+          };
+          _liveDraftBaseRevisions = {
+            for (final field in _dirtyLiveDraftFields)
+              field: canonical.draft.fieldRevisions[field] ?? 0,
+          };
+          _clearOwnedLiveDraftLocks();
+          _setLiveDraftError(
+            'OFFLINE_RECORD_QUEUED',
+            '网络不可用，记录已保存到本机，恢复连接后将检查是否可安全提交',
+          );
+          await _persistLiveDraftState();
+          _safeNotify();
+          return LiveDraftCommitDisposition.queuedOffline;
+        }
+      });
+
+  Future<void> discardCurrentLiveDraft() => _serializeLiveDraft(() async {
+        final context = _requireLiveDraftContext(requireEdit: true);
+        final snapshot = _liveDraftSnapshot;
+        if (snapshot == null) throw StateError('LIVE_DRAFT_NOT_LOADED');
+        late final LiveDraftDiscardResultDto discarded;
+        try {
+          discarded = await context.api.discardLiveDraft(
+            sessionId: context.binding.sessionId,
+            deviceId: context.deviceId,
+            expectedDraftVersion: snapshot.draft.version,
+            idempotencyKey: _uuidV4(),
+          );
+        } on ServerApiException catch (error) {
+          _setLiveDraftError(error.code, error.message);
+          if ({'LIVE_DRAFT_VERSION_CONFLICT', 'LIVE_DRAFT_BUSY'}
+              .contains(error.code)) {
+            unawaited(refreshLiveDraft());
+          }
+          rethrow;
+        }
+        _liveDraftSnapshot = LiveDraftSnapshotDto(
+          draft: discarded.nextDraft,
+          locks: const [],
+          currentOrdinal: discarded.currentOrdinal,
+          totalRecords: discarded.totalRecords,
+          previousRecord: snapshot.previousRecord,
+        );
+        _localLiveDraftFields = discarded.nextDraft.fields;
+        _dirtyLiveDraftFields = const {};
+        _liveDraftBaseRevisions = const {};
+        _clearOwnedLiveDraftLocks();
+        _clearLiveDraftError();
+        await _persistLiveDraftState();
+        _safeNotify();
+      });
+
+  Future<void> resolveOfflineRecord(
+    String mutationId,
+    OfflineRecordResolution resolution,
+  ) =>
+      _serializeLiveDraft(() async {
+        LocalOfflineRecordDto? record;
+        for (final candidate in _offlineRecords) {
+          if (candidate.mutationId == mutationId) {
+            record = candidate;
+            break;
+          }
+        }
+        if (record == null) throw StateError('OFFLINE_RECORD_NOT_FOUND');
+        if (resolution == OfflineRecordResolution.discard) {
+          await _updateOfflineRecord(
+            record,
+            state: OfflineRecordState.discarded,
+            resolution: resolution,
+          );
+          return;
+        }
+        final context = _requireLiveDraftContext(requireEdit: true);
+        await _copyOfflineRecordIntoCurrentDraft(record, context);
+        if (resolution == OfflineRecordResolution.submitAsDuplicate) {
+          final snapshot = _liveDraftSnapshot!;
+          final committed = await context.api.commitLiveDraft(
+            sessionId: context.binding.sessionId,
+            deviceId: context.deviceId,
+            expectedDraftVersion: snapshot.draft.version,
+            syncId: record.mutationId,
+            idempotencyKey: record.mutationId,
+          );
+          _liveDraftSnapshot = LiveDraftSnapshotDto(
+            draft: committed.nextDraft,
+            locks: const [],
+            currentOrdinal: committed.currentOrdinal,
+            totalRecords: committed.totalRecords,
+            previousRecord: committed.record,
+          );
+          _localLiveDraftFields = committed.nextDraft.fields;
+          _dirtyLiveDraftFields = const {};
+          _liveDraftBaseRevisions = const {};
+          _clearOwnedLiveDraftLocks();
+          _syncCoordinator?.wake();
+        }
+        await _updateOfflineRecord(
+          record,
+          state: OfflineRecordState.resolved,
+          resolution: resolution,
+        );
+        await _persistLiveDraftState();
+        _safeNotify();
+      });
+
   Future<void> refreshManagement() async {
     await _runOperation((context) async {
       final binding = _requireBoundSession(context, requireOwner: true);
@@ -923,6 +1305,126 @@ class CollaborationProvider with ChangeNotifier {
       ];
       await _refreshManagementBestEffort(context, binding);
     });
+  }
+
+  Future<void> leaveCurrentSession() async {
+    await _runOperation((context) async {
+      final binding = _requireBoundSession(context, requireOwner: false);
+      if (effectiveRole == SessionRole.owner) {
+        throw StateError('OWNER_TRANSFER_REQUIRED');
+      }
+      await _ensureServerCapabilities(context, _memberManagementFeatures);
+      _assertOperationCurrent(context);
+      final pending = await _pendingMutationId(
+        context,
+        binding,
+        'leaveSession',
+        const {},
+      );
+      _assertOperationCurrent(context);
+      final result = await context.api.leaveSession(
+        sessionId: binding.sessionId,
+        idempotencyKey: pending.id,
+      );
+      await _confirmPendingMutation(pending.storageKey);
+      if (!_isOperationCurrent(context)) return;
+      await RustApi.markCollaborationRevoked(
+        serverInstanceId: binding.serverInstanceId,
+        accountId: binding.accountId,
+        sessionId: binding.sessionId,
+      );
+      if (!_isOperationCurrent(context)) return;
+      _membership = result.membership;
+      _members = const [];
+      _invites = const [];
+      _state = CollaborationState.revoked;
+      context.logs.setCollaborationReadOnly(binding.sessionId, true);
+    });
+  }
+
+  Future<void> refreshPublicShares() async {
+    await _runOperation((context) async {
+      final binding = _requireBoundSession(context, requireOwner: true);
+      await _ensureServerCapabilities(context, _publicShareFeatures);
+      _assertOperationCurrent(context);
+      final shares = <PublicShareDto>[];
+      String? cursor;
+      do {
+        final page = await context.api.listPublicShares(
+          sessionId: binding.sessionId,
+          after: cursor,
+        );
+        _assertOperationCurrent(context);
+        shares.addAll(page.publicShares);
+        cursor = page.nextCursor;
+      } while (cursor != null);
+      _publicShares = List.unmodifiable(shares);
+    }, refreshAfter: false);
+  }
+
+  Future<PublicShareDto> createPublicShare({
+    int expiresInHours = 24,
+  }) async {
+    late PublicShareDto created;
+    await _runOperation((context) async {
+      final binding = _requireBoundSession(context, requireOwner: true);
+      await _ensureServerCapabilities(context, _publicShareFeatures);
+      _assertOperationCurrent(context);
+      final pending = await _pendingMutationId(
+        context,
+        binding,
+        'createPublicShare',
+        {'expiresInHours': expiresInHours},
+      );
+      _assertOperationCurrent(context);
+      created = await context.api.createPublicShare(
+        sessionId: binding.sessionId,
+        expiresInHours: expiresInHours,
+        idempotencyKey: pending.id,
+      );
+      await _confirmPendingMutation(pending.storageKey);
+      if (!_isOperationCurrent(context)) return;
+      _lastCreatedPublicShare = created;
+      _publicShares = [
+        created,
+        ..._publicShares.where(
+          (share) => share.publicShareId != created.publicShareId,
+        ),
+      ];
+    }, refreshAfter: false);
+    return created;
+  }
+
+  Uri publicSharePageUri(PublicShareDto share) =>
+      _requireServer().api.publicSharePageUri(share);
+
+  Future<void> revokePublicShare(String publicShareId) async {
+    await _runOperation((context) async {
+      final binding = _requireBoundSession(context, requireOwner: true);
+      await _ensureServerCapabilities(context, _publicShareFeatures);
+      _assertOperationCurrent(context);
+      final pending = await _pendingMutationId(
+        context,
+        binding,
+        'revokePublicShare',
+        {'publicShareId': publicShareId},
+      );
+      _assertOperationCurrent(context);
+      final revoked = await context.api.revokePublicShare(
+        sessionId: binding.sessionId,
+        publicShareId: publicShareId,
+        idempotencyKey: pending.id,
+      );
+      await _confirmPendingMutation(pending.storageKey);
+      if (!_isOperationCurrent(context)) return;
+      _publicShares = [
+        for (final share in _publicShares)
+          if (share.publicShareId == publicShareId) revoked else share,
+      ];
+      if (_lastCreatedPublicShare?.publicShareId == publicShareId) {
+        _lastCreatedPublicShare = null;
+      }
+    }, refreshAfter: false);
   }
 
   Future<void> removeMember(String userId) async {
@@ -1058,6 +1560,20 @@ class CollaborationProvider with ChangeNotifier {
   Future<void> closeCurrentSession() async {
     await _runOperation((context) async {
       final binding = _requireSynchronizedOwner(context);
+      if (supportsLiveDraft) {
+        final snapshot = await context.api.getLiveDraft(binding.sessionId);
+        _assertOperationCurrent(context);
+        if (_liveDraftHasActualContent(snapshot.draft.fields)) {
+          throw StateError(
+            'LIVE_DRAFT_NOT_EMPTY: 请先提交或明确丢弃当前点名草稿',
+          );
+        }
+        if (snapshot.locks.isNotEmpty) {
+          throw StateError(
+            'LIVE_DRAFT_BUSY: 请先结束所有草稿字段编辑后再关闭会话',
+          );
+        }
+      }
       await RustApi.closeSession(sessionId: binding.sessionId);
       _assertOperationCurrent(context);
       // Lock writes before any async UI reload or network round trip. Rust has
@@ -1584,6 +2100,660 @@ class CollaborationProvider with ChangeNotifier {
     _clearScopedState();
   }
 
+  Future<T> _serializeLiveDraft<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    final previous = _liveDraftSerial;
+    _liveDraftSerial = () async {
+      try {
+        await previous;
+      } catch (_) {
+        // Each caller receives its own error; a failed action must not poison
+        // later draft operations.
+      }
+      try {
+        completer.complete(await action());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    }();
+    return completer.future;
+  }
+
+  ({
+    ServerApi api,
+    LocalCollaborationBinding binding,
+    String deviceId,
+  }) _requireLiveDraftContext({required bool requireEdit}) {
+    final context = _tryLiveDraftContext(requireEdit: requireEdit);
+    if (context == null) {
+      throw StateError(
+        requireEdit ? 'LIVE_DRAFT_READ_ONLY' : 'LIVE_DRAFT_CONTEXT_MISMATCH',
+      );
+    }
+    return context;
+  }
+
+  ({
+    ServerApi api,
+    LocalCollaborationBinding binding,
+    String deviceId,
+  })? _tryLiveDraftContext({required bool requireEdit}) {
+    final server = _server;
+    final binding = _binding;
+    final deviceId = _deviceId;
+    if (server == null ||
+        binding == null ||
+        deviceId == null ||
+        !canViewLiveDraft ||
+        (requireEdit && !canEditLiveDraft)) {
+      return null;
+    }
+    return (api: server.api, binding: binding, deviceId: deviceId);
+  }
+
+  Future<void> _refreshLiveDraftForBinding(
+    LocalCollaborationBinding binding, {
+    required int requestGeneration,
+  }) async {
+    bool isCurrent() =>
+        !_disposed &&
+        requestGeneration == _liveDraftGeneration &&
+        _binding?.serverInstanceId == binding.serverInstanceId &&
+        _binding?.accountId == binding.accountId &&
+        _binding?.sessionId == binding.sessionId &&
+        _sessions?.currentSessionId == binding.sessionId;
+
+    _liveDraftLoading = true;
+    _safeNotify();
+    try {
+      try {
+        final cachedJson = await RustApi.getCollaborationLiveDraftCache(
+          serverInstanceId: binding.serverInstanceId,
+          accountId: binding.accountId,
+          sessionId: binding.sessionId,
+        );
+        if (!isCurrent()) return;
+        if (cachedJson != null) {
+          final cached = Map<String, Object?>.from(
+            jsonDecode(cachedJson) as Map,
+          );
+          final remote = cached['remote'];
+          if (remote != null) {
+            _liveDraftSnapshot = LiveDraftSnapshotDto.fromJson(remote);
+          }
+          _localLiveDraftFields = LiveDraftFieldsDto.fromJson(
+            cached['localFields'],
+          );
+          _dirtyLiveDraftFields = {
+            for (final value in List<Object?>.from(
+              cached['dirtyFields'] as List? ?? const [],
+            ))
+              if (liveDraftFieldNames.contains(value.toString()))
+                value.toString(),
+          };
+          final cachedRevisions = cached['fieldRevisions'];
+          if (cachedRevisions is Map) {
+            final values = Map<String, Object?>.from(cachedRevisions);
+            _liveDraftBaseRevisions = {
+              for (final field in _dirtyLiveDraftFields)
+                if (values[field] is int) field: values[field]! as int,
+            };
+          } else {
+            _liveDraftBaseRevisions = const {};
+          }
+          _liveDraftClientSeq = cached['clientSeq'] as int? ?? 0;
+          _safeNotify();
+        }
+      } catch (_) {
+        // A corrupt or old cache is non-authoritative; the server snapshot
+        // below remains the source of truth.
+      }
+
+      final server = _server;
+      if (server == null || !isCurrent()) return;
+      final previousSnapshot = _liveDraftSnapshot;
+      final snapshot = await server.api.getLiveDraft(binding.sessionId);
+      if (!isCurrent()) return;
+      final cachedDraftId = previousSnapshot?.draft.draftId;
+      final preserveLocal = cachedDraftId == snapshot.draft.draftId &&
+          _localLiveDraftFields != null &&
+          _dirtyLiveDraftFields.isNotEmpty;
+      if (cachedDraftId != null && cachedDraftId != snapshot.draft.draftId) {
+        _clearOwnedLiveDraftLocks();
+      }
+      _liveDraftSnapshot = snapshot;
+      if (!preserveLocal) {
+        _localLiveDraftFields = snapshot.draft.fields;
+        _dirtyLiveDraftFields = const {};
+        _liveDraftBaseRevisions = const {};
+      } else {
+        final local = _localLiveDraftFields!;
+        _localLiveDraftFields = LiveDraftFieldsDto({
+          for (final field in liveDraftFieldNames)
+            field: _dirtyLiveDraftFields.contains(field)
+                ? local[field]
+                : snapshot.draft.fields[field],
+        });
+        _liveDraftBaseRevisions = {
+          for (final field in _dirtyLiveDraftFields)
+            field: _liveDraftBaseRevisions[field] ??
+                previousSnapshot?.draft.fieldRevisions[field] ??
+                0,
+        };
+      }
+      final offlineJson = await RustApi.listCollaborationOfflineRecords(
+        serverInstanceId: binding.serverInstanceId,
+        accountId: binding.accountId,
+        sessionId: binding.sessionId,
+      );
+      if (!isCurrent()) return;
+      final offlineValues = jsonDecode(offlineJson);
+      if (offlineValues is! List) {
+        throw const FormatException('offline record list must be an array');
+      }
+      _offlineRecords = List.unmodifiable(
+        offlineValues.map(LocalOfflineRecordDto.fromJson),
+      );
+      _clearLiveDraftError();
+      await _reconcilePendingOfflineRecords(binding, isCurrent);
+      if (!isCurrent()) return;
+      await _persistLiveDraftState();
+    } on ServerApiException catch (error) {
+      if (isCurrent()) _setLiveDraftError(error.code, error.message);
+    } catch (error) {
+      if (isCurrent()) {
+        _setLiveDraftError('LIVE_DRAFT_REFRESH_FAILED', error.toString());
+      }
+    } finally {
+      if (requestGeneration == _liveDraftGeneration) {
+        _liveDraftLoading = false;
+        _safeNotify();
+      }
+    }
+  }
+
+  Future<LiveDraftLockDto> _acquireLiveDraftFieldInternal(
+    String field,
+    ({
+      ServerApi api,
+      LocalCollaborationBinding binding,
+      String deviceId,
+    }) context,
+  ) async {
+    final current = _ownedLiveDraftLocks[field];
+    if (current != null && current.expiresAt.isAfter(DateTime.now())) {
+      return current;
+    }
+    final lock = await context.api.acquireLiveDraftLock(
+      sessionId: context.binding.sessionId,
+      field: field,
+      deviceId: context.deviceId,
+    );
+    _ownedLiveDraftLocks = {..._ownedLiveDraftLocks, field: lock};
+    _replaceLiveDraftLock(lock);
+    _ensureLiveDraftRenewalTimer();
+    return lock;
+  }
+
+  Future<void> _flushLiveDraftField(String field) async {
+    final context = _requireLiveDraftContext(requireEdit: true);
+    final snapshot = _liveDraftSnapshot;
+    final local = _localLiveDraftFields;
+    if (snapshot == null || local == null) {
+      throw StateError('LIVE_DRAFT_NOT_LOADED');
+    }
+    if (!_dirtyLiveDraftFields.contains(field)) return;
+    if (local[field] == snapshot.draft.fields[field]) {
+      _dirtyLiveDraftFields = Set.of(_dirtyLiveDraftFields)..remove(field);
+      _liveDraftBaseRevisions = Map.of(_liveDraftBaseRevisions)..remove(field);
+      await _persistLiveDraftState();
+      return;
+    }
+    final lock = await _acquireLiveDraftFieldInternal(field, context);
+    Future<LiveDraftPatchResultDto> send(int clientSeq) =>
+        context.api.updateLiveDraft(
+          sessionId: context.binding.sessionId,
+          deviceId: context.deviceId,
+          clientSeq: clientSeq,
+          updates: [
+            LiveDraftPatchUpdateDto(
+              field: field,
+              value: local[field],
+              expectedRevision: _liveDraftBaseRevisions[field] ??
+                  snapshot.draft.fieldRevisions[field] ??
+                  0,
+              leaseId: lock.leaseId,
+            ),
+          ],
+        );
+    try {
+      late LiveDraftPatchResultDto result;
+      var clientSeq = _liveDraftClientSeq + 1;
+      try {
+        result = await send(clientSeq);
+      } on ServerApiException catch (error) {
+        if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_GAP') {
+          final expected = _expectedLiveDraftClientSeq(error);
+          if (expected == null) rethrow;
+          _liveDraftClientSeq = expected - 1;
+          clientSeq = expected;
+          result = await send(clientSeq);
+        } else if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_REUSED') {
+          // A reused response proves this sequence was already accepted for a
+          // different payload (typically an earlier response was lost). Move
+          // the acknowledged baseline once, then submit the current value as
+          // the next serial update.
+          _liveDraftClientSeq = clientSeq;
+          clientSeq += 1;
+          result = await send(clientSeq);
+        } else {
+          rethrow;
+        }
+      }
+      if (result.appliedClientSeq != clientSeq) {
+        throw const FormatException(
+          'live draft response acknowledged another clientSeq',
+        );
+      }
+      _liveDraftClientSeq = result.appliedClientSeq;
+      final currentSnapshot = _liveDraftSnapshot;
+      if (currentSnapshot == null) return;
+      _liveDraftSnapshot = LiveDraftSnapshotDto(
+        draft: result.draft,
+        locks: currentSnapshot.locks,
+        currentOrdinal: currentSnapshot.currentOrdinal,
+        totalRecords: currentSnapshot.totalRecords,
+        previousRecord: currentSnapshot.previousRecord,
+      );
+      _dirtyLiveDraftFields = Set.of(_dirtyLiveDraftFields)..remove(field);
+      _liveDraftBaseRevisions = Map.of(_liveDraftBaseRevisions)..remove(field);
+      _clearLiveDraftError();
+      await _persistLiveDraftState();
+      _safeNotify();
+    } on ServerApiException catch (error) {
+      _setLiveDraftError(error.code, error.message);
+      if (error.code == 'LIVE_DRAFT_LOCK_REQUIRED') {
+        final stale = _ownedLiveDraftLocks[field];
+        _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(field);
+        if (stale != null) _removeLiveDraftLock(stale.leaseId);
+      }
+      if ({
+        'LIVE_DRAFT_FIELD_CONFLICT',
+        'LIVE_DRAFT_VERSION_CONFLICT',
+        'LIVE_DRAFT_FIELD_LOCKED',
+        'LIVE_DRAFT_LOCK_REQUIRED',
+        'LIVE_DRAFT_CLIENT_SEQ_GAP',
+        'LIVE_DRAFT_CLIENT_SEQ_REUSED',
+      }.contains(error.code)) {
+        unawaited(refreshLiveDraft());
+      }
+      await _persistLiveDraftState();
+      rethrow;
+    }
+  }
+
+  Future<void> _flushDirtyLiveDraftFields() async {
+    for (final field in List<String>.from(_dirtyLiveDraftFields)) {
+      await _flushLiveDraftField(field);
+    }
+  }
+
+  Future<void> _copyOfflineRecordIntoCurrentDraft(
+    LocalOfflineRecordDto record,
+    ({
+      ServerApi api,
+      LocalCollaborationBinding binding,
+      String deviceId,
+    }) context,
+  ) async {
+    final snapshot = _liveDraftSnapshot;
+    if (snapshot == null) throw StateError('LIVE_DRAFT_NOT_LOADED');
+    _localLiveDraftFields = record.record;
+    _dirtyLiveDraftFields = {
+      for (final field in liveDraftFieldNames)
+        if (record.record[field] != snapshot.draft.fields[field]) field,
+    };
+    _liveDraftBaseRevisions = {
+      for (final field in _dirtyLiveDraftFields)
+        field: snapshot.draft.fieldRevisions[field] ?? 0,
+    };
+    for (final field in List<String>.from(_dirtyLiveDraftFields)) {
+      await _flushLiveDraftField(field);
+    }
+  }
+
+  Future<LocalOfflineRecordDto> _queueOfflineRecord(
+    ({
+      ServerApi api,
+      LocalCollaborationBinding binding,
+      String deviceId,
+    }) context, {
+    required String mutationId,
+    required LiveDraftSnapshotDto snapshot,
+    required LiveDraftFieldsDto fields,
+  }) async {
+    final encoded = await RustApi.queueCollaborationOfflineRecord(
+      requestJson: jsonEncode({
+        'serverInstanceId': context.binding.serverInstanceId,
+        'accountId': context.binding.accountId,
+        'sessionId': context.binding.sessionId,
+        'mutationId': mutationId,
+        'draftId': snapshot.draft.draftId,
+        'expectedDraftVersion': snapshot.draft.version,
+        'provisionalOrdinal': snapshot.currentOrdinal,
+        'record': fields.toJson(),
+      }),
+    );
+    return LocalOfflineRecordDto.fromJson(jsonDecode(encoded));
+  }
+
+  Future<void> _updateOfflineRecord(
+    LocalOfflineRecordDto record, {
+    required OfflineRecordState state,
+    required OfflineRecordResolution? resolution,
+    String? lastErrorCode,
+  }) async {
+    final encoded = await RustApi.updateCollaborationOfflineRecord(
+      requestJson: jsonEncode({
+        'mutationId': record.mutationId,
+        'state': state.name,
+        'resolution': resolution?.name,
+        'lastErrorCode': lastErrorCode,
+      }),
+    );
+    final updated = LocalOfflineRecordDto.fromJson(jsonDecode(encoded));
+    _offlineRecords = List.unmodifiable([
+      for (final candidate in _offlineRecords)
+        if (candidate.mutationId != updated.mutationId) candidate,
+      if (state != OfflineRecordState.resolved &&
+          state != OfflineRecordState.discarded)
+        updated,
+    ]);
+    _safeNotify();
+  }
+
+  Future<void> _reconcilePendingOfflineRecords(
+    LocalCollaborationBinding binding,
+    bool Function() isCurrent,
+  ) async {
+    final server = _server;
+    final deviceId = _deviceId;
+    final membership = _membership;
+    if (server == null ||
+        deviceId == null ||
+        membership == null ||
+        membership.removedAt != null ||
+        membership.role == SessionRole.viewer) {
+      return;
+    }
+    for (final record in List<LocalOfflineRecordDto>.from(_offlineRecords)) {
+      if (!isCurrent()) break;
+      if (record.state != OfflineRecordState.pending &&
+          record.state != OfflineRecordState.submitting) {
+        continue;
+      }
+      final snapshot = _liveDraftSnapshot;
+      if (snapshot == null) break;
+      final serverUnchanged = record.draftId == snapshot.draft.draftId &&
+          record.expectedDraftVersion == snapshot.draft.version;
+      if (!serverUnchanged) {
+        await _updateOfflineRecord(
+          record,
+          state: OfflineRecordState.reviewing,
+          resolution: null,
+          lastErrorCode: 'OFFLINE_RECORD_OVERLAPS_SERVER_PROGRESS',
+        );
+        continue;
+      }
+      try {
+        final continuation =
+            _dirtyLiveDraftFields.isEmpty ? null : _localLiveDraftFields;
+        await _updateOfflineRecord(
+          record,
+          state: OfflineRecordState.submitting,
+          resolution: null,
+        );
+        await _copyOfflineRecordIntoCurrentDraft(
+          record,
+          (api: server.api, binding: binding, deviceId: deviceId),
+        );
+        final canonical = _liveDraftSnapshot;
+        if (canonical == null) throw StateError('LIVE_DRAFT_NOT_LOADED');
+        final committed = await server.api.commitLiveDraft(
+          sessionId: binding.sessionId,
+          deviceId: deviceId,
+          expectedDraftVersion: canonical.draft.version,
+          syncId: record.mutationId,
+          idempotencyKey: record.mutationId,
+        );
+        if (!isCurrent()) return;
+        _liveDraftSnapshot = LiveDraftSnapshotDto(
+          draft: committed.nextDraft,
+          locks: const [],
+          currentOrdinal: committed.currentOrdinal,
+          totalRecords: committed.totalRecords,
+          previousRecord: committed.record,
+        );
+        _clearOwnedLiveDraftLocks();
+        if (continuation == null) {
+          _localLiveDraftFields = committed.nextDraft.fields;
+          _dirtyLiveDraftFields = const {};
+          _liveDraftBaseRevisions = const {};
+        } else {
+          _localLiveDraftFields = continuation;
+          _dirtyLiveDraftFields = {
+            for (final field in liveDraftFieldNames)
+              if (continuation[field] != committed.nextDraft.fields[field])
+                field,
+          };
+          _liveDraftBaseRevisions = {
+            for (final field in _dirtyLiveDraftFields)
+              field: committed.nextDraft.fieldRevisions[field] ?? 0,
+          };
+        }
+        await _updateOfflineRecord(
+          record,
+          state: OfflineRecordState.resolved,
+          resolution: OfflineRecordResolution.submitAsDuplicate,
+        );
+        _syncCoordinator?.wake();
+      } on ServerApiException catch (error) {
+        if (error.retryable) {
+          await _updateOfflineRecord(
+            record,
+            state: OfflineRecordState.pending,
+            resolution: null,
+            lastErrorCode: error.code,
+          );
+          return;
+        }
+        await _updateOfflineRecord(
+          record,
+          state: OfflineRecordState.reviewing,
+          resolution: null,
+          lastErrorCode: error.code,
+        );
+      }
+    }
+  }
+
+  LiveDraftFieldsDto _resetFieldsAfterCommit(LiveDraftFieldsDto previous) {
+    final time = DateTime.now().toUtc().toIso8601String();
+    return LiveDraftFieldsDto({
+      'time': time,
+      'controller': previous['controller'],
+      'rstSent': '59',
+      'rstRcvd': '59',
+    });
+  }
+
+  String _normalizeLiveDraftTime(String value) {
+    final normalized = value.trim();
+    if (normalized.isEmpty) return '';
+    final parsed = DateTime.tryParse(normalized);
+    if (parsed != null && normalized.contains('T')) {
+      return parsed.toUtc().toIso8601String();
+    }
+    final match =
+        RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$').firstMatch(normalized);
+    if (match == null) return normalized;
+    final hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2)!);
+    final second = int.parse(match.group(3) ?? '0');
+    if (hour > 23 || minute > 59 || second > 59) return normalized;
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, hour, minute, second)
+        .toUtc()
+        .toIso8601String();
+  }
+
+  bool _liveDraftHasActualContent(LiveDraftFieldsDto fields) {
+    bool hasText(String field) => fields[field].trim().isNotEmpty;
+    bool hasNonDefaultReport(String field) {
+      final value = fields[field].trim();
+      return value.isNotEmpty && value != '59';
+    }
+
+    return const [
+          'callsign',
+          'qth',
+          'device',
+          'power',
+          'antenna',
+          'height',
+          'remarks',
+        ].any(hasText) ||
+        hasNonDefaultReport('rstSent') ||
+        hasNonDefaultReport('rstRcvd');
+  }
+
+  Future<void> _persistLiveDraftState() async {
+    final binding = _binding;
+    final snapshot = _liveDraftSnapshot;
+    final local = _localLiveDraftFields;
+    if (binding == null || snapshot == null || local == null) return;
+    try {
+      await RustApi.saveCollaborationLiveDraftCache(
+        requestJson: jsonEncode({
+          'serverInstanceId': binding.serverInstanceId,
+          'accountId': binding.accountId,
+          'sessionId': binding.sessionId,
+          'draftId': snapshot.draft.draftId,
+          'draftVersion': snapshot.draft.version,
+          'remote': snapshot.toJson(),
+          'localFields': local.toJson(),
+          'fieldRevisions': {
+            for (final field in liveDraftFieldNames)
+              field: _dirtyLiveDraftFields.contains(field)
+                  ? (_liveDraftBaseRevisions[field] ??
+                      snapshot.draft.fieldRevisions[field] ??
+                      0)
+                  : (snapshot.draft.fieldRevisions[field] ?? 0),
+          },
+          'dirtyFields': _dirtyLiveDraftFields.toList(growable: false),
+          'clientSeq': _liveDraftClientSeq,
+          'remoteUpdatedAt':
+              snapshot.draft.lastUpdatedAt.toUtc().toIso8601String(),
+        }),
+      );
+    } catch (error) {
+      _setLiveDraftError('LIVE_DRAFT_CACHE_FAILED', error.toString());
+    }
+  }
+
+  void _replaceLiveDraftLock(LiveDraftLockDto lock) {
+    final snapshot = _liveDraftSnapshot;
+    if (snapshot == null) return;
+    _liveDraftSnapshot = LiveDraftSnapshotDto(
+      draft: snapshot.draft,
+      locks: List.unmodifiable([
+        for (final candidate in snapshot.locks)
+          if (candidate.field != lock.field &&
+              candidate.leaseId != lock.leaseId)
+            candidate,
+        lock,
+      ]),
+      currentOrdinal: snapshot.currentOrdinal,
+      totalRecords: snapshot.totalRecords,
+      previousRecord: snapshot.previousRecord,
+    );
+  }
+
+  void _removeLiveDraftLock(String leaseId) {
+    final snapshot = _liveDraftSnapshot;
+    if (snapshot == null) return;
+    _liveDraftSnapshot = LiveDraftSnapshotDto(
+      draft: snapshot.draft,
+      locks: List.unmodifiable(
+        snapshot.locks.where((lock) => lock.leaseId != leaseId),
+      ),
+      currentOrdinal: snapshot.currentOrdinal,
+      totalRecords: snapshot.totalRecords,
+      previousRecord: snapshot.previousRecord,
+    );
+  }
+
+  void _ensureLiveDraftRenewalTimer() {
+    _liveDraftRenewalTimer ??= Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(_serializeLiveDraft(_renewOwnedLiveDraftLocks)),
+    );
+  }
+
+  Future<void> _renewOwnedLiveDraftLocks() async {
+    final context = _tryLiveDraftContext(requireEdit: true);
+    if (context == null) {
+      _clearOwnedLiveDraftLocks();
+      return;
+    }
+    for (final entry in List<MapEntry<String, LiveDraftLockDto>>.from(
+      _ownedLiveDraftLocks.entries,
+    )) {
+      try {
+        final renewed = await context.api.renewLiveDraftLock(
+          sessionId: context.binding.sessionId,
+          leaseId: entry.value.leaseId,
+          deviceId: context.deviceId,
+        );
+        _ownedLiveDraftLocks = {..._ownedLiveDraftLocks, entry.key: renewed};
+        _replaceLiveDraftLock(renewed);
+      } on ServerApiException catch (error) {
+        _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(entry.key);
+        _removeLiveDraftLock(entry.value.leaseId);
+        _setLiveDraftError(error.code, error.message);
+      }
+    }
+    if (_ownedLiveDraftLocks.isEmpty) {
+      _liveDraftRenewalTimer?.cancel();
+      _liveDraftRenewalTimer = null;
+    }
+    _safeNotify();
+  }
+
+  void _clearOwnedLiveDraftLocks() {
+    _liveDraftRenewalTimer?.cancel();
+    _liveDraftRenewalTimer = null;
+    _ownedLiveDraftLocks = const {};
+  }
+
+  void _setLiveDraftError(String code, String message) {
+    _liveDraftErrorCode = code;
+    _liveDraftErrorMessage = message;
+    _safeNotify();
+  }
+
+  int? _expectedLiveDraftClientSeq(ServerApiException error) {
+    final details = error.details;
+    if (details is! Map) return null;
+    final expected = details['expectedClientSeq'];
+    return expected is int && expected > 0 ? expected : null;
+  }
+
+  void _clearLiveDraftError() {
+    _liveDraftErrorCode = null;
+    _liveDraftErrorMessage = null;
+  }
+
   void _startSynchronization(
     LocalCollaborationBinding binding,
     MembershipDto membership, {
@@ -1697,6 +2867,39 @@ class CollaborationProvider with ChangeNotifier {
           propagateErrors: true,
         );
       },
+      onControlMessage: (_) async {
+        if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        await refreshLiveDraft();
+      },
+      onLocalCloseRejected: (mutation, result) async {
+        if (!_isSyncCurrent(generation, identity, coordinator)) return false;
+        try {
+          // The server remains active when it rejects a close because the live
+          // draft is non-empty or locked. Reopening locally removes the
+          // rejected close chain and restores the materialized Session from its
+          // canonical active shadow without emitting a spurious remote reopen.
+          await RustApi.reopenCollaborationSession(
+            sessionId: binding.sessionId,
+          );
+          if (!_isSyncCurrent(generation, identity, coordinator)) return false;
+          await sessions.reloadCurrentSession();
+          if (!_isSyncCurrent(generation, identity, coordinator)) return false;
+          _setError(
+            result.code ?? 'LIVE_DRAFT_CLOSE_REJECTED',
+            result.message ?? '草稿尚未清空，关闭请求已撤销',
+          );
+          return true;
+        } catch (error) {
+          if (_isSyncCurrent(generation, identity, coordinator)) {
+            _setError(
+              'LOCAL_CLOSE_ROLLBACK_FAILED',
+              '服务器拒绝关闭会话，本地状态恢复失败：$error',
+            );
+            _safeNotify();
+          }
+          return false;
+        }
+      },
     );
     _syncCoordinator = coordinator;
     logs.setOnDataChanged(() async {
@@ -1792,6 +2995,18 @@ class CollaborationProvider with ChangeNotifier {
 
   void _clearScopedState() {
     _stopSynchronization();
+    _liveDraftGeneration += 1;
+    _clearOwnedLiveDraftLocks();
+    _liveDraftSnapshot = null;
+    _localLiveDraftFields = null;
+    _dirtyLiveDraftFields = const {};
+    _liveDraftBaseRevisions = const {};
+    _offlineRecords = const [];
+    _liveDraftClientSeq = 0;
+    _liveDraftLoading = false;
+    _clearLiveDraftError();
+    _publicShares = const [];
+    _lastCreatedPublicShare = null;
     _binding = null;
     _membership = null;
     _members = const [];

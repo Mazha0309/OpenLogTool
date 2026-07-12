@@ -2,7 +2,7 @@ use crate::get_db;
 use serde_json::{json, Value};
 use sqlx::{sqlite::SqliteRow, Column, Row, TypeInfo};
 
-const EXPORT_VERSION: i32 = 5;
+const EXPORT_VERSION: i32 = 6;
 
 pub async fn get_database_status() -> anyhow::Result<String> {
     let pool = get_db()?;
@@ -53,6 +53,9 @@ pub async fn export_database() -> anyhow::Result<String> {
     let sync_outbox = query_table(&mut tx, "sync_outbox").await?;
     let applied_events = query_table(&mut tx, "applied_events").await?;
     let sync_conflicts = query_table(&mut tx, "sync_conflicts").await?;
+    let collaboration_live_drafts = query_table(&mut tx, "collaboration_live_drafts").await?;
+    let collaboration_offline_records =
+        query_table(&mut tx, "collaboration_offline_records").await?;
 
     let export = json!({
         "version": EXPORT_VERSION,
@@ -68,6 +71,8 @@ pub async fn export_database() -> anyhow::Result<String> {
         "sync_outbox": sync_outbox,
         "applied_events": applied_events,
         "sync_conflicts": sync_conflicts,
+        "collaboration_live_drafts": collaboration_live_drafts,
+        "collaboration_offline_records": collaboration_offline_records,
     });
 
     tx.commit().await?;
@@ -90,6 +95,21 @@ pub async fn import_database(json_data: String) -> anyhow::Result<()> {
     // Clear identity-scoped replica data before its materialized Sessions. The
     // installation-level device_state is intentionally not imported/exported:
     // restoring a backup on another device must not clone its device identity.
+    sqlx::query("DELETE FROM collaboration_offline_records")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM collaboration_live_drafts")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM sync_conflicts")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM applied_events")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM sync_outbox")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM entity_shadows")
         .execute(&mut *tx)
         .await?;
@@ -134,6 +154,18 @@ pub async fn import_database(json_data: String) -> anyhow::Result<()> {
     insert_from_json(&mut tx, "sync_outbox", data.get("sync_outbox")).await?;
     insert_from_json(&mut tx, "applied_events", data.get("applied_events")).await?;
     insert_from_json(&mut tx, "sync_conflicts", data.get("sync_conflicts")).await?;
+    insert_from_json(
+        &mut tx,
+        "collaboration_live_drafts",
+        data.get("collaboration_live_drafts"),
+    )
+    .await?;
+    insert_from_json(
+        &mut tx,
+        "collaboration_offline_records",
+        data.get("collaboration_offline_records"),
+    )
+    .await?;
 
     tx.commit().await?;
     Ok(())
@@ -165,6 +197,9 @@ fn validate_backup(data: &Value) -> anyhow::Result<()> {
     if version >= 5 {
         required_tables.extend(["sync_outbox", "applied_events", "sync_conflicts"]);
     }
+    if version >= 6 {
+        required_tables.extend(["collaboration_live_drafts", "collaboration_offline_records"]);
+    }
     for table in required_tables {
         let rows = object
             .get(table)
@@ -188,6 +223,21 @@ pub async fn clear_all_data() -> anyhow::Result<()> {
         anyhow::bail!("COLLABORATION_SESSION_READ_ONLY");
     }
 
+    sqlx::query("DELETE FROM collaboration_offline_records")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM collaboration_live_drafts")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM sync_conflicts")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM applied_events")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM sync_outbox")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM entity_shadows")
         .execute(&mut *tx)
         .await?;

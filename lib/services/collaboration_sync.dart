@@ -441,6 +441,13 @@ typedef CollaborationEventApplied = FutureOr<void> Function(
 typedef CollaborationSnapshotInstalled = FutureOr<void> Function(
   SessionSnapshotDto snapshot,
 );
+typedef CollaborationControlMessage = FutureOr<void> Function(
+  JsonObject message,
+);
+typedef CollaborationLocalCloseRejected = FutureOr<bool> Function(
+  CollaborationMutationDto mutation,
+  MutationResultDto result,
+);
 typedef CollaborationDelay = Future<void> Function(Duration duration);
 typedef CollaborationClock = DateTime Function();
 
@@ -478,6 +485,8 @@ final class CollaborationSyncCoordinator {
     this.onStateChanged,
     this.onEventApplied,
     this.onSnapshotInstalled,
+    this.onControlMessage,
+    this.onLocalCloseRejected,
     CollaborationDelay? delay,
     CollaborationClock? clock,
     Random? random,
@@ -492,6 +501,8 @@ final class CollaborationSyncCoordinator {
   final CollaborationSyncStateListener? onStateChanged;
   final CollaborationEventApplied? onEventApplied;
   final CollaborationSnapshotInstalled? onSnapshotInstalled;
+  final CollaborationControlMessage? onControlMessage;
+  final CollaborationLocalCloseRejected? onLocalCloseRejected;
   final CollaborationDelay _delay;
   final CollaborationClock _clock;
   final Random _random;
@@ -1159,6 +1170,21 @@ final class CollaborationSyncCoordinator {
             _persistentWarningCode = result.code ?? 'MUTATION_REJECTED';
             _persistentWarningMessage =
                 result.message ?? '一项本地修改被服务器拒绝，请检查后重新编辑';
+            if (_isLiveDraftCloseRejection(mutation, result) &&
+                _localSessionClosed &&
+                !_sessionClosed) {
+              final reconciled = await onLocalCloseRejected?.call(
+                    mutation,
+                    result,
+                  ) ??
+                  false;
+              _ensureCurrent(generation, identity);
+              if (reconciled) {
+                _localSessionClosed = false;
+                _recomputeWriteSuspended();
+                _emit();
+              }
+            }
           default:
             throw const CollaborationSyncException(
               code: 'INVALID_MUTATION_STATUS',
@@ -1282,6 +1308,18 @@ final class CollaborationSyncCoordinator {
             await _refreshMembership(generation, identity);
             _ensureCurrent(generation, identity);
             await _synchronizeOnce(generation, identity);
+          case 'liveDraft.updated':
+          case 'liveDraft.lockChanged':
+          case 'liveDraft.cleared':
+          case 'liveDraft.committed':
+            final sessionId = _jsonString(message, 'sessionId');
+            if (sessionId != identity.sessionId) {
+              throw const CollaborationSyncException(
+                code: 'WS_CONTEXT_MISMATCH',
+                message: 'WebSocket control message belongs to another session',
+              );
+            }
+            await onControlMessage?.call(message);
           default:
             throw const CollaborationSyncException(
               code: 'UNKNOWN_WS_MESSAGE',
@@ -1388,6 +1426,14 @@ final class CollaborationSyncCoordinator {
         _role == SessionRole.viewer ||
         (_localSessionClosed && !_sessionClosed);
   }
+
+  bool _isLiveDraftCloseRejection(
+    CollaborationMutationDto mutation,
+    MutationResultDto result,
+  ) =>
+      mutation.entityType == 'session' &&
+      mutation.operation == 'close' &&
+      const {'LIVE_DRAFT_NOT_EMPTY', 'LIVE_DRAFT_BUSY'}.contains(result.code);
 
   void _updateSessionState(CollaborationEventDto event) {
     switch (event.type) {

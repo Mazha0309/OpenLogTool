@@ -65,7 +65,7 @@ fn snapshot_request() -> InstallSnapshotRequest {
 }
 
 #[tokio::test]
-async fn v5_export_preserves_replica_metadata_and_v3_import_becomes_local_only() {
+async fn v6_export_preserves_replica_metadata_and_v3_import_becomes_local_only() {
     let database_path = std::env::temp_dir().join(format!(
         "openlogtool-collaboration-backup-{}.db",
         uuid::Uuid::new_v4()
@@ -136,10 +136,46 @@ async fn v5_export_preserves_replica_metadata_and_v3_import_becomes_local_only()
     .execute(pool)
     .await
     .unwrap();
+    sqlx::query(
+        "INSERT INTO collaboration_live_drafts (
+            server_instance_id, account_id, session_id, draft_id, draft_version,
+            remote_json, local_fields_json, field_revisions_json, dirty_fields_json,
+            client_seq, remote_updated_at, local_updated_at
+         ) VALUES (
+            'backup-server', 'backup-account', 'remote-before-import',
+            'draft-before-import', 3,
+            '{\"draftId\":\"draft-before-import\",\"version\":3}',
+            '{\"callsign\":\"BA4BBB\"}', '{\"callsign\":2}',
+            '[\"callsign\"]', 7, ?, ?
+         )",
+    )
+    .bind(NOW)
+    .bind(NOW)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO collaboration_offline_records (
+            mutation_id, server_instance_id, account_id, session_id,
+            draft_id, expected_draft_version, provisional_ordinal, record_json,
+            state, resolution, last_error_code, created_at, updated_at
+         ) VALUES (
+            '00000000-0000-4000-8000-000000000004',
+            'backup-server', 'backup-account', 'remote-before-import',
+            'draft-before-import', 3, 2,
+            '{\"callsign\":\"BA4CCC\",\"controller\":\"BG5CRL\"}',
+            'reviewing', NULL, 'LIVE_DRAFT_VERSION_CONFLICT', ?, ?
+         )",
+    )
+    .bind(NOW)
+    .bind(NOW)
+    .execute(pool)
+    .await
+    .unwrap();
 
     let exported: serde_json::Value =
         serde_json::from_str(&export_database().await.unwrap()).unwrap();
-    assert_eq!(exported["version"], 5);
+    assert_eq!(exported["version"], 6);
     assert_eq!(
         exported["collaboration_bindings"].as_array().unwrap().len(),
         1
@@ -148,6 +184,20 @@ async fn v5_export_preserves_replica_metadata_and_v3_import_becomes_local_only()
     assert_eq!(exported["sync_outbox"].as_array().unwrap().len(), 1);
     assert_eq!(exported["applied_events"].as_array().unwrap().len(), 1);
     assert_eq!(exported["sync_conflicts"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        exported["collaboration_live_drafts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        exported["collaboration_offline_records"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(exported.get("device_state").is_none());
 
     let invalid_error = import_database(r#"{"version":4}"#.to_string())
@@ -155,7 +205,7 @@ async fn v5_export_preserves_replica_metadata_and_v3_import_becomes_local_only()
         .unwrap_err()
         .to_string();
     assert!(invalid_error.contains("数据库备份缺少有效表"));
-    let future_error = import_database(r#"{"version":6}"#.to_string())
+    let future_error = import_database(r#"{"version":7}"#.to_string())
         .await
         .unwrap_err()
         .to_string();
@@ -244,18 +294,20 @@ async fn v5_export_preserves_replica_metadata_and_v3_import_becomes_local_only()
             .fetch_one(pool)
             .await
             .unwrap();
-    let roundtrip_sync: (i64, i64, i64) = sqlx::query_as(
+    let roundtrip_sync: (i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT
             (SELECT COUNT(*) FROM sync_outbox),
             (SELECT COUNT(*) FROM applied_events),
-            (SELECT COUNT(*) FROM sync_conflicts)",
+            (SELECT COUNT(*) FROM sync_conflicts),
+            (SELECT COUNT(*) FROM collaboration_live_drafts),
+            (SELECT COUNT(*) FROM collaboration_offline_records)",
     )
     .fetch_one(pool)
     .await
     .unwrap();
     assert_eq!(roundtrip_bindings.0, 1);
     assert_eq!(roundtrip_shadows.0, 2);
-    assert_eq!(roundtrip_sync, (1, 1, 1));
+    assert_eq!(roundtrip_sync, (1, 1, 1, 1, 1));
     assert_eq!(roundtrip_remarks.0.as_deref(), Some("backup remarks"));
 
     sqlx::query("DELETE FROM entity_shadows")

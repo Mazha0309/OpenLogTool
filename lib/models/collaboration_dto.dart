@@ -705,6 +705,93 @@ final class RemovedMemberDto {
       };
 }
 
+final class LeaveSessionResultDto {
+  const LeaveSessionResultDto({
+    required this.left,
+    required this.membership,
+  });
+
+  factory LeaveSessionResultDto.fromJson(Object? json) {
+    final object = _object(json, 'leaveSessionResult');
+    return LeaveSessionResultDto(
+      left: _boolean(object, 'left'),
+      membership: MembershipDto.fromJson(object['membership']),
+    );
+  }
+
+  final bool left;
+  final MembershipDto membership;
+}
+
+final class PublicShareDto {
+  const PublicShareDto({
+    required this.publicShareId,
+    required this.sessionId,
+    required this.expiresAt,
+    required this.createdBy,
+    required this.createdAt,
+    required this.revokedAt,
+    required this.revokedBy,
+    this.secret,
+  });
+
+  factory PublicShareDto.fromJson(Object? json) {
+    final object = _object(json, 'publicShare');
+    return PublicShareDto(
+      publicShareId: _string(object, 'publicShareId'),
+      sessionId: _string(object, 'sessionId'),
+      expiresAt: _dateTime(object, 'expiresAt'),
+      createdBy: _string(object, 'createdBy'),
+      createdAt: _dateTime(object, 'createdAt'),
+      revokedAt: _nullableDateTime(object, 'revokedAt'),
+      revokedBy: _nullableString(object, 'revokedBy'),
+      secret: _nullableString(object, 'secret', missingIsNull: true),
+    );
+  }
+
+  final String publicShareId;
+  final String sessionId;
+  final DateTime expiresAt;
+  final String createdBy;
+  final DateTime createdAt;
+  final DateTime? revokedAt;
+  final String? revokedBy;
+  final String? secret;
+
+  bool get active => revokedAt == null && expiresAt.isAfter(DateTime.now());
+
+  JsonObject toJson() => {
+        'publicShareId': publicShareId,
+        'sessionId': sessionId,
+        'expiresAt': expiresAt.toUtc().toIso8601String(),
+        'createdBy': createdBy,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'revokedAt': revokedAt?.toUtc().toIso8601String(),
+        'revokedBy': revokedBy,
+        if (secret != null) 'secret': secret,
+      };
+}
+
+final class PublicSharePageDto {
+  const PublicSharePageDto({
+    required this.publicShares,
+    required this.nextCursor,
+  });
+
+  factory PublicSharePageDto.fromJson(Object? json) {
+    final object = _object(json, 'publicSharePage');
+    return PublicSharePageDto(
+      publicShares: List.unmodifiable(
+        _list(object, 'publicShares').map(PublicShareDto.fromJson),
+      ),
+      nextCursor: _nullableString(object, 'nextCursor'),
+    );
+  }
+
+  final List<PublicShareDto> publicShares;
+  final String? nextCursor;
+}
+
 /// Canonical collaboration event shared by mutation responses, event catch-up
 /// and WebSocket notifications.
 final class CollaborationEventDto {

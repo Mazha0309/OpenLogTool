@@ -11,6 +11,7 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
+import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
 
@@ -49,6 +50,10 @@ class SettingsPanel extends StatelessWidget {
           isNarrow: isNarrow,
           cardPadding: cardPadding,
         ),
+
+        const SizedBox(height: 16),
+
+        ControllerDisplaySettings(cardPadding: cardPadding),
 
         const SizedBox(height: 16),
 

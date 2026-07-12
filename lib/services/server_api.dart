@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/models/live_draft.dart';
 
 /// Persistence boundary for authentication state.
 ///
@@ -297,6 +298,186 @@ final class ServerApi {
     );
   }
 
+  Future<LeaveSessionResultDto> leaveSession({
+    required String sessionId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _authorizedRequest(
+      'DELETE',
+      '/sessions/${_segment(sessionId)}/membership',
+      body: const <String, Object?>{},
+      headers: _idempotencyHeaders(idempotencyKey),
+    );
+    return _parseResponse(response, LeaveSessionResultDto.fromJson);
+  }
+
+  Future<LiveDraftSnapshotDto> getLiveDraft(String sessionId) async {
+    final response = await _authorizedRequest(
+      'GET',
+      '/sessions/${_segment(sessionId)}/live-draft',
+    );
+    return _parseResponse(response, LiveDraftSnapshotDto.fromJson);
+  }
+
+  Future<LiveDraftLockDto> acquireLiveDraftLock({
+    required String sessionId,
+    required String field,
+    required String deviceId,
+  }) async {
+    if (!liveDraftFieldNames.contains(field)) {
+      throw ArgumentError.value(field, 'field', 'unknown live draft field');
+    }
+    final response = await _authorizedRequest(
+      'POST',
+      '/sessions/${_segment(sessionId)}/live-draft/locks',
+      body: {'field': field, 'deviceId': deviceId},
+    );
+    final lock = _parseResponse(
+      response,
+      (json) => LiveDraftLockDto.fromJson(
+        _jsonObject(json, 'liveDraftLockResult')['lock'],
+      ),
+    );
+    if (lock.sessionId != sessionId) {
+      throw _clientException(
+        code: 'INVALID_RESPONSE',
+        message: 'The live draft lock belongs to another Session',
+        statusCode: response.statusCode,
+      );
+    }
+    return lock;
+  }
+
+  Future<LiveDraftLockDto> renewLiveDraftLock({
+    required String sessionId,
+    required String leaseId,
+    required String deviceId,
+  }) async {
+    final response = await _authorizedRequest(
+      'POST',
+      '/sessions/${_segment(sessionId)}/live-draft/locks/'
+          '${_segment(leaseId)}/renew',
+      body: {'deviceId': deviceId},
+    );
+    final lock = _parseResponse(
+      response,
+      (json) => LiveDraftLockDto.fromJson(
+        _jsonObject(json, 'liveDraftLockRenewResult')['lock'],
+      ),
+    );
+    if (lock.sessionId != sessionId || lock.leaseId != leaseId) {
+      throw _clientException(
+        code: 'INVALID_RESPONSE',
+        message: 'The renewed live draft lock does not match the request',
+        statusCode: response.statusCode,
+      );
+    }
+    return lock;
+  }
+
+  Future<void> releaseLiveDraftLock({
+    required String sessionId,
+    required String leaseId,
+    required String deviceId,
+  }) async {
+    final response = await _authorizedRequest(
+      'DELETE',
+      '/sessions/${_segment(sessionId)}/live-draft/locks/'
+          '${_segment(leaseId)}',
+      body: {'deviceId': deviceId},
+    );
+    _parseResponse(response, (json) {
+      final result = _jsonObject(json, 'liveDraftLockReleaseResult');
+      if (result['released'] != true) {
+        throw const FormatException('released must be true');
+      }
+    });
+  }
+
+  Future<LiveDraftPatchResultDto> updateLiveDraft({
+    required String sessionId,
+    required String deviceId,
+    required int clientSeq,
+    required List<LiveDraftPatchUpdateDto> updates,
+  }) async {
+    if (clientSeq < 1) {
+      throw ArgumentError.value(clientSeq, 'clientSeq', 'must be positive');
+    }
+    if (updates.isEmpty) {
+      throw ArgumentError.value(updates, 'updates', 'must not be empty');
+    }
+    if (updates.length > liveDraftFieldNames.length) {
+      throw ArgumentError.value(updates, 'updates', 'contains too many fields');
+    }
+    final fields = <String>{};
+    if (updates.any((update) => !fields.add(update.field))) {
+      throw ArgumentError.value(
+          updates, 'updates', 'contains duplicate fields');
+    }
+    final response = await _authorizedRequest(
+      'PATCH',
+      '/sessions/${_segment(sessionId)}/live-draft',
+      body: {
+        'deviceId': deviceId,
+        'clientSeq': clientSeq,
+        'updates': updates.map((update) => update.toJson()).toList(),
+      },
+    );
+    return _parseResponse(response, LiveDraftPatchResultDto.fromJson);
+  }
+
+  Future<LiveDraftCommitResultDto> commitLiveDraft({
+    required String sessionId,
+    required String deviceId,
+    required int expectedDraftVersion,
+    required String syncId,
+    required String idempotencyKey,
+  }) async {
+    if (expectedDraftVersion < 1) {
+      throw ArgumentError.value(
+        expectedDraftVersion,
+        'expectedDraftVersion',
+        'must be positive',
+      );
+    }
+    final response = await _authorizedRequest(
+      'POST',
+      '/sessions/${_segment(sessionId)}/live-draft/commit',
+      body: {
+        'deviceId': deviceId,
+        'expectedDraftVersion': expectedDraftVersion,
+        'syncId': syncId,
+      },
+      headers: _idempotencyHeaders(idempotencyKey),
+    );
+    return _parseResponse(response, LiveDraftCommitResultDto.fromJson);
+  }
+
+  Future<LiveDraftDiscardResultDto> discardLiveDraft({
+    required String sessionId,
+    required String deviceId,
+    required int expectedDraftVersion,
+    required String idempotencyKey,
+  }) async {
+    if (expectedDraftVersion < 1) {
+      throw ArgumentError.value(
+        expectedDraftVersion,
+        'expectedDraftVersion',
+        'must be positive',
+      );
+    }
+    final response = await _authorizedRequest(
+      'DELETE',
+      '/sessions/${_segment(sessionId)}/live-draft',
+      body: {
+        'deviceId': deviceId,
+        'expectedDraftVersion': expectedDraftVersion,
+      },
+      headers: _idempotencyHeaders(idempotencyKey),
+    );
+    return _parseResponse(response, LiveDraftDiscardResultDto.fromJson);
+  }
+
   Future<List<MembershipDto>> listMembers(String sessionId) async {
     final response = await _authorizedRequest(
       'GET',
@@ -402,6 +583,90 @@ final class ServerApi {
       (json) => CollaborationInviteDto.fromJson(
         _jsonObject(json, 'revokeInviteResult')['invite'],
       ),
+    );
+  }
+
+  Future<PublicShareDto> createPublicShare({
+    required String sessionId,
+    required int expiresInHours,
+    required String idempotencyKey,
+  }) async {
+    if (expiresInHours < 1 || expiresInHours > 24 * 30) {
+      throw ArgumentError.value(
+        expiresInHours,
+        'expiresInHours',
+        'must be between 1 and 720',
+      );
+    }
+    final response = await _authorizedRequest(
+      'POST',
+      '/sessions/${_segment(sessionId)}/public-shares',
+      body: {'expiresInHours': expiresInHours},
+      headers: _idempotencyHeaders(idempotencyKey),
+    );
+    return _parseResponse(
+      response,
+      (json) => PublicShareDto.fromJson(
+        _jsonObject(json, 'createPublicShareResult')['publicShare'],
+      ),
+    );
+  }
+
+  Future<PublicSharePageDto> listPublicShares({
+    required String sessionId,
+    int limit = 50,
+    String? after,
+  }) async {
+    if (limit < 1 || limit > 50) {
+      throw ArgumentError.value(limit, 'limit', 'must be between 1 and 50');
+    }
+    if (after != null && after.isEmpty) {
+      throw ArgumentError.value(after, 'after', 'must not be empty');
+    }
+    final response = await _authorizedRequest(
+      'GET',
+      '/sessions/${_segment(sessionId)}/public-shares',
+      queryParameters: {
+        'limit': '$limit',
+        if (after != null) 'after': after,
+      },
+    );
+    return _parseResponse(response, PublicSharePageDto.fromJson);
+  }
+
+  Future<PublicShareDto> revokePublicShare({
+    required String sessionId,
+    required String publicShareId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _authorizedRequest(
+      'DELETE',
+      '/sessions/${_segment(sessionId)}/public-shares/'
+          '${_segment(publicShareId)}',
+      headers: _idempotencyHeaders(idempotencyKey),
+    );
+    return _parseResponse(
+      response,
+      (json) => PublicShareDto.fromJson(
+        _jsonObject(json, 'revokePublicShareResult')['publicShare'],
+      ),
+    );
+  }
+
+  Uri publicSharePageUri(PublicShareDto share) {
+    final secret = share.secret;
+    if (secret == null || secret.isEmpty) {
+      throw ArgumentError.value(share, 'share', 'secret is required');
+    }
+    const apiSuffix = '/api/v1';
+    final apiPath = _apiBaseUri.path;
+    final rootPath = apiPath.endsWith(apiSuffix)
+        ? apiPath.substring(0, apiPath.length - apiSuffix.length)
+        : '';
+    return _apiBaseUri.replace(
+      path: '$rootPath/live/${_segment(share.publicShareId)}',
+      query: null,
+      fragment: secret,
     );
   }
 
