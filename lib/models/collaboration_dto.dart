@@ -415,6 +415,7 @@ final class SessionSnapshotDto {
     required this.protocolVersion,
     required this.session,
     required this.highWatermarkSeq,
+    required this.includesDeletedLogs,
     required this.logs,
   });
 
@@ -424,6 +425,12 @@ final class SessionSnapshotDto {
       protocolVersion: _integer(object, 'protocolVersion'),
       session: CollaborationSessionDto.fromJson(object['session']),
       highWatermarkSeq: _integer(object, 'highWatermarkSeq'),
+      // Stage 1 servers predate tombstone-aware snapshot reinstall. Their
+      // ordinary publish/first-join snapshots remain valid, while the resync
+      // coordinator still explicitly requires this value to be true.
+      includesDeletedLogs: object.containsKey('includesDeletedLogs')
+          ? _boolean(object, 'includesDeletedLogs')
+          : false,
       logs: List.unmodifiable(
         _list(object, 'logs').map(CollaborationLogDto.fromJson),
       ),
@@ -433,12 +440,14 @@ final class SessionSnapshotDto {
   final int protocolVersion;
   final CollaborationSessionDto session;
   final int highWatermarkSeq;
+  final bool includesDeletedLogs;
   final List<CollaborationLogDto> logs;
 
   JsonObject toJson() => {
         'protocolVersion': protocolVersion,
         'session': session.toJson(),
         'highWatermarkSeq': highWatermarkSeq,
+        'includesDeletedLogs': includesDeletedLogs,
         'logs': logs.map((log) => log.toJson()).toList(),
       };
 }

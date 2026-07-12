@@ -6,9 +6,14 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class LogTable extends StatefulWidget {
-  const LogTable({super.key, this.readOnly = false});
+  const LogTable({
+    super.key,
+    this.readOnly = false,
+    this.conflictedLogIds = const <String>{},
+  });
 
   final bool readOnly;
+  final Set<String> conflictedLogIds;
 
   @override
   State<LogTable> createState() => _LogTableState();
@@ -39,7 +44,7 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _startEditing(int index, LogEntry log) {
-    if (widget.readOnly) return;
+    if (widget.readOnly || widget.conflictedLogIds.contains(log.id)) return;
     setState(() {
       _editingIndex = index;
       _controllers = {
@@ -73,7 +78,8 @@ class _LogTableState extends State<LogTable> {
   }
 
   Future<void> _saveEditing(int index) async {
-    if (widget.readOnly) {
+    final logId = _controllers['_id']?.text ?? '';
+    if (widget.readOnly || widget.conflictedLogIds.contains(logId)) {
       _cancelEditing();
       return;
     }
@@ -296,6 +302,7 @@ class _LogTableState extends State<LogTable> {
       final originalIndex = entry.value.key;
       final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
+      final isConflicted = widget.conflictedLogIds.contains(log.id);
       // 倒序序号：最新的记录显示最大序号
       final reverseIndex = originalIndex + 1;
 
@@ -486,10 +493,10 @@ class _LogTableState extends State<LogTable> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.check, size: 20),
-                          onPressed: widget.readOnly
+                          onPressed: widget.readOnly || isConflicted
                               ? null
                               : () => _saveEditing(originalIndex),
-                          tooltip: '保存',
+                          tooltip: isConflicted ? '先在冲突中心解决此记录' : '保存',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -516,10 +523,10 @@ class _LogTableState extends State<LogTable> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit, size: 20),
-                          onPressed: widget.readOnly
+                          onPressed: widget.readOnly || isConflicted
                               ? null
                               : () => _startEditing(originalIndex, log),
-                          tooltip: '编辑记录',
+                          tooltip: isConflicted ? '先在冲突中心解决此记录' : '编辑记录',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -530,13 +537,14 @@ class _LogTableState extends State<LogTable> {
                         const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.delete, size: 20),
-                          onPressed: widget.readOnly
+                          onPressed: widget.readOnly || isConflicted
                               ? null
                               : () => _showDeleteConfirmation(
                                     context,
                                     originalIndex,
+                                    log.id,
                                   ),
-                          tooltip: '删除记录',
+                          tooltip: isConflicted ? '先在冲突中心解决此记录' : '删除记录',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -609,8 +617,12 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, int index) {
-    if (widget.readOnly) return;
+  void _showDeleteConfirmation(
+    BuildContext context,
+    int index,
+    String logId,
+  ) {
+    if (widget.readOnly || widget.conflictedLogIds.contains(logId)) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -623,6 +635,10 @@ class _LogTableState extends State<LogTable> {
           ),
           ElevatedButton(
             onPressed: () {
+              if (widget.readOnly || widget.conflictedLogIds.contains(logId)) {
+                Navigator.pop(context);
+                return;
+              }
               Provider.of<LogProvider>(context, listen: false).deleteLog(index);
               Navigator.pop(context);
               context.showLoggedSnackBar(

@@ -62,7 +62,7 @@ pub struct RemoteSession {
     pub deleted_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteLog {
     pub sync_id: String,
@@ -88,6 +88,9 @@ pub struct RemoteLog {
 #[serde(rename_all = "camelCase")]
 pub struct CollaborationSnapshot {
     pub protocol_version: i32,
+    /// True when the snapshot contains both active logs and canonical log
+    /// tombstones. Replica reinstall must never infer deletion from absence.
+    pub includes_deleted_logs: bool,
     pub session: RemoteSession,
     pub high_watermark_seq: i64,
     pub logs: Vec<RemoteLog>,
@@ -203,6 +206,76 @@ pub struct MutationConflictRequest {
     pub mutation_id: String,
     pub current_version: i64,
     pub current_entity: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MutationConflictOutcome {
+    pub outcome: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_mutation_id: Option<String>,
+    pub conflicting_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenSyncConflict {
+    pub conflict_id: String,
+    pub session_id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub mutation_id: String,
+    pub base_version: i64,
+    pub remote_version: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_entity: Option<serde_json::Value>,
+    pub local_entity: serde_json::Value,
+    pub remote_entity: serde_json::Value,
+    pub conflicting_fields: Vec<String>,
+    pub allowed_resolutions: Vec<ConflictResolution>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConflictResolution {
+    UseRemote,
+    KeepLocal,
+    CopyLocalAsNew,
+}
+
+impl ConflictResolution {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UseRemote => "useRemote",
+            Self::KeepLocal => "keepLocal",
+            Self::CopyLocalAsNew => "copyLocalAsNew",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveConflictRequest {
+    pub server_instance_id: String,
+    pub account_id: String,
+    pub session_id: String,
+    pub conflict_id: String,
+    pub expected_remote_version: i64,
+    pub resolution: ConflictResolution,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveConflictResult {
+    pub outcome: String,
+    pub resolution: ConflictResolution,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_mutation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_entity_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

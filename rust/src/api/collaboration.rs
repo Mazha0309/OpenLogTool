@@ -2,7 +2,7 @@ use crate::db;
 use crate::get_db;
 use crate::models::collaboration::{
     ApplyEventRequest, CollaborationRole, InstallSnapshotRequest, MutationConflictRequest,
-    MutationFailureRequest,
+    MutationFailureRequest, ResolveConflictRequest,
 };
 
 pub async fn get_or_create_device_id() -> anyhow::Result<String> {
@@ -188,6 +188,28 @@ pub async fn record_collaboration_mutation_conflict(
         .map_err(|error| anyhow::anyhow!("MUTATION_CONFLICT_JSON_INVALID: {error}"))?;
     let conflict = db::collaboration::record_mutation_conflict(get_db()?, request).await?;
     Ok(serde_json::to_string(&conflict)?)
+}
+
+pub async fn list_open_collaboration_conflicts(
+    server_instance_id: String,
+    account_id: String,
+    session_id: String,
+) -> anyhow::Result<String> {
+    let conflicts = db::collaboration::list_open_conflicts(
+        get_db()?,
+        &server_instance_id,
+        &account_id,
+        &session_id,
+    )
+    .await?;
+    Ok(serde_json::to_string(&conflicts)?)
+}
+
+pub async fn resolve_collaboration_conflict(request_json: String) -> anyhow::Result<String> {
+    let request: ResolveConflictRequest = serde_json::from_str(&request_json)
+        .map_err(|error| anyhow::anyhow!("CONFLICT_RESOLUTION_JSON_INVALID: {error}"))?;
+    let result = db::collaboration::resolve_conflict(get_db()?, request).await?;
+    Ok(serde_json::to_string(&result)?)
 }
 
 pub async fn apply_collaboration_event(request_json: String) -> anyhow::Result<String> {

@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1551143121;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1562318165;
 
 // Section: executor
 
@@ -1325,6 +1325,50 @@ fn wire__crate__api__sessions__join_session_impl(
         },
     )
 }
+fn wire__crate__api__collaboration__list_open_collaboration_conflicts_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_open_collaboration_conflicts",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_server_instance_id = <String>::sse_decode(&mut deserializer);
+            let api_account_id = <String>::sse_decode(&mut deserializer);
+            let api_session_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::collaboration::list_open_collaboration_conflicts(
+                                api_server_instance_id,
+                                api_account_id,
+                                api_session_id,
+                            )
+                            .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__collaboration__list_pending_collaboration_mutations_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1740,6 +1784,45 @@ fn wire__crate__api__dictionaries__reset_dictionaries_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
                         let output_ok = crate::api::dictionaries::reset_dictionaries().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__collaboration__resolve_collaboration_conflict_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "resolve_collaboration_conflict",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::collaboration::resolve_collaboration_conflict(
+                            api_request_json,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -2657,92 +2740,104 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         33 => wire__crate__api__sessions__join_session_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__collaboration__list_pending_collaboration_mutations_impl(
+        34 => wire__crate__api__collaboration__list_open_collaboration_conflicts_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        35 => wire__crate__api__sessions__list_sessions_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__collaboration__mark_collaboration_mutation_accepted_impl(
+        35 => wire__crate__api__collaboration__list_pending_collaboration_mutations_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__collaboration__mark_collaboration_mutation_rejected_impl(
+        36 => wire__crate__api__sessions__list_sessions_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__collaboration__mark_collaboration_mutation_accepted_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        38 => wire__crate__api__collaboration__mark_collaboration_mutation_retry_impl(
+        38 => wire__crate__api__collaboration__mark_collaboration_mutation_rejected_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__collaboration__mark_collaboration_mutations_sending_impl(
+        39 => wire__crate__api__collaboration__mark_collaboration_mutation_retry_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__collaboration__mark_collaboration_revoked_impl(
+        40 => wire__crate__api__collaboration__mark_collaboration_mutations_sending_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__collaboration__record_collaboration_mutation_conflict_impl(
+        41 => wire__crate__api__collaboration__mark_collaboration_revoked_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__sessions__reopen_collaboration_session_impl(
+        42 => wire__crate__api__collaboration__record_collaboration_mutation_conflict_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        43 => wire__crate__api__dictionaries__reset_dictionaries_impl(
+        43 => wire__crate__api__sessions__reopen_collaboration_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__logs__restore_log_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__collaboration__set_collaboration_head_seq_impl(
+        44 => wire__crate__api__dictionaries__reset_dictionaries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        48 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
+        45 => wire__crate__api__collaboration__resolve_collaboration_conflict_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        50 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__collaboration__update_collaboration_membership_impl(
+        46 => wire__crate__api__logs__restore_log_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__collaboration__set_collaboration_head_seq_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        52 => wire__crate__api__sessions__update_collaboration_session_title_impl(
+        50 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        53 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
-        54 => {
+        52 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__collaboration__update_collaboration_membership_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        54 => wire__crate__api__sessions__update_collaboration_session_title_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        55 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
+        56 => {
             wire__crate__api__dictionaries__upsert_dict_item_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),

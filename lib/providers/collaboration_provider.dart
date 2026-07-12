@@ -4,11 +4,13 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/collaboration_publish.dart';
+import 'package:openlogtool/services/collaboration_conflicts.dart';
 import 'package:openlogtool/services/collaboration_replica.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/services/server_api.dart';
@@ -105,11 +107,42 @@ final class _OperationContextChanged implements Exception {
   String toString() => 'COLLABORATION_CONTEXT_CHANGED: 服务器、账号或会话已切换';
 }
 
+CollaborationConflictPort _resolveConflictPort(
+  CollaborationReplicaPort? replica,
+) {
+  if (replica is CollaborationConflictPort) {
+    return replica as CollaborationConflictPort;
+  }
+  return const RustCollaborationReplicaPort();
+}
+
+@visibleForTesting
+bool collaborationEventMayAffectOpenConflicts({
+  required CollaborationEventDto event,
+  required List<CollaborationConflict> openConflicts,
+  required int reportedConflictCount,
+}) {
+  if (reportedConflictCount <= 0 && openConflicts.isEmpty) return false;
+  // While the first list request is pending, conservatively invalidate on any
+  // event so a response read just before that event cannot become permanent.
+  if (openConflicts.isEmpty) return true;
+  // Session status/version changes can alter the allowed resolutions of every
+  // Log conflict, even when the conflicted entity itself did not change.
+  if (event.entityType == 'session') return true;
+  return openConflicts.any(
+    (conflict) =>
+        conflict.entityType.name == event.entityType &&
+        conflict.entityId == event.entityId,
+  );
+}
+
 class CollaborationProvider with ChangeNotifier {
   CollaborationProvider({
     CollaborationReplicaPort? replica,
+    CollaborationConflictPort? conflicts,
     CollaborationSocketConnector? sockets,
   })  : _replica = replica ?? const RustCollaborationReplicaPort(),
+        _conflictPort = conflicts ?? _resolveConflictPort(replica),
         _sockets = sockets ?? const WebSocketChannelConnector();
 
   static const _pendingJoinPrefix = 'collaboration_pending_join_';
@@ -131,6 +164,7 @@ class CollaborationProvider with ChangeNotifier {
   };
   static const _refreshFeatures = {
     'sessionSnapshots',
+    'sessionSnapshotTombstones',
     'sessionMembership',
   };
   static const _memberManagementFeatures = {
@@ -143,9 +177,11 @@ class CollaborationProvider with ChangeNotifier {
     'sessionEvents',
     'sessionMutations',
     'collaborationWebSocket',
+    'sessionSnapshotTombstones',
   };
 
   final CollaborationReplicaPort _replica;
+  final CollaborationConflictPort _conflictPort;
   final CollaborationSocketConnector _sockets;
 
   ServerProvider? _server;
@@ -161,6 +197,10 @@ class CollaborationProvider with ChangeNotifier {
   CollaborationSyncCoordinator? _syncCoordinator;
   CollaborationSyncState? _syncState;
   int _syncGeneration = 0;
+  int _conflictRequestGeneration = 0;
+  int _conflictInvalidationGeneration = 0;
+  bool _conflictsNeedRefresh = false;
+  bool _conflictReloadScheduled = false;
 
   CollaborationState _state = CollaborationState.localOnly;
   LocalCollaborationBinding? _binding;
@@ -174,6 +214,10 @@ class CollaborationProvider with ChangeNotifier {
   String? _failedOperation;
   String _progressLabel = '';
   double? _progress;
+  List<CollaborationConflict> _openConflicts = const [];
+  bool _conflictsLoaded = false;
+  bool _conflictsLoading = false;
+  String? _resolvingConflictId;
 
   CollaborationState get state => _state;
   LocalCollaborationBinding? get binding => _binding;
@@ -187,6 +231,9 @@ class CollaborationProvider with ChangeNotifier {
   String? get failedOperation => _failedOperation;
   String get progressLabel => _progressLabel;
   double? get progress => _progress;
+  List<CollaborationConflict> get openConflicts => _openConflicts;
+  bool get conflictsLoading => _conflictsLoading;
+  String? get resolvingConflictId => _resolvingConflictId;
   bool get isBusy => _operationInProgress;
   CollaborationSyncState? get syncState => _syncState;
   CollaborationTransportPhase get transportPhase =>
@@ -196,7 +243,8 @@ class CollaborationProvider with ChangeNotifier {
   int get serverHeadSeq =>
       _syncState?.serverHeadSeq ?? _binding?.lastSeenHeadSeq ?? 0;
   int get pendingCount => _syncState?.pendingCount ?? 0;
-  int get conflictCount => _syncState?.conflictCount ?? 0;
+  int get conflictCount =>
+      _conflictsLoaded ? _openConflicts.length : _syncState?.conflictCount ?? 0;
   int get rejectedCount => _syncState?.rejectedCount ?? 0;
   DateTime? get lastSuccessfulSyncAt => _syncState?.lastSuccessfulSyncAt;
   DateTime? get nextRetryAt => _syncState?.nextRetryAt;
@@ -208,6 +256,34 @@ class CollaborationProvider with ChangeNotifier {
   SessionRole? get effectiveRole => _syncState?.role ?? _membership?.role;
   bool get canEditCurrentSession =>
       _state == CollaborationState.ready && (_syncState?.canEdit ?? false);
+  bool get canResolveConflicts => _currentConflictIdentity() != null;
+  bool get hasOpenSessionConflict {
+    final sessionId = _binding?.sessionId;
+    return sessionId != null &&
+        _openConflicts.any(
+          (conflict) =>
+              conflict.entityType == CollaborationConflictEntityType.session &&
+              conflict.entityId == sessionId,
+        );
+  }
+
+  Set<String> get conflictedLogIds => Set.unmodifiable(
+        _openConflicts
+            .where(
+              (conflict) =>
+                  conflict.entityType == CollaborationConflictEntityType.log,
+            )
+            .map((conflict) => conflict.entityId),
+      );
+
+  bool canResolveConflictWith(
+    CollaborationConflict conflict,
+    CollaborationConflictResolution resolution,
+  ) =>
+      canResolveConflicts &&
+      conflict.sessionId == _binding?.sessionId &&
+      conflict.allowedResolutions.contains(resolution);
+
   bool get isOwner {
     final server = _server;
     final sessions = _sessions;
@@ -363,7 +439,12 @@ class CollaborationProvider with ChangeNotifier {
       if (!isCurrent()) return;
       if (remoteMembership.version > currentBinding.membershipVersion ||
           remoteMembership.role != currentBinding.role) {
-        final snapshot = await api.getSessionSnapshot(sessionId);
+        final snapshot = await api.getSessionSnapshot(
+          sessionId,
+          includeDeleted: includeDeletedLogsForSnapshotInstall(
+            CollaborationSnapshotInstallTarget.existingReplica,
+          ),
+        );
         if (!isCurrent()) return;
         final refreshedBinding = await RustApi.installCollaborationSnapshot(
           requestJson: jsonEncode({
@@ -539,7 +620,12 @@ class CollaborationProvider with ChangeNotifier {
         _setProgress('安装服务端规范快照', 0.9);
         final remoteMembership = await context.api.getMembership(sessionId);
         _assertOperationCurrent(context);
-        final snapshot = await context.api.getSessionSnapshot(sessionId);
+        final snapshot = await context.api.getSessionSnapshot(
+          sessionId,
+          includeDeleted: includeDeletedLogsForSnapshotInstall(
+            CollaborationSnapshotInstallTarget.publish,
+          ),
+        );
         _assertOperationCurrent(context);
         validatePublishedCollaborationSnapshot(
           sessionId: sessionId,
@@ -682,8 +768,27 @@ class CollaborationProvider with ChangeNotifier {
         _assertOperationCurrent(context);
         _state = CollaborationState.snapshotting;
         _setProgress('下载协作快照', 0.55);
+        final existingBinding = await RustApi.getCollaborationBinding(
+          serverInstanceId: info.serverInstanceId,
+          accountId: context.accountId,
+          sessionId: redeemed.session.sessionId,
+        );
+        _assertOperationCurrent(context);
+        final isReinstall = existingBinding != null;
+        if (isReinstall &&
+            !info.features.contains('sessionSnapshotTombstones')) {
+          throw StateError(
+            'SYNC_FEATURE_UNAVAILABLE: '
+            '服务器不支持含删除记录的安全副本重装',
+          );
+        }
         final snapshot = await context.api.getSessionSnapshot(
           redeemed.session.sessionId,
+          includeDeleted: includeDeletedLogsForSnapshotInstall(
+            isReinstall
+                ? CollaborationSnapshotInstallTarget.existingReplica
+                : CollaborationSnapshotInstallTarget.firstJoin,
+          ),
         );
         _assertOperationCurrent(context);
         if (snapshot.session.sessionId != redeemed.session.sessionId ||
@@ -735,7 +840,7 @@ class CollaborationProvider with ChangeNotifier {
         _failedOperation = null;
         _setProgress('加入完成', 1);
         _clearError();
-      } catch (_) {
+      } catch (error) {
         if (_isOperationCurrent(context)) {
           _state = CollaborationState.failed;
           _failedOperation = 'join';
@@ -878,6 +983,7 @@ class CollaborationProvider with ChangeNotifier {
       await _ensureServerCapabilities(context, {
         ..._memberManagementFeatures,
         'sessionSnapshots',
+        'sessionSnapshotTombstones',
       });
       _assertOperationCurrent(context);
       final pending = await _pendingMutationId(
@@ -901,6 +1007,9 @@ class CollaborationProvider with ChangeNotifier {
       try {
         final snapshot = await context.api.getSessionSnapshot(
           binding.sessionId,
+          includeDeleted: includeDeletedLogsForSnapshotInstall(
+            CollaborationSnapshotInstallTarget.existingReplica,
+          ),
         );
         _assertOperationCurrent(context);
         final bindingJson = await RustApi.installCollaborationSnapshot(
@@ -973,6 +1082,190 @@ class CollaborationProvider with ChangeNotifier {
       context.logs.setCollaborationReadOnly(binding.sessionId, true);
       _syncCoordinator?.markSessionLocallyReopened();
     }, refreshAfter: false);
+  }
+
+  Future<void> refreshOpenConflicts() async {
+    if (_operationInProgress) {
+      throw StateError('已有协作操作正在进行');
+    }
+    final identity = _currentConflictIdentity();
+    if (identity == null) {
+      throw StateError('COLLABORATION_CONFLICT_CONTEXT_MISMATCH');
+    }
+    await _loadOpenConflicts(identity, rethrowError: true);
+  }
+
+  Future<void> useRemoteForConflict(String conflictId) => _resolveConflict(
+        conflictId,
+        CollaborationConflictResolution.useRemote,
+      );
+
+  Future<void> keepLocalForConflict(String conflictId) => _resolveConflict(
+        conflictId,
+        CollaborationConflictResolution.keepLocal,
+      );
+
+  Future<void> copyLocalAsNewForConflict(String conflictId) => _resolveConflict(
+        conflictId,
+        CollaborationConflictResolution.copyLocalAsNew,
+      );
+
+  Future<void> _resolveConflict(
+    String conflictId,
+    CollaborationConflictResolution resolution,
+  ) async {
+    if (conflictId.trim().isEmpty) {
+      throw ArgumentError.value(conflictId, 'conflictId', 'must not be empty');
+    }
+    await _runOperation((context) async {
+      final binding = _requireBoundSession(context, requireOwner: false);
+      final identity = _currentConflictIdentity();
+      if (identity == null ||
+          identity.serverInstanceId != binding.serverInstanceId ||
+          identity.accountId != binding.accountId ||
+          identity.sessionId != binding.sessionId) {
+        throw StateError('COLLABORATION_CONFLICT_CONTEXT_MISMATCH');
+      }
+      CollaborationConflict? conflict;
+      for (final candidate in _openConflicts) {
+        if (candidate.conflictId == conflictId) {
+          conflict = candidate;
+          break;
+        }
+      }
+      if (conflict == null || conflict.sessionId != identity.sessionId) {
+        throw StateError('COLLABORATION_CONFLICT_NOT_FOUND');
+      }
+      if (!conflict.allowedResolutions.contains(resolution)) {
+        throw StateError('CONFLICT_RESOLUTION_NOT_ALLOWED');
+      }
+      if (_resolvingConflictId != null) {
+        throw StateError('COLLABORATION_CONFLICT_OPERATION_IN_PROGRESS');
+      }
+
+      _resolvingConflictId = conflictId;
+      _conflictRequestGeneration += 1;
+      _safeNotify();
+      try {
+        final result = await _conflictPort.resolveConflict(
+          identity,
+          conflictId,
+          resolution,
+          expectedRemoteVersion: conflict.remoteVersion,
+        );
+        _assertOperationCurrent(context);
+        if (_currentConflictIdentity() != identity ||
+            result.resolution != resolution) {
+          throw const _OperationContextChanged();
+        }
+
+        // The local resolution transaction is durable at this point. Wake the
+        // coordinator before UI reloads so a keep-local replacement mutation
+        // is not delayed by rendering work.
+        _syncCoordinator?.wake();
+        await context.sessions.reloadCurrentSession();
+        _assertOperationCurrent(context);
+        await context.logs.reloadForSession(
+          binding.sessionId,
+          propagateErrors: true,
+        );
+        _assertOperationCurrent(context);
+        await _loadOpenConflicts(identity, rethrowError: true);
+        _assertOperationCurrent(context);
+      } catch (error) {
+        // A remote-version precondition or a permission change means the
+        // choice the user confirmed is stale. Keep the operation error
+        // visible, but best-effort refresh the list before returning it.
+        if (_isOperationCurrent(context) &&
+            _currentConflictIdentity() == identity) {
+          await _loadOpenConflicts(identity, rethrowError: false);
+        }
+        if (_localErrorCode(error) == 'CONFLICT_REMOTE_ADVANCED') {
+          throw StateError(
+            'CONFLICT_REMOTE_ADVANCED: 远端内容已更新，'
+            '请检查刷新后的冲突内容并重新确认',
+          );
+        }
+        rethrow;
+      } finally {
+        if (_isOperationCurrent(context) &&
+            _resolvingConflictId == conflictId) {
+          _resolvingConflictId = null;
+          _safeNotify();
+        }
+      }
+    }, refreshAfter: false);
+  }
+
+  Future<void> _loadOpenConflicts(
+    CollaborationSyncIdentity identity, {
+    required bool rethrowError,
+  }) async {
+    final requestGeneration = ++_conflictRequestGeneration;
+    final invalidationGeneration = _conflictInvalidationGeneration;
+    _conflictsLoading = true;
+    _safeNotify();
+    try {
+      final conflicts = await _conflictPort.listOpenConflicts(identity);
+      if (!_isConflictRequestCurrent(requestGeneration, identity)) return;
+      final ids = <String>{};
+      if (conflicts.any(
+        (conflict) =>
+            conflict.sessionId != identity.sessionId ||
+            !ids.add(conflict.conflictId),
+      )) {
+        throw const FormatException(
+          'Conflict list contains another session or duplicate IDs',
+        );
+      }
+      _openConflicts = List.unmodifiable(conflicts);
+      _conflictsLoaded = true;
+      if (_conflictInvalidationGeneration == invalidationGeneration) {
+        _conflictsNeedRefresh = false;
+      }
+      if (_errorCode == 'CONFLICT_LIST_FAILED') _clearError();
+    } catch (error) {
+      if (_isConflictRequestCurrent(requestGeneration, identity)) {
+        _setError('CONFLICT_LIST_FAILED', error.toString());
+      }
+      if (rethrowError) rethrow;
+    } finally {
+      if (requestGeneration == _conflictRequestGeneration) {
+        _conflictsLoading = false;
+        _safeNotify();
+        if (_conflictsNeedRefresh &&
+            _conflictInvalidationGeneration != invalidationGeneration) {
+          _scheduleOpenConflictReload(identity);
+        }
+      }
+    }
+  }
+
+  void _invalidateOpenConflicts(CollaborationSyncIdentity identity) {
+    if ((_syncState?.conflictCount ?? 0) <= 0 && _openConflicts.isEmpty) {
+      return;
+    }
+    _conflictInvalidationGeneration += 1;
+    _conflictsNeedRefresh = true;
+    _scheduleOpenConflictReload(identity);
+  }
+
+  void _scheduleOpenConflictReload(CollaborationSyncIdentity identity) {
+    if (_conflictReloadScheduled ||
+        _conflictsLoading ||
+        _currentConflictIdentity() != identity) {
+      return;
+    }
+    _conflictReloadScheduled = true;
+    scheduleMicrotask(() {
+      _conflictReloadScheduled = false;
+      if (_conflictsLoading ||
+          _currentConflictIdentity() != identity ||
+          ((_syncState?.conflictCount ?? 0) <= 0 && _openConflicts.isEmpty)) {
+        return;
+      }
+      unawaited(_loadOpenConflicts(identity, rethrowError: false));
+    });
   }
 
   Future<void> _runOperation(
@@ -1315,6 +1608,7 @@ class CollaborationProvider with ChangeNotifier {
     final generation = ++_syncGeneration;
     final identity = CollaborationSyncIdentity(
       serverInstanceId: binding.serverInstanceId,
+      serverOrigin: binding.serverOrigin,
       accountId: binding.accountId,
       sessionId: binding.sessionId,
       deviceId: deviceId,
@@ -1327,6 +1621,7 @@ class CollaborationProvider with ChangeNotifier {
       onStateChanged: (state) {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
         final previousRole = _syncState?.role ?? _membership?.role;
+        final previousConflictCount = _syncState?.conflictCount;
         _syncState = state;
         switch (state.replicaPhase) {
           case CollaborationReplicaPhase.catchingUp:
@@ -1348,12 +1643,53 @@ class CollaborationProvider with ChangeNotifier {
         }
         logs.setCollaborationReadOnly(binding.sessionId, !state.canEdit);
         _safeNotify();
+        if (state.conflictCount == 0) {
+          if (_openConflicts.isNotEmpty ||
+              !_conflictsLoaded ||
+              _conflictsLoading ||
+              _conflictsNeedRefresh ||
+              _conflictReloadScheduled) {
+            _conflictRequestGeneration += 1;
+            _conflictInvalidationGeneration += 1;
+            _openConflicts = const [];
+            _conflictsLoaded = true;
+            _conflictsLoading = false;
+            _conflictsNeedRefresh = false;
+            _conflictReloadScheduled = false;
+            _safeNotify();
+          }
+        } else if (state.replicaPhase == CollaborationReplicaPhase.ready &&
+            !_conflictsLoading &&
+            (!_conflictsLoaded ||
+                _openConflicts.length != state.conflictCount ||
+                previousConflictCount != state.conflictCount ||
+                _conflictsNeedRefresh)) {
+          _scheduleOpenConflictReload(identity);
+        }
         if (state.role != null && state.role != previousRole) {
+          _invalidateOpenConflicts(identity);
           _scheduleRefresh();
         }
       },
       onEventApplied: (event) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        if (collaborationEventMayAffectOpenConflicts(
+          event: event,
+          openConflicts: _openConflicts,
+          reportedConflictCount: _syncState?.conflictCount ?? 0,
+        )) {
+          _invalidateOpenConflicts(identity);
+        }
+        await sessions.reloadCurrentSession();
+        if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        await logs.reloadForSession(
+          sessions.currentSessionId,
+          propagateErrors: true,
+        );
+      },
+      onSnapshotInstalled: (snapshot) async {
+        if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        _invalidateOpenConflicts(identity);
         await sessions.reloadCurrentSession();
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
         await logs.reloadForSession(
@@ -1385,15 +1721,64 @@ class CollaborationProvider with ChangeNotifier {
         generation == _syncGeneration &&
         identical(_syncCoordinator, coordinator) &&
         _binding?.serverInstanceId == identity.serverInstanceId &&
+        _binding?.serverOrigin == identity.serverOrigin &&
         _binding?.accountId == identity.accountId &&
         _binding?.sessionId == identity.sessionId &&
         server?.accountId == identity.accountId &&
+        server?.serverUrl == identity.serverOrigin &&
         server?.serverInfo?.serverInstanceId == identity.serverInstanceId &&
         _sessions?.currentSessionId == identity.sessionId;
   }
 
+  CollaborationSyncIdentity? _currentConflictIdentity() {
+    final identity = _syncState?.identity;
+    final binding = _binding;
+    final membership = _membership;
+    final server = _server;
+    if (_disposed ||
+        identity == null ||
+        binding == null ||
+        membership == null ||
+        _syncState?.replicaPhase != CollaborationReplicaPhase.ready ||
+        binding.replicaState != 'ready' ||
+        binding.serverInstanceId != identity.serverInstanceId ||
+        binding.serverOrigin != identity.serverOrigin ||
+        binding.accountId != identity.accountId ||
+        binding.sessionId != identity.sessionId ||
+        membership.membershipId != binding.membershipId ||
+        membership.sessionId != identity.sessionId ||
+        membership.userId != identity.accountId ||
+        membership.removedAt != null ||
+        server?.serverUrl != identity.serverOrigin ||
+        server?.accountId != identity.accountId ||
+        server?.serverInfo?.serverInstanceId != identity.serverInstanceId ||
+        _sessions?.currentSessionId != identity.sessionId) {
+      return null;
+    }
+    return identity;
+  }
+
+  bool _isConflictRequestCurrent(
+    int requestGeneration,
+    CollaborationSyncIdentity identity,
+  ) =>
+      requestGeneration == _conflictRequestGeneration &&
+      _currentConflictIdentity() == identity;
+
+  void _resetConflictState() {
+    _conflictRequestGeneration += 1;
+    _conflictInvalidationGeneration += 1;
+    _openConflicts = const [];
+    _conflictsLoaded = false;
+    _conflictsLoading = false;
+    _conflictsNeedRefresh = false;
+    _conflictReloadScheduled = false;
+    _resolvingConflictId = null;
+  }
+
   void _stopSynchronization() {
     _syncGeneration += 1;
+    _resetConflictState();
     final binding = _binding;
     if (binding != null) {
       _logs?.setCollaborationReadOnly(binding.sessionId, true);

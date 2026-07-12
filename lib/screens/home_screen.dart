@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -175,6 +176,8 @@ class AddRecordPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final logProvider = Provider.of<LogProvider>(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
+    final conflictedLogIds =
+        context.watch<CollaborationProvider>().conflictedLogIds;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -182,8 +185,8 @@ class AddRecordPage extends StatelessWidget {
             constraints.maxWidth > 1200 && settingsProvider.wideLayoutEnabled;
 
         final content = isWideScreen
-            ? _buildWideLayout(context, logProvider)
-            : _buildNarrowLayout(context, logProvider);
+            ? _buildWideLayout(context, logProvider, conflictedLogIds)
+            : _buildNarrowLayout(context, logProvider, conflictedLogIds);
         if (!logProvider.currentSessionReadOnly) {
           return content;
         }
@@ -210,7 +213,11 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  Widget _buildWideLayout(BuildContext context, LogProvider logProvider) {
+  Widget _buildWideLayout(
+    BuildContext context,
+    LogProvider logProvider,
+    Set<String> conflictedLogIds,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Row(
@@ -272,6 +279,7 @@ class AddRecordPage extends StatelessWidget {
                     const SizedBox(height: 16),
                     LogTable(
                       readOnly: logProvider.currentSessionReadOnly,
+                      conflictedLogIds: conflictedLogIds,
                     ),
                   ],
                 ),
@@ -283,7 +291,11 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  Widget _buildNarrowLayout(BuildContext context, LogProvider logProvider) {
+  Widget _buildNarrowLayout(
+    BuildContext context,
+    LogProvider logProvider,
+    Set<String> conflictedLogIds,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Column(
@@ -333,7 +345,10 @@ class AddRecordPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  LogTable(readOnly: logProvider.currentSessionReadOnly),
+                  LogTable(
+                    readOnly: logProvider.currentSessionReadOnly,
+                    conflictedLogIds: conflictedLogIds,
+                  ),
                 ],
               ),
             ),

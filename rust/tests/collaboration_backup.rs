@@ -27,6 +27,7 @@ fn snapshot_request() -> InstallSnapshotRequest {
         },
         snapshot: CollaborationSnapshot {
             protocol_version: 1,
+            includes_deleted_logs: true,
             session: RemoteSession {
                 session_id: "remote-before-import".to_string(),
                 title: "Remote before import".to_string(),

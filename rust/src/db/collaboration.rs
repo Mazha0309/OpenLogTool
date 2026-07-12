@@ -1,7 +1,8 @@
 use crate::models::collaboration::{
     ApplyEventRequest, ApplyEventResult, CollaborationBinding, CollaborationRole,
-    InstallSnapshotRequest, MutationConflictRequest, MutationFailureRequest, PublishLog,
-    PublishSession, PublishSnapshot, RemoteLog, SnapshotInstallMode, SyncStatus,
+    ConflictResolution, InstallSnapshotRequest, MutationConflictOutcome, MutationConflictRequest,
+    MutationFailureRequest, OpenSyncConflict, PublishLog, PublishSession, PublishSnapshot,
+    RemoteLog, ResolveConflictRequest, ResolveConflictResult, SnapshotInstallMode, SyncStatus,
 };
 use crate::models::log_entry::LogEntry;
 use chrono::{DateTime, NaiveTime, TimeZone};
@@ -49,7 +50,25 @@ struct OutboxRow {
     created_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromRow)]
+struct ConflictRow {
+    conflict_id: String,
+    server_instance_id: String,
+    account_id: String,
+    session_id: String,
+    entity_type: String,
+    entity_id: String,
+    mutation_id: String,
+    base_version: i64,
+    remote_version: i64,
+    base_json: Option<String>,
+    local_json: String,
+    remote_json: String,
+    state: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct CanonicalSessionEntity {
     session_id: String,
@@ -60,6 +79,91 @@ struct CanonicalSessionEntity {
     updated_at: String,
     closed_at: Option<String>,
     deleted_at: Option<String>,
+}
+
+/// Removes an accepted outbox root once an authoritative canonical baseline is
+/// known to contain that mutation. A direct successor can only be rebased when
+/// the canonical entity is exactly the root's `base + 1` version. If another
+/// remote mutation has already advanced the entity further, retaining the
+/// successor's old base deliberately lets the server return VERSION_CONFLICT
+/// instead of silently applying a stale patch to a newer entity.
+async fn acknowledge_outbox_root_covered_by_canonical(
+    tx: &mut Transaction<'_, Sqlite>,
+    server_instance_id: &str,
+    account_id: &str,
+    session_id: &str,
+    mutation_id: &str,
+    entity_type: &str,
+    entity_id: &str,
+    base_version: i64,
+    canonical_version: i64,
+    canonical_json: &str,
+    canonical_cursor: i64,
+    now: &str,
+) -> anyhow::Result<bool> {
+    let expected_version = base_version
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("OUTBOX_BASE_VERSION_INVALID"))?;
+    if canonical_version < expected_version {
+        return Ok(false);
+    }
+
+    if canonical_version == expected_version {
+        sqlx::query(
+            "UPDATE sync_outbox
+             SET base_version = ?, base_json = ?, observed_seq = ?,
+                 depends_on_mutation_id = NULL, updated_at = ?
+             WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+               AND depends_on_mutation_id = ?
+               AND entity_type = ? AND entity_id = ?",
+        )
+        .bind(canonical_version)
+        .bind(canonical_json)
+        .bind(canonical_cursor)
+        .bind(now)
+        .bind(server_instance_id)
+        .bind(account_id)
+        .bind(session_id)
+        .bind(mutation_id)
+        .bind(entity_type)
+        .bind(entity_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    // Cross-entity dependencies are not produced by the current writer, but a
+    // restored/older database must still be handled without assigning the
+    // wrong entity JSON as its base. The same update also handles successors
+    // when canonical_version > expected_version.
+    sqlx::query(
+        "UPDATE sync_outbox
+         SET depends_on_mutation_id = NULL, updated_at = ?
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND depends_on_mutation_id = ?",
+    )
+    .bind(now)
+    .bind(server_instance_id)
+    .bind(account_id)
+    .bind(session_id)
+    .bind(mutation_id)
+    .execute(&mut **tx)
+    .await?;
+
+    let removed = sqlx::query(
+        "DELETE FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND mutation_id = ? AND state = 'accepted'",
+    )
+    .bind(server_instance_id)
+    .bind(account_id)
+    .bind(session_id)
+    .bind(mutation_id)
+    .execute(&mut **tx)
+    .await?;
+    if removed.rows_affected() != 1 {
+        anyhow::bail!("OUTBOX_ACCEPTED_MUTATION_NOT_FOUND");
+    }
+    Ok(true)
 }
 
 #[derive(Debug, FromRow)]
@@ -223,6 +327,9 @@ fn validate_install_request(request: &InstallSnapshotRequest) -> anyhow::Result<
     let snapshot = &request.snapshot;
     if snapshot.protocol_version != 1 {
         anyhow::bail!("SNAPSHOT_PROTOCOL_MISMATCH");
+    }
+    if !snapshot.includes_deleted_logs && snapshot.logs.iter().any(|log| log.deleted_at.is_some()) {
+        anyhow::bail!("SNAPSHOT_DELETED_LOGS_FLAG_INVALID");
     }
     if snapshot.high_watermark_seq < 0
         || snapshot.session.high_watermark_seq != snapshot.high_watermark_seq
@@ -594,6 +701,8 @@ pub async fn install_snapshot(
     .bind(session_id)
     .fetch_optional(&mut *tx)
     .await?;
+    let complete_reinstall =
+        request.mode == SnapshotInstallMode::Join && existing_binding.is_some();
 
     if let Some(existing) = &existing_binding {
         if existing.server_instance_id != request.server_instance_id
@@ -616,6 +725,9 @@ pub async fn install_snapshot(
         }
         SnapshotInstallMode::Join => {
             if let Some(existing) = &existing_binding {
+                if !snapshot.includes_deleted_logs {
+                    anyhow::bail!("SNAPSHOT_TOMBSTONES_REQUIRED");
+                }
                 let explicit_rejoin = existing.replica_state == "revoked"
                     && existing.membership_id == request.membership.membership_id
                     && request.membership.version > existing.membership_version;
@@ -631,8 +743,16 @@ pub async fn install_snapshot(
                 if snapshot.high_watermark_seq < existing.last_applied_seq {
                     anyhow::bail!("SNAPSHOT_CURSOR_REGRESSION");
                 }
+                if snapshot.high_watermark_seq < existing.last_seen_head_seq {
+                    anyhow::bail!("SNAPSHOT_HEAD_REGRESSION");
+                }
                 if request.membership.version < existing.membership_version {
                     anyhow::bail!("SNAPSHOT_MEMBERSHIP_VERSION_REGRESSION");
+                }
+                if request.membership.version == existing.membership_version
+                    && request.membership.role.as_str() != existing.role
+                {
+                    anyhow::bail!("SNAPSHOT_MEMBERSHIP_VERSION_FORK");
                 }
             } else if local_session_exists.0 > 0 {
                 anyhow::bail!("LOCAL_SESSION_ID_CONFLICT");
@@ -833,8 +953,8 @@ pub async fn install_snapshot(
     .execute(&mut *tx)
     .await?;
 
-    let acknowledged = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT mutation_id, entity_type, entity_id
+    let acknowledged = sqlx::query_as::<_, (String, String, String, i64)>(
+        "SELECT mutation_id, entity_type, entity_id, base_version
          FROM sync_outbox
          WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
            AND state = 'accepted' AND accepted_event_seq <= ?
@@ -846,7 +966,7 @@ pub async fn install_snapshot(
     .bind(snapshot.high_watermark_seq)
     .fetch_all(&mut *tx)
     .await?;
-    for (mutation_id, entity_type, entity_id) in acknowledged {
+    for (mutation_id, entity_type, entity_id, base_version) in acknowledged {
         let canonical: Option<(i64, String)> = sqlx::query_as(
             "SELECT server_version, server_json FROM entity_shadows
              WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
@@ -860,28 +980,26 @@ pub async fn install_snapshot(
         .fetch_optional(&mut *tx)
         .await?;
         let Some((version, server_json)) = canonical else {
-            // A full member snapshot omits tombstones. Keep an accepted delete
-            // until its canonical event can be recovered rather than guessing a
-            // restore base and silently discarding a dependent local command.
-            continue;
+            // A complete reinstall includes tombstones, so an accepted entity
+            // covered by the new cursor cannot be absent. Abort rather than
+            // advance the cursor and strand an acknowledgement below it.
+            anyhow::bail!("SNAPSHOT_ACCEPTED_ENTITY_MISSING");
         };
-        sqlx::query(
-            "UPDATE sync_outbox
-             SET base_version = ?, base_json = ?, observed_seq = ?,
-                 depends_on_mutation_id = NULL, updated_at = ?
-             WHERE depends_on_mutation_id = ?",
+        acknowledge_outbox_root_covered_by_canonical(
+            &mut tx,
+            &request.server_instance_id,
+            &request.account_id,
+            session_id,
+            &mutation_id,
+            &entity_type,
+            &entity_id,
+            base_version,
+            version,
+            &server_json,
+            snapshot.high_watermark_seq,
+            &now,
         )
-        .bind(version)
-        .bind(&server_json)
-        .bind(snapshot.high_watermark_seq)
-        .bind(&now)
-        .bind(&mutation_id)
-        .execute(&mut *tx)
         .await?;
-        sqlx::query("DELETE FROM sync_outbox WHERE mutation_id = ?")
-            .bind(&mutation_id)
-            .execute(&mut *tx)
-            .await?;
     }
 
     let pending_entities = sqlx::query_as::<_, (String, String)>(
@@ -909,6 +1027,27 @@ pub async fn install_snapshot(
         let base = if let Some((server_json,)) = canonical {
             serde_json::from_str(&server_json)?
         } else if entity_type == "log" {
+            if complete_reinstall {
+                let root: Option<(String, i64, Option<String>)> = sqlx::query_as(
+                    "SELECT operation, base_version, depends_on_mutation_id
+                     FROM sync_outbox
+                     WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+                       AND entity_type = ? AND entity_id = ?
+                     ORDER BY local_seq LIMIT 1",
+                )
+                .bind(&request.server_instance_id)
+                .bind(&request.account_id)
+                .bind(session_id)
+                .bind(&entity_type)
+                .bind(&entity_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if !root.is_some_and(|(operation, base_version, dependency)| {
+                    operation == "create" && base_version == 0 && dependency.is_none()
+                }) {
+                    anyhow::bail!("SNAPSHOT_PENDING_ENTITY_MISSING");
+                }
+            }
             pending_materialized_logs
                 .get(&entity_id)
                 .cloned()
@@ -1422,6 +1561,30 @@ async fn queue_session_from_canonical(
     Ok(())
 }
 
+async fn ensure_entity_not_conflicted(
+    tx: &mut Transaction<'_, Sqlite>,
+    binding: &BindingRow,
+    entity_type: &str,
+    entity_id: &str,
+) -> anyhow::Result<()> {
+    let conflicted: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sync_conflicts
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND entity_type = ? AND entity_id = ? AND state = 'open'",
+    )
+    .bind(&binding.server_instance_id)
+    .bind(&binding.account_id)
+    .bind(&binding.session_id)
+    .bind(entity_type)
+    .bind(entity_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if conflicted.0 != 0 {
+        anyhow::bail!("COLLABORATION_ENTITY_CONFLICTED");
+    }
+    Ok(())
+}
+
 pub(crate) async fn queue_log_create(
     tx: &mut Transaction<'_, Sqlite>,
     entry: &LogEntry,
@@ -1429,6 +1592,7 @@ pub(crate) async fn queue_log_create(
     let Some(binding) = writable_binding(tx, &entry.session_id, false).await? else {
         return Ok(());
     };
+    ensure_entity_not_conflicted(tx, &binding, "log", &entry.sync_id).await?;
     if let Some(rejected_base) =
         discard_rejected_entity_chain(tx, &binding, "log", &entry.sync_id).await?
     {
@@ -1472,6 +1636,7 @@ pub(crate) async fn queue_log_update(
     let Some(binding) = writable_binding(tx, &after.session_id, false).await? else {
         return Ok(());
     };
+    ensure_entity_not_conflicted(tx, &binding, "log", &after.sync_id).await?;
     if let Some(rejected_base) =
         discard_rejected_entity_chain(tx, &binding, "log", &after.sync_id).await?
     {
@@ -1552,6 +1717,7 @@ pub(crate) async fn queue_log_delete(
     let Some(binding) = writable_binding(tx, &entry.session_id, false).await? else {
         return Ok(false);
     };
+    ensure_entity_not_conflicted(tx, &binding, "log", &entry.sync_id).await?;
     if let Some(rejected_base) =
         discard_rejected_entity_chain(tx, &binding, "log", &entry.sync_id).await?
     {
@@ -1611,6 +1777,7 @@ pub(crate) async fn queue_log_restore(
     let Some(binding) = writable_binding(tx, &entry.session_id, false).await? else {
         return Ok(());
     };
+    ensure_entity_not_conflicted(tx, &binding, "log", &entry.sync_id).await?;
     if let Some(rejected_base) =
         discard_rejected_entity_chain(tx, &binding, "log", &entry.sync_id).await?
     {
@@ -1732,6 +1899,7 @@ pub(crate) async fn mutate_session_in_tx(
         if binding.role != "owner" {
             anyhow::bail!("COLLABORATION_OWNER_REQUIRED");
         }
+        ensure_entity_not_conflicted(tx, binding, "session", session_id).await?;
         let canonical_status = canonical_session_status_in_tx(
             tx,
             &binding.server_instance_id,
@@ -2338,10 +2506,11 @@ async fn materialized_entity_json(
                 String,
                 String,
                 String,
+                String,
                 Option<String>,
                 Option<String>,
             ) = sqlx::query_as(
-                "SELECT session_id, title, status, created_at, closed_at, deleted_at
+                "SELECT session_id, title, status, created_at, updated_at, closed_at, deleted_at
                      FROM sessions WHERE session_id = ?",
             )
             .bind(entity_id)
@@ -2354,57 +2523,377 @@ async fn materialized_entity_json(
                 "status": row.2,
                 "version": version,
                 "createdAt": row.3,
-                "closedAt": row.4,
-                "deletedAt": row.5,
+                "updatedAt": row.4,
+                "closedAt": row.5,
+                "deletedAt": row.6,
             }))
         }
         _ => anyhow::bail!("ENTITY_TYPE_INVALID"),
     }
 }
 
-fn changed_keys(base: Option<&Value>, other: &Value) -> HashSet<String> {
-    let Some(other) = other.as_object() else {
-        return HashSet::new();
-    };
-    let base = base.and_then(Value::as_object);
-    other
+const LOG_EDITABLE_FIELDS: &[&str] = &[
+    "time",
+    "controller",
+    "callsign",
+    "rstSent",
+    "rstRcvd",
+    "qth",
+    "device",
+    "power",
+    "antenna",
+    "height",
+    "remarks",
+];
+const SESSION_EDITABLE_FIELDS: &[&str] = &["title"];
+
+fn editable_fields(entity_type: &str) -> anyhow::Result<&'static [&'static str]> {
+    match entity_type {
+        "log" => Ok(LOG_EDITABLE_FIELDS),
+        "session" => Ok(SESSION_EDITABLE_FIELDS),
+        _ => anyhow::bail!("ENTITY_TYPE_INVALID"),
+    }
+}
+
+fn object_field<'a>(value: &'a Value, field: &str) -> anyhow::Result<Option<&'a Value>> {
+    value
+        .as_object()
+        .map(|object| object.get(field))
+        .ok_or_else(|| anyhow::anyhow!("CONFLICT_ENTITY_INVALID"))
+}
+
+fn changed_fields(base: &Value, desired: &Value, fields: &[&str]) -> anyhow::Result<Vec<String>> {
+    let mut changed = Vec::new();
+    for field in fields {
+        if object_field(base, field)? != object_field(desired, field)? {
+            changed.push((*field).to_string());
+        }
+    }
+    Ok(changed)
+}
+
+fn three_way_conflicting_fields(
+    base: &Value,
+    desired: &Value,
+    remote: &Value,
+    fields: &[String],
+) -> anyhow::Result<Vec<String>> {
+    let mut conflicting = Vec::new();
+    for field in fields {
+        let base_value = object_field(base, field)?;
+        let desired_value = object_field(desired, field)?;
+        let remote_value = object_field(remote, field)?;
+        if remote_value != base_value && remote_value != desired_value {
+            conflicting.push(field.clone());
+        }
+    }
+    Ok(conflicting)
+}
+
+fn patch_for_fields(desired: &Value, fields: &[String]) -> anyhow::Result<Map<String, Value>> {
+    let desired = desired
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_ENTITY_INVALID"))?;
+    fields
         .iter()
-        .filter_map(|(key, value)| {
-            if base.and_then(|object| object.get(key)) == Some(value) {
-                None
-            } else {
-                Some(key.clone())
-            }
+        .map(|field| {
+            desired
+                .get(field)
+                .cloned()
+                .map(|value| (field.clone(), value))
+                .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_FIELD_MISSING:{field}"))
         })
         .collect()
+}
+
+fn validate_conflict_entity(
+    entity_type: &str,
+    entity_id: &str,
+    session_id: &str,
+    version: i64,
+    value: &Value,
+) -> anyhow::Result<()> {
+    if version < 1 || !value.is_object() {
+        anyhow::bail!("CONFLICT_ENTITY_INVALID");
+    }
+    match entity_type {
+        "log" => {
+            let log: RemoteLog = serde_json::from_value(value.clone())
+                .map_err(|error| anyhow::anyhow!("CONFLICT_LOG_INVALID: {error}"))?;
+            if log.sync_id != entity_id || log.session_id != session_id || log.version != version {
+                anyhow::bail!("CONFLICT_ENTITY_MISMATCH");
+            }
+            for timestamp in [&log.time, &log.created_at, &log.updated_at] {
+                DateTime::parse_from_rfc3339(timestamp)
+                    .map_err(|_| anyhow::anyhow!("CONFLICT_LOG_TIME_INVALID"))?;
+            }
+            if let Some(timestamp) = &log.deleted_at {
+                DateTime::parse_from_rfc3339(timestamp)
+                    .map_err(|_| anyhow::anyhow!("CONFLICT_LOG_TIME_INVALID"))?;
+            }
+        }
+        "session" => {
+            let session: CanonicalSessionEntity = serde_json::from_value(value.clone())
+                .map_err(|error| anyhow::anyhow!("CONFLICT_SESSION_INVALID: {error}"))?;
+            if session.session_id != entity_id
+                || session.session_id != session_id
+                || session.version != version
+            {
+                anyhow::bail!("CONFLICT_ENTITY_MISMATCH");
+            }
+            if !matches!(session.status.as_str(), "active" | "closed") {
+                anyhow::bail!("CONFLICT_SESSION_STATUS_INVALID");
+            }
+            for timestamp in [&session.created_at, &session.updated_at] {
+                DateTime::parse_from_rfc3339(timestamp)
+                    .map_err(|_| anyhow::anyhow!("CONFLICT_SESSION_TIME_INVALID"))?;
+            }
+            for timestamp in [session.closed_at.as_deref(), session.deleted_at.as_deref()]
+                .into_iter()
+                .flatten()
+            {
+                DateTime::parse_from_rfc3339(timestamp)
+                    .map_err(|_| anyhow::anyhow!("CONFLICT_SESSION_TIME_INVALID"))?;
+            }
+        }
+        _ => anyhow::bail!("ENTITY_TYPE_INVALID"),
+    }
+    Ok(())
+}
+
+async fn load_entity_chain_from_root(
+    tx: &mut Transaction<'_, Sqlite>,
+    binding: &BindingRow,
+    root: &OutboxRow,
+) -> anyhow::Result<Vec<OutboxRow>> {
+    if root.depends_on_mutation_id.is_some() {
+        anyhow::bail!("CONFLICT_MUTATION_NOT_CHAIN_ROOT");
+    }
+    let earlier: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND entity_type = ? AND entity_id = ? AND local_seq < ?",
+    )
+    .bind(&binding.server_instance_id)
+    .bind(&binding.account_id)
+    .bind(&binding.session_id)
+    .bind(&root.entity_type)
+    .bind(&root.entity_id)
+    .bind(root._local_seq)
+    .fetch_one(&mut **tx)
+    .await?;
+    if earlier.0 != 0 {
+        anyhow::bail!("CONFLICT_MUTATION_NOT_CHAIN_ROOT");
+    }
+
+    let chain = sqlx::query_as::<_, OutboxRow>(
+        "SELECT local_seq, mutation_id, entity_type, entity_id, operation,
+                base_version, observed_seq, base_json, payload_json, state,
+                attempts, next_attempt_at, depends_on_mutation_id, created_at
+         FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND entity_type = ? AND entity_id = ? AND local_seq >= ?
+         ORDER BY local_seq",
+    )
+    .bind(&binding.server_instance_id)
+    .bind(&binding.account_id)
+    .bind(&binding.session_id)
+    .bind(&root.entity_type)
+    .bind(&root.entity_id)
+    .bind(root._local_seq)
+    .fetch_all(&mut **tx)
+    .await?;
+    if chain.first().map(|row| row.mutation_id.as_str()) != Some(root.mutation_id.as_str()) {
+        anyhow::bail!("CONFLICT_CHAIN_INVALID");
+    }
+    for pair in chain.windows(2) {
+        if pair[1].depends_on_mutation_id.as_deref() != Some(pair[0].mutation_id.as_str()) {
+            anyhow::bail!("CONFLICT_CHAIN_NOT_LINEAR");
+        }
+    }
+    for row in &chain {
+        let external_dependents: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sync_outbox
+             WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+               AND depends_on_mutation_id = ?
+               AND (entity_type <> ? OR entity_id <> ?)",
+        )
+        .bind(&binding.server_instance_id)
+        .bind(&binding.account_id)
+        .bind(&binding.session_id)
+        .bind(&row.mutation_id)
+        .bind(&root.entity_type)
+        .bind(&root.entity_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if external_dependents.0 != 0 {
+            anyhow::bail!("CONFLICT_CHAIN_CROSS_ENTITY_DEPENDENCY");
+        }
+    }
+    Ok(chain)
+}
+
+fn fold_update_chain(base: &Value, chain: &[OutboxRow]) -> anyhow::Result<Value> {
+    let mut desired = base.clone();
+    let allowed = editable_fields(&chain[0].entity_type)?;
+    for row in chain {
+        if row.operation != "update" {
+            anyhow::bail!("CONFLICT_CHAIN_LIFECYCLE_OPERATION");
+        }
+        let payload: Value = serde_json::from_str(&row.payload_json)
+            .map_err(|error| anyhow::anyhow!("OUTBOX_PAYLOAD_INVALID: {error}"))?;
+        let patch = payload
+            .get("patch")
+            .and_then(Value::as_object)
+            .ok_or_else(|| anyhow::anyhow!("OUTBOX_PAYLOAD_INVALID"))?;
+        if patch.is_empty() || patch.keys().any(|field| !allowed.contains(&field.as_str())) {
+            anyhow::bail!("OUTBOX_PAYLOAD_INVALID");
+        }
+        merge_object(&mut desired, &Value::Object(patch.clone()))?;
+    }
+    Ok(desired)
+}
+
+fn lifecycle_conflict_fields(entity_type: &str, chain: &[OutboxRow]) -> Vec<String> {
+    let mut fields = Vec::new();
+    for row in chain {
+        match (entity_type, row.operation.as_str()) {
+            ("log", "create") => fields.push("existence".to_string()),
+            ("log", "delete" | "restore") => fields.push("deletedAt".to_string()),
+            ("session", "close" | "reopen") => fields.push("status".to_string()),
+            _ => {}
+        }
+    }
+    fields.sort();
+    fields.dedup();
+    fields
+}
+
+fn remote_blocks_update(entity_type: &str, remote: &Value) -> anyhow::Result<Vec<String>> {
+    let mut fields = Vec::new();
+    if remote
+        .get("deletedAt")
+        .is_some_and(|deleted_at| !deleted_at.is_null())
+    {
+        fields.push("deletedAt".to_string());
+    }
+    if entity_type == "session" && remote.get("status").and_then(Value::as_str) != Some("active") {
+        fields.push("status".to_string());
+    }
+    Ok(fields)
+}
+
+fn same_version_conflict_proven(entity_type: &str, operation: &str, remote: &Value) -> bool {
+    let remote_deleted = remote
+        .get("deletedAt")
+        .is_some_and(|value| !value.is_null());
+    matches!(
+        (entity_type, operation, remote_deleted),
+        ("log", "update" | "delete", true) | ("log", "restore", false)
+    )
+}
+
+async fn delete_entity_chain(
+    tx: &mut Transaction<'_, Sqlite>,
+    binding: &BindingRow,
+    root: &OutboxRow,
+    expected_count: usize,
+) -> anyhow::Result<()> {
+    let deleted = sqlx::query(
+        "DELETE FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND entity_type = ? AND entity_id = ? AND local_seq >= ?",
+    )
+    .bind(&binding.server_instance_id)
+    .bind(&binding.account_id)
+    .bind(&binding.session_id)
+    .bind(&root.entity_type)
+    .bind(&root.entity_id)
+    .bind(root._local_seq)
+    .execute(&mut **tx)
+    .await?;
+    if deleted.rows_affected() != expected_count as u64 {
+        anyhow::bail!("CONFLICT_CHAIN_DELETE_RACE");
+    }
+    Ok(())
+}
+
+struct ReplacementOutbox<'a> {
+    local_seq: i64,
+    entity_type: &'a str,
+    entity_id: &'a str,
+    operation: &'a str,
+    base_version: i64,
+    base_json: Option<&'a str>,
+    payload: &'a Value,
+}
+
+async fn insert_replacement_intent(
+    tx: &mut Transaction<'_, Sqlite>,
+    binding: &BindingRow,
+    replacement: ReplacementOutbox<'_>,
+) -> anyhow::Result<String> {
+    let mutation_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO sync_outbox (
+            local_seq, server_instance_id, account_id, session_id, mutation_id,
+            entity_type, entity_id, operation, base_version, observed_seq,
+            base_json, payload_json, state, attempts, next_attempt_at,
+            accepted_event_seq, depends_on_mutation_id,
+            last_error_code, last_error_message, last_error_details_json,
+            created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL,
+                   NULL, NULL, NULL, NULL, NULL, ?, ?)",
+    )
+    .bind(replacement.local_seq)
+    .bind(&binding.server_instance_id)
+    .bind(&binding.account_id)
+    .bind(&binding.session_id)
+    .bind(&mutation_id)
+    .bind(replacement.entity_type)
+    .bind(replacement.entity_id)
+    .bind(replacement.operation)
+    .bind(replacement.base_version)
+    .bind(binding.last_applied_seq)
+    .bind(replacement.base_json)
+    .bind(serde_json::to_string(replacement.payload)?)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(mutation_id)
+}
+
+async fn write_materialized_entity(
+    tx: &mut Transaction<'_, Sqlite>,
+    entity_type: &str,
+    value: Value,
+) -> anyhow::Result<()> {
+    match entity_type {
+        "log" => write_materialized_log(tx, value).await,
+        "session" => write_materialized_session(tx, value).await,
+        _ => anyhow::bail!("ENTITY_TYPE_INVALID"),
+    }
 }
 
 pub async fn record_mutation_conflict(
     pool: &SqlitePool,
     request: MutationConflictRequest,
-) -> anyhow::Result<Value> {
+) -> anyhow::Result<MutationConflictOutcome> {
     if request.current_version < 1 || !request.current_entity.is_object() {
         anyhow::bail!("CONFLICT_ENTITY_INVALID");
     }
     let mut tx = pool.begin().await?;
-    require_partition_binding(
+    let binding = require_partition_binding(
         &mut tx,
         &request.server_instance_id,
         &request.account_id,
         &request.session_id,
     )
     .await?;
-    if let Some(version) = request
-        .current_entity
-        .get("version")
-        .and_then(Value::as_i64)
-    {
-        if version != request.current_version {
-            anyhow::bail!("CONFLICT_VERSION_MISMATCH");
-        }
-    }
-    let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT conflict_id FROM sync_conflicts
+    let existing: Option<(String, String)> = sqlx::query_as(
+        "SELECT conflict_id, conflicting_fields_json FROM sync_conflicts
          WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
            AND mutation_id = ?",
     )
@@ -2414,9 +2903,16 @@ pub async fn record_mutation_conflict(
     .bind(&request.mutation_id)
     .fetch_optional(&mut *tx)
     .await?;
-    if let Some((conflict_id,)) = existing {
+    if let Some((conflict_id, fields_json)) = existing {
+        let conflicting_fields = serde_json::from_str(&fields_json)
+            .map_err(|error| anyhow::anyhow!("CONFLICT_FIELDS_INVALID: {error}"))?;
         tx.commit().await?;
-        return Ok(json!({"conflictId": conflict_id, "state": "open"}));
+        return Ok(MutationConflictOutcome {
+            outcome: "conflict".to_string(),
+            conflict_id: Some(conflict_id),
+            replacement_mutation_id: None,
+            conflicting_fields,
+        });
     }
 
     let outbox = sqlx::query_as::<_, OutboxRow>(
@@ -2437,6 +2933,27 @@ pub async fn record_mutation_conflict(
     if outbox.state == "accepted" {
         anyhow::bail!("OUTBOX_ALREADY_ACCEPTED");
     }
+    if !matches!(outbox.state.as_str(), "pending" | "sending" | "retrying") {
+        anyhow::bail!("OUTBOX_MUTATION_NOT_CONFLICTABLE");
+    }
+    validate_conflict_entity(
+        &outbox.entity_type,
+        &outbox.entity_id,
+        &request.session_id,
+        request.current_version,
+        &request.current_entity,
+    )?;
+    let chain = load_entity_chain_from_root(&mut tx, &binding, &outbox).await?;
+    if request.current_version < outbox.base_version
+        || (request.current_version == outbox.base_version
+            && !same_version_conflict_proven(
+                &outbox.entity_type,
+                &outbox.operation,
+                &request.current_entity,
+            ))
+    {
+        anyhow::bail!("CONFLICT_VERSION_NOT_ADVANCED");
+    }
     let base_value = outbox
         .base_json
         .as_deref()
@@ -2449,15 +2966,97 @@ pub async fn record_mutation_conflict(
         request.current_version,
     )
     .await?;
-    let local_keys = changed_keys(base_value.as_ref(), &local_value);
-    let remote_keys = changed_keys(base_value.as_ref(), &request.current_entity);
-    let mut conflicting_fields: Vec<String> =
-        local_keys.intersection(&remote_keys).cloned().collect();
-    if outbox.operation == "delete" || outbox.operation == "restore" {
-        conflicting_fields.push("deletedAt".to_string());
+
+    let auto_rebase_candidate = base_value.is_some()
+        && chain.iter().all(|row| row.operation == "update")
+        && chain
+            .iter()
+            .skip(1)
+            .all(|row| row.state == "pending" && row.attempts == 0);
+    let mut conflicting_fields = lifecycle_conflict_fields(&outbox.entity_type, &chain);
+    let mut auto_desired = None;
+    let mut local_changed_fields = Vec::new();
+    if auto_rebase_candidate {
+        let base = base_value.as_ref().expect("checked above");
+        let desired = fold_update_chain(base, &chain)?;
+        local_changed_fields =
+            changed_fields(base, &desired, editable_fields(&outbox.entity_type)?)?;
+        conflicting_fields.extend(three_way_conflicting_fields(
+            base,
+            &desired,
+            &request.current_entity,
+            &local_changed_fields,
+        )?);
+        conflicting_fields.extend(remote_blocks_update(
+            &outbox.entity_type,
+            &request.current_entity,
+        )?);
+        auto_desired = Some(desired);
+    } else if let Some(base) = base_value.as_ref() {
+        let local_fields =
+            changed_fields(base, &local_value, editable_fields(&outbox.entity_type)?)?;
+        conflicting_fields.extend(three_way_conflicting_fields(
+            base,
+            &local_value,
+            &request.current_entity,
+            &local_fields,
+        )?);
+        if chain.iter().all(|row| row.operation == "update") {
+            conflicting_fields.extend(remote_blocks_update(
+                &outbox.entity_type,
+                &request.current_entity,
+            )?);
+        }
+    }
+    if !auto_rebase_candidate && conflicting_fields.is_empty() {
+        conflicting_fields.push("chain".to_string());
     }
     conflicting_fields.sort();
     conflicting_fields.dedup();
+
+    if auto_rebase_candidate && conflicting_fields.is_empty() {
+        let desired = auto_desired.expect("auto rebase desired exists");
+        let patch = patch_for_fields(&desired, &local_changed_fields)?;
+        let patch: Map<String, Value> = patch
+            .into_iter()
+            .filter(|(field, value)| request.current_entity.get(field) != Some(value))
+            .collect();
+        delete_entity_chain(&mut tx, &binding, &outbox, chain.len()).await?;
+        let replacement_mutation_id = if patch.is_empty() {
+            None
+        } else {
+            let base_json = serde_json::to_string(&request.current_entity)?;
+            let payload = json!({"patch": patch.clone()});
+            Some(
+                insert_replacement_intent(
+                    &mut tx,
+                    &binding,
+                    ReplacementOutbox {
+                        local_seq: outbox._local_seq,
+                        entity_type: &outbox.entity_type,
+                        entity_id: &outbox.entity_id,
+                        operation: "update",
+                        base_version: request.current_version,
+                        base_json: Some(&base_json),
+                        payload: &payload,
+                    },
+                )
+                .await?,
+            )
+        };
+        let mut materialized = request.current_entity.clone();
+        if !patch.is_empty() {
+            merge_object(&mut materialized, &Value::Object(patch))?;
+        }
+        write_materialized_entity(&mut tx, &outbox.entity_type, materialized).await?;
+        tx.commit().await?;
+        return Ok(MutationConflictOutcome {
+            outcome: "rebased".to_string(),
+            conflict_id: None,
+            replacement_mutation_id,
+            conflicting_fields: Vec::new(),
+        });
+    }
 
     let conflict_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -2489,18 +3088,659 @@ pub async fn record_mutation_conflict(
         "UPDATE sync_outbox
          SET state = 'conflict', next_attempt_at = NULL,
              last_error_code = 'VERSION_CONFLICT', updated_at = ?
-         WHERE mutation_id = ?",
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND mutation_id = ?",
     )
     .bind(&now)
+    .bind(&request.server_instance_id)
+    .bind(&request.account_id)
+    .bind(&request.session_id)
     .bind(&request.mutation_id)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(json!({
-        "conflictId": conflict_id,
-        "state": "open",
-        "conflictingFields": conflicting_fields,
-    }))
+    Ok(MutationConflictOutcome {
+        outcome: "conflict".to_string(),
+        conflict_id: Some(conflict_id),
+        replacement_mutation_id: None,
+        conflicting_fields,
+    })
+}
+
+fn parse_json_field(value: &str, code: &str) -> anyhow::Result<Value> {
+    serde_json::from_str(value).map_err(|error| anyhow::anyhow!("{code}: {error}"))
+}
+
+fn conflict_row_to_model(
+    row: &ConflictRow,
+    remote_version: i64,
+    remote_entity: Value,
+    conflicting_fields: Vec<String>,
+    allowed_resolutions: Vec<ConflictResolution>,
+) -> anyhow::Result<OpenSyncConflict> {
+    Ok(OpenSyncConflict {
+        conflict_id: row.conflict_id.clone(),
+        session_id: row.session_id.clone(),
+        entity_type: row.entity_type.clone(),
+        entity_id: row.entity_id.clone(),
+        mutation_id: row.mutation_id.clone(),
+        base_version: row.base_version,
+        remote_version,
+        base_entity: row
+            .base_json
+            .as_deref()
+            .map(|value| parse_json_field(value, "CONFLICT_BASE_INVALID"))
+            .transpose()?,
+        local_entity: parse_json_field(&row.local_json, "CONFLICT_LOCAL_INVALID")?,
+        remote_entity,
+        conflicting_fields,
+        allowed_resolutions,
+        created_at: row.created_at.clone(),
+    })
+}
+
+fn latest_conflicting_fields(
+    conflict: &ConflictRow,
+    chain: &[OutboxRow],
+    local: &Value,
+    remote: &Value,
+) -> anyhow::Result<Vec<String>> {
+    let mut fields = lifecycle_conflict_fields(&conflict.entity_type, chain);
+    let base = conflict
+        .base_json
+        .as_deref()
+        .map(|value| parse_json_field(value, "CONFLICT_BASE_INVALID"))
+        .transpose()?;
+    if let Some(base) = base.as_ref() {
+        let local_fields = changed_fields(base, local, editable_fields(&conflict.entity_type)?)?;
+        fields.extend(three_way_conflicting_fields(
+            base,
+            local,
+            remote,
+            &local_fields,
+        )?);
+        if chain.iter().all(|row| row.operation == "update") {
+            fields.extend(remote_blocks_update(&conflict.entity_type, remote)?);
+        }
+    }
+    let safely_foldable_update_chain = base.is_some()
+        && chain.iter().all(|row| row.operation == "update")
+        && chain
+            .iter()
+            .skip(1)
+            .all(|row| row.state == "pending" && row.attempts == 0);
+    if fields.is_empty() && !safely_foldable_update_chain {
+        fields.push("chain".to_string());
+    }
+    fields.sort();
+    fields.dedup();
+    Ok(fields)
+}
+
+pub async fn list_open_conflicts(
+    pool: &SqlitePool,
+    server_instance_id: &str,
+    account_id: &str,
+    session_id: &str,
+) -> anyhow::Result<Vec<OpenSyncConflict>> {
+    let mut tx = pool.begin().await?;
+    let binding =
+        require_partition_binding(&mut tx, server_instance_id, account_id, session_id).await?;
+    let rows = sqlx::query_as::<_, ConflictRow>(
+        "SELECT conflict_id, server_instance_id, account_id, session_id,
+                entity_type, entity_id, mutation_id, base_version, remote_version,
+                base_json, local_json, remote_json, state, created_at
+         FROM sync_conflicts
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND state = 'open'
+         ORDER BY created_at, conflict_id",
+    )
+    .bind(server_instance_id)
+    .bind(account_id)
+    .bind(session_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let canonical_session_status =
+        canonical_session_status_in_tx(&mut tx, server_instance_id, account_id, session_id).await?;
+    let mut conflicts = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let root = sqlx::query_as::<_, OutboxRow>(
+            "SELECT local_seq, mutation_id, entity_type, entity_id, operation,
+                    base_version, observed_seq, base_json, payload_json, state,
+                    attempts, next_attempt_at, depends_on_mutation_id, created_at
+             FROM sync_outbox
+             WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+               AND mutation_id = ?",
+        )
+        .bind(server_instance_id)
+        .bind(account_id)
+        .bind(session_id)
+        .bind(&row.mutation_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("CONFLICT_INTENT_NOT_FOUND"))?;
+        let chain = load_entity_chain_from_root(&mut tx, &binding, &root).await?;
+        let (remote_version, remote, _) = latest_resolution_remote(&mut tx, row).await?;
+        let local = parse_json_field(&row.local_json, "CONFLICT_LOCAL_INVALID")?;
+        let conflicting_fields = latest_conflicting_fields(row, &chain, &local, &remote)?;
+        let allowed_resolutions = allowed_conflict_resolutions(
+            &binding,
+            row,
+            &root,
+            &local,
+            &remote,
+            &canonical_session_status,
+        )?;
+        conflicts.push(conflict_row_to_model(
+            row,
+            remote_version,
+            remote,
+            conflicting_fields,
+            allowed_resolutions,
+        )?);
+    }
+    tx.commit().await?;
+    Ok(conflicts)
+}
+
+fn canonical_conflict_entities_equal(
+    entity_type: &str,
+    left: &Value,
+    right: &Value,
+) -> anyhow::Result<bool> {
+    match entity_type {
+        "log" => {
+            let left: RemoteLog = serde_json::from_value(left.clone())
+                .map_err(|error| anyhow::anyhow!("CONFLICT_LOG_INVALID: {error}"))?;
+            let right: RemoteLog = serde_json::from_value(right.clone())
+                .map_err(|error| anyhow::anyhow!("CONFLICT_LOG_INVALID: {error}"))?;
+            Ok(left == right)
+        }
+        "session" => {
+            let left: CanonicalSessionEntity = serde_json::from_value(left.clone())
+                .map_err(|error| anyhow::anyhow!("CONFLICT_SESSION_INVALID: {error}"))?;
+            let right: CanonicalSessionEntity = serde_json::from_value(right.clone())
+                .map_err(|error| anyhow::anyhow!("CONFLICT_SESSION_INVALID: {error}"))?;
+            Ok(left == right)
+        }
+        _ => anyhow::bail!("ENTITY_TYPE_INVALID"),
+    }
+}
+
+async fn latest_resolution_remote(
+    tx: &mut Transaction<'_, Sqlite>,
+    conflict: &ConflictRow,
+) -> anyhow::Result<(i64, Value, String)> {
+    let mut version = conflict.remote_version;
+    let mut json = conflict.remote_json.clone();
+    let shadow: Option<(i64, String)> = sqlx::query_as(
+        "SELECT server_version, server_json FROM entity_shadows
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND entity_type = ? AND entity_id = ?",
+    )
+    .bind(&conflict.server_instance_id)
+    .bind(&conflict.account_id)
+    .bind(&conflict.session_id)
+    .bind(&conflict.entity_type)
+    .bind(&conflict.entity_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if let Some((shadow_version, shadow_json)) = shadow {
+        if shadow_version == version {
+            let conflict_value = parse_json_field(&json, "CONFLICT_REMOTE_INVALID")?;
+            let shadow_value = parse_json_field(&shadow_json, "COLLABORATION_SHADOW_INVALID")?;
+            if !canonical_conflict_entities_equal(
+                &conflict.entity_type,
+                &conflict_value,
+                &shadow_value,
+            )? {
+                anyhow::bail!("CONFLICT_REMOTE_FORK");
+            }
+        } else if shadow_version > version {
+            version = shadow_version;
+            json = shadow_json;
+        }
+    }
+    let value = parse_json_field(&json, "CONFLICT_REMOTE_INVALID")?;
+    validate_conflict_entity(
+        &conflict.entity_type,
+        &conflict.entity_id,
+        &conflict.session_id,
+        version,
+        &value,
+    )?;
+    Ok((version, value, json))
+}
+
+fn local_intent_fields(
+    entity_type: &str,
+    base: Option<&Value>,
+    local: &Value,
+) -> anyhow::Result<Vec<String>> {
+    let fields = editable_fields(entity_type)?;
+    match base {
+        Some(base) => changed_fields(base, local, fields),
+        None => {
+            for field in fields {
+                if object_field(local, field)?.is_none() {
+                    anyhow::bail!("CONFLICT_LOCAL_FIELD_MISSING:{field}");
+                }
+            }
+            Ok(fields.iter().map(|field| (*field).to_string()).collect())
+        }
+    }
+}
+
+fn log_restore_value(value: &Value) -> anyhow::Result<Value> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_ENTITY_INVALID"))?;
+    let mut restored = Map::new();
+    for field in ["syncId", "sessionId"]
+        .into_iter()
+        .chain(LOG_EDITABLE_FIELDS.iter().copied())
+    {
+        restored.insert(
+            field.to_string(),
+            object
+                .get(field)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_FIELD_MISSING:{field}"))?,
+        );
+    }
+    Ok(Value::Object(restored))
+}
+
+fn build_keep_local_resolution(
+    entity_type: &str,
+    base: Option<&Value>,
+    local: &Value,
+    remote: &Value,
+) -> anyhow::Result<(Value, Option<(String, Value)>)> {
+    let intent_fields = local_intent_fields(entity_type, base, local)?;
+    let mut desired = remote.clone();
+    let local_object = local
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_ENTITY_INVALID"))?;
+    let desired_object = desired
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("CONFLICT_REMOTE_ENTITY_INVALID"))?;
+    for field in &intent_fields {
+        desired_object.insert(
+            field.clone(),
+            local_object
+                .get(field)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_FIELD_MISSING:{field}"))?,
+        );
+    }
+
+    match entity_type {
+        "log" => {
+            let local_deleted = local.get("deletedAt").is_some_and(|value| !value.is_null());
+            let remote_deleted = remote
+                .get("deletedAt")
+                .is_some_and(|value| !value.is_null());
+            desired["deletedAt"] = if local_deleted && remote_deleted {
+                remote.get("deletedAt").cloned().unwrap_or(Value::Null)
+            } else if local_deleted {
+                local.get("deletedAt").cloned().unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            };
+            if local_deleted && !remote_deleted {
+                return Ok((desired, Some(("delete".to_string(), json!({})))));
+            }
+            if !local_deleted && remote_deleted {
+                let value = log_restore_value(&desired)?;
+                return Ok((
+                    desired,
+                    Some(("restore".to_string(), json!({"value": value}))),
+                ));
+            }
+            let patch = patch_for_fields(&desired, &intent_fields)?;
+            let patch: Map<String, Value> = patch
+                .into_iter()
+                .filter(|(field, value)| remote.get(field) != Some(value))
+                .collect();
+            if local_deleted && !patch.is_empty() {
+                anyhow::bail!("CONFLICT_KEEP_LOCAL_TOMBSTONE_UPDATE_UNSUPPORTED");
+            }
+            Ok((
+                desired,
+                (!patch.is_empty()).then(|| ("update".to_string(), json!({"patch": patch}))),
+            ))
+        }
+        "session" => {
+            if local.get("deletedAt").is_some_and(|value| !value.is_null()) {
+                anyhow::bail!("CONFLICT_KEEP_LOCAL_SESSION_DELETE_UNSUPPORTED");
+            }
+            let local_status = local
+                .get("status")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("CONFLICT_LOCAL_ENTITY_INVALID"))?;
+            let remote_status = remote
+                .get("status")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("CONFLICT_REMOTE_ENTITY_INVALID"))?;
+            if !matches!(local_status, "active" | "closed")
+                || !matches!(remote_status, "active" | "closed")
+            {
+                anyhow::bail!("CONFLICT_SESSION_STATUS_INVALID");
+            }
+            desired["status"] = Value::String(local_status.to_string());
+            desired["closedAt"] = if local_status == "active" {
+                Value::Null
+            } else if remote_status == "closed" {
+                remote.get("closedAt").cloned().unwrap_or(Value::Null)
+            } else {
+                local.get("closedAt").cloned().unwrap_or(Value::Null)
+            };
+            let title_changed = remote.get("title") != desired.get("title");
+            let intent = match (remote_status, local_status, title_changed) {
+                ("active", "active", true) => Some((
+                    "update".to_string(),
+                    json!({"patch": {"title": desired["title"].clone()}}),
+                )),
+                ("active", "active", false) | ("closed", "closed", false) => None,
+                ("active", "closed", false) => Some(("close".to_string(), json!({}))),
+                ("closed", "active", false) => Some(("reopen".to_string(), json!({}))),
+                _ => anyhow::bail!("CONFLICT_KEEP_LOCAL_MULTI_STEP_UNSUPPORTED"),
+            };
+            Ok((desired, intent))
+        }
+        _ => anyhow::bail!("ENTITY_TYPE_INVALID"),
+    }
+}
+
+fn allowed_conflict_resolutions(
+    binding: &BindingRow,
+    conflict: &ConflictRow,
+    root: &OutboxRow,
+    local: &Value,
+    remote: &Value,
+    canonical_session_status: &str,
+) -> anyhow::Result<Vec<ConflictResolution>> {
+    let mut allowed = vec![ConflictResolution::UseRemote];
+    let local_deleted = local.get("deletedAt").is_some_and(|value| !value.is_null());
+    let remote_deleted = remote
+        .get("deletedAt")
+        .is_some_and(|value| !value.is_null());
+    let can_write_entity = match conflict.entity_type.as_str() {
+        "log" => binding.role != "viewer" && canonical_session_status == "active",
+        "session" => binding.role == "owner",
+        _ => false,
+    };
+    let base = conflict
+        .base_json
+        .as_deref()
+        .map(|value| parse_json_field(value, "CONFLICT_BASE_INVALID"))
+        .transpose()?;
+    let keep_local_semantically_safe = base.is_some()
+        && root.operation != "create"
+        && !(conflict.entity_type == "log"
+            && remote_deleted
+            && !local_deleted
+            && root.operation != "restore");
+    if can_write_entity
+        && keep_local_semantically_safe
+        && build_keep_local_resolution(&conflict.entity_type, base.as_ref(), local, remote).is_ok()
+    {
+        allowed.push(ConflictResolution::KeepLocal);
+    }
+    if conflict.entity_type == "log"
+        && binding.role != "viewer"
+        && canonical_session_status == "active"
+        && !local_deleted
+    {
+        allowed.push(ConflictResolution::CopyLocalAsNew);
+    }
+    Ok(allowed)
+}
+
+fn build_local_log_copy(local: &Value, new_sync_id: &str) -> anyhow::Result<(Value, Value)> {
+    let local_log: RemoteLog = serde_json::from_value(local.clone())
+        .map_err(|error| anyhow::anyhow!("CONFLICT_LOCAL_LOG_INVALID: {error}"))?;
+    if local_log.deleted_at.is_some() {
+        anyhow::bail!("CONFLICT_COPY_DELETED_LOG_NOT_ALLOWED");
+    }
+    let normalized_time =
+        normalize_publish_time(&local_log.time, &local_log.created_at, new_sync_id)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut copy = local.clone();
+    copy["syncId"] = Value::String(new_sync_id.to_string());
+    copy["version"] = Value::from(1);
+    copy["createdAt"] = Value::String(now.clone());
+    copy["updatedAt"] = Value::String(now.clone());
+    copy["deletedAt"] = Value::Null;
+    copy["time"] = Value::String(normalized_time);
+    let value = log_restore_value(&copy)?;
+    Ok((copy, json!({"value": value})))
+}
+
+async fn allocate_copy_sync_id(
+    tx: &mut Transaction<'_, Sqlite>,
+    binding: &BindingRow,
+) -> anyhow::Result<String> {
+    for _ in 0..8 {
+        let candidate = uuid::Uuid::new_v4().to_string();
+        let exists: (i64,) = sqlx::query_as(
+            "SELECT
+                (SELECT COUNT(*) FROM logs WHERE sync_id = ?) +
+                (SELECT COUNT(*) FROM sync_outbox
+                 WHERE server_instance_id = ? AND account_id = ? AND entity_id = ?) +
+                (SELECT COUNT(*) FROM entity_shadows
+                 WHERE server_instance_id = ? AND account_id = ?
+                   AND entity_type = 'log' AND entity_id = ?)",
+        )
+        .bind(&candidate)
+        .bind(&binding.server_instance_id)
+        .bind(&binding.account_id)
+        .bind(&candidate)
+        .bind(&binding.server_instance_id)
+        .bind(&binding.account_id)
+        .bind(&candidate)
+        .fetch_one(&mut **tx)
+        .await?;
+        if exists.0 == 0 {
+            return Ok(candidate);
+        }
+    }
+    anyhow::bail!("CONFLICT_COPY_ID_ALLOCATION_FAILED")
+}
+
+async fn delete_open_conflict(
+    tx: &mut Transaction<'_, Sqlite>,
+    conflict: &ConflictRow,
+) -> anyhow::Result<()> {
+    let deleted = sqlx::query(
+        "DELETE FROM sync_conflicts
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND conflict_id = ? AND state = 'open'",
+    )
+    .bind(&conflict.server_instance_id)
+    .bind(&conflict.account_id)
+    .bind(&conflict.session_id)
+    .bind(&conflict.conflict_id)
+    .execute(&mut **tx)
+    .await?;
+    if deleted.rows_affected() != 1 {
+        anyhow::bail!("CONFLICT_RESOLUTION_RACE");
+    }
+    Ok(())
+}
+
+pub async fn resolve_conflict(
+    pool: &SqlitePool,
+    request: ResolveConflictRequest,
+) -> anyhow::Result<ResolveConflictResult> {
+    if request.conflict_id.trim().is_empty() {
+        anyhow::bail!("CONFLICT_ID_REQUIRED");
+    }
+    let mut tx = pool.begin().await?;
+    let binding = require_partition_binding(
+        &mut tx,
+        &request.server_instance_id,
+        &request.account_id,
+        &request.session_id,
+    )
+    .await?;
+    if binding.replica_state != "ready" {
+        anyhow::bail!("COLLABORATION_NOT_READY");
+    }
+    let conflict = sqlx::query_as::<_, ConflictRow>(
+        "SELECT conflict_id, server_instance_id, account_id, session_id,
+                entity_type, entity_id, mutation_id, base_version, remote_version,
+                base_json, local_json, remote_json, state, created_at
+         FROM sync_conflicts
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND conflict_id = ? AND state = 'open'",
+    )
+    .bind(&request.server_instance_id)
+    .bind(&request.account_id)
+    .bind(&request.session_id)
+    .bind(&request.conflict_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("OPEN_CONFLICT_NOT_FOUND"))?;
+    if conflict.state != "open" {
+        anyhow::bail!("OPEN_CONFLICT_NOT_FOUND");
+    }
+    let root = sqlx::query_as::<_, OutboxRow>(
+        "SELECT local_seq, mutation_id, entity_type, entity_id, operation,
+                base_version, observed_seq, base_json, payload_json, state,
+                attempts, next_attempt_at, depends_on_mutation_id, created_at
+         FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND mutation_id = ?",
+    )
+    .bind(&request.server_instance_id)
+    .bind(&request.account_id)
+    .bind(&request.session_id)
+    .bind(&conflict.mutation_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("CONFLICT_INTENT_NOT_FOUND"))?;
+    if root.state != "conflict" {
+        anyhow::bail!("CONFLICT_INTENT_STATE_INVALID");
+    }
+    let chain = load_entity_chain_from_root(&mut tx, &binding, &root).await?;
+    let (remote_version, remote, remote_json) =
+        latest_resolution_remote(&mut tx, &conflict).await?;
+    if remote_version != request.expected_remote_version {
+        anyhow::bail!("CONFLICT_REMOTE_ADVANCED");
+    }
+    let local = parse_json_field(&conflict.local_json, "CONFLICT_LOCAL_INVALID")?;
+    let canonical_session_status = canonical_session_status_in_tx(
+        &mut tx,
+        &request.server_instance_id,
+        &request.account_id,
+        &request.session_id,
+    )
+    .await?;
+    let allowed = allowed_conflict_resolutions(
+        &binding,
+        &conflict,
+        &root,
+        &local,
+        &remote,
+        &canonical_session_status,
+    )?;
+    if request.resolution != ConflictResolution::UseRemote && binding.role == "viewer" {
+        anyhow::bail!("COLLABORATION_ROLE_READ_ONLY");
+    }
+    if request.resolution == ConflictResolution::KeepLocal
+        && conflict.entity_type == "session"
+        && binding.role != "owner"
+    {
+        anyhow::bail!("COLLABORATION_OWNER_REQUIRED");
+    }
+    if request.resolution != ConflictResolution::UseRemote
+        && conflict.entity_type == "log"
+        && canonical_session_status != "active"
+    {
+        anyhow::bail!("SESSION_NOT_ACTIVE");
+    }
+    if !allowed.contains(&request.resolution) {
+        anyhow::bail!("CONFLICT_RESOLUTION_NOT_ALLOWED");
+    }
+
+    let mut replacement_entity_id = None;
+    let mut copied_materialized = None;
+    let (materialized, intent): (Value, Option<(String, String, i64, Option<String>, Value)>) =
+        match request.resolution {
+            ConflictResolution::UseRemote => (remote.clone(), None),
+            ConflictResolution::KeepLocal => {
+                let base = conflict
+                    .base_json
+                    .as_deref()
+                    .map(|value| parse_json_field(value, "CONFLICT_BASE_INVALID"))
+                    .transpose()?;
+                let (desired, intent) = build_keep_local_resolution(
+                    &conflict.entity_type,
+                    base.as_ref(),
+                    &local,
+                    &remote,
+                )?;
+                (
+                    desired,
+                    intent.map(|(operation, payload)| {
+                        (
+                            root.entity_id.clone(),
+                            operation,
+                            remote_version,
+                            Some(remote_json.clone()),
+                            payload,
+                        )
+                    }),
+                )
+            }
+            ConflictResolution::CopyLocalAsNew => {
+                let new_sync_id = allocate_copy_sync_id(&mut tx, &binding).await?;
+                let (copy, payload) = build_local_log_copy(&local, &new_sync_id)?;
+                replacement_entity_id = Some(new_sync_id.clone());
+                copied_materialized = Some(copy);
+                (
+                    remote.clone(),
+                    Some((new_sync_id, "create".to_string(), 0, None, payload)),
+                )
+            }
+        };
+
+    delete_open_conflict(&mut tx, &conflict).await?;
+    delete_entity_chain(&mut tx, &binding, &root, chain.len()).await?;
+    let replacement_mutation_id =
+        if let Some((entity_id, operation, base_version, base_json, payload)) = intent {
+            Some(
+                insert_replacement_intent(
+                    &mut tx,
+                    &binding,
+                    ReplacementOutbox {
+                        local_seq: root._local_seq,
+                        entity_type: &root.entity_type,
+                        entity_id: &entity_id,
+                        operation: &operation,
+                        base_version,
+                        base_json: base_json.as_deref(),
+                        payload: &payload,
+                    },
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+    write_materialized_entity(&mut tx, &root.entity_type, materialized).await?;
+    if let Some(copy) = copied_materialized {
+        write_materialized_log(&mut tx, copy).await?;
+    }
+    tx.commit().await?;
+    Ok(ResolveConflictResult {
+        outcome: "resolved".to_string(),
+        resolution: request.resolution,
+        replacement_mutation_id,
+        replacement_entity_id,
+    })
 }
 
 fn validate_event(request: &ApplyEventRequest) -> anyhow::Result<()> {
@@ -2798,6 +4038,140 @@ async fn write_materialized_session(
     Ok(())
 }
 
+fn shadow_matches_duplicate_event(
+    entity_type: &str,
+    shadow_json: &str,
+    event_payload: &Value,
+) -> anyhow::Result<bool> {
+    if entity_type == "session" {
+        // Snapshot session objects additionally carry the requesting member's
+        // role and the snapshot watermark. Compare only the canonical entity
+        // fields that also exist in session events.
+        let shadow: CanonicalSessionEntity = serde_json::from_str(shadow_json)
+            .map_err(|error| anyhow::anyhow!("COLLABORATION_SHADOW_INVALID: {error}"))?;
+        let event: CanonicalSessionEntity = serde_json::from_value(event_payload.clone())
+            .map_err(|error| anyhow::anyhow!("EVENT_SESSION_PAYLOAD_INVALID: {error}"))?;
+        return Ok(shadow == event);
+    }
+    let shadow: Value = serde_json::from_str(shadow_json)
+        .map_err(|error| anyhow::anyhow!("COLLABORATION_SHADOW_INVALID: {error}"))?;
+    Ok(shadow == *event_payload)
+}
+
+/// A mutation replay after snapshot reinstall can return its original event,
+/// whose sequence is already below the new cursor. The ordinary duplicate
+/// fast-path must still retire that accepted outbox row. This is safe only when
+/// the current canonical shadow proves that the event (or a later entity
+/// version) is already represented by the installed baseline.
+async fn reconcile_duplicate_event_outbox(
+    tx: &mut Transaction<'_, Sqlite>,
+    binding: &BindingRow,
+    request: &ApplyEventRequest,
+) -> anyhow::Result<()> {
+    let event = &request.event;
+    let Some(mutation_id) = event.mutation_id.as_deref() else {
+        return Ok(());
+    };
+    let matched = sqlx::query_as::<_, OutboxRow>(
+        "SELECT local_seq, mutation_id, entity_type, entity_id, operation,
+                base_version, observed_seq, base_json, payload_json, state,
+                attempts, next_attempt_at, depends_on_mutation_id, created_at
+         FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND mutation_id = ?",
+    )
+    .bind(&request.server_instance_id)
+    .bind(&request.account_id)
+    .bind(&event.session_id)
+    .bind(mutation_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(matched) = matched else {
+        return Ok(());
+    };
+    if matched.entity_type != event.entity_type || matched.entity_id != event.entity_id {
+        anyhow::bail!("EVENT_MUTATION_ENTITY_MISMATCH");
+    }
+    if matched.state != "accepted" {
+        anyhow::bail!("DUPLICATE_EVENT_MUTATION_NOT_ACCEPTED");
+    }
+    let (accepted_event_seq,): (Option<i64>,) = sqlx::query_as(
+        "SELECT accepted_event_seq FROM sync_outbox
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND mutation_id = ?",
+    )
+    .bind(&request.server_instance_id)
+    .bind(&request.account_id)
+    .bind(&event.session_id)
+    .bind(mutation_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if accepted_event_seq != Some(event.seq) {
+        anyhow::bail!("ACCEPTED_EVENT_SEQUENCE_MISMATCH");
+    }
+    let expected_version = matched
+        .base_version
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("OUTBOX_BASE_VERSION_INVALID"))?;
+    if event.entity_version != expected_version {
+        anyhow::bail!("EVENT_MUTATION_VERSION_MISMATCH");
+    }
+
+    let shadow: Option<(i64, String)> = sqlx::query_as(
+        "SELECT server_version, server_json FROM entity_shadows
+         WHERE server_instance_id = ? AND account_id = ? AND session_id = ?
+           AND entity_type = ? AND entity_id = ?",
+    )
+    .bind(&request.server_instance_id)
+    .bind(&request.account_id)
+    .bind(&event.session_id)
+    .bind(&event.entity_type)
+    .bind(&event.entity_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some((canonical_version, canonical_json)) = shadow else {
+        anyhow::bail!("DUPLICATE_EVENT_SHADOW_MISSING");
+    };
+    if canonical_version < event.entity_version {
+        anyhow::bail!("DUPLICATE_EVENT_SHADOW_BEHIND");
+    }
+    if canonical_version == event.entity_version
+        && !shadow_matches_duplicate_event(&event.entity_type, &canonical_json, &event.payload)?
+    {
+        anyhow::bail!("DUPLICATE_EVENT_CANONICAL_FORK");
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let acknowledged = acknowledge_outbox_root_covered_by_canonical(
+        tx,
+        &request.server_instance_id,
+        &request.account_id,
+        &event.session_id,
+        mutation_id,
+        &event.entity_type,
+        &event.entity_id,
+        matched.base_version,
+        canonical_version,
+        &canonical_json,
+        binding.last_applied_seq,
+        &now,
+    )
+    .await?;
+    if !acknowledged {
+        anyhow::bail!("DUPLICATE_EVENT_NOT_COVERED");
+    }
+
+    let canonical: Value = serde_json::from_str(&canonical_json)
+        .map_err(|error| anyhow::anyhow!("COLLABORATION_SHADOW_INVALID: {error}"))?;
+    let materialized = apply_pending_overlay(tx, request, canonical).await?;
+    match event.entity_type.as_str() {
+        "log" => write_materialized_log(tx, materialized).await?,
+        "session" => write_materialized_session(tx, materialized).await?,
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
 pub async fn apply_event(
     pool: &SqlitePool,
     request: ApplyEventRequest,
@@ -2850,6 +4224,7 @@ pub async fn apply_event(
                 anyhow::bail!("EVENT_SEQUENCE_FORK");
             }
         }
+        reconcile_duplicate_event_outbox(&mut tx, &binding, &request).await?;
         tx.commit().await?;
         return Ok(ApplyEventResult {
             outcome: "duplicate".to_string(),

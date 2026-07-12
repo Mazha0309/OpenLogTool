@@ -188,10 +188,14 @@ final class ServerApi {
     return _parseResponse(response, ActivateSessionResultDto.fromJson);
   }
 
-  Future<SessionSnapshotDto> getSessionSnapshot(String sessionId) async {
+  Future<SessionSnapshotDto> getSessionSnapshot(
+    String sessionId, {
+    bool includeDeleted = false,
+  }) async {
     final response = await _authorizedRequest(
       'GET',
       '/sessions/${_segment(sessionId)}/snapshot',
+      queryParameters: includeDeleted ? {'includeDeleted': 'true'} : null,
     );
     return _parseResponse(response, SessionSnapshotDto.fromJson);
   }

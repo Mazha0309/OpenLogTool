@@ -24,15 +24,58 @@ enum CollaborationReplicaPhase {
   failed,
 }
 
+enum CollaborationSnapshotInstallTarget {
+  publish,
+  firstJoin,
+  existingReplica,
+}
+
+bool includeDeletedLogsForSnapshotInstall(
+  CollaborationSnapshotInstallTarget target,
+) =>
+    target == CollaborationSnapshotInstallTarget.existingReplica;
+
+String? _canonicalEventTypeForMutation(CollaborationMutationDto mutation) =>
+    switch ((mutation.entityType, mutation.operation)) {
+      ('log', 'create') => 'log.created',
+      ('log', 'update') => 'log.updated',
+      ('log', 'delete') => 'log.deleted',
+      ('log', 'restore') => 'log.restored',
+      ('session', 'update') => 'session.updated',
+      ('session', 'close') => 'session.closed',
+      ('session', 'reopen') => 'session.reopened',
+      _ => null,
+    };
+
+bool _acceptedEventMatchesMutation(
+  CollaborationSyncIdentity identity,
+  CollaborationMutationDto mutation,
+  CollaborationEventDto? event,
+) {
+  if (event == null) return false;
+  final expectedType = _canonicalEventTypeForMutation(mutation);
+  return expectedType != null &&
+      event.protocolVersion == 1 &&
+      event.seq >= 1 &&
+      event.mutationId == mutation.mutationId &&
+      event.sessionId == identity.sessionId &&
+      event.entityType == mutation.entityType &&
+      event.entityId == mutation.entityId &&
+      event.entityVersion == mutation.baseVersion + 1 &&
+      event.type == expectedType;
+}
+
 final class CollaborationSyncIdentity {
   const CollaborationSyncIdentity({
     required this.serverInstanceId,
+    required this.serverOrigin,
     required this.accountId,
     required this.sessionId,
     required this.deviceId,
   });
 
   final String serverInstanceId;
+  final String serverOrigin;
   final String accountId;
   final String sessionId;
   final String deviceId;
@@ -43,6 +86,7 @@ final class CollaborationSyncIdentity {
   bool operator ==(Object other) =>
       other is CollaborationSyncIdentity &&
       other.serverInstanceId == serverInstanceId &&
+      other.serverOrigin == serverOrigin &&
       other.accountId == accountId &&
       other.sessionId == sessionId &&
       other.deviceId == deviceId;
@@ -50,6 +94,7 @@ final class CollaborationSyncIdentity {
   @override
   int get hashCode => Object.hash(
         serverInstanceId,
+        serverOrigin,
         accountId,
         sessionId,
         deviceId,
@@ -152,6 +197,12 @@ final class CollaborationApplyResult {
 }
 
 abstract interface class CollaborationReplicaPort {
+  Future<void> reinstallSnapshot(
+    CollaborationSyncIdentity identity,
+    MembershipDto membership,
+    SessionSnapshotDto snapshot,
+  );
+
   Future<void> updateMembership(
     CollaborationSyncIdentity identity,
     MembershipDto membership,
@@ -215,6 +266,11 @@ abstract interface class CollaborationReplicaPort {
 abstract interface class CollaborationSyncTransport {
   Future<MembershipDto> getMembership(String sessionId);
 
+  Future<SessionSnapshotDto> getSnapshot({
+    required String sessionId,
+    required bool includeDeleted,
+  });
+
   Future<SessionEventsPageDto> getEvents({
     required String sessionId,
     required int afterSeq,
@@ -245,6 +301,16 @@ final class ServerApiCollaborationSyncTransport
   @override
   Future<MembershipDto> getMembership(String sessionId) =>
       api.getMembership(sessionId);
+
+  @override
+  Future<SessionSnapshotDto> getSnapshot({
+    required String sessionId,
+    required bool includeDeleted,
+  }) =>
+      api.getSessionSnapshot(
+        sessionId,
+        includeDeleted: includeDeleted,
+      );
 
   @override
   Future<SessionEventsPageDto> getEvents({
@@ -372,6 +438,9 @@ typedef CollaborationSyncStateListener = void Function(
 typedef CollaborationEventApplied = FutureOr<void> Function(
   CollaborationEventDto event,
 );
+typedef CollaborationSnapshotInstalled = FutureOr<void> Function(
+  SessionSnapshotDto snapshot,
+);
 typedef CollaborationDelay = Future<void> Function(Duration duration);
 typedef CollaborationClock = DateTime Function();
 
@@ -408,6 +477,7 @@ final class CollaborationSyncCoordinator {
     CollaborationSocketConnector? sockets,
     this.onStateChanged,
     this.onEventApplied,
+    this.onSnapshotInstalled,
     CollaborationDelay? delay,
     CollaborationClock? clock,
     Random? random,
@@ -421,6 +491,7 @@ final class CollaborationSyncCoordinator {
   final CollaborationSocketConnector sockets;
   final CollaborationSyncStateListener? onStateChanged;
   final CollaborationEventApplied? onEventApplied;
+  final CollaborationSnapshotInstalled? onSnapshotInstalled;
   final CollaborationDelay _delay;
   final CollaborationClock _clock;
   final Random _random;
@@ -453,6 +524,8 @@ final class CollaborationSyncCoordinator {
   String? _persistentWarningMessage;
   DateTime? _nextRetryAt;
   bool _remoteCommitPendingLocalApply = false;
+  bool _snapshotResyncRequired = false;
+  bool _snapshotBaselineInstalled = false;
 
   CollaborationSyncState get state => CollaborationSyncState(
         identity: _identity,
@@ -503,6 +576,8 @@ final class CollaborationSyncCoordinator {
     _lastSuccessfulSyncAt = null;
     _persistentWarningCode = null;
     _persistentWarningMessage = null;
+    _snapshotResyncRequired = false;
+    _snapshotBaselineInstalled = false;
     _clearError();
     _emit();
     _loop = _run(generation, identity);
@@ -583,6 +658,15 @@ final class CollaborationSyncCoordinator {
 
         var membership = await _refreshMembership(generation, identity);
 
+        if (_snapshotResyncRequired && !_snapshotBaselineInstalled) {
+          await _reinstallCanonicalSnapshot(
+            generation,
+            identity,
+            membership,
+          );
+          _ensureCurrent(generation, identity);
+        }
+
         await _synchronizeOnce(generation, identity);
         _ensureCurrent(generation, identity);
 
@@ -637,7 +721,7 @@ final class CollaborationSyncCoordinator {
         );
       } catch (error) {
         if (!_isCurrent(generation, identity)) return;
-        final syncError = _normalizeError(error);
+        var syncError = _normalizeError(error);
         await _closeActiveTransport();
         if (!_isCurrent(generation, identity)) return;
 
@@ -663,11 +747,22 @@ final class CollaborationSyncCoordinator {
         }
         if (syncError.code == 'CURSOR_EXPIRED' ||
             syncError.code == 'RESYNC_REQUIRED') {
+          final wasAlreadyResyncing = _snapshotResyncRequired;
+          _snapshotResyncRequired = true;
+          _snapshotBaselineInstalled = false;
           _replicaPhase = CollaborationReplicaPhase.resyncing;
-          _transportPhase = CollaborationTransportPhase.stopped;
+          _transportPhase = CollaborationTransportPhase.connecting;
+          _writeSuspended = true;
           _setError(syncError);
           _emit();
-          return;
+          if (!wasAlreadyResyncing) continue;
+          syncError = CollaborationSyncException(
+            code: syncError.code,
+            message: syncError.message,
+            retryable: true,
+            retryAfter: syncError.retryAfter,
+            cause: syncError.cause,
+          );
         }
         if (!syncError.retryable) {
           _replicaPhase = CollaborationReplicaPhase.failed;
@@ -695,7 +790,8 @@ final class CollaborationSyncCoordinator {
     int generation,
     CollaborationSyncIdentity identity,
   ) async {
-    if (_replicaPhase != CollaborationReplicaPhase.ready) {
+    if (_replicaPhase != CollaborationReplicaPhase.ready &&
+        !_snapshotResyncRequired) {
       _replicaPhase = CollaborationReplicaPhase.catchingUp;
       _emitIfCurrent(generation, identity);
     }
@@ -721,6 +817,9 @@ final class CollaborationSyncCoordinator {
     }
     await _refreshStatus(generation, identity);
     _ensureCurrent(generation, identity);
+    _snapshotResyncRequired = false;
+    _snapshotBaselineInstalled = false;
+    _recomputeWriteSuspended();
     _replicaPhase = CollaborationReplicaPhase.ready;
     _lastSuccessfulSyncAt = _clock();
     _remoteCommitPendingLocalApply = false;
@@ -832,6 +931,61 @@ final class CollaborationSyncCoordinator {
     );
   }
 
+  Future<void> _reinstallCanonicalSnapshot(
+    int generation,
+    CollaborationSyncIdentity identity,
+    MembershipDto membership,
+  ) async {
+    _replicaPhase = CollaborationReplicaPhase.resyncing;
+    _writeSuspended = true;
+    _emitIfCurrent(generation, identity);
+
+    final snapshot = await transport.getSnapshot(
+      sessionId: identity.sessionId,
+      includeDeleted: true,
+    );
+    _ensureCurrent(generation, identity);
+    if (snapshot.session.role != membership.role) {
+      // Membership is read immediately before the snapshot. A differing role
+      // means the authorization view changed inside that window; retry from a
+      // fresh membership read while the resync write lock remains active.
+      throw const CollaborationSyncException(
+        code: 'MEMBERSHIP_CHANGING',
+        message: 'Membership changed while fetching the canonical snapshot',
+        retryable: true,
+      );
+    }
+    if (snapshot.protocolVersion != 1 ||
+        !snapshot.includesDeletedLogs ||
+        snapshot.session.sessionId != identity.sessionId ||
+        snapshot.highWatermarkSeq < 0 ||
+        snapshot.session.highWatermarkSeq != snapshot.highWatermarkSeq ||
+        !const {'active', 'closed', 'deleted'}.contains(
+          snapshot.session.status,
+        )) {
+      throw const CollaborationSyncException(
+        code: 'SNAPSHOT_CONTEXT_MISMATCH',
+        message: 'The canonical resync snapshot is incomplete or mismatched',
+      );
+    }
+
+    await replica.reinstallSnapshot(identity, membership, snapshot);
+    _ensureCurrent(generation, identity);
+    await _refreshStatus(generation, identity);
+    _ensureCurrent(generation, identity);
+    if (_lastAppliedSeq != snapshot.highWatermarkSeq ||
+        _serverHeadSeq < snapshot.highWatermarkSeq) {
+      throw const CollaborationSyncException(
+        code: 'SNAPSHOT_INSTALL_CURSOR_MISMATCH',
+        message: 'The replica did not install the snapshot cursor baseline',
+        retryable: true,
+      );
+    }
+    await onSnapshotInstalled?.call(snapshot);
+    _ensureCurrent(generation, identity);
+    _snapshotBaselineInstalled = true;
+  }
+
   Future<bool> _flushOutbox(
     int generation,
     CollaborationSyncIdentity identity,
@@ -924,10 +1078,11 @@ final class CollaborationSyncCoordinator {
         for (final mutation in sendable) {
           final result = results[mutation.mutationId]!;
           final valid = switch (result.status) {
-            'accepted' => result.event != null &&
-                result.event!.protocolVersion == 1 &&
-                result.event!.mutationId == mutation.mutationId &&
-                result.event!.sessionId == identity.sessionId,
+            'accepted' => _acceptedEventMatchesMutation(
+                identity,
+                mutation,
+                result.event,
+              ),
             'conflict' => result.code == 'VERSION_CONFLICT' &&
                 result.currentVersion != null &&
                 result.currentEntity != null,
@@ -938,6 +1093,7 @@ final class CollaborationSyncCoordinator {
             throw const CollaborationSyncException(
               code: 'INVALID_MUTATION_RESULT',
               message: 'Mutation response contains an invalid result payload',
+              retryable: true,
             );
           }
         }
@@ -1174,7 +1330,7 @@ final class CollaborationSyncCoordinator {
         );
       }
       _sessionClosed = canonicalStatus != 'active';
-      _writeSuspended = canonicalStatus == 'active' && _localSessionClosed;
+      _recomputeWriteSuspended();
     }
     _emit();
   }
@@ -1221,9 +1377,16 @@ final class CollaborationSyncCoordinator {
     await replica.updateMembership(identity, membership);
     _ensureCurrent(generation, identity);
     _role = membership.role;
-    _writeSuspended = _localSessionClosed && !_sessionClosed;
+    _recomputeWriteSuspended();
     _emit();
     return membership;
+  }
+
+  void _recomputeWriteSuspended() {
+    _writeSuspended = _snapshotResyncRequired ||
+        _role == null ||
+        _role == SessionRole.viewer ||
+        (_localSessionClosed && !_sessionClosed);
   }
 
   void _updateSessionState(CollaborationEventDto event) {
@@ -1231,11 +1394,11 @@ final class CollaborationSyncCoordinator {
       case 'session.closed':
       case 'session.deleted':
         _sessionClosed = true;
-        _writeSuspended = false;
+        _recomputeWriteSuspended();
       case 'session.reopened':
         _sessionClosed = false;
         _localSessionClosed = false;
-        _writeSuspended = false;
+        _recomputeWriteSuspended();
     }
   }
 

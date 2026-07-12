@@ -58,6 +58,7 @@ fn install_request() -> InstallSnapshotRequest {
         },
         snapshot: CollaborationSnapshot {
             protocol_version: 1,
+            includes_deleted_logs: true,
             session: RemoteSession {
                 session_id: SESSION.to_string(),
                 title: "Rejected recovery".to_string(),

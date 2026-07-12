@@ -82,6 +82,7 @@ void main() {
             deletedAt: null,
           ),
           highWatermarkSeq: 1,
+          includesDeletedLogs: false,
           logs: [
             CollaborationLogDto(
               syncId: local.syncId,

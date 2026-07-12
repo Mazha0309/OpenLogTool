@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
+import 'package:openlogtool/widgets/collaboration_conflict_center.dart';
 import 'package:provider/provider.dart';
 
 class CollaborationScreen extends StatefulWidget {
@@ -53,6 +55,44 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
               if (server.isLoggedIn) _joinCard(collaboration),
               if (sessions.currentSession != null)
                 _sessionCard(collaboration, sessions),
+              if (collaboration.binding != null &&
+                  (collaboration.conflictCount > 0 ||
+                      collaboration.conflictsLoading ||
+                      collaboration.openConflicts.isNotEmpty))
+                CollaborationConflictCenter(
+                  conflicts: collaboration.openConflicts,
+                  loading: collaboration.conflictsLoading,
+                  resolvingConflictId: collaboration.resolvingConflictId,
+                  enabled: !collaboration.isBusy &&
+                      collaboration.canResolveConflicts,
+                  onRefresh:
+                      collaboration.isBusy || !collaboration.canResolveConflicts
+                          ? null
+                          : () => unawaited(
+                                _run(collaboration.refreshOpenConflicts),
+                              ),
+                  onAcceptRemote: (conflictId) => unawaited(
+                    _confirmConflictResolution(
+                      collaboration,
+                      conflictId,
+                      CollaborationConflictResolution.useRemote,
+                    ),
+                  ),
+                  onKeepLocal: (conflictId) => unawaited(
+                    _confirmConflictResolution(
+                      collaboration,
+                      conflictId,
+                      CollaborationConflictResolution.keepLocal,
+                    ),
+                  ),
+                  onCopyLocalAsNew: (conflictId) => unawaited(
+                    _confirmConflictResolution(
+                      collaboration,
+                      conflictId,
+                      CollaborationConflictResolution.copyLocalAsNew,
+                    ),
+                  ),
+                ),
               if (server.isLoggedIn &&
                   collaboration.state == CollaborationState.ready &&
                   collaboration.isOwner) ...[
@@ -212,6 +252,15 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
+              if (collaboration.hasOpenSessionConflict) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '会话本身存在未解决冲突；请先在冲突中心处理，重命名、关闭和重新打开暂时禁用。',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 12),
             if (isLocal ||
@@ -247,7 +296,8 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                     if (session.status == 'active' &&
                         !collaboration.canonicalSessionClosed) ...[
                       OutlinedButton.icon(
-                        onPressed: collaboration.isBusy
+                        onPressed: collaboration.isBusy ||
+                                collaboration.hasOpenSessionConflict
                             ? null
                             : () =>
                                 _renameSession(collaboration, session.title),
@@ -255,7 +305,8 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                         label: const Text('重命名'),
                       ),
                       OutlinedButton.icon(
-                        onPressed: collaboration.isBusy
+                        onPressed: collaboration.isBusy ||
+                                collaboration.hasOpenSessionConflict
                             ? null
                             : () => _closeSession(collaboration),
                         icon: const Icon(Icons.stop_circle_outlined),
@@ -264,7 +315,8 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                     ] else if (session.status == 'closed' &&
                         collaboration.canonicalSessionClosed)
                       FilledButton.tonalIcon(
-                        onPressed: collaboration.isBusy
+                        onPressed: collaboration.isBusy ||
+                                collaboration.hasOpenSessionConflict
                             ? null
                             : () => _reopenSession(collaboration),
                         icon: const Icon(Icons.play_circle_outline),
@@ -377,6 +429,48 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     await _run(
       collaboration.reopenCurrentSession,
       success: '重新打开请求已保存到本地，等待同步确认',
+    );
+  }
+
+  Future<void> _confirmConflictResolution(
+    CollaborationProvider collaboration,
+    String conflictId,
+    CollaborationConflictResolution resolution,
+  ) async {
+    final title = switch (resolution) {
+      CollaborationConflictResolution.useRemote => '采用远端版本',
+      CollaborationConflictResolution.keepLocal => '保留本地版本',
+      CollaborationConflictResolution.copyLocalAsNew => '复制为新日志',
+    };
+    final message = switch (resolution) {
+      CollaborationConflictResolution.useRemote =>
+        '本地未同步修改会被远端规范版本替换，此操作不会再次提交 mutation。',
+      CollaborationConflictResolution.keepLocal =>
+        '将基于最新远端版本创建一个新的 mutation。若远端再次变化，仍可能产生新冲突。',
+      CollaborationConflictResolution.copyLocalAsNew =>
+        '远端原日志会保留，本地内容将使用新的日志 ID 创建副本并重新同步。',
+    };
+    final accepted = await _confirm(
+      title,
+      message,
+    );
+    if (!accepted || !mounted) return;
+    final action = switch (resolution) {
+      CollaborationConflictResolution.useRemote => () =>
+          collaboration.useRemoteForConflict(conflictId),
+      CollaborationConflictResolution.keepLocal => () =>
+          collaboration.keepLocalForConflict(conflictId),
+      CollaborationConflictResolution.copyLocalAsNew => () =>
+          collaboration.copyLocalAsNewForConflict(conflictId),
+    };
+    final success = switch (resolution) {
+      CollaborationConflictResolution.useRemote => '已采用远端版本',
+      CollaborationConflictResolution.keepLocal => '已保留本地版本并进入重试队列',
+      CollaborationConflictResolution.copyLocalAsNew => '已复制为新日志并进入同步队列',
+    };
+    await _run(
+      action,
+      success: success,
     );
   }
 

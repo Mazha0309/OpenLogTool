@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/services/collaboration_conflicts.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/src/bridge/api/collaboration.dart' as bridge;
 
@@ -8,8 +10,33 @@ import 'package:openlogtool/src/bridge/api/collaboration.dart' as bridge;
 ///
 /// Keeping protocol DTO conversion here prevents the coordinator from
 /// depending on generated flutter_rust_bridge types or method signatures.
-final class RustCollaborationReplicaPort implements CollaborationReplicaPort {
+final class RustCollaborationReplicaPort
+    implements CollaborationReplicaPort, CollaborationConflictPort {
   const RustCollaborationReplicaPort();
+
+  static const CollaborationConflictPort _conflicts =
+      JsonCollaborationConflictPort(
+    listOpen: bridge.listOpenCollaborationConflicts,
+    resolve: bridge.resolveCollaborationConflict,
+  );
+
+  @override
+  Future<void> reinstallSnapshot(
+    CollaborationSyncIdentity identity,
+    MembershipDto membership,
+    SessionSnapshotDto snapshot,
+  ) async {
+    await bridge.installCollaborationSnapshot(
+      requestJson: jsonEncode({
+        'mode': 'join',
+        'serverInstanceId': identity.serverInstanceId,
+        'serverOrigin': identity.serverOrigin,
+        'accountId': identity.accountId,
+        'membership': membership.toJson(),
+        'snapshot': snapshot.toJson(),
+      }),
+    );
+  }
 
   @override
   Future<void> updateMembership(
@@ -167,5 +194,25 @@ final class RustCollaborationReplicaPort implements CollaborationReplicaPort {
         serverInstanceId: identity.serverInstanceId,
         accountId: identity.accountId,
         sessionId: identity.sessionId,
+      );
+
+  @override
+  Future<List<CollaborationConflict>> listOpenConflicts(
+    CollaborationSyncIdentity identity,
+  ) =>
+      _conflicts.listOpenConflicts(identity);
+
+  @override
+  Future<CollaborationConflictResolutionResult> resolveConflict(
+    CollaborationSyncIdentity identity,
+    String conflictId,
+    CollaborationConflictResolution resolution, {
+    required int expectedRemoteVersion,
+  }) =>
+      _conflicts.resolveConflict(
+        identity,
+        conflictId,
+        resolution,
+        expectedRemoteVersion: expectedRemoteVersion,
       );
 }

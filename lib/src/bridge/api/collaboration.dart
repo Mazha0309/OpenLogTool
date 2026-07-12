@@ -136,6 +136,19 @@ Future<String> recordCollaborationMutationConflict(
         .crateApiCollaborationRecordCollaborationMutationConflict(
             requestJson: requestJson);
 
+Future<String> listOpenCollaborationConflicts(
+        {required String serverInstanceId,
+        required String accountId,
+        required String sessionId}) =>
+    RustLib.instance.api.crateApiCollaborationListOpenCollaborationConflicts(
+        serverInstanceId: serverInstanceId,
+        accountId: accountId,
+        sessionId: sessionId);
+
+Future<String> resolveCollaborationConflict({required String requestJson}) =>
+    RustLib.instance.api.crateApiCollaborationResolveCollaborationConflict(
+        requestJson: requestJson);
+
 Future<String> applyCollaborationEvent({required String requestJson}) =>
     RustLib.instance.api
         .crateApiCollaborationApplyCollaborationEvent(requestJson: requestJson);

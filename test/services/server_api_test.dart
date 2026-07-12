@@ -291,6 +291,7 @@ void main() {
               'protocolVersion': 1,
               'session': _sessionJson,
               'highWatermarkSeq': 3,
+              'includesDeletedLogs': false,
               'logs': [_logJson],
             });
           case 'GET /api/v1/sessions/session-1/membership':
@@ -505,6 +506,17 @@ void main() {
       final client = MockClient((request) async {
         expect(request.headers['authorization'], 'Bearer access');
         switch ('${request.method} ${request.url.path}') {
+          case 'GET /prefix/api/v1/sessions/session-1/snapshot':
+            expect(request.url.queryParameters, {
+              'includeDeleted': 'true',
+            });
+            return _jsonResponse({
+              'protocolVersion': 1,
+              'session': _sessionJson,
+              'highWatermarkSeq': 3,
+              'includesDeletedLogs': true,
+              'logs': [_logJson],
+            });
           case 'GET /prefix/api/v1/sessions/session-1/events':
             expect(request.url.queryParameters, {
               'afterSeq': '3',
@@ -564,6 +576,11 @@ void main() {
         limit: 250,
       );
       expect(events.events.single.seq, 4);
+      final snapshot = await api.getSessionSnapshot(
+        'session-1',
+        includeDeleted: true,
+      );
+      expect(snapshot.includesDeletedLogs, isTrue);
       final result = await api.submitMutations(
         sessionId: 'session-1',
         deviceId: 'device-1',

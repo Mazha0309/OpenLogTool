@@ -8,6 +8,42 @@ import 'package:openlogtool/services/collaboration_sync.dart';
 
 void main() {
   group('CollaborationSyncCoordinator', () {
+    test('snapshot install selection keeps first join lean and rejoin safe',
+        () {
+      expect(
+        includeDeletedLogsForSnapshotInstall(
+          CollaborationSnapshotInstallTarget.publish,
+        ),
+        isFalse,
+      );
+      expect(
+        includeDeletedLogsForSnapshotInstall(
+          CollaborationSnapshotInstallTarget.firstJoin,
+        ),
+        isFalse,
+      );
+      expect(
+        includeDeletedLogsForSnapshotInstall(
+          CollaborationSnapshotInstallTarget.existingReplica,
+        ),
+        isTrue,
+      );
+    });
+
+    test('legacy snapshots default missing tombstone capability to false', () {
+      final json = _snapshotDto(
+        'legacy-session',
+        highWatermarkSeq: 0,
+        includesDeletedLogs: false,
+      ).toJson()
+        ..remove('includesDeletedLogs');
+
+      final parsed = SessionSnapshotDto.fromJson(json);
+
+      expect(parsed.includesDeletedLogs, isFalse);
+      expect(parsed.session.sessionId, 'legacy-session');
+    });
+
     test('does not apply a REST cursor gap', () async {
       final replica = _FakeReplica(cursor: 0);
       final transport = _FakeTransport(
@@ -682,6 +718,82 @@ void main() {
       await coordinator.stop();
     });
 
+    test('malformed accepted events return mutations to retry', () async {
+      final cases = <String, CollaborationEventDto>{
+        'entity type': _event(
+          seq: 1,
+          mutationId: 'invalid-entity-type',
+          entityId: 'log-1',
+          entityType: 'session',
+          type: 'session.updated',
+          entityVersion: 2,
+        ),
+        'entity id': _event(
+          seq: 1,
+          mutationId: 'invalid-entity-id',
+          entityId: 'other-log',
+          entityVersion: 2,
+        ),
+        'entity version': _event(
+          seq: 1,
+          mutationId: 'invalid-entity-version',
+          entityId: 'log-1',
+          entityVersion: 3,
+        ),
+        'event type': _event(
+          seq: 1,
+          mutationId: 'invalid-event-type',
+          entityId: 'log-1',
+          type: 'log.deleted',
+          entityVersion: 2,
+        ),
+      };
+
+      for (final entry in cases.entries) {
+        final mutationId = entry.value.mutationId!;
+        final mutation = _mutation(mutationId, 'log-1');
+        final replica = _FakeReplica(cursor: 0, pending: [mutation]);
+        final backoff = Completer<void>();
+        final transport = _FakeTransport(
+          submit: (_) => MutationBatchResultDto(
+            headSeq: 1,
+            results: [
+              MutationResultDto(
+                mutationId: mutationId,
+                status: 'accepted',
+                event: entry.value,
+              ),
+            ],
+          ),
+        );
+        final coordinator = CollaborationSyncCoordinator(
+          transport: transport,
+          replica: replica,
+          sockets: _FakeSocketConnector(),
+          delay: (_) => backoff.future,
+        );
+
+        coordinator.start(
+          identity: _identity('session-a'),
+          role: SessionRole.editor,
+        );
+        await _waitUntil(
+          () => coordinator.state.lastErrorCode == 'INVALID_MUTATION_RESULT',
+        );
+
+        expect(replica.acceptedMutationIds, isEmpty, reason: entry.key);
+        expect(replica.appliedEventIds, isEmpty, reason: entry.key);
+        expect(replica.stateOf(mutationId), 'retrying', reason: entry.key);
+        expect(
+          coordinator.state.transportPhase,
+          CollaborationTransportPhase.backingOff,
+          reason: entry.key,
+        );
+        await coordinator.stop();
+        backoff.complete();
+      }
+    });
+
     test('accepted gap catch-up unlocks and flushes a dependent mutation',
         () async {
       final first = _mutation('mutation-first', 'log-1');
@@ -820,6 +932,363 @@ void main() {
       );
       await coordinator.stop();
     });
+
+    test('reinstalls a tombstone-complete snapshot after cursor expiry',
+        () async {
+      final mutation = _mutation('mutation-after-snapshot', 'log-local');
+      final replica = _FakeReplica(cursor: 0, pending: [mutation]);
+      final states = <CollaborationSyncState>[];
+      var remoteHead = 6;
+      final transport = _FakeTransport(
+        snapshot: (sessionId, includeDeleted, call) => _snapshotDto(
+          sessionId,
+          highWatermarkSeq: 5,
+          includesDeletedLogs: true,
+        ),
+        events: (sessionId, afterSeq) {
+          if (afterSeq == 0) {
+            return const SessionEventsPageDto(
+              afterSeq: 0,
+              toSeq: 0,
+              headSeq: 6,
+              minAvailableSeq: 5,
+              hasMore: true,
+              events: [],
+            );
+          }
+          return SessionEventsPageDto(
+            afterSeq: afterSeq,
+            toSeq: afterSeq == 5 ? 6 : afterSeq,
+            headSeq: max(remoteHead, afterSeq),
+            minAvailableSeq: 5,
+            hasMore: false,
+            events: afterSeq == 5 ? [_event(seq: 6)] : const [],
+          );
+        },
+        submit: (operations) {
+          remoteHead = 7;
+          return MutationBatchResultDto(
+            headSeq: 7,
+            results: [
+              MutationResultDto(
+                mutationId: operations.single.mutationId,
+                status: 'accepted',
+                event: _event(
+                  seq: 7,
+                  mutationId: operations.single.mutationId,
+                  entityId: operations.single.entityId,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(autoReady: true),
+        onStateChanged: states.add,
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () =>
+            coordinator.state.transportPhase ==
+                CollaborationTransportPhase.online &&
+            replica.cursor == 7,
+      );
+
+      expect(transport.snapshotCalls, 1);
+      expect(transport.snapshotIncludesDeleted, [isTrue]);
+      expect(replica.installedSnapshots.single.highWatermarkSeq, 5);
+      expect(transport.submittedSessions, ['session-a']);
+      expect(
+        states.any(
+          (state) =>
+              state.replicaPhase == CollaborationReplicaPhase.resyncing &&
+              state.writeSuspended,
+        ),
+        isTrue,
+      );
+      expect(coordinator.state.writeSuspended, isFalse);
+      await coordinator.stop();
+    });
+
+    test('retries a failed snapshot fetch while keeping writes suspended',
+        () async {
+      final states = <CollaborationSyncState>[];
+      final transport = _FakeTransport(
+        snapshot: (sessionId, includeDeleted, call) {
+          if (call == 1) {
+            throw const CollaborationSyncException(
+              code: 'SNAPSHOT_FETCH_FAILED',
+              message: 'temporary snapshot failure',
+              retryable: true,
+            );
+          }
+          return _snapshotDto(
+            sessionId,
+            highWatermarkSeq: 4,
+            includesDeletedLogs: true,
+          );
+        },
+        events: (sessionId, afterSeq) => SessionEventsPageDto(
+          afterSeq: afterSeq,
+          toSeq: afterSeq,
+          headSeq: afterSeq == 0 ? 4 : afterSeq,
+          minAvailableSeq: 4,
+          hasMore: afterSeq == 0,
+          events: const [],
+        ),
+      );
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: _FakeReplica(cursor: 0),
+        sockets: _FakeSocketConnector(autoReady: true),
+        delay: (_) async {},
+        onStateChanged: states.add,
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () =>
+            transport.snapshotCalls == 2 &&
+            coordinator.state.transportPhase ==
+                CollaborationTransportPhase.online,
+      );
+
+      final failedStates = states.where(
+        (state) => state.lastErrorCode == 'SNAPSHOT_FETCH_FAILED',
+      );
+      expect(failedStates, isNotEmpty);
+      expect(failedStates.every((state) => state.writeSuspended), isTrue);
+      expect(coordinator.state.writeSuspended, isFalse);
+      await coordinator.stop();
+    });
+
+    test('retries when membership role changes during snapshot fetch',
+        () async {
+      var membershipCalls = 0;
+      final states = <CollaborationSyncState>[];
+      final replica = _FakeReplica(cursor: 0);
+      final transport = _FakeTransport(
+        membership: (sessionId) async {
+          membershipCalls += 1;
+          return _membership(
+            sessionId,
+            role: membershipCalls < 3 ? SessionRole.editor : SessionRole.viewer,
+            version: membershipCalls < 3 ? 1 : 2,
+          );
+        },
+        snapshot: (sessionId, includeDeleted, call) => _snapshotDto(
+          sessionId,
+          highWatermarkSeq: 4,
+          includesDeletedLogs: true,
+          role: SessionRole.viewer,
+        ),
+        events: (sessionId, afterSeq) => SessionEventsPageDto(
+          afterSeq: afterSeq,
+          toSeq: afterSeq,
+          headSeq: afterSeq == 0 ? 4 : afterSeq,
+          minAvailableSeq: 4,
+          hasMore: afterSeq == 0,
+          events: const [],
+        ),
+        ticket: (sessionId, afterSeq, call) => WebSocketTicketDto(
+          ticket: 'viewer-ticket-$call',
+          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+          sessionId: sessionId,
+          role: SessionRole.viewer,
+          membershipVersion: 2,
+          afterSeq: afterSeq,
+        ),
+      );
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(autoReady: true),
+        delay: (_) async {},
+        onStateChanged: states.add,
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () =>
+            transport.snapshotCalls == 2 &&
+            coordinator.state.transportPhase ==
+                CollaborationTransportPhase.online,
+      );
+
+      expect(
+        states.any(
+          (state) =>
+              state.lastErrorCode == 'MEMBERSHIP_CHANGING' &&
+              state.writeSuspended &&
+              state.transportPhase == CollaborationTransportPhase.backingOff,
+        ),
+        isTrue,
+      );
+      expect(replica.installedSnapshots, hasLength(1));
+      expect(
+          replica.installedSnapshots.single.session.role, SessionRole.viewer);
+      expect(coordinator.state.role, SessionRole.viewer);
+      expect(coordinator.state.canEdit, isFalse);
+      await coordinator.stop();
+    });
+
+    test('rejects an incomplete resync snapshot without installing it',
+        () async {
+      final transport = _FakeTransport(
+        snapshot: (sessionId, includeDeleted, call) => _snapshotDto(
+          sessionId,
+          highWatermarkSeq: 4,
+          includesDeletedLogs: false,
+        ),
+        events: (sessionId, afterSeq) => SessionEventsPageDto(
+          afterSeq: afterSeq,
+          toSeq: afterSeq,
+          headSeq: 4,
+          minAvailableSeq: 4,
+          hasMore: true,
+          events: const [],
+        ),
+      );
+      final replica = _FakeReplica(cursor: 0);
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(),
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () => coordinator.state.lastErrorCode == 'SNAPSHOT_CONTEXT_MISMATCH',
+      );
+
+      expect(coordinator.state.transportPhase,
+          CollaborationTransportPhase.incompatible);
+      expect(coordinator.state.writeSuspended, isTrue);
+      expect(replica.installedSnapshots, isEmpty);
+      await coordinator.stop();
+    });
+
+    test('a WebSocket resync hint reinstalls once in the same generation',
+        () async {
+      final replica = _FakeReplica(cursor: 0);
+      final transport = _FakeTransport(
+        snapshot: (sessionId, includeDeleted, call) => _snapshotDto(
+          sessionId,
+          highWatermarkSeq: 2,
+          includesDeletedLogs: true,
+        ),
+      );
+      final sockets = _FakeSocketConnector(autoReady: true);
+      final snapshots = <SessionSnapshotDto>[];
+      final identity = _identity('session-a');
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: sockets,
+        onSnapshotInstalled: snapshots.add,
+      );
+
+      coordinator.start(identity: identity, role: SessionRole.editor);
+      await _waitUntil(
+        () =>
+            coordinator.state.transportPhase ==
+            CollaborationTransportPhase.online,
+      );
+      sockets.lastSocket!.add(jsonEncode({'type': 'resyncRequired'}));
+      await _waitUntil(
+        () =>
+            sockets.connectCount == 2 &&
+            coordinator.state.transportPhase ==
+                CollaborationTransportPhase.online,
+      );
+
+      expect(transport.snapshotCalls, 1);
+      expect(snapshots.single.highWatermarkSeq, 2);
+      expect(replica.installIdentities, [identity]);
+      expect(replica.cursor, 2);
+      await coordinator.stop();
+    });
+
+    test('discards an old-account snapshot callback before Rust install',
+        () async {
+      final oldSnapshot = Completer<SessionSnapshotDto>();
+      final transport = _FakeTransport(
+        snapshot: (sessionId, includeDeleted, call) => oldSnapshot.future,
+        events: (sessionId, afterSeq) {
+          if (sessionId == 'session-a') {
+            return SessionEventsPageDto(
+              afterSeq: afterSeq,
+              toSeq: afterSeq,
+              headSeq: 3,
+              minAvailableSeq: 3,
+              hasMore: true,
+              events: const [],
+            );
+          }
+          return SessionEventsPageDto(
+            afterSeq: afterSeq,
+            toSeq: afterSeq,
+            headSeq: afterSeq,
+            minAvailableSeq: 0,
+            hasMore: false,
+            events: const [],
+          );
+        },
+        membership: (sessionId) async => _membership(
+          sessionId,
+          accountId: sessionId == 'session-a' ? 'account-1' : 'account-2',
+        ),
+      );
+      final replica = _FakeReplica(cursor: 0);
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(autoReady: true),
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(() => transport.snapshotCalls == 1);
+      coordinator.start(
+        identity: _identity('session-b', accountId: 'account-2'),
+        role: SessionRole.editor,
+      );
+      oldSnapshot.complete(
+        _snapshotDto(
+          'session-a',
+          highWatermarkSeq: 3,
+          includesDeletedLogs: true,
+        ),
+      );
+      await _waitUntil(
+        () =>
+            coordinator.state.identity?.sessionId == 'session-b' &&
+            coordinator.state.transportPhase ==
+                CollaborationTransportPhase.online,
+      );
+
+      expect(replica.installIdentities, isEmpty);
+      expect(coordinator.state.identity?.accountId, 'account-2');
+      await coordinator.stop();
+    });
   });
 }
 
@@ -829,6 +1298,7 @@ CollaborationSyncIdentity _identity(
 }) =>
     CollaborationSyncIdentity(
       serverInstanceId: 'server-1',
+      serverOrigin: 'https://example.test',
       accountId: accountId,
       sessionId: sessionId,
       deviceId: 'device-1',
@@ -851,6 +1321,33 @@ MembershipDto _membership(
       removedAt: null,
     );
 
+SessionSnapshotDto _snapshotDto(
+  String sessionId, {
+  required int highWatermarkSeq,
+  required bool includesDeletedLogs,
+  SessionRole role = SessionRole.editor,
+}) {
+  final timestamp = DateTime.utc(2026);
+  return SessionSnapshotDto(
+    protocolVersion: 1,
+    session: CollaborationSessionDto(
+      sessionId: sessionId,
+      title: 'Session $sessionId',
+      status: 'active',
+      version: 1,
+      role: role,
+      highWatermarkSeq: highWatermarkSeq,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      closedAt: null,
+      deletedAt: null,
+    ),
+    highWatermarkSeq: highWatermarkSeq,
+    includesDeletedLogs: includesDeletedLogs,
+    logs: const [],
+  );
+}
+
 CollaborationMutationDto _mutation(String mutationId, String entityId) =>
     CollaborationMutationDto(
       mutationId: mutationId,
@@ -868,19 +1365,25 @@ CollaborationEventDto _event({
   String? eventId,
   String? mutationId,
   String entityId = 'log-1',
+  String entityType = 'log',
+  String type = 'log.updated',
+  int? entityVersion,
 }) =>
     CollaborationEventDto(
       protocolVersion: 1,
       eventId: eventId ?? 'event-$seq',
       sessionId: 'session-a',
       seq: seq,
-      type: 'log.updated',
-      entityType: 'log',
+      type: type,
+      entityType: entityType,
       entityId: entityId,
-      entityVersion: seq,
+      entityVersion: entityVersion ?? (mutationId == null ? seq : 2),
       mutationId: mutationId,
       occurredAt: DateTime.utc(2026),
-      payload: {'syncId': entityId, 'version': seq},
+      payload: {
+        if (entityType == 'log') 'syncId': entityId else 'sessionId': entityId,
+        'version': entityVersion ?? (mutationId == null ? seq : 2),
+      },
     );
 
 Future<void> _waitUntil(
@@ -908,6 +1411,11 @@ typedef _TicketFactory = WebSocketTicketDto Function(
   int afterSeq,
   int call,
 );
+typedef _SnapshotFactory = FutureOr<SessionSnapshotDto> Function(
+  String sessionId,
+  bool includeDeleted,
+  int call,
+);
 
 final class _FakeTransport implements CollaborationSyncTransport {
   _FakeTransport({
@@ -915,25 +1423,48 @@ final class _FakeTransport implements CollaborationSyncTransport {
     _SubmitFactory? submit,
     Future<MembershipDto> Function(String sessionId)? membership,
     _TicketFactory? ticket,
+    _SnapshotFactory? snapshot,
   })  : _events = events,
         _submit = submit,
         _membershipFactory = membership,
-        _ticket = ticket;
+        _ticket = ticket,
+        _snapshot = snapshot;
 
   final _EventsFactory? _events;
   final _SubmitFactory? _submit;
   final Future<MembershipDto> Function(String sessionId)? _membershipFactory;
   final _TicketFactory? _ticket;
+  final _SnapshotFactory? _snapshot;
   final List<String> membershipSessions = [];
   final List<String> eventSessions = [];
   final List<String> submittedSessions = [];
   int ticketCalls = 0;
+  int snapshotCalls = 0;
+  final List<bool> snapshotIncludesDeleted = [];
 
   @override
   Future<MembershipDto> getMembership(String sessionId) {
     membershipSessions.add(sessionId);
     return _membershipFactory?.call(sessionId) ??
         Future.value(_membership(sessionId));
+  }
+
+  @override
+  Future<SessionSnapshotDto> getSnapshot({
+    required String sessionId,
+    required bool includeDeleted,
+  }) async {
+    snapshotCalls += 1;
+    snapshotIncludesDeleted.add(includeDeleted);
+    final factory = _snapshot;
+    if (factory != null) {
+      return await factory(sessionId, includeDeleted, snapshotCalls);
+    }
+    return _snapshotDto(
+      sessionId,
+      highWatermarkSeq: 0,
+      includesDeletedLogs: includeDeleted,
+    );
   }
 
   @override
@@ -1017,8 +1548,25 @@ final class _FakeReplica implements CollaborationReplicaPort {
   final List<String> acceptedMutationIds = [];
   final List<String> conflictMutationIds = [];
   final List<SessionRole> persistedRoles = [];
+  final List<SessionSnapshotDto> installedSnapshots = [];
+  final List<CollaborationSyncIdentity> installIdentities = [];
 
   Iterable<String> get appliedEventIds => _applied.keys;
+  String? stateOf(String mutationId) => _states[mutationId];
+
+  @override
+  Future<void> reinstallSnapshot(
+    CollaborationSyncIdentity identity,
+    MembershipDto membership,
+    SessionSnapshotDto snapshot,
+  ) async {
+    installIdentities.add(identity);
+    installedSnapshots.add(snapshot);
+    cursor = snapshot.highWatermarkSeq;
+    head = snapshot.highWatermarkSeq;
+    canonicalSessionStatus = snapshot.session.status;
+    _applied.clear();
+  }
 
   void enqueue(CollaborationMutationDto mutation) {
     _mutations[mutation.mutationId] = mutation;
