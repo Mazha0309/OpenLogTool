@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/server_provider.dart';
+import 'package:openlogtool/screens/collaboration_screen.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
@@ -84,7 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  static const List<BottomNavigationBarItem> _navItems = <BottomNavigationBarItem>[
+  static const List<BottomNavigationBarItem> _navItems =
+      <BottomNavigationBarItem>[
     BottomNavigationBarItem(
       icon: Icon(Icons.add_circle_outline, size: 24),
       activeIcon: Icon(Icons.add_circle, size: 24),
@@ -108,350 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _showShareOptions(BuildContext context) {
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final sessionId = sessionProvider.currentSessionId;
-    if (sessionId == null) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('分享'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.qr_code),
-              title: const Text('生成分享码'),
-              subtitle: const Text('生成8位分享码，对方凭码加入后可下载会话'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showGenerateShareCode(context, sessionId);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.login),
-              title: const Text('加入协作'),
-              subtitle: const Text('输入分享码，加入他人的会话'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showJoinByCodeDialog(context);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.manage_search),
-              title: const Text('管理分享码'),
-              subtitle: const Text('查看/撤销已生成的分享码'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showManageSharesDialog(context);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text('Liveshare 链接'),
-              subtitle: const Text('获取实时查看链接'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showLiveshareLink(context, sessionId);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    );
-  }
-
-  void _showGenerateShareCode(BuildContext context, String sessionId) async {
-    final sv = Provider.of<ServerProvider>(context, listen: false);
-    if (!sv.isLoggedIn) {
-      context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
-      return;
-    }
-    try {
-      final share = await sv.generateShareCode(sessionId);
-      if (context.mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('分享码已生成'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SelectableText(
-                    share['code'] as String,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 4,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text('此码一次性使用，使用后自动失效'),
-                if (share['expires_at'] != null) ...[
-                  const SizedBox(height: 4),
-                  Text('过期时间: ${share['expires_at']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) context.showLoggedSnackBar(SnackBar(content: Text('生成失败: $e')));
-    }
-  }
-
-  void _showJoinByCodeDialog(BuildContext context) {
-    final sv = Provider.of<ServerProvider>(context, listen: false);
-    if (!sv.isLoggedIn) {
-      context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
-      return;
-    }
-    final codeController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('输入分享码'),
-        content: TextField(
-          controller: codeController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '8位分享码',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          FilledButton(
-            onPressed: () async {
-              final code = codeController.text.trim();
-              if (code.length != 8) return;
-              try {
-                final data = await sv.joinByCode(code);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  final sp = Provider.of<SessionProvider>(context, listen: false);
-                  final lp = Provider.of<LogProvider>(context, listen: false);
-                  await sp.startNewSession(title: data['title'] ?? '');
-                  if (data['logs'] is List) {
-                    for (final logData in data['logs']) {
-                      await lp.addLog(LogEntry.fromJson(logData as Map<String, dynamic>), sessionId: sp.currentSessionId);
-                    }
-                  }
-                  context.showLoggedSnackBar(const SnackBar(content: Text('已加入协作')));
-                }
-              } catch (e) {
-                if (ctx.mounted) context.showLoggedSnackBar(SnackBar(content: Text('加入失败: $e')));
-              }
-            },
-            child: const Text('加入'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showManageSharesDialog(BuildContext context) async {
-    final sv = Provider.of<ServerProvider>(context, listen: false);
-    try {
-      final shares = await sv.listShareCodes();
-      if (!context.mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('我的分享码'),
-          content: SizedBox(
-            width: 300,
-            child: shares.isEmpty
-                ? const Text('暂无分享码')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: shares.length,
-                    itemBuilder: (_, i) {
-                      final s = shares[i];
-                      return ListTile(
-                        title: Text(s['code']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${s['session_title'] ?? ''}\n${s['created_at'] ?? ''}'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            try {
-                              await sv.revokeShareCode(s['id']);
-                              if (context.mounted) {
-                                Navigator.pop(ctx);
-                                _showManageSharesDialog(context);
-                              }
-                            } catch (e) {
-                              if (context.mounted) context.showLoggedSnackBar(SnackBar(content: Text('撤销失败: $e')));
-                            }
-                          },
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) context.showLoggedSnackBar(SnackBar(content: Text('获取列表失败: $e')));
-    }
-  }
-
-  void _showLiveshareLink(BuildContext context, String sessionId) {
-    final sv = Provider.of<ServerProvider>(context, listen: false);
-    if (!sv.isLoggedIn) {
-      context.showLoggedSnackBar(const SnackBar(content: Text('请先在设置中登录服务器')));
-      return;
-    }
-    final url = '${sv.serverUrl}/live/$sessionId';
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Liveshare 链接'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('在浏览器中打开此链接可实时查看：'),
-            const SizedBox(height: 8),
-            SelectableText(url, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    );
-  }
-
-
-  Future<void> _shareSession(BuildContext context, String sessionId) async {
-    final sp = Provider.of<SessionProvider>(context, listen: false);
-    final lp = Provider.of<LogProvider>(context, listen: false);
-    final sv = Provider.of<ServerProvider>(context, listen: false);
-    if (!sv.isLoggedIn) {
-      if (context.mounted) context.showLoggedSnackBar(
-        const SnackBar(content: Text('请先在设置中登录服务器')),
-      );
-      return;
-    }
-    try {
-      await sv.uploadSession(sessionId, sp.currentSession?.title ?? '', lp.logs.map((l) => l.toMap()).toList());
-      if (context.mounted) {
-        final url = '${sv.serverUrl}/live/$sessionId';
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('已分享'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('其他人可通过以下链接实时查看：'),
-                const SizedBox(height: 8),
-                SelectableText(url, style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) context.showLoggedSnackBar(
-        SnackBar(content: Text('分享失败: $e')),
-      );
-    }
-  }
-
-  void _showJoinShareDialog(BuildContext context) async {
-    final sv = Provider.of<ServerProvider>(context, listen: false);
-    if (!sv.isLoggedIn) {
-      if (context.mounted) context.showLoggedSnackBar(
-        const SnackBar(content: Text('请先在设置中登录服务器')),
-      );
-      return;
-    }
-    try {
-      final sessions = await sv.listSessions();
-      if (!context.mounted) return;
-      if (sessions.isEmpty) {
-        context.showLoggedSnackBar(
-          const SnackBar(content: Text('服务器上没有会话')),
-        );
-        return;
-      }
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('服务器上的会话'),
-          content: SizedBox(
-            width: 300,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: sessions.length,
-              itemBuilder: (_, i) {
-                final s = sessions[i];
-                return ListTile(
-                  title: Text(s['title']?.toString() ?? ''),
-                  subtitle: Text(s['created_at']?.toString() ?? ''),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    try {
-                      final data = await sv.downloadSession(s['id']);
-                      final sp = Provider.of<SessionProvider>(context, listen: false);
-                      final lp = Provider.of<LogProvider>(context, listen: false);
-                      await sp.startNewSession(title: data['title'] ?? '');
-                      if (data['logs'] is List) {
-                        for (final logData in data['logs']) {
-                          await lp.addLog(LogEntry.fromJson(logData as Map<String, dynamic>), sessionId: sp.currentSessionId);
-                        }
-                      }
-                      if (context.mounted) context.showLoggedSnackBar(
-                        const SnackBar(content: Text('已下载并切换到该会话')),
-                      );
-                    } catch (e) {
-                      if (context.mounted) context.showLoggedSnackBar(
-                        SnackBar(content: Text('下载失败: $e')),
-                      );
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) context.showLoggedSnackBar(
-        SnackBar(content: Text('获取会话列表失败: $e')),
-      );
-    }
-  }
-
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -459,9 +116,13 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
-            tooltip: '分享',
-            onPressed: () => _showShareOptions(context),
+            icon: const Icon(Icons.cloud_sync),
+            tooltip: '协作会话',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const CollaborationScreen(),
+              ),
+            ),
           ),
         ],
       ),
@@ -472,10 +133,10 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: IndexedStack(
           index: _selectedIndex,
-          children: [
+          children: const [
             AddRecordPage(),
-            const ImportExportPage(),
-            const SettingsPage(),
+            ImportExportPage(),
+            SettingsPage(),
           ],
         ),
       ),
@@ -520,11 +181,31 @@ class AddRecordPage extends StatelessWidget {
         final isWideScreen =
             constraints.maxWidth > 1200 && settingsProvider.wideLayoutEnabled;
 
-        if (isWideScreen) {
-          return _buildWideLayout(context, logProvider);
-        } else {
-          return _buildNarrowLayout(context, logProvider);
+        final content = isWideScreen
+            ? _buildWideLayout(context, logProvider)
+            : _buildNarrowLayout(context, logProvider);
+        if (!logProvider.currentSessionReadOnly) {
+          return content;
         }
+        return Column(
+          children: [
+            Container(
+              width: double.infinity,
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_outline, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('当前协作会话为只读；请在协作页查看角色、会话与同步状态。'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: content),
+          ],
+        );
       },
     );
   }
@@ -543,26 +224,28 @@ class AddRecordPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            '添加点名记录',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '添加点名记录',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const Spacer(),
-                        ],
                         ),
-                      const SizedBox(height: 16),
-                      const SizedBox(
-                        width: double.infinity,
-                        child: LogForm(),
+                        Spacer(),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: LogForm(
+                        readOnly: logProvider.currentSessionReadOnly,
                       ),
-                    ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -587,7 +270,9 @@ class AddRecordPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const LogTable(),
+                    LogTable(
+                      readOnly: logProvider.currentSessionReadOnly,
+                    ),
                   ],
                 ),
               ),
@@ -611,21 +296,21 @@ class AddRecordPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         '添加点名记录',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
+                      Spacer(),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const LogForm(),
+                  LogForm(readOnly: logProvider.currentSessionReadOnly),
                 ],
               ),
             ),
@@ -648,7 +333,7 @@ class AddRecordPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const LogTable(),
+                  LogTable(readOnly: logProvider.currentSessionReadOnly),
                 ],
               ),
             ),
@@ -672,7 +357,7 @@ class AddRecordPage extends StatelessWidget {
           children: [
             Consumer<LogProvider>(
               builder: (_, lp, __) => FilledButton(
-                onPressed: lp.canUndo
+                onPressed: !logProvider.currentSessionReadOnly && lp.canUndo
                     ? () => _showUndoConfirmation(context)
                     : null,
                 child: const Text('撤销'),
@@ -681,10 +366,13 @@ class AddRecordPage extends StatelessWidget {
             const SizedBox(width: 8),
             Consumer<LogProvider>(
               builder: (_, lp, __) => FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-                onPressed: lp.logCount > 0
-                    ? () => _showClearConfirmation(context)
-                    : null,
+                style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Colors.white),
+                onPressed:
+                    !logProvider.currentSessionReadOnly && lp.logCount > 0
+                        ? () => _showClearConfirmation(context)
+                        : null,
                 child: const Text('清空'),
               ),
             ),
@@ -702,7 +390,8 @@ class AddRecordPage extends StatelessWidget {
 
   void _showHistoryDialog(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
     final sessions = await logProvider.getHistory();
 
     if (sessions.isEmpty) {
@@ -734,8 +423,8 @@ class AddRecordPage extends StatelessWidget {
               return ListTile(
                 title: Text(name),
                 subtitle: Text(
-                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
-                  ' · ${status == "active" ? "进行中" : "已关闭"}${isCurrent ? ' · 当前' : ''}'),
+                    '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
+                    ' · ${status == "active" ? "进行中" : "已关闭"}${isCurrent ? ' · 当前' : ''}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -760,7 +449,8 @@ class AddRecordPage extends StatelessWidget {
                       tooltip: '关闭',
                       onPressed: isCurrent
                           ? null
-                          : () => _showDeleteSessionConfirmation(ctx, logProvider, sessionProvider, sessionId, name),
+                          : () => _showDeleteSessionConfirmation(ctx,
+                              logProvider, sessionProvider, sessionId, name),
                     ),
                   ],
                 ),
@@ -778,14 +468,20 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  void _showDeleteSessionConfirmation(BuildContext context, LogProvider logProvider, SessionProvider sessionProvider, String sessionId, String name) {
+  void _showDeleteSessionConfirmation(
+      BuildContext context,
+      LogProvider logProvider,
+      SessionProvider sessionProvider,
+      String sessionId,
+      String name) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('确认关闭'),
         content: Text('确定要关闭 "$name" 吗？关闭后可在历史记录中查看，但无法再添加记录。'),
         actions: [
-          TextButton(child: const Text('取消'), onPressed: () => Navigator.pop(ctx)),
+          TextButton(
+              child: const Text('取消'), onPressed: () => Navigator.pop(ctx)),
           TextButton(
             child: const Text('关闭', style: TextStyle(color: Colors.red)),
             onPressed: () async {
@@ -819,7 +515,9 @@ class AddRecordPage extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
               _showNewSessionNameDialog(context);
@@ -833,7 +531,8 @@ class AddRecordPage extends StatelessWidget {
 
   void _showNewSessionNameDialog(BuildContext context) {
     final controller = TextEditingController();
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     showDialog(
       context: context,
@@ -857,12 +556,16 @@ class AddRecordPage extends StatelessWidget {
             onPressed: () async {
               try {
                 final name = controller.text.trim();
-                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
-                await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                await sessionProvider.startNewSession(
+                    title: name.isEmpty ? null : name);
+                await logProvider
+                    .reloadForSession(sessionProvider.currentSessionId);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   context.showLoggedSnackBar(
-                    SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
+                    SnackBar(
+                        content:
+                            Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
                   );
                 }
               } catch (e, st) {
@@ -872,7 +575,9 @@ class AddRecordPage extends StatelessWidget {
                 }
                 if (context.mounted) {
                   context.showLoggedSnackBar(
-                    SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Colors.red),
+                    SnackBar(
+                        content: Text('创建新记录失败: $e'),
+                        backgroundColor: Colors.red),
                   );
                 }
               }
@@ -982,7 +687,8 @@ class SettingsPage extends StatelessWidget {
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 600;
         return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 16, vertical: isNarrow ? 12 : 16),
+          padding: EdgeInsets.symmetric(
+              horizontal: isNarrow ? 8 : 16, vertical: isNarrow ? 12 : 16),
           child: const SettingsPanel(),
         );
       },

@@ -17,7 +17,8 @@ Future<LogEntry> addLog(
         String? device,
         String? power,
         String? antenna,
-        String? height}) =>
+        String? height,
+        String? remarks}) =>
     RustLib.instance.api.crateApiLogsAddLog(
         sessionId: sessionId,
         controller: controller,
@@ -28,7 +29,8 @@ Future<LogEntry> addLog(
         device: device,
         power: power,
         antenna: antenna,
-        height: height);
+        height: height,
+        remarks: remarks);
 
 Future<List<LogEntry>> getLogs(
         {required String sessionId,
@@ -57,7 +59,8 @@ Future<LogEntry> updateLog(
         String? device,
         String? power,
         String? antenna,
-        String? height}) =>
+        String? height,
+        String? remarks}) =>
     RustLib.instance.api.crateApiLogsUpdateLog(
         syncId: syncId,
         controller: controller,
@@ -69,10 +72,14 @@ Future<LogEntry> updateLog(
         device: device,
         power: power,
         antenna: antenna,
-        height: height);
+        height: height,
+        remarks: remarks);
 
 Future<void> deleteLog({required String syncId}) =>
     RustLib.instance.api.crateApiLogsDeleteLog(syncId: syncId);
 
 Future<void> undoLastLog({required String sessionId}) =>
     RustLib.instance.api.crateApiLogsUndoLastLog(sessionId: sessionId);
+
+Future<LogEntry> restoreLog({required String syncId}) =>
+    RustLib.instance.api.crateApiLogsRestoreLog(syncId: syncId);

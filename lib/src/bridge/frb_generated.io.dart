@@ -5,6 +5,7 @@
 
 import 'api.dart';
 import 'api/callsign_qth.dart';
+import 'api/collaboration.dart';
 import 'api/database.dart';
 import 'api/dictionaries.dart';
 import 'api/export.dart';

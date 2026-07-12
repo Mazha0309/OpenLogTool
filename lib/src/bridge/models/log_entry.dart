@@ -20,6 +20,7 @@ class LogEntry {
   final String? power;
   final String? antenna;
   final String? height;
+  final String? remarks;
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -39,6 +40,7 @@ class LogEntry {
     this.power,
     this.antenna,
     this.height,
+    this.remarks,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -60,6 +62,7 @@ class LogEntry {
       power.hashCode ^
       antenna.hashCode ^
       height.hashCode ^
+      remarks.hashCode ^
       createdAt.hashCode ^
       updatedAt.hashCode ^
       deletedAt.hashCode ^
@@ -83,6 +86,7 @@ class LogEntry {
           power == other.power &&
           antenna == other.antenna &&
           height == other.height &&
+          remarks == other.remarks &&
           createdAt == other.createdAt &&
           updatedAt == other.updatedAt &&
           deletedAt == other.deletedAt &&

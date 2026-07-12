@@ -62,17 +62,22 @@ class SettingsPanel extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.cloud, size: 18, color: Theme.of(context).colorScheme.primary),
+                        Icon(Icons.cloud,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 8),
                         Text(
                           '服务器设置',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
-                      controller: TextEditingController(text: serverProvider.serverUrl),
+                      initialValue: serverProvider.serverUrl,
                       decoration: const InputDecoration(
                         labelText: '服务器地址',
                         hintText: 'http://your-server:3000',
@@ -83,6 +88,52 @@ class SettingsPanel extends StatelessWidget {
                       onChanged: (value) => serverProvider.setServerUrl(value),
                     ),
                     const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: serverProvider.isBusy
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.wifi_tethering, size: 16),
+                        label: const Text('保存并检测服务器'),
+                        onPressed: serverProvider.isBusy
+                            ? null
+                            : () async {
+                                try {
+                                  final info =
+                                      await serverProvider.checkServer();
+                                  if (context.mounted) {
+                                    context.showLoggedSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '连接成功 · 协议 v${info.protocolMin}-${info.protocolMax}',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                } catch (error) {
+                                  if (context.mounted) {
+                                    context.showLoggedSnackBar(
+                                      SnackBar(content: Text('连接失败: $error')),
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    ),
+                    if (serverProvider.serverInfo != null) ...[
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        '实例 ${serverProvider.serverInfo!.serverInstanceId}\n'
+                        '能力 ${serverProvider.serverInfo!.features.join(', ')}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
                     if (!serverProvider.isLoggedIn) ...[
                       Row(
                         children: [
@@ -90,7 +141,8 @@ class SettingsPanel extends StatelessWidget {
                             child: OutlinedButton.icon(
                               icon: const Icon(Icons.login, size: 16),
                               label: const Text('登录'),
-                              onPressed: () => _showLoginDialog(context, serverProvider),
+                              onPressed: () =>
+                                  _showLoginDialog(context, serverProvider),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -98,7 +150,8 @@ class SettingsPanel extends StatelessWidget {
                             child: OutlinedButton.icon(
                               icon: const Icon(Icons.person_add, size: 16),
                               label: const Text('注册'),
-                              onPressed: () => _showRegisterDialog(context, serverProvider),
+                              onPressed: () =>
+                                  _showRegisterDialog(context, serverProvider),
                             ),
                           ),
                         ],
@@ -106,17 +159,32 @@ class SettingsPanel extends StatelessWidget {
                     ] else ...[
                       Row(
                         children: [
-                          Icon(Icons.person, size: 16, color: Theme.of(context).colorScheme.primary),
+                          Icon(Icons.person,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary),
                           const SizedBox(width: 6),
                           Text(
                             serverProvider.username ?? '',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           const Spacer(),
                           TextButton.icon(
                             icon: const Icon(Icons.logout, size: 16),
                             label: const Text('退出'),
-                            onPressed: () => serverProvider.logout(),
+                            onPressed: () async {
+                              try {
+                                await serverProvider.logout();
+                              } catch (error) {
+                                if (context.mounted) {
+                                  context.showLoggedSnackBar(
+                                    SnackBar(content: Text('退出失败: $error')),
+                                  );
+                                }
+                              }
+                            },
                           ),
                         ],
                       ),
@@ -148,7 +216,9 @@ class SettingsPanel extends StatelessWidget {
             Expanded(
               child: FilledButton(
                 onPressed: () => _showResetConfirmation(context),
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+                style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Colors.white),
                 child: const Text('恢复默认设置'),
               ),
             ),
@@ -200,7 +270,8 @@ class SettingsPanel extends StatelessWidget {
   }
 
   void _showSnackbarLogDialog(BuildContext context) {
-    final entries = Provider.of<SnackbarLogProvider>(context, listen: false).entries;
+    final entries =
+        Provider.of<SnackbarLogProvider>(context, listen: false).entries;
 
     showDialog(
       context: context,
@@ -213,21 +284,25 @@ class SettingsPanel extends StatelessWidget {
               : ListView.separated(
                   shrinkWrap: true,
                   itemCount: entries.length,
-                  separatorBuilder: (context, index) => const Divider(height: 16),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 16),
                   itemBuilder: (context, index) {
                     final entry = entries[index];
-                    final time = '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
+                    final time =
+                        '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SelectableText(
                           entry.message,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '$time · ${entry.type} · ${entry.source}',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          style:
+                              const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ],
                     );
@@ -590,7 +665,9 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () {
               Provider.of<SettingsProvider>(context, listen: false)
                   .resetToDefaults();
@@ -614,14 +691,17 @@ class SettingsPanel extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空所有数据'),
-        content: const Text('⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？'),
+        content: const Text(
+            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？'),
         actions: [
           FilledButton(
             child: const Text('取消'),
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
               try {
@@ -708,7 +788,9 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(dialogContext),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await _importDatabase(context);
@@ -842,7 +924,8 @@ class SettingsPanel extends StatelessWidget {
   }
 
   void _showFontPicker(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
 
     showDialog(
       context: context,
@@ -867,26 +950,39 @@ class SettingsPanel extends StatelessWidget {
           children: [
             TextField(
               controller: usernameController,
-              decoration: const InputDecoration(labelText: '用户名', border: OutlineInputBorder(), isDense: true),
+              decoration: const InputDecoration(
+                  labelText: '用户名',
+                  border: OutlineInputBorder(),
+                  isDense: true),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: passwordController,
-              decoration: const InputDecoration(labelText: '密码', border: OutlineInputBorder(), isDense: true),
+              decoration: const InputDecoration(
+                  labelText: '密码', border: OutlineInputBorder(), isDense: true),
               obscureText: true,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           FilledButton(
             onPressed: () async {
               try {
-                await serverProvider.login(usernameController.text, passwordController.text);
-                if (ctx.mounted) Navigator.pop(ctx);
+                await serverProvider.login(
+                    usernameController.text, passwordController.text);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
               } catch (e) {
-                if (context.mounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text('登录失败: $e')));
-                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  scaffoldMessenger
+                      .showSnackBar(SnackBar(content: Text('登录失败: $e')));
+                }
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
               }
             },
             child: const Text('登录'),
@@ -896,7 +992,8 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  void _showRegisterDialog(BuildContext context, ServerProvider serverProvider) {
+  void _showRegisterDialog(
+      BuildContext context, ServerProvider serverProvider) {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
@@ -909,26 +1006,39 @@ class SettingsPanel extends StatelessWidget {
           children: [
             TextField(
               controller: usernameController,
-              decoration: const InputDecoration(labelText: '用户名', border: OutlineInputBorder(), isDense: true),
+              decoration: const InputDecoration(
+                  labelText: '用户名',
+                  border: OutlineInputBorder(),
+                  isDense: true),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: passwordController,
-              decoration: const InputDecoration(labelText: '密码', border: OutlineInputBorder(), isDense: true),
+              decoration: const InputDecoration(
+                  labelText: '密码', border: OutlineInputBorder(), isDense: true),
               obscureText: true,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           FilledButton(
             onPressed: () async {
               try {
-                await serverProvider.register(usernameController.text, passwordController.text);
-                if (ctx.mounted) Navigator.pop(ctx);
+                await serverProvider.register(
+                    usernameController.text, passwordController.text);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
               } catch (e) {
-                if (context.mounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text('注册失败: $e')));
-                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  scaffoldMessenger
+                      .showSnackBar(SnackBar(content: Text('注册失败: $e')));
+                }
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
               }
             },
             child: const Text('注册'),
@@ -1020,8 +1130,8 @@ class _FontPickerDialogState extends State<_FontPickerDialog> {
             Text(
               '共 ${filtered.length} 个字体',
               style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -1075,4 +1185,3 @@ class _FontPickerDialogState extends State<_FontPickerDialog> {
     );
   }
 }
-

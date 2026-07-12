@@ -14,6 +14,7 @@ class LogEntry {
   final String power;
   final String antenna;
   final String height;
+  String remarks = '';
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -32,6 +33,7 @@ class LogEntry {
     required String power,
     required String antenna,
     required String height,
+    String remarks = '',
     String? createdAt,
     String? updatedAt,
     String? deletedAt,
@@ -53,6 +55,7 @@ class LogEntry {
       power: power,
       antenna: antenna,
       height: height,
+      remarks: remarks,
       createdAt: normalizedCreatedAt,
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
@@ -74,6 +77,7 @@ class LogEntry {
     required this.power,
     required this.antenna,
     required this.height,
+    required this.remarks,
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
@@ -139,6 +143,7 @@ class LogEntry {
       'power': power,
       'antenna': antenna,
       'height': height,
+      'remarks': remarks,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
@@ -160,6 +165,7 @@ class LogEntry {
       'power': power,
       'antenna': antenna,
       'height': height,
+      'remarks': remarks,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
@@ -181,6 +187,7 @@ class LogEntry {
       power: json['power']?.toString() ?? '',
       antenna: json['antenna']?.toString() ?? '',
       height: json['height']?.toString() ?? '',
+      remarks: json['remarks']?.toString() ?? '',
       createdAt: json['createdAt']?.toString() ?? json['created_at']?.toString(),
       updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
       deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
@@ -202,6 +209,7 @@ class LogEntry {
       power: map['power']?.toString() ?? '',
       antenna: map['antenna']?.toString() ?? '',
       height: map['height']?.toString() ?? '',
+      remarks: map['remarks']?.toString() ?? '',
       createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
       updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
       deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
@@ -221,6 +229,7 @@ class LogEntry {
       power,
       antenna,
       height,
+      remarks,
     ];
   }
 
@@ -236,6 +245,7 @@ class LogEntry {
     String? power,
     String? antenna,
     String? height,
+    String? remarks,
     String? createdAt,
     String? updatedAt,
     Object? deletedAt = _copyWithSentinel,
@@ -254,6 +264,7 @@ class LogEntry {
       power: power ?? this.power,
       antenna: antenna ?? this.antenna,
       height: height ?? this.height,
+      remarks: remarks ?? this.remarks,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: identical(deletedAt, _copyWithSentinel) ? this.deletedAt : deletedAt as String?,

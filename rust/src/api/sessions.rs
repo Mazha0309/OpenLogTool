@@ -31,15 +31,9 @@ pub async fn list_sessions() -> anyhow::Result<Vec<Session>> {
 
 pub async fn close_session(session_id: String) -> anyhow::Result<()> {
     let pool = get_db()?;
-    let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        "UPDATE sessions SET status = 'closed', closed_at = ?, updated_at = ? WHERE session_id = ?",
-    )
-    .bind(&now)
-    .bind(&now)
-    .bind(&session_id)
-    .execute(pool)
-    .await?;
+    let mut tx = pool.begin().await?;
+    crate::db::collaboration::mutate_session_in_tx(&mut tx, &session_id, "close", None).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -53,6 +47,17 @@ pub async fn join_session(share_code: String) -> anyhow::Result<Session> {
     .await?
     .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
     Ok(row.into_session())
+}
+
+pub async fn update_collaboration_session_title(
+    session_id: String,
+    title: String,
+) -> anyhow::Result<()> {
+    crate::db::collaboration::update_session_title(get_db()?, &session_id, &title).await
+}
+
+pub async fn reopen_collaboration_session(session_id: String) -> anyhow::Result<()> {
+    crate::db::collaboration::reopen_session(get_db()?, &session_id).await
 }
 
 #[derive(sqlx::FromRow)]

@@ -13,22 +13,47 @@ class LogProvider with ChangeNotifier {
   Future<void> Function()? _onDataChanged;
   Future<void> Function(old.LogEntry log, bool isDelete)? _onLogChanged;
   String? _currentSessionId;
+  int _loadGeneration = 0;
+  final Set<String> _collaborationReadOnlySessions = <String>{};
 
   List<old.LogEntry> get logs => _logs;
   int get logCount => _logs.length;
   bool get canUndo => _undoStack.isNotEmpty;
+  bool get currentSessionReadOnly =>
+      _currentSessionId != null &&
+      _collaborationReadOnlySessions.contains(_currentSessionId);
+
+  void setCollaborationReadOnly(String sessionId, bool readOnly) {
+    final changed = readOnly
+        ? _collaborationReadOnlySessions.add(sessionId)
+        : _collaborationReadOnlySessions.remove(sessionId);
+    if (changed) _safeNotify();
+  }
+
+  void _ensureWritable(String? sessionId) {
+    if (sessionId != null &&
+        _collaborationReadOnlySessions.contains(sessionId)) {
+      throw StateError(
+        'COLLABORATION_SESSION_READ_ONLY: 当前角色、会话状态或同步状态不允许写入',
+      );
+    }
+  }
 
   void setOnDataChanged(Future<void> Function()? callback) {
     _onDataChanged = callback;
   }
 
-  void setOnLogChanged(Future<void> Function(old.LogEntry log, bool isDelete)? callback) {
+  void setOnLogChanged(
+      Future<void> Function(old.LogEntry log, bool isDelete)? callback) {
     _onLogChanged = callback;
   }
 
-  Future<void> reloadForSession(String? sessionId) async {
+  Future<void> reloadForSession(
+    String? sessionId, {
+    bool propagateErrors = false,
+  }) async {
     _currentSessionId = sessionId;
-    await _loadLogs();
+    await _loadLogs(propagateErrors: propagateErrors);
   }
 
   void _safeNotify() {
@@ -48,7 +73,9 @@ class LogProvider with ChangeNotifier {
     return _logs.where((log) {
       final dt = _parseLogTimestamp(log);
       if (dt == null) return false;
-      return dt.year == today.year && dt.month == today.month && dt.day == today.day;
+      return dt.year == today.year &&
+          dt.month == today.month &&
+          dt.day == today.day;
     }).length;
   }
 
@@ -83,25 +110,45 @@ class LogProvider with ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> _loadLogs() async {
+  Future<void> _loadLogs({bool propagateErrors = false}) async {
+    final generation = ++_loadGeneration;
+    final sid = _currentSessionId;
     try {
-      final sid = _currentSessionId;
       if (sid == null) {
+        if (generation != _loadGeneration || _currentSessionId != sid) return;
         _logs = [];
         _safeNotify();
         return;
       }
-      final bridgeLogs = await RustApi.getLogs(sessionId: sid, page: 1, pageSize: 500);
+      const pageSize = 500;
+      final bridgeLogs = <bridge.LogEntry>[];
+      for (var page = 1;; page += 1) {
+        final batch = await RustApi.getLogs(
+          sessionId: sid,
+          page: page,
+          pageSize: pageSize,
+        );
+        if (generation != _loadGeneration || _currentSessionId != sid) return;
+        bridgeLogs.addAll(batch);
+        if (batch.length < pageSize) break;
+      }
+      if (generation != _loadGeneration || _currentSessionId != sid) return;
       _logs = bridgeLogs.map(_toOldLog).toList();
     } catch (e, st) {
       debugPrint('[LogProvider] _loadLogs failed: $e\n$st');
+      if (generation != _loadGeneration || _currentSessionId != sid) return;
       _logs = [];
+      if (propagateErrors) {
+        _safeNotify();
+        rethrow;
+      }
     }
     _safeNotify();
   }
 
   Future<void> addLog(old.LogEntry log, {String? sessionId}) async {
     final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
+    _ensureWritable(effectiveSessionId);
     try {
       await RustApi.addLog(
         sessionId: effectiveSessionId,
@@ -114,6 +161,7 @@ class LogProvider with ChangeNotifier {
         power: log.power,
         antenna: log.antenna,
         height: log.height,
+        remarks: log.remarks.isNotEmpty ? log.remarks : null,
       );
       await _loadLogs();
       _safeNotify();
@@ -130,6 +178,7 @@ class LogProvider with ChangeNotifier {
   Future<void> updateLog(int index, old.LogEntry log) async {
     if (index < 0 || index >= _logs.length) return;
     final original = _logs[index];
+    _ensureWritable(original.sessionId ?? _currentSessionId);
     final syncId = original.id;
     if (syncId.isEmpty) return;
     try {
@@ -145,6 +194,7 @@ class LogProvider with ChangeNotifier {
         power: log.power,
         antenna: log.antenna,
         height: log.height,
+        remarks: log.remarks.isNotEmpty ? log.remarks : null,
       );
       await _loadLogs();
       _safeNotify();
@@ -158,6 +208,7 @@ class LogProvider with ChangeNotifier {
   Future<void> deleteLog(int index) async {
     if (index < 0 || index >= _logs.length) return;
     final log = _logs[index];
+    _ensureWritable(log.sessionId ?? _currentSessionId);
     final syncId = log.id;
     if (syncId.isEmpty) return;
     try {
@@ -177,6 +228,7 @@ class LogProvider with ChangeNotifier {
 
   Future<void> undoLastLog() async {
     if (_undoStack.isEmpty) return;
+    _ensureWritable(_currentSessionId);
     final log = _undoStack.removeLast();
     final sessionId = _currentSessionId;
     if (sessionId == null) {
@@ -206,6 +258,7 @@ class LogProvider with ChangeNotifier {
 
   Future<void> clearAllLogs() async {
     if (_logs.isEmpty) return;
+    _ensureWritable(_currentSessionId);
     final snapshot = List<old.LogEntry>.from(_logs);
     try {
       for (final log in snapshot) {
@@ -229,12 +282,15 @@ class LogProvider with ChangeNotifier {
   Future<List<Map<String, dynamic>>> getHistory() async {
     try {
       final sessions = await RustApi.listSessions();
-      return sessions.where((s) => s.deletedAt == null).map((s) => {
-        'session_id': s.sessionId,
-        'title': s.title,
-        'status': s.status,
-        'created_at': s.createdAt,
-      }).toList();
+      return sessions
+          .where((s) => s.deletedAt == null)
+          .map((s) => {
+                'session_id': s.sessionId,
+                'title': s.title,
+                'status': s.status,
+                'created_at': s.createdAt,
+              })
+          .toList();
     } catch (e, st) {
       debugPrint('[LogProvider] getHistory failed: $e\n$st');
       return [];
@@ -247,6 +303,7 @@ class LogProvider with ChangeNotifier {
   }
 
   Future<void> hardDeleteSession(String sessionId) async {
+    _ensureWritable(sessionId);
     try {
       await RustApi.closeSession(sessionId: sessionId);
       if (_currentSessionId == sessionId) {
@@ -262,8 +319,10 @@ class LogProvider with ChangeNotifier {
 
   Future<int> purgeDeletedRecords() async => 0;
 
-  Future<void> importLogs(List<old.LogEntry> importedLogs, {String? sessionId}) async {
+  Future<void> importLogs(List<old.LogEntry> importedLogs,
+      {String? sessionId}) async {
     final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
+    _ensureWritable(effectiveSessionId);
     try {
       for (final log in importedLogs) {
         await RustApi.addLog(
@@ -277,6 +336,7 @@ class LogProvider with ChangeNotifier {
           power: log.power,
           antenna: log.antenna,
           height: log.height,
+          remarks: log.remarks.isNotEmpty ? log.remarks : null,
         );
       }
       await _loadLogs();
@@ -306,6 +366,7 @@ class LogProvider with ChangeNotifier {
       power: b.power ?? '',
       antenna: b.antenna ?? '',
       height: b.height ?? '',
+      remarks: b.remarks ?? '',
       createdAt: b.createdAt,
       updatedAt: b.updatedAt,
       deletedAt: b.deletedAt,

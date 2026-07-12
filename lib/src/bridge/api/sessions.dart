@@ -22,3 +22,12 @@ Future<void> closeSession({required String sessionId}) =>
 
 Future<Session> joinSession({required String shareCode}) =>
     RustLib.instance.api.crateApiSessionsJoinSession(shareCode: shareCode);
+
+Future<void> updateCollaborationSessionTitle(
+        {required String sessionId, required String title}) =>
+    RustLib.instance.api.crateApiSessionsUpdateCollaborationSessionTitle(
+        sessionId: sessionId, title: title);
+
+Future<void> reopenCollaborationSession({required String sessionId}) =>
+    RustLib.instance.api
+        .crateApiSessionsReopenCollaborationSession(sessionId: sessionId);

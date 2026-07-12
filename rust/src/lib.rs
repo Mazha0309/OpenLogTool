@@ -1,7 +1,7 @@
-mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
 pub mod api;
 pub mod db;
 pub mod dict;
+mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
 pub mod models;
 
 use once_cell::sync::OnceCell;
@@ -19,9 +19,9 @@ pub async fn init_database(db_path: &str) -> anyhow::Result<()> {
     };
     let opts = SqliteConnectOptions::from_str(&conn_str)?
         .create_if_missing(true)
+        .foreign_keys(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
     let pool = SqlitePool::connect_with(opts).await?;
-    sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
     db::migrations::run(&pool).await?;
     DB_POOL
         .set(pool)

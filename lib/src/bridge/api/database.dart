@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bind_value`, `insert_from_json`, `query_table`, `row_to_json`
+// These functions are ignored because they are not marked as `pub`: `bind_value`, `insert_from_json`, `query_table`, `row_to_json`, `validate_backup`
 
 Future<String> getDatabaseStatus() =>
     RustLib.instance.api.crateApiDatabaseGetDatabaseStatus();

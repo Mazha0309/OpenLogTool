@@ -6,7 +6,9 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class LogTable extends StatefulWidget {
-  const LogTable({super.key});
+  const LogTable({super.key, this.readOnly = false});
+
+  final bool readOnly;
 
   @override
   State<LogTable> createState() => _LogTableState();
@@ -37,6 +39,7 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _startEditing(int index, LogEntry log) {
+    if (widget.readOnly) return;
     setState(() {
       _editingIndex = index;
       _controllers = {
@@ -70,6 +73,10 @@ class _LogTableState extends State<LogTable> {
   }
 
   Future<void> _saveEditing(int index) async {
+    if (widget.readOnly) {
+      _cancelEditing();
+      return;
+    }
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.maybeOf(context);
     // updateLog preserves sync_id / localId / sessionId / createdAt — only the
@@ -111,7 +118,10 @@ class _LogTableState extends State<LogTable> {
         padding: const EdgeInsets.all(40),
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -134,7 +144,10 @@ class _LogTableState extends State<LogTable> {
             Text(
               '请在上方表单中添加第一条记录',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -147,10 +160,9 @@ class _LogTableState extends State<LogTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         // 如果高度无限，使用一个默认高度
-        final maxHeight = constraints.maxHeight.isFinite 
-            ? constraints.maxHeight 
-            : 400.0;
-        
+        final maxHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 400.0;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -166,7 +178,8 @@ class _LogTableState extends State<LogTable> {
                     scrollDirection: Axis.horizontal,
                     controller: horizontalController,
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      constraints:
+                          BoxConstraints(minWidth: constraints.maxWidth),
                       child: SingleChildScrollView(
                         child: DataTable(
                           columnSpacing: 16,
@@ -196,7 +209,8 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('时间'), 100),
                             ),
                             DataColumn(
-                              label: _buildCenteredCell(const Text('点名主控'), 120),
+                              label:
+                                  _buildCenteredCell(const Text('点名主控'), 120),
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('呼号'), 120),
@@ -229,7 +243,8 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('操作'), 120),
                             ),
                           ],
-                          rows: _buildTableRows(context, logProvider, settingsProvider),
+                          rows: _buildTableRows(
+                              context, logProvider, settingsProvider),
                         ),
                       ),
                     ),
@@ -238,7 +253,8 @@ class _LogTableState extends State<LogTable> {
               ),
             ),
             // 分页控件
-            if (settingsProvider.paginationEnabled && logProvider.logs.length > _itemsPerPage)
+            if (settingsProvider.paginationEnabled &&
+                logProvider.logs.length > _itemsPerPage)
               _buildPaginationControls(logProvider.logs.length),
           ],
         );
@@ -246,7 +262,8 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider, SettingsProvider settingsProvider) {
+  List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider,
+      SettingsProvider settingsProvider) {
     final logs = logProvider.logs;
     final indexedLogs = logs.asMap().entries.toList().reversed.toList();
 
@@ -268,7 +285,8 @@ class _LogTableState extends State<LogTable> {
         _currentPage = totalPages - 1;
       }
       final startIndex = _currentPage * _itemsPerPage;
-      final endIndex = (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
+      final endIndex =
+          (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
       displayEntries = indexedLogs.sublist(startIndex, endIndex);
     } else {
       displayEntries = indexedLogs;
@@ -295,12 +313,17 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
                   )
-                : _buildCenteredCell(Text(log.time.length >= 16 ? log.time.substring(11, 16) : log.time), 100),
+                : _buildCenteredCell(
+                    Text(log.time.length >= 16
+                        ? log.time.substring(11, 16)
+                        : log.time),
+                    100),
           ),
           DataCell(
             isEditing
@@ -311,7 +334,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -327,7 +351,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -343,7 +368,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -359,7 +385,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -375,7 +402,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -391,7 +419,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -407,7 +436,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -423,7 +453,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -439,7 +470,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -454,7 +486,9 @@ class _LogTableState extends State<LogTable> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.check, size: 20),
-                          onPressed: () => _saveEditing(originalIndex),
+                          onPressed: widget.readOnly
+                              ? null
+                              : () => _saveEditing(originalIndex),
                           tooltip: '保存',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
@@ -482,7 +516,9 @@ class _LogTableState extends State<LogTable> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit, size: 20),
-                          onPressed: () => _startEditing(originalIndex, log),
+                          onPressed: widget.readOnly
+                              ? null
+                              : () => _startEditing(originalIndex, log),
                           tooltip: '编辑记录',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
@@ -494,7 +530,12 @@ class _LogTableState extends State<LogTable> {
                         const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.delete, size: 20),
-                          onPressed: () => _showDeleteConfirmation(context, originalIndex),
+                          onPressed: widget.readOnly
+                              ? null
+                              : () => _showDeleteConfirmation(
+                                    context,
+                                    originalIndex,
+                                  ),
                           tooltip: '删除记录',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
@@ -517,7 +558,8 @@ class _LogTableState extends State<LogTable> {
                         controller: _controllers['remarks'],
                         decoration: const InputDecoration(
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                         ),
                       ),
                     )
@@ -542,7 +584,7 @@ class _LogTableState extends State<LogTable> {
 
   Widget _buildPaginationControls(int totalItems) {
     final totalPages = (totalItems / _itemsPerPage).ceil();
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -550,9 +592,8 @@ class _LogTableState extends State<LogTable> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: _currentPage > 0
-                ? () => setState(() => _currentPage--)
-                : null,
+            onPressed:
+                _currentPage > 0 ? () => setState(() => _currentPage--) : null,
           ),
           const SizedBox(width: 8),
           Text('${_currentPage + 1} / $totalPages'),
@@ -569,6 +610,7 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _showDeleteConfirmation(BuildContext context, int index) {
+    if (widget.readOnly) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

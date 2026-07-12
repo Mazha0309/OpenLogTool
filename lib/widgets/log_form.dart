@@ -11,7 +11,9 @@ import 'package:openlogtool/widgets/callsign_history_field.dart';
 /// 日志表单组件
 /// 用于添加和编辑点名记录
 class LogForm extends StatefulWidget {
-  const LogForm({super.key});
+  const LogForm({super.key, this.readOnly = false});
+
+  final bool readOnly;
 
   @override
   State<LogForm> createState() => _LogFormState();
@@ -19,7 +21,7 @@ class LogForm extends StatefulWidget {
 
 class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
-final _controllerController = TextEditingController();
+  final _controllerController = TextEditingController();
   final _callsignController = TextEditingController();
   final FocusNode _callsignFocusNode = FocusNode();
   final _deviceController = TextEditingController();
@@ -65,11 +67,14 @@ final _controllerController = TextEditingController();
   }
 
   Future<void> _submitForm() async {
+    if (widget.readOnly) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final dictionaryProvider = Provider.of<DictionaryProvider>(context, listen: false);
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
+    final dictionaryProvider =
+        Provider.of<DictionaryProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
 
     if (_deviceController.text.isNotEmpty) {
@@ -81,12 +86,14 @@ final _controllerController = TextEditingController();
     if (_callsignController.text.isNotEmpty) {
       await dictionaryProvider.addCallsign(_callsignController.text);
     }
-      if (_qthController.text.isNotEmpty) {
-        await dictionaryProvider.addQth(_qthController.text);
-      }
+    if (_qthController.text.isNotEmpty) {
+      await dictionaryProvider.addQth(_qthController.text);
+    }
 
     final log = LogEntry(
-      time: _timeController.text.isNotEmpty ? _timeController.text : _getCurrentTime(),
+      time: _timeController.text.isNotEmpty
+          ? _timeController.text
+          : _getCurrentTime(),
       controller: _controllerController.text.toUpperCase(),
       callsign: _callsignController.text.toUpperCase(),
       report: _reportController.text,
@@ -140,8 +147,12 @@ final _controllerController = TextEditingController();
         final isNarrow = availableWidth < 600;
         final fieldWidth = isNarrow ? 160.0 : 200.0;
         final spacing = isNarrow ? 8.0 : 12.0;
-        final fieldsPerRow = ((availableWidth + spacing) / (fieldWidth + spacing)).floor().clamp(1, 5);
-        final calculatedFieldWidth = (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
+        final fieldsPerRow =
+            ((availableWidth + spacing) / (fieldWidth + spacing))
+                .floor()
+                .clamp(1, 5);
+        final calculatedFieldWidth =
+            (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
 
         return Form(
           key: _formKey,
@@ -173,18 +184,18 @@ final _controllerController = TextEditingController();
                   ),
                   SizedBox(
                     width: calculatedFieldWidth,
-                      child: CallsignHistoryField(
-                        callsignController: _callsignController,
-                        deviceController: _deviceController,
-                        antennaController: _antennaController,
-                        qthController: _qthController,
-                        powerController: _powerController,
-                        heightController: _heightController,
-                        reportController: _reportController,
-                        rstRcvdController: _rstRcvdController,
-                        timeController: _timeController,
-                        controllerController: _controllerController,
-                        label: '点名呼号',
+                    child: CallsignHistoryField(
+                      callsignController: _callsignController,
+                      deviceController: _deviceController,
+                      antennaController: _antennaController,
+                      qthController: _qthController,
+                      powerController: _powerController,
+                      heightController: _heightController,
+                      reportController: _reportController,
+                      rstRcvdController: _rstRcvdController,
+                      timeController: _timeController,
+                      controllerController: _controllerController,
+                      label: '点名呼号',
                       hintText: '输入呼号',
                       focusNode: _callsignFocusNode,
                       isCompact: isNarrow,
@@ -282,7 +293,8 @@ final _controllerController = TextEditingController();
                       upperCase: false,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _submitForm(),
+                      onSubmitted:
+                          widget.readOnly ? null : (_) => _submitForm(),
                     ),
                   ),
                   SizedBox(
@@ -305,9 +317,9 @@ final _controllerController = TextEditingController();
               SizedBox(
                 height: isNarrow ? 44 : 48,
                 child: FilledButton.icon(
-                  onPressed: _submitForm,
-                  icon: const Icon(Icons.add),
-                  label: const Text('添加记录'),
+                  onPressed: widget.readOnly ? null : _submitForm,
+                  icon: Icon(widget.readOnly ? Icons.lock_outline : Icons.add),
+                  label: Text(widget.readOnly ? '当前协作会话只读' : '添加记录'),
                   style: ElevatedButton.styleFrom(
                     padding: EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
                   ),
@@ -341,14 +353,16 @@ final _controllerController = TextEditingController();
         errorText: error,
         border: const OutlineInputBorder(),
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 10 : 14),
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 10 : 14),
       ),
       keyboardType: keyboardType,
       validator: validator,
       onChanged: onChanged,
       onFieldSubmitted: onSubmitted,
       textInputAction: textInputAction ?? TextInputAction.next,
-      textCapitalization: upperCase ? TextCapitalization.characters : TextCapitalization.none,
+      textCapitalization:
+          upperCase ? TextCapitalization.characters : TextCapitalization.none,
       inputFormatters: upperCase ? [UpperCaseTextFormatter()] : [],
     );
   }
@@ -363,8 +377,10 @@ final _controllerController = TextEditingController();
     bool upperCase = true,
     bool isCompact = false,
   }) {
-    final textCapitalization = upperCase ? TextCapitalization.characters : TextCapitalization.none;
-    final inputFormatters = upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
+    final textCapitalization =
+        upperCase ? TextCapitalization.characters : TextCapitalization.none;
+    final inputFormatters =
+        upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
 
     return Autocomplete<DictionaryItem>(
       optionsBuilder: (TextEditingValue textEditingValue) {
@@ -425,7 +441,8 @@ final _controllerController = TextEditingController();
             hintText: hintText,
             border: const OutlineInputBorder(),
             isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 10 : 14),
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: 12, vertical: isCompact ? 10 : 14),
           ),
           onChanged: (value) {
             controller.text = upperCase ? value.toUpperCase() : value;
@@ -458,19 +475,21 @@ final _controllerController = TextEditingController();
                   return ListTile(
                     dense: true,
                     title: Text(item.raw),
-                    subtitle: item.abbreviation.isNotEmpty || item.pinyin.isNotEmpty
-                        ? Text(
-                            [
-                              if (item.abbreviation.isNotEmpty) item.abbreviation,
-                              if (item.pinyin.isNotEmpty) item.pinyin,
-                            ].join(' · '),
-                            style: theme.textTheme.bodySmall?.copyWith(
+                    subtitle:
+                        item.abbreviation.isNotEmpty || item.pinyin.isNotEmpty
+                            ? Text(
+                                [
+                                  if (item.abbreviation.isNotEmpty)
+                                    item.abbreviation,
+                                  if (item.pinyin.isNotEmpty) item.pinyin,
+                                ].join(' · '),
+                                style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : null,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
                     onTap: () => onSelected(item),
                   );
                 },

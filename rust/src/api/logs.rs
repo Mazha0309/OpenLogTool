@@ -12,6 +12,7 @@ pub async fn add_log(
     power: Option<String>,
     antenna: Option<String>,
     height: Option<String>,
+    remarks: Option<String>,
 ) -> anyhow::Result<LogEntry> {
     let mut entry = LogEntry::new(session_id, controller, callsign);
     entry.rst_sent = rst_sent;
@@ -21,6 +22,7 @@ pub async fn add_log(
     entry.power = power;
     entry.antenna = antenna;
     entry.height = height;
+    entry.remarks = remarks;
     db::logs::insert_log(&entry).await
 }
 
@@ -62,6 +64,7 @@ pub async fn update_log(
     power: Option<String>,
     antenna: Option<String>,
     height: Option<String>,
+    remarks: Option<String>,
 ) -> anyhow::Result<LogEntry> {
     db::logs::update_log(
         &sync_id,
@@ -75,6 +78,7 @@ pub async fn update_log(
         power.as_deref(),
         antenna.as_deref(),
         height.as_deref(),
+        remarks.as_deref(),
     )
     .await
 }
@@ -85,4 +89,8 @@ pub async fn delete_log(sync_id: String) -> anyhow::Result<()> {
 
 pub async fn undo_last_log(session_id: String) -> anyhow::Result<()> {
     db::logs::undo_last_log(&session_id).await
+}
+
+pub async fn restore_log(sync_id: String) -> anyhow::Result<LogEntry> {
+    db::logs::restore_log(&sync_id).await
 }

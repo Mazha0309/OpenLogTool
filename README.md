@@ -21,6 +21,22 @@
 - JSON导出/导入
 - Excel导出
 
+### 协作会话（v1 阶段 2）
+- 使用 `/api/v1` 短期 Access Token 与 Refresh Token 登录自建服务器
+- 将完整本地 Session 分批发布，保留 sessionId、syncId、RST、时间和备注
+- 发布前按服务端字段约束校验冻结快照，并同时按 500 条与 UTF-8 请求字节上限动态分批
+- 通过 10 位成员邀请码加入同一个 Session，并原子安装服务端规范快照
+- Owner 可创建/撤销邀请、调整或移除成员、转移所有权
+- Owner/Editor 的 Log 增改删恢复会与 durable outbox 在同一个本地事务提交；Owner 还可重命名、关闭和重开 Session
+- 通过连续事件 REST 补拉和鉴权 WebSocket 提示保持在线同步；断线、重启和请求结果丢失后复用原 mutationId 恢复
+- 本地持久化服务器绑定、成员角色、shadow、游标、outbox 和冲突记录；accepted mutation 只在规范事件落库后清除
+- 永久 rejected 会保留可见提示；再次编辑同一实体时基于规范 shadow 原子重建新 mutation，不复用被拒 payload 或 ID
+- Viewer、已撤权成员及服务端已关闭的 Session 强制只读，角色变化会持久化后重连
+- 协作页展示传输状态、事件游标、待同步数、冲突数和永久拒绝提示
+- 服务器、账号、Session 切换会立即隔离管理状态；加入和管理操作保留可重放的幂等 ID
+
+公开 Liveshare、自动三方 rebase、冲突解决中心和 `CURSOR_EXPIRED` 快照重装仍在后续阶段；旧的未鉴权分享通道不会重新启用。
+
 ### 主题设置
 - 自定义主题颜色
 - 暗色/亮色模式
@@ -35,8 +51,9 @@
 ## 开始使用
 
 ### 环境要求
-- Flutter SDK 3.0.0+
-- Dart SDK 3.0.0+
+- Flutter SDK 3.41+
+- Dart SDK 3.11+
+- Rust toolchain（用于 `flutter_rust_bridge` 核心）
 
 ### 构建
 
@@ -54,7 +71,8 @@ flutter build android
 
 - Flutter
 - Provider（状态管理）
-- sqflite（数据库）
+- Rust + SQLx + SQLite（本地数据与协作副本）
+- flutter_rust_bridge
 - Excel（导出）
 
 ## License

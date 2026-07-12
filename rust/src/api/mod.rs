@@ -1,4 +1,5 @@
 pub mod callsign_qth;
+pub mod collaboration;
 pub mod database;
 pub mod dictionaries;
 pub mod export;

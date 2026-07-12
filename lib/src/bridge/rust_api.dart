@@ -6,6 +6,7 @@ import 'api/dictionaries.dart' as dict;
 import 'api/settings.dart' as settings;
 import 'api/export.dart' as export_api;
 import 'api/callsign_qth.dart' as callsign_qth;
+import 'api/collaboration.dart' as collaboration;
 import 'api/database.dart' as database;
 import 'models/log_entry.dart';
 import 'models/session.dart';
@@ -29,6 +30,7 @@ class RustApi {
     String? power,
     String? antenna,
     String? height,
+    String? remarks,
   }) {
     return logs.addLog(
       sessionId: sessionId,
@@ -41,6 +43,7 @@ class RustApi {
       power: power,
       antenna: antenna,
       height: height,
+      remarks: remarks,
     );
   }
 
@@ -81,6 +84,7 @@ class RustApi {
     String? power,
     String? antenna,
     String? height,
+    String? remarks,
   }) {
     return logs.updateLog(
       syncId: syncId,
@@ -94,6 +98,7 @@ class RustApi {
       power: power,
       antenna: antenna,
       height: height,
+      remarks: remarks,
     );
   }
 
@@ -103,6 +108,10 @@ class RustApi {
 
   static Future<void> undoLastLog({required String sessionId}) {
     return logs.undoLastLog(sessionId: sessionId);
+  }
+
+  static Future<LogEntry> restoreLog({required String syncId}) {
+    return logs.restoreLog(syncId: syncId);
   }
 
   // Sessions
@@ -120,6 +129,22 @@ class RustApi {
 
   static Future<Session> joinSession({required String shareCode}) {
     return sessions.joinSession(shareCode: shareCode);
+  }
+
+  static Future<void> updateCollaborationSessionTitle({
+    required String sessionId,
+    required String title,
+  }) {
+    return sessions.updateCollaborationSessionTitle(
+      sessionId: sessionId,
+      title: title,
+    );
+  }
+
+  static Future<void> reopenCollaborationSession({
+    required String sessionId,
+  }) {
+    return sessions.reopenCollaborationSession(sessionId: sessionId);
   }
 
   // Dictionaries
@@ -224,6 +249,211 @@ class RustApi {
 
   static Future<void> clearCallsignQthHistory() {
     return callsign_qth.clearCallsignQthHistory();
+  }
+
+  // Collaboration replica
+  static Future<String> getOrCreateDeviceId() {
+    return collaboration.getOrCreateDeviceId();
+  }
+
+  static Future<String?> getCollaborationBinding({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.getCollaborationBinding(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<String?> getSessionCollaborationBinding({
+    required String sessionId,
+  }) {
+    return collaboration.getSessionCollaborationBinding(
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<String> getPublishSnapshot({required String sessionId}) {
+    return collaboration.getPublishSnapshot(sessionId: sessionId);
+  }
+
+  static Future<String> beginPublishSnapshot({
+    required String serverInstanceId,
+    required String serverOrigin,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.beginPublishSnapshot(
+      serverInstanceId: serverInstanceId,
+      serverOrigin: serverOrigin,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<void> abortPublish({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.abortPublish(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<String> installCollaborationSnapshot({
+    required String requestJson,
+  }) {
+    return collaboration.installCollaborationSnapshot(
+      requestJson: requestJson,
+    );
+  }
+
+  static Future<void> markCollaborationRevoked({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.markCollaborationRevoked(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
+  }
+
+  static Future<String> updateCollaborationMembership({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+    required String membershipId,
+    required int membershipVersion,
+    required String role,
+  }) {
+    return collaboration.updateCollaborationMembership(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+      membershipId: membershipId,
+      membershipVersion: membershipVersion,
+      role: role,
+    );
+  }
+
+  static Future<String> listPendingCollaborationMutations({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+    int? limit,
+  }) {
+    return collaboration.listPendingCollaborationMutations(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+      limit: limit,
+    );
+  }
+
+  static Future<void> markCollaborationMutationsSending({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+    required String mutationIdsJson,
+  }) {
+    return collaboration.markCollaborationMutationsSending(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+      mutationIdsJson: mutationIdsJson,
+    );
+  }
+
+  static Future<void> markCollaborationMutationAccepted({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+    required String mutationId,
+    required int acceptedEventSeq,
+  }) {
+    return collaboration.markCollaborationMutationAccepted(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+      mutationId: mutationId,
+      acceptedEventSeq: acceptedEventSeq,
+    );
+  }
+
+  static Future<void> markCollaborationMutationRetry({
+    required String requestJson,
+  }) {
+    return collaboration.markCollaborationMutationRetry(
+      requestJson: requestJson,
+    );
+  }
+
+  static Future<void> markCollaborationMutationRejected({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+    required String mutationId,
+    required String errorCode,
+    required String errorMessage,
+    String? detailsJson,
+  }) {
+    return collaboration.markCollaborationMutationRejected(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+      mutationId: mutationId,
+      errorCode: errorCode,
+      errorMessage: errorMessage,
+      detailsJson: detailsJson,
+    );
+  }
+
+  static Future<String> recordCollaborationMutationConflict({
+    required String requestJson,
+  }) {
+    return collaboration.recordCollaborationMutationConflict(
+      requestJson: requestJson,
+    );
+  }
+
+  static Future<String> applyCollaborationEvent({
+    required String requestJson,
+  }) {
+    return collaboration.applyCollaborationEvent(requestJson: requestJson);
+  }
+
+  static Future<void> setCollaborationHeadSeq({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+    required int headSeq,
+  }) {
+    return collaboration.setCollaborationHeadSeq(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+      headSeq: headSeq,
+    );
+  }
+
+  static Future<String> getCollaborationSyncStatus({
+    required String serverInstanceId,
+    required String accountId,
+    required String sessionId,
+  }) {
+    return collaboration.getCollaborationSyncStatus(
+      serverInstanceId: serverInstanceId,
+      accountId: accountId,
+      sessionId: sessionId,
+    );
   }
 
   // Database operations
