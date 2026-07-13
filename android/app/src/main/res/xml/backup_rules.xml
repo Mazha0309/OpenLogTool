@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="openlogtool_auth_v1.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureKeyStorage:openlogtool_auth_v1.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration:openlogtool_auth_v1.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration.xml" />
+</full-backup-content>

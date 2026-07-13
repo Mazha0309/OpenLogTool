@@ -46,3 +46,10 @@ app.*.map.json
 
 # Keystore files
 *.jks
+
+# Rust
+/rust/target/
+
+# Superpowers (brainstorming artifacts)
+.superpowers/
+.worktrees/

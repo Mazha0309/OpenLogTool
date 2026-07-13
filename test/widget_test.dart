@@ -1,30 +1,83 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:openlogtool/main.dart';
+import 'package:openlogtool/models/log_entry.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('LogEntry', () {
+    test('preserves provided sync id', () {
+      final entry = LogEntry(
+        id: 'log-abc-123',
+        time: '2026-07-09T14:30:00Z',
+        controller: 'BG5CRL',
+        callsign: 'BA4AAA',
+        report: '59',
+        qth: '上海',
+        device: 'ICOM 7300',
+        power: '100W',
+        antenna: 'Dipole',
+        height: '10m',
+      );
+      expect(entry.id, 'log-abc-123');
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('generates id when not provided', () {
+      final entry = LogEntry(
+        time: '14:30',
+        controller: 'BG5CRL',
+        callsign: 'BA4AAA',
+        report: '59',
+        qth: '上海',
+        device: 'ICOM 7300',
+        power: '100W',
+        antenna: 'Dipole',
+        height: '10m',
+      );
+      expect(entry.id.isNotEmpty, true);
+      expect(entry.id.startsWith('log-'), true);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('round-trips JSON', () {
+      final entry = LogEntry(
+        id: 'log-abc-123',
+        time: '14:30',
+        controller: 'BG5CRL',
+        callsign: 'BA4AAA',
+        report: '59',
+        rstRcvd: '57',
+        qth: '上海',
+        device: 'ICOM 7300',
+        power: '100W',
+        antenna: 'Dipole',
+        height: '10m',
+      );
+      final json = entry.toJson();
+      expect((json['rstSent'], json['rstRcvd']), ('59', '57'));
+      final restored = LogEntry.fromJson(json);
+      expect(restored.id, entry.id);
+      expect(restored.callsign, entry.callsign);
+      expect(restored.rstRcvd, entry.rstRcvd);
+      expect(restored.report, entry.report);
+      expect(entry.copyWith().rstRcvd, '57');
+      expect(entry.copyWith(rstRcvd: '46').rstRcvd, '46');
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('accepts canonical and snake-case RST field names', () {
+      final canonical = LogEntry.fromJson({
+        'time': '14:30',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+        'rstSent': '58',
+        'rstRcvd': '47',
+      });
+      final snakeCase = LogEntry.fromMap({
+        'time': '14:31',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4BBB',
+        'rst_sent': '56',
+        'rst_rcvd': '45',
+      });
+
+      expect((canonical.report, canonical.rstRcvd), ('58', '47'));
+      expect((snakeCase.report, snakeCase.rstRcvd), ('56', '45'));
+    });
   });
 }

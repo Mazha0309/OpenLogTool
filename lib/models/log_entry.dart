@@ -8,11 +8,13 @@ class LogEntry {
   final String controller;
   final String callsign;
   final String report;
+  String rstRcvd;
   final String qth;
   final String device;
   final String power;
   final String antenna;
   final String height;
+  String remarks = '';
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
@@ -26,11 +28,13 @@ class LogEntry {
     required String controller,
     required String callsign,
     required String report,
+    String rstRcvd = '',
     required String qth,
     required String device,
     required String power,
     required String antenna,
     required String height,
+    String remarks = '',
     String? createdAt,
     String? updatedAt,
     String? deletedAt,
@@ -47,11 +51,13 @@ class LogEntry {
       controller: controller,
       callsign: callsign,
       report: report,
+      rstRcvd: rstRcvd,
       qth: qth,
       device: device,
       power: power,
       antenna: antenna,
       height: height,
+      remarks: remarks,
       createdAt: normalizedCreatedAt,
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
@@ -60,7 +66,7 @@ class LogEntry {
     );
   }
 
-  const LogEntry._internal({
+  LogEntry._internal({
     required this.localId,
     required this.id,
     required this.hasExplicitSyncId,
@@ -68,11 +74,13 @@ class LogEntry {
     required this.controller,
     required this.callsign,
     required this.report,
+    required this.rstRcvd,
     required this.qth,
     required this.device,
     required this.power,
     required this.antenna,
     required this.height,
+    required this.remarks,
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
@@ -133,11 +141,14 @@ class LogEntry {
       'controller': controller,
       'callsign': callsign,
       'report': report,
+      'rstSent': report,
+      'rstRcvd': rstRcvd,
       'qth': qth,
       'device': device,
       'power': power,
       'antenna': antenna,
       'height': height,
+      'remarks': remarks,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
@@ -159,6 +170,7 @@ class LogEntry {
       'power': power,
       'antenna': antenna,
       'height': height,
+      'remarks': remarks,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
@@ -174,12 +186,16 @@ class LogEntry {
       time: json['time']?.toString() ?? '',
       controller: json['controller']?.toString() ?? '',
       callsign: json['callsign']?.toString() ?? '',
-      report: json['report']?.toString() ?? '',
+      report:
+          (json['rstSent'] ?? json['rst_sent'] ?? json['report'])?.toString() ??
+              '',
+      rstRcvd: (json['rstRcvd'] ?? json['rst_rcvd'])?.toString() ?? '',
       qth: json['qth']?.toString() ?? '',
       device: json['device']?.toString() ?? '',
       power: json['power']?.toString() ?? '',
       antenna: json['antenna']?.toString() ?? '',
       height: json['height']?.toString() ?? '',
+      remarks: json['remarks']?.toString() ?? '',
       createdAt: json['createdAt']?.toString() ?? json['created_at']?.toString(),
       updatedAt: json['updatedAt']?.toString() ?? json['updated_at']?.toString(),
       deletedAt: _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
@@ -195,12 +211,16 @@ class LogEntry {
       time: map['time']?.toString() ?? '',
       controller: map['controller']?.toString() ?? '',
       callsign: map['callsign']?.toString() ?? '',
-      report: map['report']?.toString() ?? '',
+      report:
+          (map['rst_sent'] ?? map['rstSent'] ?? map['report'])?.toString() ??
+              '',
+      rstRcvd: (map['rst_rcvd'] ?? map['rstRcvd'])?.toString() ?? '',
       qth: map['qth']?.toString() ?? '',
       device: map['device']?.toString() ?? '',
       power: map['power']?.toString() ?? '',
       antenna: map['antenna']?.toString() ?? '',
       height: map['height']?.toString() ?? '',
+      remarks: map['remarks']?.toString() ?? '',
       createdAt: map['created_at']?.toString() ?? map['createdAt']?.toString(),
       updatedAt: map['updated_at']?.toString() ?? map['updatedAt']?.toString(),
       deletedAt: _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
@@ -220,6 +240,7 @@ class LogEntry {
       power,
       antenna,
       height,
+      remarks,
     ];
   }
 
@@ -230,11 +251,13 @@ class LogEntry {
     String? controller,
     String? callsign,
     String? report,
+    String? rstRcvd,
     String? qth,
     String? device,
     String? power,
     String? antenna,
     String? height,
+    String? remarks,
     String? createdAt,
     String? updatedAt,
     Object? deletedAt = _copyWithSentinel,
@@ -248,11 +271,13 @@ class LogEntry {
       controller: controller ?? this.controller,
       callsign: callsign ?? this.callsign,
       report: report ?? this.report,
+      rstRcvd: rstRcvd ?? this.rstRcvd,
       qth: qth ?? this.qth,
       device: device ?? this.device,
       power: power ?? this.power,
       antenna: antenna ?? this.antenna,
       height: height ?? this.height,
+      remarks: remarks ?? this.remarks,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: identical(deletedAt, _copyWithSentinel) ? this.deletedAt : deletedAt as String?,

@@ -1,13 +1,21 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'package:openlogtool/database/database_helper.dart';
-import 'package:openlogtool/models/log_entry.dart';
-import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
+import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
+import 'package:openlogtool/utils/log_time.dart';
 
-/// A text field for callsign input that shows a history overlay when
-/// the entered callsign matches past records. Selecting a history item
-/// fills all form controllers from that record.
+typedef CallsignHistoryLoader = Future<List<bridge.LogEntry>> Function(
+  String callsign,
+  int limit,
+);
+
+typedef CallsignHistoryReuseCallback = Future<void> Function(
+  bridge.LogEntry record,
+);
+
 class CallsignHistoryField extends StatefulWidget {
   final TextEditingController callsignController;
   final TextEditingController deviceController;
@@ -15,11 +23,20 @@ class CallsignHistoryField extends StatefulWidget {
   final TextEditingController qthController;
   final TextEditingController powerController;
   final TextEditingController heightController;
+  final TextEditingController? reportController;
+  final TextEditingController? rstRcvdController;
+  final TextEditingController? controllerController;
   final String label;
   final String hintText;
   final TextInputAction? textInputAction;
   final FocusNode? focusNode;
   final bool isCompact;
+  final bool enabled;
+  final bool historyEnabled;
+  final String? Function(String?)? validator;
+  final CallsignHistoryLoader? historyLoader;
+  final bool Function(String field)? canFillField;
+  final CallsignHistoryReuseCallback? onReuseRecord;
 
   const CallsignHistoryField({
     super.key,
@@ -29,11 +46,20 @@ class CallsignHistoryField extends StatefulWidget {
     required this.qthController,
     required this.powerController,
     required this.heightController,
+    this.reportController,
+    this.rstRcvdController,
+    this.controllerController,
     required this.label,
     required this.hintText,
     this.textInputAction,
     this.focusNode,
     this.isCompact = false,
+    this.enabled = true,
+    this.historyEnabled = true,
+    this.validator,
+    this.historyLoader,
+    this.canFillField,
+    this.onReuseRecord,
   });
 
   @override
@@ -41,19 +67,42 @@ class CallsignHistoryField extends StatefulWidget {
 }
 
 class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
-  List<LogEntry> _history = [];
+  List<bridge.LogEntry> _history = [];
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _ownFocusNode = FocusNode();
   bool _isSelecting = false;
+  int _historyRequestGeneration = 0;
 
   FocusNode get _effFocus => widget.focusNode ?? _ownFocusNode;
+  bool get _canUseHistory => widget.enabled && widget.historyEnabled;
 
   @override
   void initState() {
     super.initState();
     _effFocus.addListener(_onFocusChanged);
     widget.callsignController.addListener(_onCallsignChanged);
+  }
+
+  @override
+  void didUpdateWidget(CallsignHistoryField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldFocus = oldWidget.focusNode ?? _ownFocusNode;
+    if (oldFocus != _effFocus) {
+      oldFocus.removeListener(_onFocusChanged);
+      _effFocus.addListener(_onFocusChanged);
+    }
+    if (oldWidget.callsignController != widget.callsignController) {
+      oldWidget.callsignController.removeListener(_onCallsignChanged);
+      widget.callsignController.addListener(_onCallsignChanged);
+      _invalidateHistory();
+    }
+    final wasUsable = oldWidget.enabled && oldWidget.historyEnabled;
+    if (wasUsable && !_canUseHistory) {
+      _invalidateHistory();
+    } else if (!wasUsable && _canUseHistory) {
+      _loadHistory();
+    }
   }
 
   @override
@@ -66,24 +115,16 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   }
 
   void _onCallsignChanged() {
+    if (!_canUseHistory) {
+      _invalidateHistory();
+      return;
+    }
     _loadHistory();
     if (_overlayEntry != null) _hideOverlay();
   }
 
   void _onFocusChanged() {
-    if (_effFocus.hasFocus && _history.isNotEmpty) {
-      _showOverlay();
-    } else {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
-      });
-    }
-  }
-
-  Future<void> _loadHistory() async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    if (!settings.callSignQthLinkEnabled) {
-      if (mounted) setState(() => _history = []);
+    if (!_canUseHistory) {
       _hideOverlay();
       return;
     }
@@ -93,127 +134,296 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
       _hideOverlay();
       return;
     }
-    final db = DatabaseHelper();
-    final rows = await db.getLogsByCallsign(callsign);
-    if (mounted) {
-      setState(() => _history = rows);
-      if (_effFocus.hasFocus && _history.isNotEmpty) {
-        _showOverlay();
-      }
+    if (_effFocus.hasFocus &&
+        _history.isNotEmpty &&
+        _history.first.callsign.toUpperCase() == callsign) {
+      _showOverlay();
+    } else if (!_effFocus.hasFocus) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
+      });
     }
   }
 
-  void _fillFromRecord(LogEntry log) {
-    // Only fill fields that are currently empty
-    if (widget.deviceController.text.isEmpty) {
-      widget.deviceController.text = log.device;
+  Future<void> _loadHistory() async {
+    final requestGeneration = ++_historyRequestGeneration;
+    if (!_canUseHistory) return;
+    final callsign = widget.callsignController.text.trim().toUpperCase();
+    if (callsign.length < 2) {
+      if (mounted) setState(() => _history = []);
+      _hideOverlay();
+      return;
     }
-    if (widget.antennaController.text.isEmpty) {
-      widget.antennaController.text = log.antenna;
-    }
-    if (widget.qthController.text.isEmpty) {
-      widget.qthController.text = log.qth;
-    }
-    if (widget.powerController.text.isEmpty) {
-      widget.powerController.text = log.power;
-    }
-    if (widget.heightController.text.isEmpty) {
-      widget.heightController.text = log.height;
-    }
+    try {
+      final loader = widget.historyLoader ?? _loadHistoryFromDatabase;
+      final rows = await loader(callsign, 3);
+      if (!mounted || !_canUseHistory) return;
+      if (requestGeneration != _historyRequestGeneration) return;
+      final current = widget.callsignController.text.trim().toUpperCase();
+      if (current != callsign) {
+        // Controller listener already started the request for the latest text.
+        return;
+      }
+      setState(() => _history = rows);
+      if (_effFocus.hasFocus &&
+          _history.isNotEmpty &&
+          _history.first.callsign.toUpperCase() == current &&
+          _overlayEntry == null) {
+        _showOverlay();
+      } else if (_history.isEmpty) {
+        _hideOverlay();
+      }
+    } catch (_) {}
+  }
+
+  Future<List<bridge.LogEntry>> _loadHistoryFromDatabase(
+    String callsign,
+    int limit,
+  ) =>
+      RustApi.getRecentByCallsign(callsign: callsign, limit: limit);
+
+  void _invalidateHistory() {
+    _historyRequestGeneration += 1;
+    _history = const [];
     _hideOverlay();
+  }
+
+  bool _canFill(String field) => widget.canFillField?.call(field) ?? true;
+
+  Future<void> _fillFromRecord(bridge.LogEntry log) async {
+    _isSelecting = true;
+    _hideOverlay();
+    try {
+      final onReuseRecord = widget.onReuseRecord;
+      if (onReuseRecord != null) {
+        await onReuseRecord(log);
+        return;
+      }
+
+      _fillControllersFromRecord(log);
+    } finally {
+      _isSelecting = false;
+    }
+  }
+
+  void _fillControllersFromRecord(bridge.LogEntry log) {
+    if (_canFill('device') && (log.device?.isNotEmpty ?? false)) {
+      widget.deviceController.text = log.device!;
+    }
+    if (_canFill('antenna') && (log.antenna?.isNotEmpty ?? false)) {
+      widget.antennaController.text = log.antenna!;
+    }
+    if (_canFill('qth') && (log.qth?.isNotEmpty ?? false)) {
+      widget.qthController.text = log.qth!;
+    }
+    if (_canFill('power') && (log.power?.isNotEmpty ?? false)) {
+      widget.powerController.text = log.power!;
+    }
+    if (_canFill('height') && (log.height?.isNotEmpty ?? false)) {
+      widget.heightController.text = log.height!;
+    }
+    if (_canFill('rstSent') &&
+        widget.reportController != null &&
+        (log.rstSent?.isNotEmpty ?? false)) {
+      widget.reportController!.text = log.rstSent!;
+    }
+    if (_canFill('rstRcvd') &&
+        widget.rstRcvdController != null &&
+        (log.rstRcvd?.isNotEmpty ?? false)) {
+      widget.rstRcvdController!.text = log.rstRcvd!;
+    }
+    if (_canFill('controller') &&
+        widget.controllerController != null &&
+        log.controller.isNotEmpty) {
+      widget.controllerController!.text = log.controller;
+    }
   }
 
   void _showOverlay() {
     _hideOverlay();
-    if (_history.isEmpty) return;
+    if (!_canUseHistory || _history.isEmpty) return;
 
     final overlay = Overlay.of(context);
-    final renderBox = context.findRenderObject() as RenderBox;
-    final size = renderBox.size;
-    final historyList = _history;
+    final overlayBox = overlay.context.findRenderObject() as RenderBox;
+    final fieldBox = context.findRenderObject() as RenderBox;
+    final overlaySize = overlayBox.size;
+    final fieldSize = fieldBox.size;
+    final fieldOrigin = fieldBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    const screenMargin = 8.0;
+    const anchorGap = 4.0;
+    final mediaQuery = MediaQuery.of(context);
+    final view = View.of(context);
+    final rawBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    final bottomInset = math.max(
+      mediaQuery.viewInsets.bottom,
+      rawBottomInset,
+    );
+    final panelWidth = math.min(320.0, overlaySize.width - screenMargin * 2);
+    final maxLeft = overlaySize.width - screenMargin - panelWidth;
+    final panelLeft = fieldOrigin.dx.clamp(screenMargin, maxLeft).toDouble();
+    final desiredHeight = math.min(260.0, 42.0 + _history.length * 58.0);
+    final visibleTop = mediaQuery.padding.top + screenMargin;
+    final visibleBottom = overlaySize.height -
+        bottomInset -
+        mediaQuery.padding.bottom -
+        screenMargin;
+    final belowSpace = math.max(
+      0.0,
+      visibleBottom - (fieldOrigin.dy + fieldSize.height + anchorGap),
+    );
+    final aboveSpace = math.max(
+      0.0,
+      fieldOrigin.dy - anchorGap - visibleTop,
+    );
+    final openBelow = belowSpace >= math.min(desiredHeight, 120.0) ||
+        belowSpace >= aboveSpace;
+    final availableHeight = openBelow ? belowSpace : aboveSpace;
+    final panelHeight = math.min(desiredHeight, availableHeight);
+    final followerOffset = Offset(
+      panelLeft - fieldOrigin.dx,
+      openBelow ? fieldSize.height + anchorGap : -panelHeight - anchorGap,
+    );
+    final list = _history;
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) => Positioned(
-        width: size.width,
+        width: panelWidth,
         child: CompositedTransformFollower(
           link: _layerLink,
           showWhenUnlinked: false,
-          offset: Offset(0, size.height + 4),
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: Theme.of(ctx).colorScheme.outline.withAlpha(128)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(ctx).colorScheme.primaryContainer.withAlpha(128),
-                      borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-                    ),
-                    child: Row(children: [
-                      Icon(Icons.person_outline, size: 16, color: Theme.of(ctx).colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(historyList.first.callsign.toUpperCase(),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(ctx).colorScheme.primary)),
-                      const SizedBox(width: 4),
-                      Text('的历史记录', style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-                    ]),
-                  ),
-                  Divider(height: 1, color: Theme.of(ctx).colorScheme.outline.withAlpha(77)),
-                  Flexible(
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      itemCount: historyList.length,
-                      itemBuilder: (_, index) {
-                        final log = historyList[index];
-                        final parts = <String>[];
-                        if (log.qth.isNotEmpty) parts.add(log.qth);
-                        if (log.device.isNotEmpty) parts.add(log.device);
-                        if (log.antenna.isNotEmpty) parts.add(log.antenna);
-                        return Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _fillFromRecord(log),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                border: index < historyList.length - 1
-                                    ? Border(bottom: BorderSide(color: Theme.of(ctx).colorScheme.outline.withAlpha(51)))
-                                    : null,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(children: [
-                                    Icon(Icons.access_time, size: 14, color: Theme.of(ctx).colorScheme.primary.withAlpha(179)),
-                                    const SizedBox(width: 6),
-                                    Text(log.time, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
-                                  ]),
-                                  if (parts.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(parts.join(' · '), style: TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-                                  ],
-                                ],
+          offset: followerOffset,
+          child: TextFieldTapRegion(
+            child: Material(
+              key: const Key('callsign-history-overlay'),
+              elevation: 8,
+              borderRadius: BorderRadius.circular(10),
+              surfaceTintColor: Colors.transparent,
+              child: Container(
+                constraints: BoxConstraints(maxHeight: panelHeight),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: Theme.of(ctx).colorScheme.outlineVariant),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                            bottom: BorderSide(
+                                color:
+                                    Theme.of(ctx).colorScheme.outlineVariant)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.auto_fix_high,
+                              size: 14,
+                              color: Theme.of(ctx).colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              context.l10n.reuseDatabaseInformation,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(ctx).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    Flexible(
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: list.length,
+                        itemBuilder: (_, i) {
+                          final log = list[i];
+                          final details = [
+                            if (log.qth != null && log.qth!.isNotEmpty) log.qth,
+                            if (log.device != null && log.device!.isNotEmpty)
+                              log.device,
+                            if (log.antenna != null && log.antenna!.isNotEmpty)
+                              log.antenna,
+                          ].join(' · ');
+                          return InkWell(
+                            onTap: () async => _fillFromRecord(log),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                border: i < list.length - 1
+                                    ? Border(
+                                        bottom: BorderSide(
+                                            color: Theme.of(ctx)
+                                                .colorScheme
+                                                .outlineVariant
+                                                .withAlpha(80)))
+                                    : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.history,
+                                      size: 14,
+                                      color: Theme.of(ctx).colorScheme.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _formatTime(log.time),
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Theme.of(ctx)
+                                                  .colorScheme
+                                                  .primary),
+                                        ),
+                                        if (details.isNotEmpty)
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 2),
+                                            child: Text(details,
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Theme.of(ctx)
+                                                        .colorScheme
+                                                        .onSurfaceVariant),
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right,
+                                      size: 16,
+                                      color: Theme.of(ctx)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -237,26 +447,46 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     return CompositedTransformTarget(
       link: _layerLink,
       child: TextFormField(
-          controller: widget.callsignController,
-          focusNode: _effFocus,
-          decoration: InputDecoration(
-            labelText: widget.label,
-            hintText: widget.hintText,
-            border: const OutlineInputBorder(),
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: widget.isCompact ? 10 : 14),
-          ),
-          textInputAction: widget.textInputAction ?? TextInputAction.next,
-          textCapitalization: TextCapitalization.characters,
-          inputFormatters: [UpperCaseTextFormatter()],
+        controller: widget.callsignController,
+        focusNode: _effFocus,
+        enabled: widget.enabled,
+        validator: widget.validator,
+        decoration: InputDecoration(
+          labelText: widget.label,
+          hintText: widget.hintText,
+          border: const OutlineInputBorder(),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(
+              horizontal: 12, vertical: widget.isCompact ? 10 : 14),
+          suffixIcon: _canUseHistory
+              ? Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.search,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                )
+              : null,
         ),
+        textInputAction: widget.textInputAction ?? TextInputAction.next,
+        textCapitalization: TextCapitalization.characters,
+        inputFormatters: [UpperCaseTextFormatter()],
+        onTapOutside: (_) => _effFocus.unfocus(),
+      ),
     );
   }
 }
 
+String _formatTime(String time) {
+  return formatLogTimeForDisplay(time, includeDate: true);
+}
+
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    return TextEditingValue(text: newValue.text.toUpperCase(), selection: newValue.selection);
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+        text: newValue.text.toUpperCase(), selection: newValue.selection);
   }
 }

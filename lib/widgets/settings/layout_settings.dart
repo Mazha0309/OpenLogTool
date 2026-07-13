@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 
 class LayoutSettings extends StatelessWidget {
@@ -15,48 +16,65 @@ class LayoutSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
+    final theme = Theme.of(context);
 
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side:
+            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '布局设置',
-              style: TextStyle(
-                fontSize: isNarrow ? 14 : 16,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Icon(Icons.view_quilt,
+                    color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '布局设置',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: isNarrow ? 8 : 12),
+            SizedBox(height: isNarrow ? 12 : 16),
             _buildSwitchRow(
-              title: '启用宽屏平行布局',
-              subtitle: '在窗口宽度足够时，将添加记录和已有记录并排显示',
-              value: settingsProvider.wideLayoutEnabled,
-              onChanged: (v) => settingsProvider.setWideLayout(v),
+              context: context,
+              switchKey: const Key('limit-workbench-width-toggle'),
+              title: context.l10n.limitWorkbenchWidthSetting,
+              subtitle: context.l10n.limitWorkbenchWidthHint,
+              value: settingsProvider.limitWorkbenchWidth,
+              onChanged: settingsProvider.setLimitWorkbenchWidth,
             ),
-            SizedBox(height: isNarrow ? 10 : 12),
+            const Divider(height: 16),
             _buildSwitchRow(
+              context: context,
               title: '分页显示记录',
-              subtitle: '每5条记录分为一页显示',
+              subtitle: '每 5 条记录分为一页显示',
               value: settingsProvider.paginationEnabled,
               onChanged: (v) => settingsProvider.setPaginationEnabled(v),
             ),
-            SizedBox(height: isNarrow ? 10 : 12),
+            const Divider(height: 16),
             _buildSwitchRow(
-              title: '呼号历史填充',
-              subtitle: '输入已记录过的呼号时，显示历史记录并一键填充全部字段',
+              context: context,
+              title: context.l10n.callsignHistoryFillSetting,
+              subtitle: context.l10n.callsignHistoryFillHint,
               value: settingsProvider.callSignQthLinkEnabled,
               onChanged: (v) => settingsProvider.setCallSignQthLink(v),
             ),
-            SizedBox(height: isNarrow ? 10 : 12),
+            const Divider(height: 16),
             _buildSwitchRow(
-              title: '导入时记录呼号QTH',
-              subtitle: '导入JSON时，将呼号与QTH联动记录到历史数据库',
-              value: settingsProvider.importCallsignQthHistoryEnabled,
-              onChanged: (v) => settingsProvider.setImportCallsignQthHistory(v),
-              isNarrow: isNarrow,
+              context: context,
+              title: context.l10n.duplicateCallsignWarningSetting,
+              subtitle: context.l10n.duplicateCallsignWarningHint,
+              value: settingsProvider.duplicateCallsignWarningEnabled,
+              onChanged: settingsProvider.setDuplicateCallsignWarningEnabled,
             ),
           ],
         ),
@@ -65,12 +83,15 @@ class LayoutSettings extends StatelessWidget {
   }
 
   Widget _buildSwitchRow({
+    required BuildContext context,
+    Key? switchKey,
     required String title,
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
-    bool isNarrow = false,
   }) {
+    final theme = Theme.of(context);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -78,16 +99,22 @@ class LayoutSettings extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: TextStyle(fontSize: isNarrow ? 13 : 14)),
+              Text(
+                title,
+                style: theme.textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 2),
-              Text(subtitle,
-                  style:
-                      const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged),
+        Switch(key: switchKey, value: value, onChanged: onChanged),
       ],
     );
   }

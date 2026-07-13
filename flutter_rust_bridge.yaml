@@ -1,0 +1,4 @@
+rust_input: crate::api
+dart_output: lib/src/bridge
+rust_root: rust/
+dart_root: .

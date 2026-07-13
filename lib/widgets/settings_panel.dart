@@ -1,22 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
-import 'package:openlogtool/providers/log_provider.dart';
-import 'package:openlogtool/providers/dictionary_provider.dart';
-import 'package:openlogtool/providers/sync_provider.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
+import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
-import 'package:openlogtool/widgets/settings/subwidgets.dart';
-import 'package:openlogtool/widgets/hsv_color_painter.dart';
+import 'package:openlogtool/widgets/settings/server_account_settings.dart';
+import 'package:openlogtool/widgets/font_picker_dialog.dart';
+import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -24,402 +22,142 @@ class SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appInfoProvider = Provider.of<AppInfoProvider>(context);
-    final isNarrow = MediaQuery.of(context).size.width < 600;
-    final cardPadding = isNarrow ? 12.0 : 16.0;
+    return LayoutBuilder(builder: (context, constraints) {
+      final isNarrow = constraints.maxWidth < 860;
+      final cardPadding = constraints.maxWidth < 600 ? 12.0 : 16.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '应用设置',
-          style: TextStyle(
-            fontSize: isNarrow ? 18 : 20,
-            fontWeight: FontWeight.bold,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '应用设置',
+            style: TextStyle(
+              fontSize: isNarrow ? 18 : 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
 
-        SizedBox(height: isNarrow ? 16 : 24),
+          SizedBox(height: isNarrow ? 16 : 24),
 
-        ThemeSettings(
-          isNarrow: isNarrow,
-          cardPadding: cardPadding,
-          onPickColor: () => _showColorPicker(context),
-          onPickFont: () => _showFontPicker(context),
-        ),
-
-        const SizedBox(height: 16),
-
-        LayoutSettings(
-          isNarrow: isNarrow,
-          cardPadding: cardPadding,
-        ),
-
-        const SizedBox(height: 16),
-
-        // 服务器同步设置
-        Consumer<SyncProvider>(
-          builder: (context, syncProvider, _) {
-            if (syncProvider.settings.syncEnabled && syncProvider.isLoggedIn) {
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                if (!context.mounted) return;
-                final stillValid = await syncProvider.validateCurrentLogin();
-                if (!stillValid && context.mounted) {
-                  context.showLoggedSnackBar(
-                    const SnackBar(content: Text('登录状态已失效，请重新登录')),
-                  );
-                }
-              });
-            }
-            return Card(
-              child: Padding(
-                padding: EdgeInsets.all(cardPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '服务器同步',
-                          style: TextStyle(
-                            fontSize: isNarrow ? 14 : 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Switch(
-                          value: syncProvider.settings.syncEnabled,
-                          onChanged: (value) =>
-                              syncProvider.setSyncEnabled(value),
-                        ),
-                      ],
-                    ),
-                    if (syncProvider.settings.syncEnabled) ...[
-                      const SizedBox(height: 12),
-                      ServerSettingsFields(syncProvider: syncProvider),
-                      const SizedBox(height: 8),
-                      if (!syncProvider.isLoggedIn) ...[
-                        if (syncProvider.isLoggingIn)
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else
-                          FilledButton(
-                            child: const Text('子账号登录'),
-                            onPressed: () async {
-                              final result = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => const LoginDialog(),
-                              );
-                              if (result == true) {
-                                final ok = await syncProvider.login(
-                                  LoginDialog.username ?? '',
-                                  LoginDialog.password ?? '',
-                                );
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    SnackBar(
-                                      content: Text(ok
-                                          ? '登录成功'
-                                          : '登录失败: ${syncProvider.lastError ?? "未知错误"}'),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                      ] else ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                color: Colors.green, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              '已登录 (${syncProvider.settings.userId ?? ""})',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.green),
-                            ),
-                            const Spacer(),
-                            FilledButton(
-                              child: const Text('退出登录'),
-                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-                              onPressed: () async {
-                                await syncProvider.logout();
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    const SnackBar(content: Text('已退出登录')),
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
-                            labelText: '同步方式',
-                            border: OutlineInputBorder(),
-                          ),
-                          value: syncProvider.settings.syncMode,
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'realtime', child: Text('实时同步')),
-                            DropdownMenuItem(
-                                value: 'interval', child: Text('间隔同步')),
-                            DropdownMenuItem(
-                                value: 'manual', child: Text('手动同步')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) syncProvider.setSyncMode(value);
-                          },
-                        ),
-                        if (syncProvider.settings.syncMode == 'interval') ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<int>(
-                                  decoration: const InputDecoration(
-                                    labelText: '同步间隔',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  value:
-                                      syncProvider.settings.syncIntervalMinutes,
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: 1, child: Text('1 分钟')),
-                                    DropdownMenuItem(
-                                        value: 5, child: Text('5 分钟')),
-                                    DropdownMenuItem(
-                                        value: 10, child: Text('10 分钟')),
-                                    DropdownMenuItem(
-                                        value: 15, child: Text('15 分钟')),
-                                    DropdownMenuItem(
-                                        value: 30, child: Text('30 分钟')),
-                                    DropdownMenuItem(
-                                        value: 60, child: Text('1 小时')),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null)
-                                      syncProvider
-                                          .setSyncIntervalMinutes(value);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            FilledButton(
-                              child: const Text('测试连接'),
-                              onPressed: () async {
-                                final ok = await syncProvider.testConnection();
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    SnackBar(
-                                        content: Text(ok ? '连接成功' : '连接失败')),
-                                  );
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              child: const Text('重置同步基线'),
-                              onPressed: syncProvider.isConfigured
-                                  ? () async {
-                                      await syncProvider.resetSyncBaseline();
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text('已重置同步基线，下次同步将重新上传本地增量')),
-                                        );
-                                      }
-                                    }
-                                  : null,
-                            ),
-                            const SizedBox(width: 8),
-                            if (syncProvider.settings.syncMode != 'manual')
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: syncProvider.settings.syncMode ==
-                                          'realtime'
-                                      ? Colors.green.withValues(alpha: 0.2)
-                                      : Colors.blue.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  syncProvider.settings.syncMode == 'realtime'
-                                      ? '实时同步'
-                                      : '间隔 ${syncProvider.settings.syncIntervalMinutes} 分钟',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: syncProvider.settings.syncMode ==
-                                            'realtime'
-                                        ? Colors.green
-                                        : Colors.blue,
-                                  ),
-                                ),
-                              )
-                            else if (syncProvider.isSyncing)
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            else
-                              FilledButton(
-                                child: const Text('立即同步'),
-                                onPressed: syncProvider.isConfigured
-                                    ? () => _performSync(context, syncProvider)
-                                    : null,
-                              ),
-                          ],
-                        ),
-                        if (syncProvider.settings.lastSyncTime != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            '上次同步: ${_formatDateTime(syncProvider.settings.lastSyncTime!)}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                        if (syncProvider.lastSyncSummary != null) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: syncProvider.lastSyncConflicts > 0
-                                  ? Colors.orange.withValues(alpha: 0.12)
-                                  : Colors.green.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: syncProvider.lastSyncConflicts > 0
-                                    ? Colors.orange.withValues(alpha: 0.35)
-                                    : Colors.green.withValues(alpha: 0.28),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  syncProvider.lastSyncConflicts > 0
-                                      ? '最近一次同步存在冲突'
-                                      : '最近一次同步结果',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: syncProvider.lastSyncConflicts > 0
-                                        ? Colors.orange.shade800
-                                        : Colors.green.shade800,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  syncProvider.lastSyncSummaryText,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        if (syncProvider.lastError != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            syncProvider.lastError!,
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.red),
-                          ),
-                        ],
-                      ],
-                    ],
-                  ],
+          if (isNarrow) ...[
+            ThemeSettings(
+              isNarrow: constraints.maxWidth < 600,
+              cardPadding: cardPadding,
+              onPickColor: () => _showColorPicker(context),
+              onPickFont: () => _showFontPicker(context),
+            ),
+            const SizedBox(height: 16),
+            LayoutSettings(
+              isNarrow: constraints.maxWidth < 600,
+              cardPadding: cardPadding,
+            ),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ThemeSettings(
+                    isNarrow: false,
+                    cardPadding: cardPadding,
+                    onPickColor: () => _showColorPicker(context),
+                    onPickFont: () => _showFontPicker(context),
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
-
-        const SizedBox(height: 16),
-
-        DataOperations(
-          isNarrow: isNarrow,
-          cardPadding: cardPadding,
-          onViewDatabaseLog: () => _showDatabaseLogDialog(context),
-          onExportDatabase: () => _exportDatabase(context),
-          onImportDatabase: () => _showImportDatabaseDialog(context),
-          onViewSnackbarLog: () => _showSnackbarLogDialog(context),
-          onClearAllData: () => _showClearDataConfirmation(context),
-        ),
-
-        const SizedBox(height: 16),
-
-        // 操作按钮
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                child: const Text('恢复默认设置'),
-                onPressed: () => _showResetConfirmation(context),
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-              ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: LayoutSettings(
+                    isNarrow: false,
+                    cardPadding: cardPadding,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                child: const Text('关于应用'),
-                onPressed: () => _showAboutDialog(context),
-              ),
-            ),
-          ],
-        ),
 
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-        // 版本信息
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceVariant
-                .withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(8),
+          ControllerDisplaySettings(cardPadding: cardPadding),
+
+          const SizedBox(height: 16),
+
+          ServerAccountSettings(cardPadding: cardPadding),
+
+          const SizedBox(height: 16),
+
+          DataOperations(
+            isNarrow: isNarrow,
+            cardPadding: cardPadding,
+            onViewDatabaseLog: () => _showDatabaseLogDialog(context),
+            onExportDatabase: () => _exportDatabase(context),
+            onImportDatabase: () => _showImportDatabaseDialog(context),
+            onViewSnackbarLog: () => _showSnackbarLogDialog(context),
+            onClearAllData: () => _showClearDataConfirmation(context),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+
+          const SizedBox(height: 16),
+
+          // 操作按钮
+          Row(
             children: [
-              const Text(
-                '应用信息',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => _showResetConfirmation(context),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      foregroundColor: Colors.white),
+                  child: const Text('恢复默认设置'),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'OpenLogTool v${appInfoProvider.fullVersion}\n'
-                '© 2026 BG5CRL',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  child: const Text('关于应用'),
+                  onPressed: () => _showAboutDialog(context),
                 ),
               ),
             ],
           ),
-        ),
-      ],
-    );
+
+          const SizedBox(height: 16),
+
+          // 版本信息
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '应用信息',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'OpenLogTool v${appInfoProvider.fullVersion}\n'
+                  '© 2026 BG5CRL',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    });
   }
 
   void _showSnackbarLogDialog(BuildContext context) {
-    final entries = Provider.of<SnackbarLogProvider>(context, listen: false).entries;
+    final entries =
+        Provider.of<SnackbarLogProvider>(context, listen: false).entries;
 
     showDialog(
       context: context,
@@ -432,21 +170,25 @@ class SettingsPanel extends StatelessWidget {
               : ListView.separated(
                   shrinkWrap: true,
                   itemCount: entries.length,
-                  separatorBuilder: (context, index) => const Divider(height: 16),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 16),
                   itemBuilder: (context, index) {
                     final entry = entries[index];
-                    final time = '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
+                    final time =
+                        '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        SelectableText(
                           entry.message,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '$time · ${entry.type} · ${entry.source}',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          style:
+                              const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ],
                     );
@@ -463,338 +205,17 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  void _showColorPicker(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-
-    showDialog(
+  Future<void> _showColorPicker(BuildContext context) async {
+    final settingsProvider = context.read<SettingsProvider>();
+    final selectedColor = await showDialog<Color>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('选择主题颜色'),
-        content: SizedBox(
-          width: 300,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 预设颜色
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildColorOption(context, const Color(0xFF2196F3), '淡蓝色',
-                      settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFF4CAF50), '绿色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFFF44336), '红色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFFFF9800), '橙色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFF9C27B0), '紫色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFFFF93B7), '粉色', settingsProvider),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _showCustomColorPicker(context),
-                child: const Text('自定义颜色'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        ],
+      builder: (_) => ThemeColorPickerDialog(
+        initialColor: settingsProvider.themeColor,
       ),
     );
-  }
-
-  Widget _buildColorOption(BuildContext context, Color color, String label,
-      SettingsProvider provider) {
-    return GestureDetector(
-      onTap: () {
-        provider.setThemeColor(color);
-        Navigator.pop(context);
-      },
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCustomColorPicker(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-    HSVColor hsvColor = HSVColor.fromColor(settingsProvider.themeColor);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            Color currentColor = hsvColor.toColor();
-
-            return AlertDialog(
-              title: const Text('自定义颜色'),
-              content: SizedBox(
-                width: 320,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 280,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border:
-                            Border.all(color: Colors.grey.shade400, width: 1),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: GestureDetector(
-                          onPanStart: (details) {
-                            _updateHsvFromTap(
-                                details.localPosition,
-                                const Size(280, 150),
-                                hsvColor,
-                                setState, (newHsv) {
-                              hsvColor = newHsv;
-                              currentColor = hsvColor.toColor();
-                            });
-                          },
-                          onPanUpdate: (details) {
-                            _updateHsvFromTap(
-                                details.localPosition,
-                                const Size(280, 150),
-                                hsvColor,
-                                setState, (newHsv) {
-                              hsvColor = newHsv;
-                              currentColor = hsvColor.toColor();
-                            });
-                          },
-                          child: CustomPaint(
-                            size: const Size(280, 150),
-                            painter: HsvSaturationValuePainter(
-                              hsvColor.hue,
-                              hsvColor.saturation,
-                              hsvColor.value,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: currentColor,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: Colors.grey.shade400, width: 2),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: const TextStyle(
-                                fontFamily: 'monospace', fontSize: 14),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('色相:', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Stack(
-                            alignment: Alignment.centerLeft,
-                            children: [
-                              Container(
-                                height: 20,
-                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFF0000),
-                                      Color(0xFFFFFF00),
-                                      Color(0xFF00FF00),
-                                      Color(0xFF00FFFF),
-                                      Color(0xFF0000FF),
-                                      Color(0xFFFF00FF),
-                                      Color(0xFFFF0000),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SliderTheme(
-                                data: SliderThemeData(
-                                  trackHeight: 20,
-                                  thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 10),
-                                  overlayShape: SliderComponentShape.noOverlay,
-                                  activeTrackColor: Colors.transparent,
-                                  inactiveTrackColor: Colors.transparent,
-                                ),
-                                child: Slider(
-                                  value: hsvColor.hue,
-                                  min: 0,
-                                  max: 360,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      hsvColor = hsvColor.withHue(value);
-                                      currentColor = hsvColor.toColor();
-                                    });
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('透明度:', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Slider(
-                            value: hsvColor.alpha,
-                            min: 0,
-                            max: 1,
-                            activeColor: currentColor,
-                            inactiveColor: Colors.grey.shade300,
-                            onChanged: (value) {
-                              setState(() {
-                                hsvColor = hsvColor.withAlpha(value);
-                                currentColor = hsvColor.toColor();
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildQuickColorButton(const Color(0xFF2196F3), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF2196F3));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF4CAF50), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF4CAF50));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFFF44336), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFFF44336));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFFFF9800), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFFFF9800));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF9C27B0), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF9C27B0));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF607D8B), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF607D8B));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    settingsProvider.setThemeColor(currentColor);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('应用颜色'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _updateHsvFromTap(Offset position, Size size, HSVColor hsvColor,
-      StateSetter setState, Function(HSVColor) onUpdate) {
-    double saturation = (position.dx / size.width).clamp(0.0, 1.0);
-    double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
-    final newHsv =
-        HSVColor.fromAHSV(hsvColor.alpha, hsvColor.hue, saturation, value);
-    setState(() {});
-    onUpdate(newHsv);
-  }
-
-  Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey.shade400, width: 1),
-        ),
-      ),
-    );
+    if (selectedColor != null) {
+      await settingsProvider.setThemeColor(selectedColor);
+    }
   }
 
   void _showResetConfirmation(BuildContext context) {
@@ -809,8 +230,9 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            child: const Text('确认恢复'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () {
               Provider.of<SettingsProvider>(context, listen: false)
                   .resetToDefaults();
@@ -822,6 +244,7 @@ class SettingsPanel extends StatelessWidget {
                 ),
               );
             },
+            child: const Text('确认恢复'),
           ),
         ],
       ),
@@ -833,26 +256,26 @@ class SettingsPanel extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空所有数据'),
-        content: const Text('⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？'),
+        content: const Text(
+            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词库\n• QTH 历史记录\n\n确定要继续吗？'),
         actions: [
           FilledButton(
             child: const Text('取消'),
             onPressed: () => Navigator.pop(context),
           ),
           FilledButton(
-            child: const Text('确认清空'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
               try {
-                final dictionaryProvider =
-                    Provider.of<DictionaryProvider>(context, listen: false);
-                await dictionaryProvider.resetAllData();
+                await RustApi.clearAllData();
                 if (context.mounted) {
                   context.showLoggedSnackBar(
                     const SnackBar(
-                      content: Text('已清空所有数据'),
-                      duration: Duration(seconds: 2),
+                      content: Text('已清空所有数据，请重启应用以重新加载。'),
+                      duration: Duration(seconds: 3),
                     ),
                   );
                 }
@@ -867,6 +290,7 @@ class SettingsPanel extends StatelessWidget {
                 }
               }
             },
+            child: const Text('确认清空'),
           ),
         ],
       ),
@@ -875,9 +299,7 @@ class SettingsPanel extends StatelessWidget {
 
   void _exportDatabase(BuildContext context) async {
     try {
-      final db = DatabaseHelper();
-      final jsonData = await db.exportDatabase();
-      final stats = await db.getDatabaseStats();
+      final jsonData = await RustApi.exportDatabase();
 
       final now = DateTime.now();
       final fileName =
@@ -899,10 +321,9 @@ class SettingsPanel extends StatelessWidget {
 
         if (context.mounted) {
           context.showLoggedSnackBar(
-            SnackBar(
-              content: Text(
-                  '数据库已导出！\n记录: ${stats['logs']} 条\n设备: ${stats['device_dictionary']} 个\n天线: ${stats['antenna_dictionary']} 个\nQTH: ${stats['qth_dictionary']} 个\n呼号: ${stats['callsign_dictionary']} 个\n历史: ${stats['history']} 条'),
-              duration: const Duration(seconds: 5),
+            const SnackBar(
+              content: Text('数据库已导出！'),
+              duration: Duration(seconds: 3),
             ),
           );
         }
@@ -932,12 +353,14 @@ class SettingsPanel extends StatelessWidget {
             onPressed: () => Navigator.pop(dialogContext),
           ),
           FilledButton(
-            child: const Text('继续导入'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await _importDatabase(context);
             },
+            child: const Text('继续导入'),
           ),
         ],
       ),
@@ -955,14 +378,13 @@ class SettingsPanel extends StatelessWidget {
 
       if (result != null && result.files.single.bytes != null) {
         final jsonData = utf8.decode(result.files.single.bytes!);
-        final db = DatabaseHelper();
-        await db.importDatabase(jsonData);
+        await RustApi.importDatabase(jsonData: jsonData);
 
         if (context.mounted) {
           context.showLoggedSnackBar(
             const SnackBar(
-              content: Text('数据库导入成功！'),
-              duration: Duration(seconds: 3),
+              content: Text('数据库导入成功！请重启应用以重新加载数据。'),
+              duration: Duration(seconds: 5),
             ),
           );
         }
@@ -1006,43 +428,11 @@ class SettingsPanel extends StatelessWidget {
   }
 
   Future<String> _buildDatabaseStatus(BuildContext ctx) async {
-    final StringBuffer info = StringBuffer();
-    info.writeln('=== 应用状态 ===');
-
     try {
-      final logProvider = Provider.of<LogProvider>(ctx, listen: false);
-      final dictProvider = Provider.of<DictionaryProvider>(ctx, listen: false);
-
-      info.writeln('点名记录数: ${logProvider.logs.length}');
-      info.writeln('设备词典数: ${dictProvider.deviceDict.length}');
-      info.writeln('天线词典数: ${dictProvider.antennaDict.length}');
-      info.writeln('QTH词典数: ${dictProvider.qthDict.length}');
-      info.writeln('呼号词典数: ${dictProvider.callsignDict.length}');
-
-      final db = DatabaseHelper();
-      final database = await db.database;
-      final tables = await database.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-      info.writeln('');
-      info.writeln('=== 数据库表 ===');
-      for (final table in tables) {
-        final name = table['name'] as String;
-        info.writeln('表: $name');
-        try {
-          final count =
-              await database.rawQuery('SELECT COUNT(*) as c FROM "$name"');
-          info.writeln('  行数: ${count.first['c']}');
-        } catch (_) {
-          info.writeln('  无法读取行数');
-        }
-      }
+      return await RustApi.getDatabaseStatus();
     } catch (e) {
-      info.writeln('');
-      info.writeln('=== 错误 ===');
-      info.writeln('$e');
+      return '读取数据库状态失败: $e';
     }
-
-    return info.toString();
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -1065,7 +455,7 @@ class SettingsPanel extends StatelessWidget {
               const SizedBox(height: 8),
               const Text(
                 '一个专为业余无线电爱好者设计的点名记录工具。'
-                '支持快速记录通联信息，管理设备、天线、呼号词典，'
+                '支持快速记录通联信息，管理设备、天线、呼号词库，'
                 '以及数据导入导出功能。',
               ),
               const SizedBox(height: 12),
@@ -1074,10 +464,9 @@ class SettingsPanel extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const Text('• 快速添加点名记录'),
-              const Text('• 设备、天线、呼号、QTH词典管理'),
+              const Text('• 设备、天线、呼号、QTH 词库管理'),
               const Text('• 数据导入导出 (JSON, Excel)'),
               const Text('• 暗色/亮色主题切换'),
-              const Text('• 宽屏平行布局'),
               const Text('• 自定义主题颜色'),
               const Text('• 一键清除数据库'),
               const SizedBox(height: 12),
@@ -1098,91 +487,21 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  void _showFontPicker(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-
-    showDialog(
+  Future<void> _showFontPicker(BuildContext context) async {
+    final settingsProvider = context.read<SettingsProvider>();
+    final result = await showDialog<FontPickerResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('选择字体'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: settingsProvider.availableFonts.length + 1,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                final isSelected = settingsProvider.fontFamily == null ||
-                    settingsProvider.fontFamily!.isEmpty;
-                return ListTile(
-                  title: const Text('系统默认'),
-                  trailing: isSelected
-                      ? Icon(Icons.check,
-                          color: Theme.of(context).colorScheme.primary)
-                      : null,
-                  selected: isSelected,
-                  onTap: () {
-                    settingsProvider.setFontFamily(null);
-                    Navigator.pop(context);
-                  },
-                );
-              }
-
-              final font = settingsProvider.availableFonts[index - 1];
-              final isSelected = font == settingsProvider.fontFamily;
-              final isBuiltin = font == 'SarasaGothicSC';
-
-              return ListTile(
-                title: Text(
-                  isBuiltin ? '$font (内置)' : font,
-                  style: TextStyle(fontFamily: font),
-                ),
-                trailing: isSelected
-                    ? Icon(Icons.check,
-                        color: Theme.of(context).colorScheme.primary)
-                    : null,
-                selected: isSelected,
-                onTap: () {
-                  settingsProvider.setFontFamily(font);
-                  Navigator.pop(context);
-                },
-              );
-            },
-          ),
-        ),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+      // A global font change rebuilds the whole app. Keeping this route
+      // transition-free ensures the picker is fully gone before that rebuild
+      // starts, instead of competing with the dialog's exit animation.
+      animationStyle: AnimationStyle.noAnimation,
+      builder: (_) => FontPickerDialog(
+        availableFonts: settingsProvider.availableFonts,
+        currentFont: settingsProvider.fontFamily,
       ),
     );
-  }
-
-  Future<void> _performSync(
-      BuildContext context, SyncProvider syncProvider) async {
-    final ok = await syncProvider.runBidirectionalSync();
-
-    if (context.mounted) {
-      if (ok) {
-        context.showLoggedSnackBar(
-          SnackBar(content: Text('同步成功：${syncProvider.lastSyncSummaryText}')),
-        );
-      } else {
-        context.showLoggedSnackBar(
-          SnackBar(content: Text('同步失败: ${syncProvider.lastError ?? "未知错误"}')),
-        );
-      }
-    }
-  }
-
-  String _formatDateTime(DateTime dt) {
-    final local = dt.toLocal();
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
-        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    if (result == null || !context.mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    await settingsProvider.setFontFamily(result.fontFamily);
   }
 }
-

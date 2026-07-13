@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
-import 'package:openlogtool/services/instance_service.dart';
 
 class Session {
   final String sessionId;
@@ -25,10 +24,9 @@ class Session {
   });
 
   static Future<String> generateSessionId() async {
-    final instanceId = await InstanceService.getInstanceId();
     final timestamp = DateTime.now().toUtc().microsecondsSinceEpoch.toString();
     final random = Random.secure().nextInt(1 << 32).toRadixString(16);
-    final raw = '$instanceId:$timestamp:$random';
+    final raw = '$timestamp:$random';
     final bytes = utf8.encode(raw);
     final digest = sha256.convert(bytes);
     return digest.toString().substring(0, 32);

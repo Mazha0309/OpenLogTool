@@ -22,7 +22,7 @@ class HsvSaturationValuePainter extends CustomPainter {
     canvas.drawRect(
         rect, Paint()..shader = saturationGradient.createShader(rect));
 
-    final valueGradient = LinearGradient(
+    const valueGradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: [

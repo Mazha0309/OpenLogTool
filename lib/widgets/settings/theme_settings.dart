@@ -19,89 +19,114 @@ class ThemeSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
+    final theme = Theme.of(context);
 
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '主题设置',
-              style: TextStyle(
-                fontSize: isNarrow ? 14 : 16,
-                fontWeight: FontWeight.bold,
+            Row(
+              children: [
+                Icon(Icons.palette, color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '主题设置',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+            SizedBox(height: isNarrow ? 12 : 16),
+            _buildSettingTile(
+              context,
+              title: '主题颜色',
+              subtitle: '选择应用主色调',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: settingsProvider.themeColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: theme.colorScheme.outlineVariant),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: onPickColor,
+                    child: const Text('选择颜色'),
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: isNarrow ? 8 : 12),
-            // 主题色选择器
-            Row(
-              children: [
-                const Text('主题颜色:'),
-                const Spacer(),
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: settingsProvider.themeColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: onPickColor,
-                  child: const Text('选择颜色'),
-                ),
-              ],
+            const Divider(height: 24),
+            _buildSettingTile(
+              context,
+              title: '暗色模式',
+              subtitle: '切换到暗色主题',
+              trailing: Switch(
+                value: settingsProvider.isDarkMode,
+                onChanged: (value) => settingsProvider.setDarkMode(value),
+              ),
             ),
-            const SizedBox(height: 12),
-            // 暗色模式
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('暗色模式'),
-                      SizedBox(height: 2),
-                      Text('切换到暗色主题',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-                Switch(
-                  value: settingsProvider.isDarkMode,
-                  onChanged: (value) => settingsProvider.setDarkMode(value),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // 字体
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('字体'),
-                      SizedBox(height: 2),
-                      Text('选择应用字体',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-                FilledButton(
-                  onPressed: onPickFont,
-                  child: Text(settingsProvider.fontFamily ?? '系统默认'),
-                ),
-              ],
+            const Divider(height: 24),
+            _buildSettingTile(
+              context,
+              title: '应用字体',
+              subtitle: '选择显示字体',
+              trailing: FilledButton(
+                onPressed: onPickFont,
+                child: Text(settingsProvider.fontFamily ?? '系统默认'),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSettingTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required Widget trailing,
+  }) {
+    final theme = Theme.of(context);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        trailing,
+      ],
     );
   }
 }

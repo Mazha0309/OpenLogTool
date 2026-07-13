@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:openlogtool/database/database_helper.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 
@@ -85,10 +85,17 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
       _hideOverlay();
       return;
     }
-    final db = DatabaseHelper();
-    final history = await db.getCallsignQthHistory(_lastCallsign);
+    final history = await RustApi.getCallsignQthHistory(
+      callsign: _lastCallsign,
+      limit: 3,
+    );
     if (mounted) {
-      setState(() => _history = history);
+      setState(() => _history = history
+          .map((r) => {
+                'qth': r.qth,
+                'recorded_at': r.recordedAt,
+              })
+          .toList());
       if (_focusNode.hasFocus &&
           widget.controller.text.isEmpty &&
           _history.isNotEmpty &&
@@ -106,7 +113,7 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
     final overlay = Overlay.of(context);
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
-    final _historyList = _history;
+    final historyList = _history;
 
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
@@ -170,9 +177,9 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
                     child: ListView.builder(
                       padding: EdgeInsets.zero,
                       shrinkWrap: true,
-                      itemCount: _historyList.length,
+                      itemCount: historyList.length,
                       itemBuilder: (context, index) {
-                        final item = _historyList[index];
+                        final item = historyList[index];
                         final qth = item['qth'] as String;
                         final recordedAt = item['recorded_at'] as String?;
                         String subtitle = '';
@@ -201,7 +208,7 @@ class QthFieldWithHistoryState extends State<QthFieldWithHistory> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 10),
                                 decoration: BoxDecoration(
-                                  border: index < _historyList.length - 1
+                                  border: index < historyList.length - 1
                                       ? Border(
                                           bottom: BorderSide(
                                               color: Theme.of(context)

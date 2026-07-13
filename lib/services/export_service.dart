@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 class ExportSaveResult {
   final String? path;
@@ -95,11 +96,14 @@ class ExportService {
   static String generateFileName(String template, DateTime now) {
     String filename = template;
     filename = filename.replaceAll('{yyyy}', now.year.toString());
-    filename = filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
+    filename =
+        filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
     filename = filename.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
     filename = filename.replaceAll('{HH}', now.hour.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
+    filename =
+        filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
+    filename =
+        filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
     return filename;
   }
 
@@ -122,8 +126,9 @@ class ExportService {
   static Uint8List? generateExcelBytes(
     List<LogEntry> logs,
     ExportSettings settings,
-    DateTime now,
-  ) {
+    DateTime now, {
+    String? sessionTitle,
+  }) {
     final excel = excel_lib.Excel.createExcel();
     final sheet = excel['点名记录'];
 
@@ -134,10 +139,10 @@ class ExportService {
 
     final headerColor =
         excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
-    final headerRowColor =
-        excel_lib.ExcelColor.fromInt(settings.headerRowBackgroundColor.toARGB32());
-    final controllerColor =
-        excel_lib.ExcelColor.fromInt(settings.controllerBackgroundColor.toARGB32());
+    final headerRowColor = excel_lib.ExcelColor.fromInt(
+        settings.headerRowBackgroundColor.toARGB32());
+    final controllerColor = excel_lib.ExcelColor.fromInt(
+        settings.controllerBackgroundColor.toARGB32());
     final alternateColor =
         excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
     const whiteColor = excel_lib.ExcelColor.white;
@@ -151,11 +156,15 @@ class ExportService {
         settings.fontFamily.isEmpty ? null : settings.fontFamily;
 
     // Header
-    String headerText = generateFileName(settings.headerText, now);
+    final normalizedSessionTitle = sessionTitle?.trim() ?? '';
+    final headerText =
+        settings.useSessionTitleAsHeader && normalizedSessionTitle.isNotEmpty
+            ? normalizedSessionTitle
+            : generateFileName(settings.headerText, now);
     sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
     sheet.merge(
       excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
-      excel_lib.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 0),
+      excel_lib.CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: 0),
       customValue: excel_lib.TextCellValue(headerText),
     );
     sheet.row(0).forEach((cell) {
@@ -178,7 +187,20 @@ class ExportService {
     sheet.setRowHeight(0, 30);
 
     // Column headers
-    final headers = ['#', '时间', '呼号', '信号报告', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+    final headers = [
+      '#',
+      '时间',
+      '主控',
+      '呼号',
+      'RST发',
+      'RST收',
+      'QTH',
+      '设备',
+      '功率',
+      '天线',
+      '高度',
+      '备注'
+    ];
     sheet.insertRowIterables(
       headers.map((e) => excel_lib.TextCellValue(e)).toList(),
       1,
@@ -201,8 +223,9 @@ class ExportService {
     });
     sheet.setRowHeight(1, 25);
 
-    // Walk logs in natural order. When the controller changes from
-    // the previous log, print a new controller header row.
+    // A controller row starts each contiguous controller/time segment. If the
+    // same controller appears again after another controller (A → B → A),
+    // create a fresh row so the later stint keeps its own start time.
     int globalIndex = 1;
     int currentRow = 2;
     String? lastController;
@@ -215,7 +238,19 @@ class ExportService {
         final controllerTime = calculateControllerTime(log.time);
 
         final controllerRow = <String>[
-          '点名主控:', controllerTime, log.controller, '', '', '', '', '', '', ''];
+          '点名主控:',
+          controllerTime,
+          log.controller,
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ];
         sheet.insertRowIterables(
           controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(),
           currentRow,
@@ -240,22 +275,25 @@ class ExportService {
         currentRow++;
       }
 
-      final rowColor = settings.useAlternateColors && blockRowColorIndex % 2 == 1
+      final rowColor = settings.useAlternateColors && blockRowColorIndex.isOdd
           ? alternateColor
           : whiteColor;
       blockRowColorIndex++;
 
+      final displayTime = formatLogTimeForDisplay(log.time);
       final rowData = [
         excel_lib.TextCellValue(globalIndex.toString()),
-        excel_lib.TextCellValue(log.time),
+        excel_lib.TextCellValue(displayTime),
+        excel_lib.TextCellValue(log.controller),
         excel_lib.TextCellValue(log.callsign),
         excel_lib.TextCellValue(log.report),
+        excel_lib.TextCellValue(log.rstRcvd),
         excel_lib.TextCellValue(log.qth),
         excel_lib.TextCellValue(log.device),
         excel_lib.TextCellValue(log.power),
         excel_lib.TextCellValue(log.antenna),
         excel_lib.TextCellValue(log.height),
-        excel_lib.TextCellValue(''),
+        excel_lib.TextCellValue(log.remarks),
       ];
       sheet.insertRowIterables(rowData, currentRow);
       sheet.row(currentRow).forEach((cell) {
@@ -303,7 +341,7 @@ class ExportService {
           excel_lib.CellIndex.indexByColumnRow(
               columnIndex: 0, rowIndex: currentRow),
           excel_lib.CellIndex.indexByColumnRow(
-              columnIndex: 9, rowIndex: currentRow),
+              columnIndex: 11, rowIndex: currentRow),
           customValue: excel_lib.TextCellValue(text),
         );
         sheet.row(currentRow).forEach((cell) {
@@ -338,7 +376,7 @@ class ExportService {
   /// 计算控制器时间显示值（比第一条记录早一分钟并取整）。
   static String calculateControllerTime(String timeStr) {
     if (timeStr.isEmpty) return '';
-
+    timeStr = formatLogTimeForDisplay(timeStr);
     final parts = timeStr.split(':');
     if (parts.length < 2) return timeStr;
 
@@ -381,24 +419,15 @@ class ExportService {
 /// JSON 导入解析结果。
 class ImportResult {
   final List<LogEntry> logs;
-  final List<List<String>> callsignQthPairs;
 
-  const ImportResult({
-    required this.logs,
-    required this.callsignQthPairs,
-  });
+  const ImportResult({required this.logs});
 }
 
 /// 从 JSON 字符串解析导入数据。
 /// 支持两种格式：OpenLogTool 原生 JSON（数组）和 HamTool 导出格式（含 `currentRecords` 的 Map）。
-/// [recordCallsignQth] 决定是否收集呼号-QTH 对用于后续历史记录。
-ImportResult parseJsonImport(
-  String jsonString, {
-  bool recordCallsignQth = true,
-}) {
+ImportResult parseJsonImport(String jsonString) {
   final jsonData = json.decode(jsonString);
   final List<LogEntry> importedLogs;
-  final List<List<String>> callsignQthPairs = [];
 
   if (jsonData is Map && jsonData.containsKey('currentRecords')) {
     // HamTool format compatibility
@@ -421,10 +450,6 @@ ImportResult parseJsonImport(
       }
       if (item['qth'] != null) {
         qth = item['qth'].toString();
-      }
-
-      if (recordCallsignQth && callsign.isNotEmpty && qth.isNotEmpty) {
-        callsignQthPairs.add([callsign, qth]);
       }
 
       String report = '59';
@@ -452,15 +477,14 @@ ImportResult parseJsonImport(
       if (item['callsign'] != null) callsign = item['callsign'].toString();
       if (item['qth'] != null) qth = item['qth'].toString();
 
-      if (recordCallsignQth && callsign.isNotEmpty && qth.isNotEmpty) {
-        callsignQthPairs.add([callsign, qth]);
-      }
-
       return LogEntry(
         time: item['time']?.toString() ?? '',
         controller: item['controller']?.toString() ?? '',
         callsign: callsign,
-        report: item['report']?.toString() ?? '59',
+        report: (item['rstSent'] ?? item['rst_sent'] ?? item['report'])
+                ?.toString() ??
+            '59',
+        rstRcvd: (item['rstRcvd'] ?? item['rst_rcvd'])?.toString() ?? '',
         qth: qth,
         device: item['device']?.toString() ?? '',
         power: item['power']?.toString() ?? '',
@@ -469,8 +493,8 @@ ImportResult parseJsonImport(
       );
     }).toList();
   } else {
-    throw FormatException('未知的JSON格式');
+    throw const FormatException('未知的JSON格式');
   }
 
-  return ImportResult(logs: importedLogs, callsignQthPairs: callsignQthPairs);
+  return ImportResult(logs: importedLogs);
 }

@@ -70,6 +70,31 @@ set_target_properties(${BINARY_NAME}
 )
 
 
+# Custom target to build Rust core library
+set(RUST_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../rust")
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  set(RUST_BUILD_FLAGS "")
+  set(RUST_TARGET_DIR "debug")
+else()
+  set(RUST_BUILD_FLAGS "--release")
+  set(RUST_TARGET_DIR "release")
+endif()
+set(RUST_LIB "${RUST_PROJECT_DIR}/target/${RUST_TARGET_DIR}/libopenlogtool_core.so")
+
+# Always ask Cargo to build the core before linking/installing the Flutter
+# bundle. Cargo performs its own incremental dependency tracking, while an
+# OUTPUT-only CMake rule would incorrectly reuse an existing .so after Rust
+# sources or generated FRB bindings changed.
+add_custom_target(rust_core
+  COMMAND cargo build ${RUST_BUILD_FLAGS} --locked --lib
+  BYPRODUCTS "${RUST_LIB}"
+  WORKING_DIRECTORY ${RUST_PROJECT_DIR}
+  COMMENT "Building Rust core library (openlogtool_core, ${CMAKE_BUILD_TYPE})"
+  VERBATIM
+)
+
+add_dependencies(${BINARY_NAME} rust_core)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
@@ -105,6 +130,10 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endforeach(bundled_library)
+
+# Install the Rust core library.
+install(FILES "${RUST_LIB}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
 
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")

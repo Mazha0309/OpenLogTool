@@ -22,65 +22,131 @@ class DataOperations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side:
+            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+      ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '数据操作',
-              style: TextStyle(
-                fontSize: isNarrow ? 14 : 16,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Icon(Icons.storage, color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '数据操作',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
             SizedBox(height: isNarrow ? 8 : 12),
-            _buildTile(Icons.storage, '数据库状态', '查看数据库详细信息和日志',
-                onViewDatabaseLog),
-            _buildTile(Icons.message_outlined, '查看弹窗日志',
-                '查看本次运行期间记录的底部弹窗消息', onViewSnackbarLog),
-            _buildTile(Icons.upload, '导出数据库', '将数据库导出为JSON文件',
-                onExportDatabase),
-            _buildTile(Icons.download, '导入数据库', '从JSON文件导入数据库',
-                onImportDatabase,
-                textColor: Colors.orange),
+            _buildTile(
+              context,
+              icon: Icons.storage,
+              title: '数据库状态',
+              subtitle: '查看数据库表结构和行数统计',
+              onTap: onViewDatabaseLog,
+            ),
+            _buildTile(
+              context,
+              icon: Icons.message_outlined,
+              title: '查看弹窗日志',
+              subtitle: '查看本次运行期间记录的底部弹窗消息',
+              onTap: onViewSnackbarLog,
+            ),
+            _buildTile(
+              context,
+              icon: Icons.upload,
+              title: '导出数据库',
+              subtitle: '将数据库导出为 JSON 备份文件',
+              onTap: onExportDatabase,
+            ),
+            _buildTile(
+              context,
+              icon: Icons.download,
+              title: '导入数据库',
+              subtitle: '从 JSON 备份文件导入并覆盖现有数据',
+              onTap: onImportDatabase,
+              textColor: Colors.orange,
+            ),
             const Divider(),
-            _buildTile(Icons.delete_forever, '清空所有数据',
-                '删除所有点名记录和词典数据', onClearAllData,
-                textColor: Colors.red),
+            _buildTile(
+              context,
+              icon: Icons.delete_forever,
+              title: '清空所有数据',
+              subtitle: '删除所有点名记录和词库数据，不可恢复',
+              onTap: onClearAllData,
+              textColor: theme.colorScheme.error,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTile(IconData icon, String title, String subtitle,
-      VoidCallback onTap,
-      {Color? textColor}) {
+  Widget _buildTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color? textColor,
+  }) {
+    final theme = Theme.of(context);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
-            Icon(icon, color: textColor ?? Colors.grey[700]),
-            const SizedBox(width: 16),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (textColor ?? theme.colorScheme.primary).withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: textColor ?? theme.colorScheme.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(fontSize: 15, color: textColor)),
+                  Text(
+                    title,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                  ),
                   if (subtitle.isNotEmpty)
-                    Text(subtitle,
-                        style: TextStyle(
-                            fontSize: 12, color: textColor ?? Colors.grey)),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: textColor != null
+                            ? textColor.withAlpha(180)
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[400]),
+            Icon(Icons.chevron_right, color: theme.colorScheme.outline),
           ],
         ),
       ),

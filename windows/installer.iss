@@ -2,7 +2,9 @@
 ; 支持自定义安装目录、创建桌面快捷方式、开始菜单、卸载程序
 
 #define MyAppName "OpenLogTool"
+#ifndef MyAppVersion
 #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "BG5CRL"
 #define MyAppPublisherURL "https://github.com/Mazha0309/openlogtool"
 #define MyAppExeName "openlogtool.exe"
@@ -36,6 +38,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Flutter 3.16+ Windows release artifacts are generated under build\windows\x64\...
+; The recursive bundle copy includes openlogtool_core.dll next to the executable.
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Keep compatibility with older Flutter layouts that used build\windows\runner\...
 Source: "..\build\windows\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist

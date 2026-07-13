@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 class LogTable extends StatefulWidget {
-  const LogTable({super.key});
+  const LogTable({
+    super.key,
+    this.readOnly = false,
+    this.conflictedLogIds = const <String>{},
+  });
+
+  final bool readOnly;
+  final Set<String> conflictedLogIds;
 
   @override
   State<LogTable> createState() => _LogTableState();
@@ -17,6 +26,7 @@ class _LogTableState extends State<LogTable> {
   late Map<String, TextEditingController> _controllers;
   int _currentPage = 0;
   static const int _itemsPerPage = 5;
+  List<LogEntry> _lastSeenLogs = [];
 
   final ScrollController _horizontalController = ScrollController();
 
@@ -36,18 +46,31 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _startEditing(int index, LogEntry log) {
+    final logProvider = context.read<LogProvider>();
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(log.id) ||
+        !logProvider.canMutateLog(log)) {
+      return;
+    }
     setState(() {
       _editingIndex = index;
       _controllers = {
-        'time': TextEditingController(text: log.time),
+        'time': TextEditingController(
+          text: formatLogTimeForDisplay(log.time),
+        ),
         'controller': TextEditingController(text: log.controller),
         'callsign': TextEditingController(text: log.callsign),
         'report': TextEditingController(text: log.report),
+        'rstRcvd': TextEditingController(text: log.rstRcvd),
         'qth': TextEditingController(text: log.qth),
         'device': TextEditingController(text: log.device),
         'power': TextEditingController(text: log.power),
         'antenna': TextEditingController(text: log.antenna),
         'height': TextEditingController(text: log.height),
+        'remarks': TextEditingController(text: log.remarks),
+        '_id': TextEditingController(text: log.id),
+        '_sessionId': TextEditingController(text: log.sessionId ?? ''),
+        '_createdAt': TextEditingController(text: log.createdAt),
       };
     });
   }
@@ -63,24 +86,47 @@ class _LogTableState extends State<LogTable> {
     });
   }
 
-  Future<void> _saveEditing(int index) async {
+  Future<void> _saveEditing() async {
+    final logId = _controllers['_id']?.text ?? '';
     final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final currentIndex =
+        logProvider.logs.indexWhere((candidate) => candidate.id == logId);
+    final original = currentIndex < 0 ? null : logProvider.logs[currentIndex];
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(logId) ||
+        original == null ||
+        !logProvider.canMutateLog(original)) {
+      _cancelEditing();
+      return;
+    }
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final time = _controllers['time']?.text ?? '';
+    if (!isValidLogTimeInput(time)) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(context.l10n.logTimeInvalid)),
+      );
+      return;
+    }
     // updateLog preserves sync_id / localId / sessionId / createdAt — only the
     // text fields below are taken from the form.
     final patch = LogEntry(
-      time: _controllers['time']?.text ?? '',
+      id: _controllers['_id']?.text ?? '',
+      sessionId: _controllers['_sessionId']?.text,
+      time: time,
       controller: _controllers['controller']?.text ?? '',
       callsign: _controllers['callsign']?.text ?? '',
       report: _controllers['report']?.text ?? '',
+      rstRcvd: _controllers['rstRcvd']?.text ?? '',
       qth: _controllers['qth']?.text ?? '',
       device: _controllers['device']?.text ?? '',
       power: _controllers['power']?.text ?? '',
       antenna: _controllers['antenna']?.text ?? '',
       height: _controllers['height']?.text ?? '',
+      createdAt: _controllers['_createdAt']?.text,
     );
+    patch.remarks = _controllers['remarks']?.text ?? '';
     try {
-      await logProvider.updateLog(index, patch);
+      await logProvider.updateLogById(logId, patch);
     } catch (e) {
       messenger?.showSnackBar(
         SnackBar(content: Text('保存失败: $e')),
@@ -100,7 +146,10 @@ class _LogTableState extends State<LogTable> {
         padding: const EdgeInsets.all(40),
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -123,7 +172,10 @@ class _LogTableState extends State<LogTable> {
             Text(
               '请在上方表单中添加第一条记录',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -136,10 +188,9 @@ class _LogTableState extends State<LogTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         // 如果高度无限，使用一个默认高度
-        final maxHeight = constraints.maxHeight.isFinite 
-            ? constraints.maxHeight 
-            : 400.0;
-        
+        final maxHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 400.0;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -155,7 +206,8 @@ class _LogTableState extends State<LogTable> {
                     scrollDirection: Axis.horizontal,
                     controller: horizontalController,
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      constraints:
+                          BoxConstraints(minWidth: constraints.maxWidth),
                       child: SingleChildScrollView(
                         child: DataTable(
                           columnSpacing: 16,
@@ -185,13 +237,17 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('时间'), 100),
                             ),
                             DataColumn(
-                              label: _buildCenteredCell(const Text('点名主控'), 120),
+                              label:
+                                  _buildCenteredCell(const Text('点名主控'), 120),
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('呼号'), 120),
                             ),
                             DataColumn(
-                              label: _buildCenteredCell(const Text('信号报告'), 100),
+                              label: _buildCenteredCell(const Text('RST发'), 60),
+                            ),
+                            DataColumn(
+                              label: _buildCenteredCell(const Text('RST收'), 60),
                             ),
                             DataColumn(
                               label: _buildCenteredCell(const Text('QTH'), 150),
@@ -209,10 +265,14 @@ class _LogTableState extends State<LogTable> {
                               label: _buildCenteredCell(const Text('高度'), 80),
                             ),
                             DataColumn(
+                              label: _buildCenteredCell(const Text('备注'), 120),
+                            ),
+                            DataColumn(
                               label: _buildCenteredCell(const Text('操作'), 120),
                             ),
                           ],
-                          rows: _buildTableRows(context, logProvider, settingsProvider),
+                          rows: _buildTableRows(
+                              context, logProvider, settingsProvider),
                         ),
                       ),
                     ),
@@ -221,7 +281,8 @@ class _LogTableState extends State<LogTable> {
               ),
             ),
             // 分页控件
-            if (settingsProvider.paginationEnabled && logProvider.logs.length > _itemsPerPage)
+            if (settingsProvider.paginationEnabled &&
+                logProvider.logs.length > _itemsPerPage)
               _buildPaginationControls(logProvider.logs.length),
           ],
         );
@@ -229,9 +290,17 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider, SettingsProvider settingsProvider) {
+  List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider,
+      SettingsProvider settingsProvider) {
     final logs = logProvider.logs;
     final indexedLogs = logs.asMap().entries.toList().reversed.toList();
+
+    // Reset page when underlying log list is replaced (e.g. session switch).
+    // Use identity comparison because LogProvider rebuilds the list on every load.
+    if (!identical(_lastSeenLogs, logs)) {
+      _lastSeenLogs = logs;
+      _currentPage = 0;
+    }
 
     // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
     List<MapEntry<int, LogEntry>> displayEntries;
@@ -244,7 +313,8 @@ class _LogTableState extends State<LogTable> {
         _currentPage = totalPages - 1;
       }
       final startIndex = _currentPage * _itemsPerPage;
-      final endIndex = (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
+      final endIndex =
+          (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
       displayEntries = indexedLogs.sublist(startIndex, endIndex);
     } else {
       displayEntries = indexedLogs;
@@ -254,6 +324,16 @@ class _LogTableState extends State<LogTable> {
       final originalIndex = entry.value.key;
       final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
+      final isConflicted = widget.conflictedLogIds.contains(log.id);
+      final mutationBlockReason = widget.readOnly
+          ? 'COLLABORATION_SESSION_READ_ONLY'
+          : logProvider.mutationBlockReason(log);
+      final canMutate = mutationBlockReason == null && !isConflicted;
+      final mutationHint = isConflicted
+          ? context.l10n.logConflictReadOnlyHint
+          : mutationBlockReason == null
+              ? ''
+              : _mutationBlockLabel(context, mutationBlockReason);
       // 倒序序号：最新的记录显示最大序号
       final reverseIndex = originalIndex + 1;
 
@@ -271,12 +351,14 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
                   )
-                : _buildCenteredCell(Text(log.time), 100),
+                : _buildCenteredCell(
+                    Text(formatLogTimeForDisplay(log.time)), 100),
           ),
           DataCell(
             isEditing
@@ -287,7 +369,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -303,7 +386,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -313,18 +397,36 @@ class _LogTableState extends State<LogTable> {
           DataCell(
             isEditing
                 ? SizedBox(
-                    width: 100,
+                    width: 60,
                     child: TextField(
                       controller: _controllers['report'],
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
                   )
-                : _buildCenteredCell(Text(log.report), 100),
+                : _buildCenteredCell(Text(log.report), 60),
+          ),
+          DataCell(
+            isEditing
+                ? SizedBox(
+                    width: 60,
+                    child: TextField(
+                      controller: _controllers['rstRcvd'],
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : _buildCenteredCell(Text(log.rstRcvd), 60),
           ),
           DataCell(
             isEditing
@@ -335,7 +437,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -351,7 +454,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -367,7 +471,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -383,7 +488,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -399,7 +505,8 @@ class _LogTableState extends State<LogTable> {
                       style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -409,13 +516,31 @@ class _LogTableState extends State<LogTable> {
           DataCell(
             _buildCenteredCell(
               isEditing
+                  ? SizedBox(
+                      width: 110,
+                      child: TextField(
+                        controller: _controllers['remarks'],
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                        ),
+                      ),
+                    )
+                  : Text(log.remarks),
+              110,
+            ),
+          ),
+          DataCell(
+            _buildCenteredCell(
+              isEditing
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           icon: const Icon(Icons.check, size: 20),
-                          onPressed: () => _saveEditing(originalIndex),
-                          tooltip: '保存',
+                          onPressed: !canMutate ? null : _saveEditing,
+                          tooltip: !canMutate ? mutationHint : '保存',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -437,34 +562,47 @@ class _LogTableState extends State<LogTable> {
                         ),
                       ],
                     )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 20),
-                          onPressed: () => _startEditing(originalIndex, log),
-                          tooltip: '编辑记录',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withValues(alpha: 0.1),
+                  : !canMutate
+                      ? Tooltip(
+                          message: mutationHint,
+                          child: Icon(
+                            Icons.lock_outline,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: () =>
+                                  _startEditing(originalIndex, log),
+                              tooltip: '编辑记录',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.1),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 20),
+                              onPressed: () => _showDeleteConfirmation(
+                                context,
+                                log,
+                              ),
+                              tooltip: '删除记录',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .error
+                                    .withValues(alpha: 0.1),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.delete, size: 20),
-                          onPressed: () => _showDeleteConfirmation(context, originalIndex),
-                          tooltip: '删除记录',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withValues(alpha: 0.1),
-                          ),
-                        ),
-                      ],
-                    ),
               120,
             ),
           ),
@@ -485,7 +623,7 @@ class _LogTableState extends State<LogTable> {
 
   Widget _buildPaginationControls(int totalItems) {
     final totalPages = (totalItems / _itemsPerPage).ceil();
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -493,9 +631,8 @@ class _LogTableState extends State<LogTable> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: _currentPage > 0
-                ? () => setState(() => _currentPage--)
-                : null,
+            onPressed:
+                _currentPage > 0 ? () => setState(() => _currentPage--) : null,
           ),
           const SizedBox(width: 8),
           Text('${_currentPage + 1} / $totalPages'),
@@ -511,7 +648,16 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, int index) {
+  void _showDeleteConfirmation(
+    BuildContext context,
+    LogEntry log,
+  ) {
+    final logProvider = context.read<LogProvider>();
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(log.id) ||
+        !logProvider.canMutateLog(log)) {
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -524,7 +670,13 @@ class _LogTableState extends State<LogTable> {
           ),
           ElevatedButton(
             onPressed: () {
-              Provider.of<LogProvider>(context, listen: false).deleteLog(index);
+              if (widget.readOnly ||
+                  widget.conflictedLogIds.contains(log.id) ||
+                  !logProvider.canMutateLog(log)) {
+                Navigator.pop(context);
+                return;
+              }
+              logProvider.deleteLogById(log.id);
               Navigator.pop(context);
               context.showLoggedSnackBar(
                 const SnackBar(
@@ -542,4 +694,12 @@ class _LogTableState extends State<LogTable> {
       ),
     );
   }
+
+  String _mutationBlockLabel(BuildContext context, String? reason) =>
+      switch (reason) {
+        'COLLABORATION_LOG_NOT_OWNED' => context.l10n.logNotOwnedReadOnlyHint,
+        'COLLABORATION_LOG_AUTHOR_UNKNOWN' =>
+          context.l10n.logAuthorUnknownReadOnlyHint,
+        _ => context.l10n.logSessionReadOnlyHint,
+      };
 }

@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:provider/provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/sync_provider.dart';
+import 'package:openlogtool/screens/session_hub_page.dart';
+import 'package:openlogtool/services/controller_window_service.dart';
+import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
+import 'package:openlogtool/widgets/primary_navigation_rail.dart';
+import 'package:openlogtool/widgets/session_history_dialog.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -21,8 +27,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  bool _isBottomNavVisible = true;
-  double _lastScrollOffset = 0;
+
+  static const _destinations = <_AppDestination>[
+    _AppDestination(_AppSection.workbench, Icons.radio_outlined, Icons.radio),
+    _AppDestination(_AppSection.sessions, Icons.groups_outlined, Icons.groups),
+    _AppDestination(_AppSection.data, Icons.storage_outlined, Icons.storage),
+    _AppDestination(
+        _AppSection.settings, Icons.settings_outlined, Icons.settings),
+  ];
 
   @override
   void initState() {
@@ -30,660 +42,473 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
   }
 
-  Future<void> _initSession() async {
-    final session = context.read<SessionProvider>();
-    final logProvider = context.read<LogProvider>();
-    for (int i = 0; i < 50; i++) {
-      if (session.currentSessionId != null) break;
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-    logProvider.reloadForSession(session.currentSessionId);
-  }
-
-  void _onScroll(ScrollNotification notification) {
-    if (notification is ScrollUpdateNotification) {
-      final currentOffset = notification.metrics.pixels;
-      if (currentOffset > _lastScrollOffset && currentOffset > 50) {
-        if (_isBottomNavVisible) {
-          setState(() => _isBottomNavVisible = false);
-        }
-      } else if (currentOffset < _lastScrollOffset - 10) {
-        if (!_isBottomNavVisible) {
-          setState(() => _isBottomNavVisible = true);
-        }
-      }
-      _lastScrollOffset = currentOffset;
-    }
-  }
-
-  static const List<BottomNavigationBarItem> _navItems = <BottomNavigationBarItem>[
-    BottomNavigationBarItem(
-      icon: Icon(Icons.add_circle_outline, size: 24),
-      activeIcon: Icon(Icons.add_circle, size: 24),
-      label: '添加记录',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.import_export, size: 24),
-      activeIcon: Icon(Icons.import_export, size: 24),
-      label: '导入导出',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.settings, size: 24),
-      activeIcon: Icon(Icons.settings, size: 24),
-      label: '设置',
-    ),
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
+  @override
+  void dispose() {
+    ControllerWindowService.closeAll().catchError((Object error) {
+      debugPrint('[ControllerWindow] close failed: $error');
     });
+    super.dispose();
   }
 
-  void _showShareOptions(BuildContext context) {
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final sessionId = sessionProvider.currentSessionId;
-    if (sessionId == null) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('分享'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.group_add),
-              title: const Text('协作分享'),
-              subtitle: const Text('生成邀请码，凭码加入后双向同步'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _shareSession(context, sessionId);
-              },
+  Future<void> _initSession() async {
+    final sp = context.read<SessionProvider>();
+    final lp = context.read<LogProvider>();
+    await sp.ready;
+    if (!mounted) return;
+    if (sp.currentSessionId == null) {
+      var recordName = '';
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(ctx.l10n.newRecordName),
+          content: TextField(
+            autofocus: true,
+            onChanged: (value) => recordName = value,
+            decoration: InputDecoration(
+              hintText: ctx.l10n.newRecordNameHint,
+              border: const OutlineInputBorder(),
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text('公开链接'),
-              subtitle: const Text('生成只读链接，无需登录查看'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showLiveShareTimeDialog(context);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _generateAndShowLink(BuildContext context, SyncProvider syncProvider, String sessionId, int expiresIn) async {
-    showDialog(
-      context: context,
-      builder: (ctx) => const AlertDialog(
-        title: Text('Live Share'),
-        content: Text('正在生成分享链接...'),
-        actions: [],
-      ),
-    );
-
-    final result = await syncProvider.createLiveShareLink(sessionId, expiresIn: expiresIn);
-
-    if (context.mounted) {
-      Navigator.pop(context);
-      if (result != null) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('分享链接'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(result.url, style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 8),
-                Text('分享码: ${result.shareCode}'),
-                if (result.expiresAt != null) ...[
-                  const SizedBox(height: 4),
-                  Text('过期时间: ${result.expiresAt}', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                child: const Text('复制链接'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: result.url));
-                  ctx.showLoggedSnackBar(const SnackBar(content: Text('链接已复制')));
-                  Navigator.pop(ctx);
-                },
-              ),
-              TextButton(
-                child: const Text('复制分享码'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: result.shareCode));
-                  ctx.showLoggedSnackBar(const SnackBar(content: Text('已复制')));
-                },
-              ),
-              FilledButton(
-                child: const Text('关闭'),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ],
-          ),
-        );
-      } else {
-        context.showLoggedSnackBar(const SnackBar(content: Text('获取分享链接失败')));
-      }
-    }
-  }
-
-  void _showLiveShareTimeDialog(BuildContext context) async {
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-    final sessionId = sessionProvider.currentSessionId;
-    if (sessionId == null) return;
-
-    int selectedHours = 24;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('公开链接'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('选择过期时间：'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [1, 3, 6, 12, 24, 0].map((h) => ChoiceChip(
-                  label: Text(h == 0 ? '永不过期' : '${h}小时'),
-                  selected: selectedHours == h,
-                  onSelected: (_) => setState(() => selectedHours = h),
-                )).toList(),
-              ),
-            ],
           ),
           actions: [
-            TextButton(
-              child: const Text('取消'),
-              onPressed: () => Navigator.pop(ctx),
-            ),
             FilledButton(
-              child: const Text('生成链接'),
+              child: Text(ctx.l10n.startNewRecord),
               onPressed: () async {
-                Navigator.pop(ctx);
-                await _generateAndShowLink(context, syncProvider, sessionId, selectedHours);
+                final name = recordName.trim();
+                await sp.startNewSession(title: name.isEmpty ? null : name);
+                await lp.reloadForSession(sp.currentSessionId);
+                if (ctx.mounted) Navigator.pop(ctx);
               },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _shareSession(BuildContext ctx, String sessionId) async {
-    final syncProvider = Provider.of<SyncProvider>(ctx, listen: false);
-    if (!syncProvider.isLoggedIn) {
-      if (ctx.mounted) {
-        ctx.showLoggedSnackBar(const SnackBar(content: Text('请先在同步设置中登录账号')));
-      }
-      return;
-    }
-    await syncProvider.refreshShares();
-    final existing = syncProvider.shares
-        .where((s) => s.sessionId == sessionId && s.isPending)
-        .toList();
-    final shareCode = existing.isNotEmpty
-        ? existing.first.shareCode
-        : await syncProvider.createShareForSession(sessionId);
-    if (!ctx.mounted) return;
-    if (shareCode != null) {
-      showDialog(
-        context: ctx,
-        builder: (dCtx) => AlertDialog(
-          title: const Text('协作分享码'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('将此分享码发给合作方:'),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(dCtx).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  shareCode,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 4,
-                    fontFamily: 'monospace',
-                    color: Theme.of(dCtx).colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('复制'),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: shareCode));
-                dCtx.showLoggedSnackBar(const SnackBar(content: Text('已复制')));
-              },
-            ),
-            FilledButton(
-              child: const Text('关闭'),
-              onPressed: () => Navigator.pop(dCtx),
             ),
           ],
         ),
       );
-    } else {
-      ctx.showLoggedSnackBar(const SnackBar(content: Text('分享创建失败，请检查网络连接')));
-    }
-  }
-
-  void _showJoinShareDialog(BuildContext context) {
-    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-    if (!syncProvider.isLoggedIn) {
-      context.showLoggedSnackBar(const SnackBar(content: Text('请先在同步设置中登录账号')));
       return;
     }
-    syncProvider.refreshShares();
-    final codeController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          final joined = syncProvider.activeShares
-              .where((s) => s.shareCode.isNotEmpty)
-              .toList();
-          return AlertDialog(
-            title: const Text('合作管理'),
-            content: SizedBox(
-              width: 300,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (joined.isNotEmpty) ...[
-                    const Text('当前合作:',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ...joined.map((s) => ListTile(
-                          dense: true,
-                          leading: const Icon(Icons.group, size: 20),
-                          title: Text(s.shareCode,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontWeight: FontWeight.bold)),
-                          subtitle: Text(s.sessionId),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.exit_to_app,
-                                color: Colors.red, size: 20),
-                            tooltip: '退出',
-                            onPressed: () async {
-                              await syncProvider.revokeShare(s.shareId);
-                              await syncProvider.refreshShares();
-                              setState(() {});
-                            },
-                          ),
-                        )),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                  ],
-                  const Text('输入分享码加入新的合作:'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: codeController,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      hintText: '6位分享码',
-                      border: OutlineInputBorder(),
-                    ),
-                    style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 18,
-                        letterSpacing: 4),
-                    maxLength: 6,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                child: const Text('关闭'),
-                onPressed: () {
-                  codeController.dispose();
-                  Navigator.pop(ctx);
-                },
-              ),
-              FilledButton(
-                child: const Text('加入'),
-                onPressed: () async {
-                  final code = codeController.text.trim().toUpperCase();
-                  if (code.length < 6) {
-                    ctx.showLoggedSnackBar(
-                        const SnackBar(content: Text('请输入有效的6位分享码')));
-                    return;
-                  }
-                  final result = await syncProvider.joinShare(code);
-                  if (!ctx.mounted) return;
-                  if (result.success) {
-                    codeController.clear();
-                    syncProvider.triggerSync();
-                    await syncProvider.refreshShares();
-                    setState(() {});
-                    if (ctx.mounted) {
-                      ctx.showLoggedSnackBar(
-                          const SnackBar(content: Text('已加入合作')));
-                    }
-                  } else {
-                    ctx.showLoggedSnackBar(
-                        SnackBar(content: Text(result.error ?? '加入失败')));
-                  }
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    lp.reloadForSession(sp.currentSessionId);
+  }
+
+  void _onItemTapped(int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _selectedIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
+    final primarySidebarExpanded = context.select<SettingsProvider, bool>(
+      (settings) => settings.primarySidebarExpanded,
+    );
+    final pages = <Widget>[
+      const _WorkbenchPage(),
+      SessionHubPage(
+        onSessionOpened: () {
+          if (mounted) setState(() => _selectedIndex = 0);
+        },
+      ),
+      const ImportExportPage(),
+      const SettingsPage(),
+    ];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OpenLogTool'),
-        centerTitle: true,
+        title: Text(_destinations[_selectedIndex].label(context.l10n)),
+        centerTitle: false,
+        actions: const [_AppBarSyncStatus(), SizedBox(width: 8)],
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          _onScroll(notification);
-          return false;
-        },
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            AddRecordPage(onSharePressed: () => _showShareOptions(context), onJoinPressed: () => _showJoinShareDialog(context)),
-            const ImportExportPage(),
-            const SettingsPage(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0, end: _isBottomNavVisible ? 1 : 0),
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        builder: (context, value, child) {
-          return ClipRect(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              heightFactor: value,
-              child: child,
-            ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = IndexedStack(
+            index: _selectedIndex,
+            children: pages,
+          );
+          if (constraints.maxWidth < 720) return content;
+          final isDesktop = constraints.maxWidth >= 1200;
+          return Row(
+            children: [
+              PrimaryNavigationRail(
+                isDesktop: isDesktop,
+                expanded: primarySidebarExpanded,
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: _onItemTapped,
+                onExpandedChanged:
+                    context.read<SettingsProvider>().setPrimarySidebarExpanded,
+                destinations: [
+                  for (final destination in _destinations)
+                    NavigationRailDestination(
+                      icon: Icon(destination.icon),
+                      selectedIcon: Icon(destination.selectedIcon),
+                      label: Text(destination.label(context.l10n)),
+                    ),
+                ],
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: content),
+            ],
           );
         },
-        child: BottomNavigationBar(
-          items: _navItems,
-          currentIndex: _selectedIndex,
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          unselectedItemColor:
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-          onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed,
-          showUnselectedLabels: true,
+      ),
+      bottomNavigationBar: MediaQuery.sizeOf(context).width < 720
+          ? NavigationBar(
+              key: const Key('mobile-navigation'),
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onItemTapped,
+              destinations: [
+                for (final destination in _destinations)
+                  NavigationDestination(
+                    icon: Icon(destination.icon),
+                    selectedIcon: Icon(destination.selectedIcon),
+                    label: destination.label(context.l10n),
+                  ),
+              ],
+            )
+          : null,
+    );
+  }
+}
+
+enum _AppSection { workbench, sessions, data, settings }
+
+class _AppDestination {
+  const _AppDestination(this.section, this.icon, this.selectedIcon);
+
+  final _AppSection section;
+  final IconData icon;
+  final IconData selectedIcon;
+
+  String label(AppLocalizations l10n) => switch (section) {
+        _AppSection.workbench => l10n.navWorkbench,
+        _AppSection.sessions => l10n.navSessions,
+        _AppSection.data => l10n.navData,
+        _AppSection.settings => l10n.navSettings,
+      };
+}
+
+class _WorkbenchPage extends StatelessWidget {
+  const _WorkbenchPage();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+        children: [
+          _WorkbenchStatusBar(),
+          Expanded(child: AddRecordPage()),
+        ],
+      );
+}
+
+class _WorkbenchStatusBar extends StatelessWidget {
+  const _WorkbenchStatusBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionProvider>().currentSession;
+    final collaboration = context.watch<CollaborationProvider>();
+    final theme = Theme.of(context);
+    return Container(
+      key: const Key('workbench-status-bar'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _StatusLabel(
+            icon: Icons.event_note,
+            text: session?.title ?? context.l10n.workbenchNoSession,
+          ),
+          _StatusLabel(
+            icon: collaboration.binding == null
+                ? Icons.person_outline
+                : Icons.groups_outlined,
+            text: collaboration.binding == null
+                ? context.l10n.workbenchLocalRecording
+                : context.l10n.collaborationState(
+                    collaborationStateLabel(
+                      context.l10n,
+                      collaboration.state.name,
+                    ),
+                  ),
+          ),
+          if (collaboration.binding != null) ...[
+            _StatusLabel(
+              icon: Icons.sync,
+              text: context.l10n.pendingSyncCount(collaboration.pendingCount),
+            ),
+            _StatusLabel(
+              icon: Icons.warning_amber,
+              text: context.l10n.conflictCount(collaboration.conflictCount),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AppBarSyncStatus extends StatelessWidget {
+  const _AppBarSyncStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final collaboration = context.watch<CollaborationProvider>();
+    final local = collaboration.binding == null;
+    final online =
+        collaboration.transportPhase == CollaborationTransportPhase.online;
+    final reconnecting = collaboration.transportPhase ==
+            CollaborationTransportPhase.connecting ||
+        collaboration.transportPhase == CollaborationTransportPhase.backingOff;
+    final statusLabel = collaboration.state == CollaborationState.ready
+        ? online
+            ? context.l10n.connectionConnected
+            : reconnecting
+                ? context.l10n.connectionReconnecting
+                : context.l10n.connectionOffline
+        : collaborationStateLabel(
+            context.l10n,
+            collaboration.state.name,
+          );
+    return Tooltip(
+      message: local
+          ? context.l10n.localSessionTooltip
+          : context.l10n.collaborationStatusTooltip(
+              statusLabel,
+              collaboration.pendingCount,
+            ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Icon(
+          local
+              ? Icons.cloud_off_outlined
+              : online
+                  ? Icons.cloud_done_outlined
+                  : reconnecting
+                      ? Icons.sync
+                      : Icons.cloud_off,
+          color: local
+              ? null
+              : online
+                  ? Colors.green
+                  : reconnecting
+                      ? Colors.orange
+                      : Theme.of(context).colorScheme.error,
         ),
       ),
     );
   }
 }
 
-class AddRecordPage extends StatelessWidget {
-  final VoidCallback? onSharePressed;
-  final VoidCallback? onJoinPressed;
+class _StatusLabel extends StatelessWidget {
+  const _StatusLabel({required this.icon, required this.text});
 
-  const AddRecordPage({super.key, this.onSharePressed, this.onJoinPressed});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 5),
+          Text(text, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
+}
+
+class AddRecordPage extends StatelessWidget {
+  const AddRecordPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final logProvider = Provider.of<LogProvider>(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWideScreen =
-            constraints.maxWidth > 1200 && settingsProvider.wideLayoutEnabled;
-
-        if (isWideScreen) {
-          return _buildWideLayout(context, logProvider);
-        } else {
-          return _buildNarrowLayout(context, logProvider);
-        }
-      },
+    final currentSession = context.watch<SessionProvider>().currentSession;
+    final sessionClosed =
+        currentSession != null && currentSession.status != 'active';
+    final readOnly = logProvider.currentSessionReadOnly || sessionClosed;
+    final conflictedLogIds =
+        context.watch<CollaborationProvider>().conflictedLogIds;
+    final content = _buildStackedLayout(
+      context,
+      logProvider,
+      conflictedLogIds,
+      readOnly,
+      currentSession?.sessionId,
+    );
+    if (!readOnly) return content;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_outline, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  sessionClosed
+                      ? context.l10n.historySessionReadOnly
+                      : context.l10n.sharedDraftReadOnly,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: content),
+      ],
     );
   }
 
-  Widget _buildWideLayout(BuildContext context, LogProvider logProvider) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 1,
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            '添加点名记录',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (onSharePressed != null)
-                                IconButton(
-                                  icon: const Icon(Icons.share, size: 20),
-                                  tooltip: '分享',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  onPressed: onSharePressed,
-                                ),
-                              if (onJoinPressed != null)
-                                IconButton(
-                                  icon: const Icon(Icons.group_add, size: 20),
-                                  tooltip: '加入合作',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  onPressed: onJoinPressed,
-                                ),
-                            ],
-                          ),
-                        ],
-                        ),
-                      const SizedBox(height: 16),
-                      const SizedBox(
-                        width: double.infinity,
-                        child: LogForm(),
-                      ),
-                    ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 2,
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+  Widget _buildStackedLayout(
+    BuildContext context,
+    LogProvider logProvider,
+    Set<String> conflictedLogIds,
+    bool readOnly,
+    String? currentSessionId,
+  ) {
+    final stackedContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildLogHeader(context, logProvider),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '已有记录',
-                      style: TextStyle(
-                        fontSize: 20,
+                    Text(
+                      context.l10n.currentRecord,
+                      style: const TextStyle(
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const LogTable(),
+                    const Spacer(),
+                    _currentOrdinalBadge(context, logProvider.logCount),
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                LogForm(
+                  key: ValueKey('log-form-${currentSessionId ?? 'none'}'),
+                  readOnly: readOnly,
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNarrowLayout(BuildContext context, LogProvider logProvider) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        '添加点名记录',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (onSharePressed != null)
-                            IconButton(
-                              icon: const Icon(Icons.share, size: 20),
-                              tooltip: '分享',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              onPressed: onSharePressed,
-                            ),
-                          if (onJoinPressed != null)
-                            IconButton(
-                              icon: const Icon(Icons.group_add, size: 20),
-                              tooltip: '加入合作',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              onPressed: onJoinPressed,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const LogForm(),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildLogHeader(context, logProvider),
-                  const SizedBox(height: 12),
-                  const Text(
-                    '已有记录',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const LogTable(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogHeader(BuildContext context, LogProvider logProvider) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-          child: Consumer<LogProvider>(
-            builder: (_, lp, __) => Chip(label: Text('${lp.logCount} 条记录')),
           ),
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildLogHeader(context, readOnly),
+                const SizedBox(height: 12),
+                const Text(
+                  '已有记录',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                LogTable(
+                  readOnly: readOnly,
+                  conflictedLogIds: conflictedLogIds,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    final limitWidth = context.select<SettingsProvider, bool>(
+      (settings) => settings.limitWorkbenchWidth,
+    );
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: limitWidth
+          ? Center(
+              child: ConstrainedBox(
+                key: const Key('workbench-width-limit'),
+                constraints: const BoxConstraints(maxWidth: 1440),
+                child: stackedContent,
+              ),
+            )
+          : stackedContent,
+    );
+  }
+
+  Widget _currentOrdinalBadge(BuildContext context, int savedCount) {
+    final colors = Theme.of(context).colorScheme;
+    final ordinal = context
+            .watch<CollaborationProvider>()
+            .liveDraftSnapshot
+            ?.currentOrdinal ??
+        savedCount + 1;
+    return Container(
+      key: const Key('current-ordinal-badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        context.l10n.currentOrdinal(ordinal),
+        style: TextStyle(
+          color: colors.onPrimaryContainer,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogHeader(
+    BuildContext context,
+    bool readOnly,
+  ) {
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        Consumer<LogProvider>(
+          builder: (_, lp, __) => Chip(label: Text('${lp.logCount} 条记录')),
+        ),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             Consumer<LogProvider>(
               builder: (_, lp, __) => FilledButton(
-                onPressed: lp.canUndo
+                onPressed: !readOnly && lp.canUndo
                     ? () => _showUndoConfirmation(context)
                     : null,
                 child: const Text('撤销'),
               ),
             ),
-            const SizedBox(width: 8),
-            Consumer<LogProvider>(
-              builder: (_, lp, __) => FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-                onPressed: lp.logCount > 0
-                    ? () => _showClearConfirmation(context)
-                    : null,
-                child: const Text('清空'),
-              ),
+            FilledButton.tonalIcon(
+              key: const Key('start-new-record'),
+              onPressed: () => _showNewSessionNameDialog(context),
+              icon: const Icon(Icons.note_add_outlined),
+              label: Text(context.l10n.startNewRecord),
             ),
-            const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.history),
-              tooltip: '历史记录',
-              onPressed: () => _showHistoryDialog(context),
+              tooltip: context.l10n.historySessions,
+              onPressed: () => showSessionHistoryDialog(context),
             ),
           ],
         ),
@@ -691,174 +516,58 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  void _showHistoryDialog(BuildContext context) async {
+  Future<void> _showNewSessionNameDialog(BuildContext context) async {
+    var recordName = '';
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final sessions = await logProvider.getHistory();
-
-    if (sessions.isEmpty) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('暂无历史记录')));
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-
-    showDialog(
+    await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('历史记录'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: sessions.length,
-            itemBuilder: (_, index) {
-              final item = sessions[index];
-              final sessionId = item['session_id'] as String;
-              final name = item['title'] as String;
-              final status = item['status'] as String;
-              final createdAt = DateTime.parse(item['created_at'] as String);
-
-              return ListTile(
-                title: Text(name),
-                subtitle: Text(
-                  '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
-                  ' · ${status == "active" ? "进行中" : "已关闭"}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.open_in_new),
-                      tooltip: '打开',
-                      onPressed: () async {
-                        await logProvider.switchToSession(sessionId);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (context.mounted) {
-                          context.showLoggedSnackBar(
-                            SnackBar(content: Text('已切换到: $name')),
-                          );
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      tooltip: '删除',
-                      onPressed: () => _showDeleteSessionConfirmation(ctx, logProvider, sessionId, name),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_forever, color: Colors.red),
-                      tooltip: '彻底删除',
-                      onPressed: () async {
-                        await logProvider.hardDeleteSession(sessionId);
-                        Navigator.pop(ctx);
-                        if (context.mounted) _showHistoryDialog(context);
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          FilledButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteSessionConfirmation(BuildContext context, LogProvider logProvider, String sessionId, String name) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除 "$name" 吗？'),
-        actions: [
-          TextButton(child: const Text('取消'), onPressed: () => Navigator.pop(ctx)),
-          TextButton(
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
-            onPressed: () async {
-              await logProvider.hardDeleteSession(sessionId);
-              Navigator.pop(ctx);
-              Navigator.pop(context); // close history dialog
-              if (context.mounted) {
-                _showHistoryDialog(context);
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showClearConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认清空记录'),
-        content: const Text('您确定要清空所有点名记录吗？此操作不可撤销！'),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            child: const Text('确认清空'),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(context);
-              _showNewSessionNameDialog(context);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showNewSessionNameDialog(BuildContext context) {
-    final controller = TextEditingController();
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('新记录名称'),
+        title: Text(ctx.l10n.newRecordName),
         content: TextField(
-          controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入本次记录名称（可留空）',
-            border: OutlineInputBorder(),
+          onChanged: (value) => recordName = value,
+          decoration: InputDecoration(
+            hintText: ctx.l10n.newRecordNameHint,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
-            child: const Text('取消'),
+            child: Text(ctx.l10n.cancel),
             onPressed: () => Navigator.pop(ctx),
           ),
           FilledButton(
-            child: const Text('开始新记录'),
+            child: Text(ctx.l10n.startNewRecord),
             onPressed: () async {
               try {
-                final name = controller.text.trim();
-                await sessionProvider.startNewSession(title: name.isEmpty ? null : name);
-                await logProvider.reloadForSession(sessionProvider.currentSessionId);
+                final name = recordName.trim();
+                await sessionProvider.startNewSession(
+                    title: name.isEmpty ? null : name);
+                await logProvider
+                    .reloadForSession(sessionProvider.currentSessionId);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   context.showLoggedSnackBar(
-                    SnackBar(content: Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
+                    SnackBar(
+                      content: Text(
+                        context.l10n.newRecordStarted(
+                          name.isEmpty ? context.l10n.automaticName : name,
+                        ),
+                      ),
+                    ),
                   );
                 }
               } catch (e, st) {
                 debugPrint('[SessionDialog] ERROR: $e\n$st');
-                Navigator.pop(ctx);
+                if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   context.showLoggedSnackBar(
-                    SnackBar(content: Text('创建新记录失败: $e'), backgroundColor: Colors.red),
+                    SnackBar(
+                      content: Text(context.l10n.createNewRecordFailed('$e')),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -897,66 +606,27 @@ class ImportExportPage extends StatelessWidget {
   const ImportExportPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWideScreen =
-            constraints.maxWidth > 900 && settingsProvider.wideLayoutEnabled;
-
-        if (isWideScreen) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: ExportPanel(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Flexible(
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: DictionaryManager(),
-                    ),
-                  ),
-                ),
-              ],
+  Widget build(BuildContext context) => const SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(12.0),
+                child: ExportPanel(),
+              ),
             ),
-          );
-        } else {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: ExportPanel(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: DictionaryManager(),
-                  ),
-                ),
-              ],
+            SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(12.0),
+                child: DictionaryManager(),
+              ),
             ),
-          );
-        }
-      },
-    );
-  }
+          ],
+        ),
+      );
 }
 
 class SettingsPage extends StatelessWidget {
@@ -968,8 +638,16 @@ class SettingsPage extends StatelessWidget {
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 600;
         return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 16, vertical: isNarrow ? 12 : 16),
-          child: SettingsPanel(),
+          padding: EdgeInsets.symmetric(
+            horizontal: isNarrow ? 8 : 24,
+            vertical: isNarrow ? 12 : 24,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: const SettingsPanel(),
+            ),
+          ),
         );
       },
     );

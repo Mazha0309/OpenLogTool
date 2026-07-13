@@ -27,21 +27,9 @@ class AppConfig {
     return parts.isNotEmpty ? parts[0] : appVersion;
   }
   
-  static String get commitHash {
-    final parts = appVersion.split('-');
-    if (parts.length >= 2) {
-      return parts[1];
-    }
-    return _commitHash;
-  }
-  
-  static String get buildNumber {
-    final parts = appVersion.split('-');
-    if (parts.length >= 3) {
-      return parts[2];
-    }
-    return _buildNumber;
-  }
+  static String get commitHash => _commitHash;
+
+  static String get buildNumber => _buildNumber;
   
   static String get fullVersion => appVersion;
 
@@ -55,36 +43,36 @@ class AppConfig {
     return 'local';
   }
 
-  static List<String> getSystemFonts() {
-    final List<String> fonts = [];
-    
+  static Future<List<String>> getSystemFonts() async {
+    final Set<String> fonts = {};
+
     try {
       if (Platform.isLinux) {
-        final result = Process.runSync('fc-list', ['--format=%{family}\n']);
+        final result = await Process.run('fc-list', ['--format=%{family}\n']);
         if (result.exitCode == 0) {
           final output = (result.stdout as String).trim();
           final lines = output.split('\n');
           for (final line in lines) {
-            final font = line.trim();
-            if (font.isNotEmpty && !fonts.contains(font)) {
-              fonts.add(font);
+            final primary = _extractPrimaryFamily(line);
+            if (primary != null) {
+              fonts.add(primary);
             }
           }
         }
       } else if (Platform.isMacOS) {
-        final result = Process.runSync('system_profiler', ['SPFontsDataType']);
+        final result = await Process.run('system_profiler', ['SPFontsDataType']);
         if (result.exitCode == 0) {
           final regex = RegExp(r'^\s*(.+?):\s*$', multiLine: true);
           final matches = regex.allMatches(result.stdout as String);
           for (final match in matches) {
             final font = match.group(1)?.trim();
-            if (font != null && font.isNotEmpty && !fonts.contains(font)) {
+            if (font != null && font.isNotEmpty && !_isStyleVariant(font)) {
               fonts.add(font);
             }
           }
         }
       } else if (Platform.isWindows) {
-        final regResult = Process.runSync(
+        final regResult = await Process.run(
           'reg',
           ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'],
         );
@@ -93,7 +81,7 @@ class AppConfig {
           final matches = regex.allMatches(regResult.stdout as String);
           for (final match in matches) {
             final font = match.group(1)?.trim();
-            if (font != null && font.isNotEmpty && !fonts.contains(font)) {
+            if (font != null && font.isNotEmpty && !_isStyleVariant(font)) {
               fonts.add(font);
             }
           }
@@ -101,19 +89,50 @@ class AppConfig {
       }
     } catch (_) {}
 
-    // 添加内置更纱黑体作为默认选项
-    if (!fonts.contains('SarasaGothicSC')) {
-      fonts.insert(0, 'SarasaGothicSC');
-    }
-
     if (fonts.isEmpty) {
       fonts.addAll(['SarasaGothicSC', 'Roboto', 'Arial', 'sans-serif']);
     }
 
-    fonts.sort();
-    // 将更纱黑体和系统默认移到最前面
-    fonts.remove('SarasaGothicSC');
-    fonts.insert(0, 'SarasaGothicSC');
-    return fonts;
+    fonts.add('SarasaGothicSC');
+
+    final sorted = fonts.toList()..sort();
+    sorted.remove('SarasaGothicSC');
+    sorted.insert(0, 'SarasaGothicSC');
+    return sorted;
+  }
+
+  /// 从 fc-list 的一行输出里提取主 family 名。
+  /// 例如 "Inter,Inter ExtraLight" 只保留 "Inter"；过滤掉变体。
+  static String? _extractPrimaryFamily(String line) {
+    final raw = line.trim();
+    if (raw.isEmpty) return null;
+
+    final parts = raw.split(',');
+    for (final part in parts) {
+      final family = part.trim();
+      if (family.isEmpty) continue;
+      if (_isStyleVariant(family)) continue;
+      return family;
+    }
+    return null;
+  }
+
+  /// 把用户保存的字体名标准化为主 family。
+  /// 例如 "更纱黑体 SC,Sarasa Gothic SC" -> "更纱黑体 SC"。
+  static String normalizeFontFamily(String? font) {
+    if (font == null || font.isEmpty) return '';
+    final primary = _extractPrimaryFamily(font);
+    return primary ?? font;
+  }
+
+  /// 判断是否像 "Bold" / "Italic" / "Light" 等字重/样式变体。
+  static bool _isStyleVariant(String name) {
+    final lower = name.toLowerCase();
+    const variants = [
+      'bold', 'italic', 'oblique', 'light', 'regular',
+      'medium', 'black', 'thin', 'heavy', 'condensed',
+      'expanded', 'semi', 'extra', 'ultra', 'narrow',
+    ];
+    return variants.any((v) => lower.contains(v));
   }
 }
