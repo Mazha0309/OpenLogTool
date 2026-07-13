@@ -645,6 +645,10 @@ class SettingsPanel extends StatelessWidget {
     final settingsProvider = context.read<SettingsProvider>();
     final result = await showDialog<FontPickerResult>(
       context: context,
+      // A global font change rebuilds the whole app. Keeping this route
+      // transition-free ensures the picker is fully gone before that rebuild
+      // starts, instead of competing with the dialog's exit animation.
+      animationStyle: AnimationStyle.noAnimation,
       builder: (_) => FontPickerDialog(
         availableFonts: settingsProvider.availableFonts,
         currentFont: settingsProvider.fontFamily,

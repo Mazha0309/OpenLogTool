@@ -26,7 +26,7 @@ class PrimaryNavigationRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveExpanded = isDesktop && expanded;
-    return KeyedSubtree(
+    final rail = KeyedSubtree(
       key: Key(isDesktop ? 'desktop-navigation' : 'tablet-navigation'),
       child: NavigationRail(
         // Recreate the rail at its final width. Updating `extended` on the same
@@ -61,6 +61,7 @@ class PrimaryNavigationRail extends StatelessWidget {
         destinations: destinations,
       ),
     );
+    return RepaintBoundary(child: rail);
   }
 }
 
