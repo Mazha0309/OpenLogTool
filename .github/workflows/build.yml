@@ -720,19 +720,26 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app"
 
           smoke_root="$RUNNER_TEMP/openlogtool-macos-smoke"
-          mkdir -p "$smoke_root/home"
-          HOME="$smoke_root/home" "$executable" \
-            >"$smoke_root/output.log" 2>&1 &
-          pid=$!
+          mkdir -p "$smoke_root"
+          open -n -F -g -W "$app" >"$smoke_root/output.log" 2>&1 &
+          launcher_pid=$!
           sleep 10
-          if ! kill -0 "$pid" 2>/dev/null; then
-            wait "$pid" || status=$?
+          if ! kill -0 "$launcher_pid" 2>/dev/null; then
+            wait "$launcher_pid" || status=$?
             cat "$smoke_root/output.log"
             echo "macOS app exited during smoke test (${status:-0})" >&2
             exit 1
           fi
-          kill -TERM "$pid" 2>/dev/null || true
-          wait "$pid" || true
+          app_pid=$(pgrep -x openlogtool | head -n 1 || true)
+          if [ -z "$app_pid" ]; then
+            cat "$smoke_root/output.log"
+            kill -TERM "$launcher_pid" 2>/dev/null || true
+            wait "$launcher_pid" || true
+            echo "macOS app process was not found during smoke test" >&2
+            exit 1
+          fi
+          kill -TERM "$app_pid" 2>/dev/null || true
+          wait "$launcher_pid" || true
 
       - name: Package and verify macOS artifacts
         env:
@@ -784,19 +791,26 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$packaged_app"
 
           smoke_root="$RUNNER_TEMP/openlogtool-macos-package-smoke"
-          mkdir -p "$smoke_root/home"
-          HOME="$smoke_root/home" "$packaged_executable" \
-            >"$smoke_root/output.log" 2>&1 &
-          pid=$!
+          mkdir -p "$smoke_root"
+          open -n -F -g -W "$packaged_app" >"$smoke_root/output.log" 2>&1 &
+          launcher_pid=$!
           sleep 10
-          if ! kill -0 "$pid" 2>/dev/null; then
-            wait "$pid" || status=$?
+          if ! kill -0 "$launcher_pid" 2>/dev/null; then
+            wait "$launcher_pid" || status=$?
             cat "$smoke_root/output.log"
             echo "Packaged macOS app exited during smoke test (${status:-0})" >&2
             exit 1
           fi
-          kill -TERM "$pid" 2>/dev/null || true
-          wait "$pid" || true
+          app_pid=$(pgrep -x openlogtool | head -n 1 || true)
+          if [ -z "$app_pid" ]; then
+            cat "$smoke_root/output.log"
+            kill -TERM "$launcher_pid" 2>/dev/null || true
+            wait "$launcher_pid" || true
+            echo "Packaged macOS app process was not found during smoke test" >&2
+            exit 1
+          fi
+          kill -TERM "$app_pid" 2>/dev/null || true
+          wait "$launcher_pid" || true
 
           (
             cd dist
