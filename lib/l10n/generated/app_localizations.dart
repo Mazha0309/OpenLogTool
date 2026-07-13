@@ -771,6 +771,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'一键复用数据库信息'**
   String get reuseDatabaseInformation;
+
+  /// No description provided for @collapseSidebar.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起侧边栏'**
+  String get collapseSidebar;
+
+  /// No description provided for @expandSidebar.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开侧边栏'**
+  String get expandSidebar;
+
+  /// No description provided for @serverConnectionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接失败：{detail}'**
+  String serverConnectionFailed(String detail);
+
+  /// No description provided for @serverNetworkError.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器 {url} 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。'**
+  String serverNetworkError(String url);
+
+  /// No description provided for @serverNetworkTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接 {url} 超时。请检查网络、防火墙和服务端状态。'**
+  String serverNetworkTimeout(String url);
+
+  /// No description provided for @serverInvalidResponse.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接 {url}，但它没有返回兼容的 OpenLogTool Server 响应。'**
+  String serverInvalidResponse(String url);
+
+  /// No description provided for @serverAddressRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先填写服务器地址。'**
+  String get serverAddressRequired;
+
+  /// No description provided for @serverAddressInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器地址必须是完整的 http(s) URL。'**
+  String get serverAddressInvalid;
 }
 
 class _AppLocalizationsDelegate

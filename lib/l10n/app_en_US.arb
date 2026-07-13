@@ -111,5 +111,13 @@
   "publicShareLinkCopied": "Public link copied",
   "publicShareExpiresAt": "Expires {time}",
   "refresh": "Refresh",
-  "reuseDatabaseInformation": "Reuse database information"
+  "reuseDatabaseInformation": "Reuse database information",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Expand sidebar",
+  "serverConnectionFailed": "Connection failed: {detail}",
+  "serverNetworkError": "The server at {url} did not respond. Check the address and port, and make sure the server or reverse proxy is running.",
+  "serverNetworkTimeout": "The connection to {url} timed out. Check the network, firewall, and server status.",
+  "serverInvalidResponse": "Connected to {url}, but it did not return a compatible OpenLogTool Server response.",
+  "serverAddressRequired": "Enter a server address first.",
+  "serverAddressInvalid": "The server address must be a complete http(s) URL."
 }

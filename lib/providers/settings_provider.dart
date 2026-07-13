@@ -17,6 +17,7 @@ class SettingsProvider with ChangeNotifier {
       'duplicateCallsignWarningEnabled';
   static const String _controllerDeviceModeEnabledKey =
       'controllerDeviceModeEnabled';
+  static const String _primarySidebarExpandedKey = 'primarySidebarExpanded';
 
   bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
@@ -28,6 +29,7 @@ class SettingsProvider with ChangeNotifier {
   bool _paginationEnabled = false;
   bool _duplicateCallsignWarningEnabled = true;
   bool _controllerDeviceModeEnabled = false;
+  bool _primarySidebarExpanded = true;
   ControllerDisplayPreferences _controllerDisplayPreferences =
       const ControllerDisplayPreferences();
 
@@ -41,6 +43,7 @@ class SettingsProvider with ChangeNotifier {
   bool get paginationEnabled => _paginationEnabled;
   bool get duplicateCallsignWarningEnabled => _duplicateCallsignWarningEnabled;
   bool get controllerDeviceModeEnabled => _controllerDeviceModeEnabled;
+  bool get primarySidebarExpanded => _primarySidebarExpanded;
   ControllerDisplayPreferences get controllerDisplayPreferences =>
       _controllerDisplayPreferences;
 
@@ -78,6 +81,7 @@ class SettingsProvider with ChangeNotifier {
         prefs.getBool(_duplicateCallsignWarningKey) ?? true;
     _controllerDeviceModeEnabled =
         prefs.getBool(_controllerDeviceModeEnabledKey) ?? false;
+    _primarySidebarExpanded = prefs.getBool(_primarySidebarExpandedKey) ?? true;
     final controllerPreferencesJson =
         prefs.getString(controllerDisplayPreferencesStorageKey);
     if (controllerPreferencesJson != null) {
@@ -153,6 +157,13 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setPrimarySidebarExpanded(bool expanded) async {
+    if (_primarySidebarExpanded == expanded) return;
+    _primarySidebarExpanded = expanded;
+    notifyListeners();
+    await _saveSetting(_primarySidebarExpandedKey, expanded);
+  }
+
   Future<void> setControllerDisplayPreferences(
     ControllerDisplayPreferences preferences,
   ) async {
@@ -192,6 +203,7 @@ class SettingsProvider with ChangeNotifier {
     _exportSettings = ExportSettings();
     _callSignQthLinkEnabled = true;
     _controllerDeviceModeEnabled = false;
+    _primarySidebarExpanded = true;
     _duplicateCallsignWarningEnabled = true;
     _controllerDisplayPreferences = const ControllerDisplayPreferences();
 
@@ -203,6 +215,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.remove(_exportSettingsKey);
     await prefs.remove(_callSignQthLinkKey);
     await prefs.remove(_controllerDeviceModeEnabledKey);
+    await prefs.remove(_primarySidebarExpandedKey);
     await prefs.remove(_duplicateCallsignWarningKey);
     await prefs.remove(controllerDisplayPreferencesStorageKey);
 

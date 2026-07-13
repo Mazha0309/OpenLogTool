@@ -7,8 +7,10 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
+import 'package:openlogtool/utils/server_connection_error.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
@@ -123,7 +125,15 @@ class SettingsPanel extends StatelessWidget {
                                 } catch (error) {
                                   if (context.mounted) {
                                     context.showLoggedSnackBar(
-                                      SnackBar(content: Text('连接失败: $error')),
+                                      SnackBar(
+                                        content: Text(
+                                          localizedServerConnectionError(
+                                            l10n: context.l10n,
+                                            serverUrl: serverProvider.serverUrl,
+                                            error: error,
+                                          ),
+                                        ),
+                                      ),
                                     );
                                   }
                                 }

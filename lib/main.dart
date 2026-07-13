@@ -24,9 +24,10 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 桌面子窗口只渲染主控屏，不初始化 Rust、本地数据库或主应用 Provider。
-  final controllerWindow = await ControllerWindowService.currentWindowLaunch();
+  final controllerWindow =
+      await ControllerWindowService.currentWindowLaunch(args);
   if (controllerWindow != null) {
-    runApp(ControllerDisplayWindowApp(launch: controllerWindow));
+    runApp(ControllerDisplayWindowApp(session: controllerWindow));
     return;
   }
 

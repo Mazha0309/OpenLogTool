@@ -372,6 +372,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reuseDatabaseInformation => '一键复用数据库信息';
+
+  @override
+  String get collapseSidebar => '收起侧边栏';
+
+  @override
+  String get expandSidebar => '展开侧边栏';
+
+  @override
+  String serverConnectionFailed(String detail) {
+    return '连接失败：$detail';
+  }
+
+  @override
+  String serverNetworkError(String url) {
+    return '服务器 $url 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。';
+  }
+
+  @override
+  String serverNetworkTimeout(String url) {
+    return '连接 $url 超时。请检查网络、防火墙和服务端状态。';
+  }
+
+  @override
+  String serverInvalidResponse(String url) {
+    return '已连接 $url，但它没有返回兼容的 OpenLogTool Server 响应。';
+  }
+
+  @override
+  String get serverAddressRequired => '请先填写服务器地址。';
+
+  @override
+  String get serverAddressInvalid => '服务器地址必须是完整的 http(s) URL。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -742,4 +774,36 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get reuseDatabaseInformation => '一键复用数据库信息';
+
+  @override
+  String get collapseSidebar => '收起侧边栏';
+
+  @override
+  String get expandSidebar => '展开侧边栏';
+
+  @override
+  String serverConnectionFailed(String detail) {
+    return '连接失败：$detail';
+  }
+
+  @override
+  String serverNetworkError(String url) {
+    return '服务器 $url 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。';
+  }
+
+  @override
+  String serverNetworkTimeout(String url) {
+    return '连接 $url 超时。请检查网络、防火墙和服务端状态。';
+  }
+
+  @override
+  String serverInvalidResponse(String url) {
+    return '已连接 $url，但它没有返回兼容的 OpenLogTool Server 响应。';
+  }
+
+  @override
+  String get serverAddressRequired => '请先填写服务器地址。';
+
+  @override
+  String get serverAddressInvalid => '服务器地址必须是完整的 http(s) URL。';
 }

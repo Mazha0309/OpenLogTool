@@ -38,5 +38,9 @@ void main() {
     expect(en.callsignHistoryFillSetting, 'Reuse callsign history');
     expect(zh.offlineReviewTitle, '离线记录待复核');
     expect(en.offlineReviewTitle, 'Offline records need review');
+    expect(zh.collapseSidebar, '收起侧边栏');
+    expect(zh.expandSidebar, '展开侧边栏');
+    expect(en.collapseSidebar, 'Collapse sidebar');
+    expect(en.expandSidebar, 'Expand sidebar');
   });
 }

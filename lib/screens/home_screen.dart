@@ -14,6 +14,7 @@ import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
+import 'package:openlogtool/widgets/primary_navigation_rail.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -89,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
     final pages = <Widget>[
       const _WorkbenchPage(),
       const SessionHubPage(),
@@ -108,33 +110,15 @@ class _HomeScreenState extends State<HomeScreen> {
             children: pages,
           );
           if (constraints.maxWidth < 720) return content;
-          final expanded = constraints.maxWidth >= 1200;
+          final isDesktop = constraints.maxWidth >= 1200;
           return Row(
             children: [
-              NavigationRail(
-                key: Key(expanded ? 'desktop-navigation' : 'tablet-navigation'),
+              PrimaryNavigationRail(
+                isDesktop: isDesktop,
+                expanded: settings.primarySidebarExpanded,
                 selectedIndex: _selectedIndex,
                 onDestinationSelected: _onItemTapped,
-                extended: expanded,
-                labelType: expanded
-                    ? NavigationRailLabelType.none
-                    : NavigationRailLabelType.selected,
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: expanded
-                      ? const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.graphic_eq, size: 28),
-                            SizedBox(width: 10),
-                            Text(
-                              'OpenLogTool',
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ],
-                        )
-                      : const Icon(Icons.graphic_eq, size: 28),
-                ),
+                onExpandedChanged: settings.setPrimarySidebarExpanded,
                 destinations: [
                   for (final destination in _destinations)
                     NavigationRailDestination(

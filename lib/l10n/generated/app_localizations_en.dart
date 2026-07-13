@@ -384,6 +384,39 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reuseDatabaseInformation => 'Reuse database information';
+
+  @override
+  String get collapseSidebar => 'Collapse sidebar';
+
+  @override
+  String get expandSidebar => 'Expand sidebar';
+
+  @override
+  String serverConnectionFailed(String detail) {
+    return 'Connection failed: $detail';
+  }
+
+  @override
+  String serverNetworkError(String url) {
+    return 'The server at $url did not respond. Check the address and port, and make sure the server or reverse proxy is running.';
+  }
+
+  @override
+  String serverNetworkTimeout(String url) {
+    return 'The connection to $url timed out. Check the network, firewall, and server status.';
+  }
+
+  @override
+  String serverInvalidResponse(String url) {
+    return 'Connected to $url, but it did not return a compatible OpenLogTool Server response.';
+  }
+
+  @override
+  String get serverAddressRequired => 'Enter a server address first.';
+
+  @override
+  String get serverAddressInvalid =>
+      'The server address must be a complete http(s) URL.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -766,4 +799,37 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get reuseDatabaseInformation => 'Reuse database information';
+
+  @override
+  String get collapseSidebar => 'Collapse sidebar';
+
+  @override
+  String get expandSidebar => 'Expand sidebar';
+
+  @override
+  String serverConnectionFailed(String detail) {
+    return 'Connection failed: $detail';
+  }
+
+  @override
+  String serverNetworkError(String url) {
+    return 'The server at $url did not respond. Check the address and port, and make sure the server or reverse proxy is running.';
+  }
+
+  @override
+  String serverNetworkTimeout(String url) {
+    return 'The connection to $url timed out. Check the network, firewall, and server status.';
+  }
+
+  @override
+  String serverInvalidResponse(String url) {
+    return 'Connected to $url, but it did not return a compatible OpenLogTool Server response.';
+  }
+
+  @override
+  String get serverAddressRequired => 'Enter a server address first.';
+
+  @override
+  String get serverAddressInvalid =>
+      'The server address must be a complete http(s) URL.';
 }
