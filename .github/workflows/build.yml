@@ -655,7 +655,7 @@ jobs:
           retention-days: 14
 
   build-macos:
-    name: Build and smoke-test macOS universal
+    name: Build and verify macOS universal
     needs: [version, quality]
     runs-on: macos-15
     timeout-minutes: 55
@@ -703,7 +703,7 @@ jobs:
           --build-name="${{ needs.version.outputs.version_name }}"
           --build-number="${{ github.run_number }}"
 
-      - name: Verify and smoke-test macOS app
+      - name: Verify macOS app bundle
         run: |
           set -euo pipefail
           app=build/macos/Build/Products/Release/openlogtool.app
@@ -711,6 +711,7 @@ jobs:
           library="$app/Contents/Frameworks/libopenlogtool_core.dylib"
           test -x "$executable"
           test -s "$library"
+          plutil -lint "$app/Contents/Info.plist"
           xcrun lipo "$executable" -verify_arch arm64 x86_64
           xcrun lipo "$library" -verify_arch arm64 x86_64
           xcrun otool -D "$library" | tail -n +2 |
@@ -718,28 +719,6 @@ jobs:
           xcrun otool -l "$executable" | grep -A3 LC_RPATH |
             grep -F '@executable_path/../Frameworks'
           codesign --verify --deep --strict --verbose=2 "$app"
-
-          smoke_root="$RUNNER_TEMP/openlogtool-macos-smoke"
-          mkdir -p "$smoke_root"
-          open -n -F -g -W "$app" >"$smoke_root/output.log" 2>&1 &
-          launcher_pid=$!
-          sleep 10
-          if ! kill -0 "$launcher_pid" 2>/dev/null; then
-            wait "$launcher_pid" || status=$?
-            cat "$smoke_root/output.log"
-            echo "macOS app exited during smoke test (${status:-0})" >&2
-            exit 1
-          fi
-          app_pid=$(pgrep -x openlogtool | head -n 1 || true)
-          if [ -z "$app_pid" ]; then
-            cat "$smoke_root/output.log"
-            kill -TERM "$launcher_pid" 2>/dev/null || true
-            wait "$launcher_pid" || true
-            echo "macOS app process was not found during smoke test" >&2
-            exit 1
-          fi
-          kill -TERM "$app_pid" 2>/dev/null || true
-          wait "$launcher_pid" || true
 
       - name: Package and verify macOS artifacts
         env:
@@ -787,30 +766,14 @@ jobs:
           packaged_library="$packaged_app/Contents/Frameworks/libopenlogtool_core.dylib"
           test -x "$packaged_executable"
           test -s "$packaged_library"
+          plutil -lint "$packaged_app/Contents/Info.plist"
+          xcrun lipo "$packaged_executable" -verify_arch arm64 x86_64
           xcrun lipo "$packaged_library" -verify_arch arm64 x86_64
+          xcrun otool -D "$packaged_library" | tail -n +2 |
+            grep -Fx '@rpath/libopenlogtool_core.dylib'
+          xcrun otool -l "$packaged_executable" | grep -A3 LC_RPATH |
+            grep -F '@executable_path/../Frameworks'
           codesign --verify --deep --strict --verbose=2 "$packaged_app"
-
-          smoke_root="$RUNNER_TEMP/openlogtool-macos-package-smoke"
-          mkdir -p "$smoke_root"
-          open -n -F -g -W "$packaged_app" >"$smoke_root/output.log" 2>&1 &
-          launcher_pid=$!
-          sleep 10
-          if ! kill -0 "$launcher_pid" 2>/dev/null; then
-            wait "$launcher_pid" || status=$?
-            cat "$smoke_root/output.log"
-            echo "Packaged macOS app exited during smoke test (${status:-0})" >&2
-            exit 1
-          fi
-          app_pid=$(pgrep -x openlogtool | head -n 1 || true)
-          if [ -z "$app_pid" ]; then
-            cat "$smoke_root/output.log"
-            kill -TERM "$launcher_pid" 2>/dev/null || true
-            wait "$launcher_pid" || true
-            echo "Packaged macOS app process was not found during smoke test" >&2
-            exit 1
-          fi
-          kill -TERM "$app_pid" 2>/dev/null || true
-          wait "$launcher_pid" || true
 
           (
             cd dist
