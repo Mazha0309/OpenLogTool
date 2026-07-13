@@ -1,8 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:flutter/material.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:provider/provider.dart';
+
+int dictionaryGridColumnCount(double width) => width >= 760 ? 2 : 1;
 
 class DictionaryManager extends StatefulWidget {
   const DictionaryManager({super.key});
@@ -12,23 +17,38 @@ class DictionaryManager extends StatefulWidget {
 }
 
 class _DictionaryManagerState extends State<DictionaryManager> {
-  final Map<String, bool> _expandedStates = {
+  final Map<String, bool> _expandedStates = <String, bool>{
     'device': false,
     'antenna': false,
     'callsign': false,
     'qth': false,
   };
-
-  final Map<String, TextEditingController> _controllers = {
+  final Map<String, TextEditingController> _addControllers =
+      <String, TextEditingController>{
     'device': TextEditingController(),
     'antenna': TextEditingController(),
     'callsign': TextEditingController(),
     'qth': TextEditingController(),
   };
+  final Map<String, ScrollController> _listControllers =
+      <String, ScrollController>{
+    'device': ScrollController(),
+    'antenna': ScrollController(),
+    'callsign': ScrollController(),
+    'qth': ScrollController(),
+  };
+  final Map<String, String> _queries = <String, String>{};
+  final Set<String> _busyLibraries = <String>{};
+  bool _importing = false;
+
+  bool get _mutationInProgress => _importing || _busyLibraries.isNotEmpty;
 
   @override
   void dispose() {
-    for (var controller in _controllers.values) {
+    for (final controller in _addControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _listControllers.values) {
       controller.dispose();
     }
     super.dispose();
@@ -37,122 +57,219 @@ class _DictionaryManagerState extends State<DictionaryManager> {
   void _toggleAll() {
     final allExpanded = _expandedStates.values.every((state) => state);
     setState(() {
-      _expandedStates.forEach((key, value) {
+      for (final key in _expandedStates.keys) {
         _expandedStates[key] = !allExpanded;
-      });
+      }
     });
   }
 
-  void _toggleDictionary(String key) {
-    setState(() {
-      _expandedStates[key] = !_expandedStates[key]!;
-    });
+  void _toggleLibrary(String key) {
+    setState(() => _expandedStates[key] = !_expandedStates[key]!);
   }
 
-  Future<void> _importFromFile(String dictType) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final provider = Provider.of<DictionaryProvider>(context, listen: false);
+  String _libraryName(String type) => switch (type) {
+        'device' => context.l10n.deviceLibrary,
+        'antenna' => context.l10n.antennaLibrary,
+        'callsign' => context.l10n.callsignLibrary,
+        'qth' => context.l10n.qthLibrary,
+        _ => '',
+      };
+
+  IconData _libraryIcon(String type) => switch (type) {
+        'device' => Icons.radio,
+        'antenna' => Icons.settings_input_antenna,
+        'callsign' => Icons.badge_outlined,
+        'qth' => Icons.place_outlined,
+        _ => Icons.folder_outlined,
+      };
+
+  Future<void> _importFromFile() async {
+    if (_mutationInProgress) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<DictionaryProvider>();
+    setState(() => _importing = true);
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['json'],
+        allowedExtensions: const <String>['json'],
+        withData: true,
       );
-
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final content = String.fromCharCodes(file.bytes!);
-        final counts = await provider.importFromJson(content);
-
-        final total = counts.values.fold(0, (a, b) => a + b);
-        if (total == 0) {
-          scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('文件中没有可导入的词库数据'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-          return;
-        }
-
-        final parts = <String>[];
-        counts.forEach((key, count) {
-          parts.add('${_getDictName(key)} $count 条');
-        });
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text('已导入：${parts.join('，')}'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      if (result == null || result.files.isEmpty) return;
+      final bytes = result.files.first.bytes;
+      if (bytes == null) {
+        throw const FormatException('The selected file could not be read.');
       }
-    } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('导入失败: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
+      final counts = await provider.importFromJson(utf8.decode(bytes));
+      if (!mounted) return;
+      final imported = counts.entries.where((entry) => entry.value > 0);
+      if (imported.isEmpty) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(context.l10n.libraryImportEmpty)),
+        );
+        return;
+      }
+      final summary = imported
+          .map(
+            (entry) => context.l10n.libraryImportCount(
+              _libraryName(entry.key),
+              entry.value,
+            ),
+          )
+          .join(context.l10n.listSeparator);
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryImportSucceeded(summary))),
       );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryImportFailed('$error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _importing = false);
     }
   }
 
-  String _getDictName(String type) {
-    switch (type) {
-      case 'device':
-        return '设备';
-      case 'antenna':
-        return '天线';
-      case 'callsign':
-        return '呼号';
-      case 'qth':
-        return 'QTH';
-      default:
-        return '';
+  Future<void> _addItem(_LibraryDefinition library) async {
+    final controller = _addControllers[library.type]!;
+    final value = controller.text.trim();
+    if (value.isEmpty || _mutationInProgress) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (library.items.any((item) => item.raw == value)) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryItemAlreadyExists(value))),
+      );
+      return;
+    }
+
+    setState(() => _busyLibraries.add(library.type));
+    try {
+      await library.onAdd(value);
+      if (!mounted) return;
+      controller.clear();
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryItemAdded(value))),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryItemAddFailed('$error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _busyLibraries.remove(library.type));
     }
   }
 
-  IconData _getDictIcon(String type) {
-    switch (type) {
-      case 'device':
-        return Icons.radio;
-      case 'antenna':
-        return Icons.settings_input_antenna;
-      case 'callsign':
-        return Icons.badge;
-      case 'qth':
-        return Icons.place;
-      default:
-        return Icons.folder;
-    }
+  List<DictionaryItem> _filteredItems(_LibraryDefinition library) {
+    final query = _queries[library.type]?.trim() ?? '';
+    if (query.isEmpty) return library.items;
+    return library.items.where((item) => item.matches(query)).toList();
   }
 
-  Widget _buildDictionaryCard({
-    required String type,
-    required String title,
-    required List<DictionaryItem> items,
-    required Function(String) onAdd,
-    double cardPadding = 16.0,
-  }) {
+  Widget _buildHeader(List<_LibraryDefinition> libraries) {
     final theme = Theme.of(context);
-    final isExpanded = _expandedStates[type]!;
+    final allExpanded = _expandedStates.values.every((state) => state);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 420,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.dictionaryManagementTitle,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    context.l10n.dictionaryManagementHint,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('import-library-json'),
+                  onPressed: _mutationInProgress ? null : _importFromFile,
+                  icon: _importing
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.file_upload_outlined, size: 18),
+                  label: Text(context.l10n.importLibraryJson),
+                ),
+                TextButton.icon(
+                  onPressed: _toggleAll,
+                  icon: Icon(
+                    allExpanded ? Icons.unfold_less : Icons.unfold_more,
+                    size: 18,
+                  ),
+                  label: Text(
+                    allExpanded
+                        ? context.l10n.collapseAll
+                        : context.l10n.expandAll,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: libraries
+              .map(
+                (library) => ActionChip(
+                  avatar: Icon(_libraryIcon(library.type), size: 16),
+                  label: Text(
+                    '${_libraryName(library.type)} · ${library.items.length}',
+                  ),
+                  onPressed: () => _toggleLibrary(library.type),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildLibraryCard(_LibraryDefinition library) {
+    final theme = Theme.of(context);
+    final isExpanded = _expandedStates[library.type]!;
+    final isBusy = _busyLibraries.contains(library.type);
+    final items = _filteredItems(library);
     return Card(
+      key: Key('library-card-${library.type}'),
       elevation: 0,
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            onTap: () => _toggleDictionary(type),
+            onTap: () => _toggleLibrary(library.type),
             child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: cardPadding,
-                vertical: cardPadding * 0.75,
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
               child: Row(
                 children: [
                   Container(
@@ -162,303 +279,257 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
-                      _getDictIcon(type),
+                      _libraryIcon(library.type),
                       size: 20,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title,
+                          _libraryName(library.type),
                           style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        const SizedBox(height: 2),
                         Text(
-                          '共 ${items.length} 条',
+                          context.l10n.libraryItemCount(library.items.length),
                           style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
                   ),
+                  if (isBusy)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
                   AnimatedRotation(
                     turns: isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.expand_more,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    duration: const Duration(milliseconds: 160),
+                    child: const Icon(Icons.expand_more),
                   ),
+                  const SizedBox(width: 8),
                 ],
               ),
             ),
           ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: EdgeInsets.fromLTRB(
-                cardPadding,
-                0,
-                cardPadding,
-                cardPadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 添加项目表单
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _controllers[type],
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: isExpanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Divider(height: 1),
+                        const SizedBox(height: 12),
+                        _buildAddRow(library, _mutationInProgress),
+                        const SizedBox(height: 10),
+                        TextField(
+                          key: Key('search-library-${library.type}'),
                           decoration: InputDecoration(
-                            labelText: '添加${_getDictName(type)}',
-                            hintText: '输入${_getDictName(type)}名称',
+                            hintText: context.l10n.searchLibrary(
+                              _libraryName(library.type),
+                            ),
+                            prefixIcon: const Icon(Icons.search, size: 20),
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 14,
-                            ),
                           ),
-                          onSubmitted: (value) {
-                            if (value.isNotEmpty) {
-                              onAdd(value);
-                              _controllers[type]!.clear();
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('添加'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 14,
+                          onChanged: (value) => setState(
+                            () => _queries[library.type] = value,
                           ),
                         ),
-                        onPressed: () {
-                          final value = _controllers[type]!.text.trim();
-                          if (value.isNotEmpty) {
-                            onAdd(value);
-                            _controllers[type]!.clear();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // 导入文件按钮
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.file_upload, size: 18),
-                    label: const Text('从文件导入 (.json)'),
-                    onPressed: () => _importFromFile(type),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // 项目列表
-                  if (items.isNotEmpty)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.3),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.all(8),
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          return ListTile(
-                            dense: true,
-                            visualDensity: VisualDensity.compact,
-                            leading: Text(
-                              '${index + 1}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            title: Text(
-                              item.raw,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          );
-                        },
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.inbox_outlined,
-                              size: 32,
-                              color: theme.colorScheme.onSurfaceVariant
-                                  .withAlpha(180),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '暂无${_getDictName(type)}数据',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
+                        const SizedBox(height: 10),
+                        _buildItemList(library, items),
+                      ],
                     ),
-                ],
-              ),
-            ),
-            crossFadeState:
-                isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 200),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final dictionaryProvider = Provider.of<DictionaryProvider>(context);
-    final allExpanded = _expandedStates.values.every((state) => state);
-    final isNarrow = MediaQuery.of(context).size.width < 600;
-    final cardSpacing = isNarrow ? 12.0 : 16.0;
-    final cardPadding = isNarrow ? 12.0 : 16.0;
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 标题和切换按钮
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildAddRow(_LibraryDefinition library, bool isBusy) {
+    final field = TextField(
+      key: Key('add-library-${library.type}'),
+      controller: _addControllers[library.type],
+      enabled: !isBusy,
+      decoration: InputDecoration(
+        labelText: context.l10n.addLibraryItem(_libraryName(library.type)),
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => _addItem(library),
+    );
+    final button = FilledButton.icon(
+      onPressed: isBusy ? null : () => _addItem(library),
+      icon: const Icon(Icons.add, size: 18),
+      label: Text(context.l10n.add),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 430) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [field, const SizedBox(height: 8), button],
+          );
+        }
+        return Row(
           children: [
-            Text(
-              '词库管理器',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+            Expanded(child: field),
+            const SizedBox(width: 8),
+            button,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildItemList(
+    _LibraryDefinition library,
+    List<DictionaryItem> items,
+  ) {
+    final theme = Theme.of(context);
+    if (items.isEmpty) {
+      final hasQuery = (_queries[library.type]?.trim().isNotEmpty ?? false);
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.35,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              hasQuery ? Icons.search_off : Icons.inbox_outlined,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            TextButton.icon(
-              icon: Icon(
-                allExpanded ? Icons.unfold_less : Icons.unfold_more,
-                size: 18,
-              ),
-              label: Text(allExpanded ? '折叠全部' : '展开全部'),
-              onPressed: _toggleAll,
+            const SizedBox(height: 6),
+            Text(
+              hasQuery
+                  ? context.l10n.noLibrarySearchResults
+                  : context.l10n.libraryEmpty,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ),
+      );
+    }
+    final listController = _listControllers[library.type]!;
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 280),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ListView.separated(
+        controller: listController,
+        primary: false,
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final searchHint = <String>{
+            if (item.pinyin.trim().isNotEmpty) item.pinyin.trim(),
+            if (item.abbreviation.trim().isNotEmpty) item.abbreviation.trim(),
+          }.join(' · ');
+          return ListTile(
+            dense: true,
+            leading: CircleAvatar(
+              radius: 13,
+              child: Text('${index + 1}', style: theme.textTheme.labelSmall),
+            ),
+            title: Text(item.raw),
+            subtitle: searchHint.isEmpty ? null : Text(searchHint),
+          );
+        },
+      ),
+    );
+  }
 
-        SizedBox(height: cardSpacing),
-
-        // 设备词典
-        _buildDictionaryCard(
-          type: 'device',
-          title: '设备词典管理',
-          items: dictionaryProvider.deviceDict,
-          cardPadding: cardPadding,
-          onAdd: (value) async {
-            final messenger = ScaffoldMessenger.of(context);
-            await dictionaryProvider.addDevice(value);
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text('已添加设备: $value'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
-
-        SizedBox(height: cardSpacing),
-
-        // 天线词典
-        _buildDictionaryCard(
-          type: 'antenna',
-          title: '天线词典管理',
-          items: dictionaryProvider.antennaDict,
-          cardPadding: cardPadding,
-          onAdd: (value) async {
-            final messenger = ScaffoldMessenger.of(context);
-            await dictionaryProvider.addAntenna(value);
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text('已添加天线: $value'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
-
-        SizedBox(height: cardSpacing),
-
-        // 呼号词典
-        _buildDictionaryCard(
-          type: 'callsign',
-          title: '呼号词典管理',
-          items: dictionaryProvider.callsignDict,
-          cardPadding: cardPadding,
-          onAdd: (value) async {
-            final messenger = ScaffoldMessenger.of(context);
-            await dictionaryProvider.addCallsign(value);
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text('已添加呼号: $value'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
-
-        SizedBox(height: cardSpacing),
-
-        // QTH词典
-        _buildDictionaryCard(
-          type: 'qth',
-          title: 'QTH 词典管理',
-          items: dictionaryProvider.qthDict,
-          cardPadding: cardPadding,
-          onAdd: (value) async {
-            final messenger = ScaffoldMessenger.of(context);
-            await dictionaryProvider.addQth(value);
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text('已添加 QTH: $value'),
-                duration: const Duration(seconds: 2),
-              ),
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<DictionaryProvider>();
+    final libraries = <_LibraryDefinition>[
+      _LibraryDefinition(
+        type: 'device',
+        items: provider.deviceDict,
+        onAdd: provider.addDevice,
+      ),
+      _LibraryDefinition(
+        type: 'antenna',
+        items: provider.antennaDict,
+        onAdd: provider.addAntenna,
+      ),
+      _LibraryDefinition(
+        type: 'callsign',
+        items: provider.callsignDict,
+        onAdd: provider.addCallsign,
+      ),
+      _LibraryDefinition(
+        type: 'qth',
+        items: provider.qthDict,
+        onAdd: provider.addQth,
+      ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeader(libraries),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const spacing = 12.0;
+            final columns = dictionaryGridColumnCount(constraints.maxWidth);
+            final width = columns == 1
+                ? constraints.maxWidth
+                : (constraints.maxWidth - spacing) / columns;
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: libraries
+                  .map(
+                    (library) => SizedBox(
+                      width: width,
+                      child: _buildLibraryCard(library),
+                    ),
+                  )
+                  .toList(growable: false),
             );
           },
         ),
       ],
     );
   }
+}
+
+class _LibraryDefinition {
+  const _LibraryDefinition({
+    required this.type,
+    required this.items,
+    required this.onAdd,
+  });
+
+  final String type;
+  final List<DictionaryItem> items;
+  final Future<void> Function(String value) onAdd;
 }

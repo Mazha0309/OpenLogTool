@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
@@ -21,6 +22,9 @@ void main() {
       restored.preferences.detail,
       ControllerDisplayDetail.standard,
     );
+    expect(restored.appearance.themeColor, const Color(0xFF9C27B0));
+    expect(restored.appearance.isDarkMode, isTrue);
+    expect(restored.appearance.fontFamily, 'SarasaGothicSC');
   });
 
   test('pipe protocol handles split frames and rejects unknown modes', () {
@@ -118,12 +122,19 @@ void main() {
       preferences: const ControllerDisplayPreferences(
         detail: ControllerDisplayDetail.full,
       ),
+      appearance: const ControllerWindowAppearance(
+        themeColor: Color(0xFFFF9800),
+      ),
     );
 
     expect(cache[ControllerWindowMode.secondDisplay]?.data.currentOrdinal, 13);
     expect(
       cache[ControllerWindowMode.secondDisplay]?.data.current.callsign,
       'BA4BBB',
+    );
+    expect(
+      cache[ControllerWindowMode.secondDisplay]?.appearance.themeColor,
+      const Color(0xFFFF9800),
     );
   });
 
@@ -161,5 +172,10 @@ const _launch = ControllerWindowLaunch(
   ),
   preferences: ControllerDisplayPreferences(
     detail: ControllerDisplayDetail.standard,
+  ),
+  appearance: ControllerWindowAppearance(
+    themeColor: Color(0xFF9C27B0),
+    isDarkMode: true,
+    fontFamily: 'SarasaGothicSC',
   ),
 );

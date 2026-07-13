@@ -28,7 +28,8 @@ class DataOperations extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+        side:
+            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
       ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
@@ -42,8 +43,8 @@ class DataOperations extends StatelessWidget {
                 Text(
                   '数据操作',
                   style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -82,7 +83,7 @@ class DataOperations extends StatelessWidget {
               context,
               icon: Icons.delete_forever,
               title: '清空所有数据',
-              subtitle: '删除所有点名记录和词典数据，不可恢复',
+              subtitle: '删除所有点名记录和词库数据，不可恢复',
               onTap: onClearAllData,
               textColor: theme.colorScheme.error,
             ),
@@ -129,18 +130,18 @@ class DataOperations extends StatelessWidget {
                   Text(
                     title,
                     style: theme.textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: textColor,
-                        ),
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
                   ),
                   if (subtitle.isNotEmpty)
                     Text(
                       subtitle,
                       style: theme.textTheme.bodySmall?.copyWith(
-                            color: textColor != null
-                                ? textColor.withAlpha(180)
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
+                        color: textColor != null
+                            ? textColor.withAlpha(180)
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                 ],
               ),

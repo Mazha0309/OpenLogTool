@@ -15,7 +15,7 @@ import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
-import 'package:openlogtool/widgets/hsv_color_painter.dart';
+import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -23,265 +23,289 @@ class SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appInfoProvider = Provider.of<AppInfoProvider>(context);
-    final isNarrow = MediaQuery.of(context).size.width < 600;
-    final cardPadding = isNarrow ? 12.0 : 16.0;
+    return LayoutBuilder(builder: (context, constraints) {
+      final isNarrow = constraints.maxWidth < 860;
+      final cardPadding = constraints.maxWidth < 600 ? 12.0 : 16.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '应用设置',
-          style: TextStyle(
-            fontSize: isNarrow ? 18 : 20,
-            fontWeight: FontWeight.bold,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '应用设置',
+            style: TextStyle(
+              fontSize: isNarrow ? 18 : 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
 
-        SizedBox(height: isNarrow ? 16 : 24),
+          SizedBox(height: isNarrow ? 16 : 24),
 
-        ThemeSettings(
-          isNarrow: isNarrow,
-          cardPadding: cardPadding,
-          onPickColor: () => _showColorPicker(context),
-          onPickFont: () => _showFontPicker(context),
-        ),
+          if (isNarrow) ...[
+            ThemeSettings(
+              isNarrow: constraints.maxWidth < 600,
+              cardPadding: cardPadding,
+              onPickColor: () => _showColorPicker(context),
+              onPickFont: () => _showFontPicker(context),
+            ),
+            const SizedBox(height: 16),
+            LayoutSettings(
+              isNarrow: constraints.maxWidth < 600,
+              cardPadding: cardPadding,
+            ),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ThemeSettings(
+                    isNarrow: false,
+                    cardPadding: cardPadding,
+                    onPickColor: () => _showColorPicker(context),
+                    onPickFont: () => _showFontPicker(context),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: LayoutSettings(
+                    isNarrow: false,
+                    cardPadding: cardPadding,
+                  ),
+                ),
+              ],
+            ),
 
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-        LayoutSettings(
-          isNarrow: isNarrow,
-          cardPadding: cardPadding,
-        ),
+          ControllerDisplaySettings(cardPadding: cardPadding),
 
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-        ControllerDisplaySettings(cardPadding: cardPadding),
-
-        const SizedBox(height: 16),
-
-        Consumer<ServerProvider>(
-          builder: (context, serverProvider, _) {
-            return Card(
-              child: Padding(
-                padding: EdgeInsets.all(cardPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.cloud,
-                            size: 18,
-                            color: Theme.of(context).colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          '服务器设置',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
+          Consumer<ServerProvider>(
+            builder: (context, serverProvider, _) {
+              return Card(
+                child: Padding(
+                  padding: EdgeInsets.all(cardPadding),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.cloud,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text(
+                            '服务器设置',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        initialValue: serverProvider.serverUrl,
+                        decoration: const InputDecoration(
+                          labelText: '服务器地址',
+                          hintText: 'http://your-server:3000',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.link, size: 18),
+                        ),
+                        onChanged: (value) =>
+                            serverProvider.setServerUrl(value),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: serverProvider.isBusy
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.wifi_tethering, size: 16),
+                          label: const Text('保存并检测服务器'),
+                          onPressed: serverProvider.isBusy
+                              ? null
+                              : () async {
+                                  try {
+                                    final info =
+                                        await serverProvider.checkServer();
+                                    if (context.mounted) {
+                                      context.showLoggedSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            '连接成功 · 协议 v${info.protocolMin}-${info.protocolMax}',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  } catch (error) {
+                                    if (context.mounted) {
+                                      context.showLoggedSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            localizedServerConnectionError(
+                                              l10n: context.l10n,
+                                              serverUrl:
+                                                  serverProvider.serverUrl,
+                                              error: error,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                        ),
+                      ),
+                      if (serverProvider.serverInfo != null) ...[
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          '实例 ${serverProvider.serverInfo!.serverInstanceId}\n'
+                          '能力 ${serverProvider.serverInfo!.features.join(', ')}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: serverProvider.serverUrl,
-                      decoration: const InputDecoration(
-                        labelText: '服务器地址',
-                        hintText: 'http://your-server:3000',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        prefixIcon: Icon(Icons.link, size: 18),
-                      ),
-                      onChanged: (value) => serverProvider.setServerUrl(value),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        icon: serverProvider.isBusy
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.wifi_tethering, size: 16),
-                        label: const Text('保存并检测服务器'),
-                        onPressed: serverProvider.isBusy
-                            ? null
-                            : () async {
+                      const SizedBox(height: 12),
+                      if (!serverProvider.isLoggedIn) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.login, size: 16),
+                                label: const Text('登录'),
+                                onPressed: () =>
+                                    _showLoginDialog(context, serverProvider),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.person_add, size: 16),
+                                label: const Text('注册'),
+                                onPressed: () => _showRegisterDialog(
+                                    context, serverProvider),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Icon(Icons.person,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              serverProvider.username ?? '',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              icon: const Icon(Icons.logout, size: 16),
+                              label: const Text('退出'),
+                              onPressed: () async {
                                 try {
-                                  final info =
-                                      await serverProvider.checkServer();
-                                  if (context.mounted) {
-                                    context.showLoggedSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '连接成功 · 协议 v${info.protocolMin}-${info.protocolMax}',
-                                        ),
-                                      ),
-                                    );
-                                  }
+                                  await serverProvider.logout();
                                 } catch (error) {
                                   if (context.mounted) {
                                     context.showLoggedSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          localizedServerConnectionError(
-                                            l10n: context.l10n,
-                                            serverUrl: serverProvider.serverUrl,
-                                            error: error,
-                                          ),
-                                        ),
-                                      ),
+                                      SnackBar(content: Text('退出失败: $error')),
                                     );
                                   }
                                 }
                               },
-                      ),
-                    ),
-                    if (serverProvider.serverInfo != null) ...[
-                      const SizedBox(height: 8),
-                      SelectableText(
-                        '实例 ${serverProvider.serverInfo!.serverInstanceId}\n'
-                        '能力 ${serverProvider.serverInfo!.features.join(', ')}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (!serverProvider.isLoggedIn) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.login, size: 16),
-                              label: const Text('登录'),
-                              onPressed: () =>
-                                  _showLoginDialog(context, serverProvider),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.person_add, size: 16),
-                              label: const Text('注册'),
-                              onPressed: () =>
-                                  _showRegisterDialog(context, serverProvider),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      Row(
-                        children: [
-                          Icon(Icons.person,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            serverProvider.username ?? '',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          const Spacer(),
-                          TextButton.icon(
-                            icon: const Icon(Icons.logout, size: 16),
-                            label: const Text('退出'),
-                            onPressed: () async {
-                              try {
-                                await serverProvider.logout();
-                              } catch (error) {
-                                if (context.mounted) {
-                                  context.showLoggedSnackBar(
-                                    SnackBar(content: Text('退出失败: $error')),
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
-
-        const SizedBox(height: 16),
-
-        DataOperations(
-          isNarrow: isNarrow,
-          cardPadding: cardPadding,
-          onViewDatabaseLog: () => _showDatabaseLogDialog(context),
-          onExportDatabase: () => _exportDatabase(context),
-          onImportDatabase: () => _showImportDatabaseDialog(context),
-          onViewSnackbarLog: () => _showSnackbarLogDialog(context),
-          onClearAllData: () => _showClearDataConfirmation(context),
-        ),
-
-        const SizedBox(height: 16),
-
-        // 操作按钮
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                onPressed: () => _showResetConfirmation(context),
-                style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    foregroundColor: Colors.white),
-                child: const Text('恢复默认设置'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                child: const Text('关于应用'),
-                onPressed: () => _showAboutDialog(context),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // 版本信息
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(8),
+              );
+            },
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+
+          const SizedBox(height: 16),
+
+          DataOperations(
+            isNarrow: isNarrow,
+            cardPadding: cardPadding,
+            onViewDatabaseLog: () => _showDatabaseLogDialog(context),
+            onExportDatabase: () => _exportDatabase(context),
+            onImportDatabase: () => _showImportDatabaseDialog(context),
+            onViewSnackbarLog: () => _showSnackbarLogDialog(context),
+            onClearAllData: () => _showClearDataConfirmation(context),
+          ),
+
+          const SizedBox(height: 16),
+
+          // 操作按钮
+          Row(
             children: [
-              const Text(
-                '应用信息',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => _showResetConfirmation(context),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      foregroundColor: Colors.white),
+                  child: const Text('恢复默认设置'),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'OpenLogTool v${appInfoProvider.fullVersion}\n'
-                '© 2026 BG5CRL',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  child: const Text('关于应用'),
+                  onPressed: () => _showAboutDialog(context),
                 ),
               ),
             ],
           ),
-        ),
-      ],
-    );
+
+          const SizedBox(height: 16),
+
+          // 版本信息
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '应用信息',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'OpenLogTool v${appInfoProvider.fullVersion}\n'
+                  '© 2026 BG5CRL',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    });
   }
 
   void _showSnackbarLogDialog(BuildContext context) {
@@ -334,338 +358,17 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  void _showColorPicker(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-
-    showDialog(
+  Future<void> _showColorPicker(BuildContext context) async {
+    final settingsProvider = context.read<SettingsProvider>();
+    final selectedColor = await showDialog<Color>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('选择主题颜色'),
-        content: SizedBox(
-          width: 300,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 预设颜色
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildColorOption(context, const Color(0xFF2196F3), '淡蓝色',
-                      settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFF4CAF50), '绿色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFFF44336), '红色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFFFF9800), '橙色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFF9C27B0), '紫色', settingsProvider),
-                  _buildColorOption(
-                      context, const Color(0xFFFF93B7), '粉色', settingsProvider),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _showCustomColorPicker(context),
-                child: const Text('自定义颜色'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        ],
+      builder: (_) => ThemeColorPickerDialog(
+        initialColor: settingsProvider.themeColor,
       ),
     );
-  }
-
-  Widget _buildColorOption(BuildContext context, Color color, String label,
-      SettingsProvider provider) {
-    return GestureDetector(
-      onTap: () {
-        provider.setThemeColor(color);
-        Navigator.pop(context);
-      },
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCustomColorPicker(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-    HSVColor hsvColor = HSVColor.fromColor(settingsProvider.themeColor);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            Color currentColor = hsvColor.toColor();
-
-            return AlertDialog(
-              title: const Text('自定义颜色'),
-              content: SizedBox(
-                width: 320,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 280,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border:
-                            Border.all(color: Colors.grey.shade400, width: 1),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: GestureDetector(
-                          onPanStart: (details) {
-                            _updateHsvFromTap(
-                                details.localPosition,
-                                const Size(280, 150),
-                                hsvColor,
-                                setState, (newHsv) {
-                              hsvColor = newHsv;
-                              currentColor = hsvColor.toColor();
-                            });
-                          },
-                          onPanUpdate: (details) {
-                            _updateHsvFromTap(
-                                details.localPosition,
-                                const Size(280, 150),
-                                hsvColor,
-                                setState, (newHsv) {
-                              hsvColor = newHsv;
-                              currentColor = hsvColor.toColor();
-                            });
-                          },
-                          child: CustomPaint(
-                            size: const Size(280, 150),
-                            painter: HsvSaturationValuePainter(
-                              hsvColor.hue,
-                              hsvColor.saturation,
-                              hsvColor.value,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: currentColor,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: Colors.grey.shade400, width: 2),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: const TextStyle(
-                                fontFamily: 'monospace', fontSize: 14),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('色相:', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Stack(
-                            alignment: Alignment.centerLeft,
-                            children: [
-                              Container(
-                                height: 20,
-                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFF0000),
-                                      Color(0xFFFFFF00),
-                                      Color(0xFF00FF00),
-                                      Color(0xFF00FFFF),
-                                      Color(0xFF0000FF),
-                                      Color(0xFFFF00FF),
-                                      Color(0xFFFF0000),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SliderTheme(
-                                data: SliderThemeData(
-                                  trackHeight: 20,
-                                  thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 10),
-                                  overlayShape: SliderComponentShape.noOverlay,
-                                  activeTrackColor: Colors.transparent,
-                                  inactiveTrackColor: Colors.transparent,
-                                ),
-                                child: Slider(
-                                  value: hsvColor.hue,
-                                  min: 0,
-                                  max: 360,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      hsvColor = hsvColor.withHue(value);
-                                      currentColor = hsvColor.toColor();
-                                    });
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('透明度:', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Slider(
-                            value: hsvColor.alpha,
-                            min: 0,
-                            max: 1,
-                            activeColor: currentColor,
-                            inactiveColor: Colors.grey.shade300,
-                            onChanged: (value) {
-                              setState(() {
-                                hsvColor = hsvColor.withAlpha(value);
-                                currentColor = hsvColor.toColor();
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildQuickColorButton(const Color(0xFF2196F3), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF2196F3));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF4CAF50), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF4CAF50));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFFF44336), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFFF44336));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFFFF9800), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFFFF9800));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF9C27B0), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF9C27B0));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF607D8B), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF607D8B));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    settingsProvider.setThemeColor(currentColor);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('应用颜色'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _updateHsvFromTap(Offset position, Size size, HSVColor hsvColor,
-      StateSetter setState, Function(HSVColor) onUpdate) {
-    double saturation = (position.dx / size.width).clamp(0.0, 1.0);
-    double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
-    final newHsv =
-        HSVColor.fromAHSV(hsvColor.alpha, hsvColor.hue, saturation, value);
-    setState(() {});
-    onUpdate(newHsv);
-  }
-
-  Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey.shade400, width: 1),
-        ),
-      ),
-    );
+    if (selectedColor != null) {
+      await settingsProvider.setThemeColor(selectedColor);
+    }
   }
 
   void _showResetConfirmation(BuildContext context) {
@@ -707,7 +410,7 @@ class SettingsPanel extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('清空所有数据'),
         content: const Text(
-            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词典\n• QTH 历史记录\n\n确定要继续吗？'),
+            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词库\n• QTH 历史记录\n\n确定要继续吗？'),
         actions: [
           FilledButton(
             child: const Text('取消'),
@@ -905,7 +608,7 @@ class SettingsPanel extends StatelessWidget {
               const SizedBox(height: 8),
               const Text(
                 '一个专为业余无线电爱好者设计的点名记录工具。'
-                '支持快速记录通联信息，管理设备、天线、呼号词典，'
+                '支持快速记录通联信息，管理设备、天线、呼号词库，'
                 '以及数据导入导出功能。',
               ),
               const SizedBox(height: 12),
@@ -914,7 +617,7 @@ class SettingsPanel extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const Text('• 快速添加点名记录'),
-              const Text('• 设备、天线、呼号、QTH词典管理'),
+              const Text('• 设备、天线、呼号、QTH 词库管理'),
               const Text('• 数据导入导出 (JSON, Excel)'),
               const Text('• 暗色/亮色主题切换'),
               const Text('• 宽屏平行布局'),

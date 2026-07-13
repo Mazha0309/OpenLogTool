@@ -90,7 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final primarySidebarExpanded = context.select<SettingsProvider, bool>(
+      (settings) => settings.primarySidebarExpanded,
+    );
     final pages = <Widget>[
       const _WorkbenchPage(),
       const SessionHubPage(),
@@ -115,10 +117,11 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               PrimaryNavigationRail(
                 isDesktop: isDesktop,
-                expanded: settings.primarySidebarExpanded,
+                expanded: primarySidebarExpanded,
                 selectedIndex: _selectedIndex,
                 onDestinationSelected: _onItemTapped,
-                onExpandedChanged: settings.setPrimarySidebarExpanded,
+                onExpandedChanged:
+                    context.read<SettingsProvider>().setPrimarySidebarExpanded,
                 destinations: [
                   for (final destination in _destinations)
                     NavigationRailDestination(
@@ -867,8 +870,15 @@ class SettingsPage extends StatelessWidget {
         final isNarrow = constraints.maxWidth < 600;
         return SingleChildScrollView(
           padding: EdgeInsets.symmetric(
-              horizontal: isNarrow ? 8 : 16, vertical: isNarrow ? 12 : 16),
-          child: const SettingsPanel(),
+            horizontal: isNarrow ? 8 : 24,
+            vertical: isNarrow ? 12 : 24,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: const SettingsPanel(),
+            ),
+          ),
         );
       },
     );

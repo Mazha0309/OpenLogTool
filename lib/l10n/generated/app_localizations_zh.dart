@@ -404,6 +404,174 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get serverAddressInvalid => '服务器地址必须是完整的 http(s) URL。';
+
+  @override
+  String get excelUseSessionTitleAsHeader => '抬头使用当前会话名';
+
+  @override
+  String get excelUseSessionTitleAsHeaderHint =>
+      '开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。';
+
+  @override
+  String get themeColorPickerTitle => '选择主题颜色';
+
+  @override
+  String get themeColorPresets => '预设颜色';
+
+  @override
+  String get themeColorCustom => '自定义颜色';
+
+  @override
+  String get themeColorHex => 'HEX 颜色';
+
+  @override
+  String get themeColorHue => '色相';
+
+  @override
+  String get themeColorBlue => '蓝色';
+
+  @override
+  String get themeColorGreen => '绿色';
+
+  @override
+  String get themeColorRed => '红色';
+
+  @override
+  String get themeColorOrange => '橙色';
+
+  @override
+  String get themeColorPurple => '紫色';
+
+  @override
+  String get themeColorPink => '粉色';
+
+  @override
+  String get save => '保存';
+
+  @override
+  String get add => '添加';
+
+  @override
+  String get renameSession => '修改会话名';
+
+  @override
+  String get renameSessionTitle => '修改会话名';
+
+  @override
+  String get sessionTitleLabel => '会话名';
+
+  @override
+  String get renameCollaborationSessionHint => '只有会话所有者可以修改；保存后将同步给其他书记员和主控显示。';
+
+  @override
+  String get renameSessionSaved => '会话名已更新';
+
+  @override
+  String get renameCollaborationSessionSaved => '会话名已保存，正在同步给其他成员';
+
+  @override
+  String renameSessionFailed(String error) {
+    return '修改会话名失败：$error';
+  }
+
+  @override
+  String get renameSessionBlockedClosed => '已关闭的会话不能修改名称';
+
+  @override
+  String get renameSessionBlockedBusy => '协作操作进行中，暂时不能修改名称';
+
+  @override
+  String get renameSessionBlockedConflict => '请先解决会话冲突，再修改名称';
+
+  @override
+  String get renameSessionBlockedNotReady => '协作会话尚未就绪，暂时不能修改名称';
+
+  @override
+  String get renameSessionBlockedOwner => '只有会话所有者可以修改名称';
+
+  @override
+  String get dictionaryManagementTitle => '词库管理';
+
+  @override
+  String get dictionaryManagementHint => '管理点名时可搜索和一键复用的设备、天线、呼号与 QTH 内容。';
+
+  @override
+  String get deviceLibrary => '设备词库';
+
+  @override
+  String get antennaLibrary => '天线词库';
+
+  @override
+  String get callsignLibrary => '呼号词库';
+
+  @override
+  String get qthLibrary => 'QTH 词库';
+
+  @override
+  String libraryItemCount(int count) {
+    return '共 $count 条';
+  }
+
+  @override
+  String get importLibraryJson => '导入 JSON';
+
+  @override
+  String get expandAll => '展开全部';
+
+  @override
+  String get collapseAll => '折叠全部';
+
+  @override
+  String addLibraryItem(String name) {
+    return '添加$name';
+  }
+
+  @override
+  String searchLibrary(String name) {
+    return '搜索$name';
+  }
+
+  @override
+  String get libraryEmpty => '词库中还没有内容';
+
+  @override
+  String get noLibrarySearchResults => '没有匹配的词库内容';
+
+  @override
+  String libraryItemAdded(String value) {
+    return '已添加：$value';
+  }
+
+  @override
+  String libraryItemAlreadyExists(String value) {
+    return '词库中已有“$value”';
+  }
+
+  @override
+  String libraryItemAddFailed(String error) {
+    return '添加失败：$error';
+  }
+
+  @override
+  String get libraryImportEmpty => '文件中没有可导入的词库内容';
+
+  @override
+  String libraryImportCount(String name, int count) {
+    return '$name $count 条';
+  }
+
+  @override
+  String libraryImportSucceeded(String summary) {
+    return '已导入：$summary';
+  }
+
+  @override
+  String libraryImportFailed(String error) {
+    return '导入词库失败：$error';
+  }
+
+  @override
+  String get listSeparator => '，';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -806,4 +974,172 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get serverAddressInvalid => '服务器地址必须是完整的 http(s) URL。';
+
+  @override
+  String get excelUseSessionTitleAsHeader => '抬头使用当前会话名';
+
+  @override
+  String get excelUseSessionTitleAsHeaderHint =>
+      '开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。';
+
+  @override
+  String get themeColorPickerTitle => '选择主题颜色';
+
+  @override
+  String get themeColorPresets => '预设颜色';
+
+  @override
+  String get themeColorCustom => '自定义颜色';
+
+  @override
+  String get themeColorHex => 'HEX 颜色';
+
+  @override
+  String get themeColorHue => '色相';
+
+  @override
+  String get themeColorBlue => '蓝色';
+
+  @override
+  String get themeColorGreen => '绿色';
+
+  @override
+  String get themeColorRed => '红色';
+
+  @override
+  String get themeColorOrange => '橙色';
+
+  @override
+  String get themeColorPurple => '紫色';
+
+  @override
+  String get themeColorPink => '粉色';
+
+  @override
+  String get save => '保存';
+
+  @override
+  String get add => '添加';
+
+  @override
+  String get renameSession => '修改会话名';
+
+  @override
+  String get renameSessionTitle => '修改会话名';
+
+  @override
+  String get sessionTitleLabel => '会话名';
+
+  @override
+  String get renameCollaborationSessionHint => '只有会话所有者可以修改；保存后将同步给其他书记员和主控显示。';
+
+  @override
+  String get renameSessionSaved => '会话名已更新';
+
+  @override
+  String get renameCollaborationSessionSaved => '会话名已保存，正在同步给其他成员';
+
+  @override
+  String renameSessionFailed(String error) {
+    return '修改会话名失败：$error';
+  }
+
+  @override
+  String get renameSessionBlockedClosed => '已关闭的会话不能修改名称';
+
+  @override
+  String get renameSessionBlockedBusy => '协作操作进行中，暂时不能修改名称';
+
+  @override
+  String get renameSessionBlockedConflict => '请先解决会话冲突，再修改名称';
+
+  @override
+  String get renameSessionBlockedNotReady => '协作会话尚未就绪，暂时不能修改名称';
+
+  @override
+  String get renameSessionBlockedOwner => '只有会话所有者可以修改名称';
+
+  @override
+  String get dictionaryManagementTitle => '词库管理';
+
+  @override
+  String get dictionaryManagementHint => '管理点名时可搜索和一键复用的设备、天线、呼号与 QTH 内容。';
+
+  @override
+  String get deviceLibrary => '设备词库';
+
+  @override
+  String get antennaLibrary => '天线词库';
+
+  @override
+  String get callsignLibrary => '呼号词库';
+
+  @override
+  String get qthLibrary => 'QTH 词库';
+
+  @override
+  String libraryItemCount(int count) {
+    return '共 $count 条';
+  }
+
+  @override
+  String get importLibraryJson => '导入 JSON';
+
+  @override
+  String get expandAll => '展开全部';
+
+  @override
+  String get collapseAll => '折叠全部';
+
+  @override
+  String addLibraryItem(String name) {
+    return '添加$name';
+  }
+
+  @override
+  String searchLibrary(String name) {
+    return '搜索$name';
+  }
+
+  @override
+  String get libraryEmpty => '词库中还没有内容';
+
+  @override
+  String get noLibrarySearchResults => '没有匹配的词库内容';
+
+  @override
+  String libraryItemAdded(String value) {
+    return '已添加：$value';
+  }
+
+  @override
+  String libraryItemAlreadyExists(String value) {
+    return '词库中已有“$value”';
+  }
+
+  @override
+  String libraryItemAddFailed(String error) {
+    return '添加失败：$error';
+  }
+
+  @override
+  String get libraryImportEmpty => '文件中没有可导入的词库内容';
+
+  @override
+  String libraryImportCount(String name, int count) {
+    return '$name $count 条';
+  }
+
+  @override
+  String libraryImportSucceeded(String summary) {
+    return '已导入：$summary';
+  }
+
+  @override
+  String libraryImportFailed(String error) {
+    return '导入词库失败：$error';
+  }
+
+  @override
+  String get listSeparator => '，';
 }

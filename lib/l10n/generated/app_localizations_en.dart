@@ -417,6 +417,182 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get serverAddressInvalid =>
       'The server address must be a complete http(s) URL.';
+
+  @override
+  String get excelUseSessionTitleAsHeader =>
+      'Use current session name as header';
+
+  @override
+  String get excelUseSessionTitleAsHeaderHint =>
+      'Use the current session name directly as the Excel header. If it is blank, the header template is used instead.';
+
+  @override
+  String get themeColorPickerTitle => 'Choose theme color';
+
+  @override
+  String get themeColorPresets => 'Preset colors';
+
+  @override
+  String get themeColorCustom => 'Custom color';
+
+  @override
+  String get themeColorHex => 'HEX color';
+
+  @override
+  String get themeColorHue => 'Hue';
+
+  @override
+  String get themeColorBlue => 'Blue';
+
+  @override
+  String get themeColorGreen => 'Green';
+
+  @override
+  String get themeColorRed => 'Red';
+
+  @override
+  String get themeColorOrange => 'Orange';
+
+  @override
+  String get themeColorPurple => 'Purple';
+
+  @override
+  String get themeColorPink => 'Pink';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get add => 'Add';
+
+  @override
+  String get renameSession => 'Rename session';
+
+  @override
+  String get renameSessionTitle => 'Rename session';
+
+  @override
+  String get sessionTitleLabel => 'Session name';
+
+  @override
+  String get renameCollaborationSessionHint =>
+      'Only the session owner can rename it. The new name will sync to other scribes and controller displays.';
+
+  @override
+  String get renameSessionSaved => 'Session name updated';
+
+  @override
+  String get renameCollaborationSessionSaved =>
+      'Session name saved and syncing to other members';
+
+  @override
+  String renameSessionFailed(String error) {
+    return 'Could not rename session: $error';
+  }
+
+  @override
+  String get renameSessionBlockedClosed => 'A closed session cannot be renamed';
+
+  @override
+  String get renameSessionBlockedBusy =>
+      'Wait for the current collaboration operation to finish';
+
+  @override
+  String get renameSessionBlockedConflict =>
+      'Resolve the session conflict before renaming';
+
+  @override
+  String get renameSessionBlockedNotReady =>
+      'The collaboration session is not ready to be renamed';
+
+  @override
+  String get renameSessionBlockedOwner =>
+      'Only the session owner can rename it';
+
+  @override
+  String get dictionaryManagementTitle => 'Lookup libraries';
+
+  @override
+  String get dictionaryManagementHint =>
+      'Manage radios, antennas, callsigns, and QTH values that can be searched and reused while logging.';
+
+  @override
+  String get deviceLibrary => 'Radio library';
+
+  @override
+  String get antennaLibrary => 'Antenna library';
+
+  @override
+  String get callsignLibrary => 'Callsign library';
+
+  @override
+  String get qthLibrary => 'QTH library';
+
+  @override
+  String libraryItemCount(int count) {
+    return '$count entries';
+  }
+
+  @override
+  String get importLibraryJson => 'Import JSON';
+
+  @override
+  String get expandAll => 'Expand all';
+
+  @override
+  String get collapseAll => 'Collapse all';
+
+  @override
+  String addLibraryItem(String name) {
+    return 'Add to $name';
+  }
+
+  @override
+  String searchLibrary(String name) {
+    return 'Search $name';
+  }
+
+  @override
+  String get libraryEmpty => 'This library is empty';
+
+  @override
+  String get noLibrarySearchResults => 'No matching library entries';
+
+  @override
+  String libraryItemAdded(String value) {
+    return 'Added: $value';
+  }
+
+  @override
+  String libraryItemAlreadyExists(String value) {
+    return '“$value” is already in the library';
+  }
+
+  @override
+  String libraryItemAddFailed(String error) {
+    return 'Could not add entry: $error';
+  }
+
+  @override
+  String get libraryImportEmpty => 'The file has no library entries to import';
+
+  @override
+  String libraryImportCount(String name, int count) {
+    return '$name: $count';
+  }
+
+  @override
+  String libraryImportSucceeded(String summary) {
+    return 'Imported: $summary';
+  }
+
+  @override
+  String libraryImportFailed(String error) {
+    return 'Could not import libraries: $error';
+  }
+
+  @override
+  String get listSeparator => ', ';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -832,4 +1008,180 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get serverAddressInvalid =>
       'The server address must be a complete http(s) URL.';
+
+  @override
+  String get excelUseSessionTitleAsHeader =>
+      'Use current session name as header';
+
+  @override
+  String get excelUseSessionTitleAsHeaderHint =>
+      'Use the current session name directly as the Excel header. If it is blank, the header template is used instead.';
+
+  @override
+  String get themeColorPickerTitle => 'Choose theme color';
+
+  @override
+  String get themeColorPresets => 'Preset colors';
+
+  @override
+  String get themeColorCustom => 'Custom color';
+
+  @override
+  String get themeColorHex => 'HEX color';
+
+  @override
+  String get themeColorHue => 'Hue';
+
+  @override
+  String get themeColorBlue => 'Blue';
+
+  @override
+  String get themeColorGreen => 'Green';
+
+  @override
+  String get themeColorRed => 'Red';
+
+  @override
+  String get themeColorOrange => 'Orange';
+
+  @override
+  String get themeColorPurple => 'Purple';
+
+  @override
+  String get themeColorPink => 'Pink';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get add => 'Add';
+
+  @override
+  String get renameSession => 'Rename session';
+
+  @override
+  String get renameSessionTitle => 'Rename session';
+
+  @override
+  String get sessionTitleLabel => 'Session name';
+
+  @override
+  String get renameCollaborationSessionHint =>
+      'Only the session owner can rename it. The new name will sync to other scribes and controller displays.';
+
+  @override
+  String get renameSessionSaved => 'Session name updated';
+
+  @override
+  String get renameCollaborationSessionSaved =>
+      'Session name saved and syncing to other members';
+
+  @override
+  String renameSessionFailed(String error) {
+    return 'Could not rename session: $error';
+  }
+
+  @override
+  String get renameSessionBlockedClosed => 'A closed session cannot be renamed';
+
+  @override
+  String get renameSessionBlockedBusy =>
+      'Wait for the current collaboration operation to finish';
+
+  @override
+  String get renameSessionBlockedConflict =>
+      'Resolve the session conflict before renaming';
+
+  @override
+  String get renameSessionBlockedNotReady =>
+      'The collaboration session is not ready to be renamed';
+
+  @override
+  String get renameSessionBlockedOwner =>
+      'Only the session owner can rename it';
+
+  @override
+  String get dictionaryManagementTitle => 'Lookup libraries';
+
+  @override
+  String get dictionaryManagementHint =>
+      'Manage radios, antennas, callsigns, and QTH values that can be searched and reused while logging.';
+
+  @override
+  String get deviceLibrary => 'Radio library';
+
+  @override
+  String get antennaLibrary => 'Antenna library';
+
+  @override
+  String get callsignLibrary => 'Callsign library';
+
+  @override
+  String get qthLibrary => 'QTH library';
+
+  @override
+  String libraryItemCount(int count) {
+    return '$count entries';
+  }
+
+  @override
+  String get importLibraryJson => 'Import JSON';
+
+  @override
+  String get expandAll => 'Expand all';
+
+  @override
+  String get collapseAll => 'Collapse all';
+
+  @override
+  String addLibraryItem(String name) {
+    return 'Add to $name';
+  }
+
+  @override
+  String searchLibrary(String name) {
+    return 'Search $name';
+  }
+
+  @override
+  String get libraryEmpty => 'This library is empty';
+
+  @override
+  String get noLibrarySearchResults => 'No matching library entries';
+
+  @override
+  String libraryItemAdded(String value) {
+    return 'Added: $value';
+  }
+
+  @override
+  String libraryItemAlreadyExists(String value) {
+    return '“$value” is already in the library';
+  }
+
+  @override
+  String libraryItemAddFailed(String error) {
+    return 'Could not add entry: $error';
+  }
+
+  @override
+  String get libraryImportEmpty => 'The file has no library entries to import';
+
+  @override
+  String libraryImportCount(String name, int count) {
+    return '$name: $count';
+  }
+
+  @override
+  String libraryImportSucceeded(String summary) {
+    return 'Imported: $summary';
+  }
+
+  @override
+  String libraryImportFailed(String error) {
+    return 'Could not import libraries: $error';
+  }
+
+  @override
+  String get listSeparator => ', ';
 }

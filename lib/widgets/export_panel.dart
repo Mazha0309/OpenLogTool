@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -44,7 +45,6 @@ class _ExportPanelState extends State<ExportPanel> {
                     ),
               ),
               SizedBox(height: sectionSpacing),
-
               if (isWideScreen)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,9 +63,7 @@ class _ExportPanelState extends State<ExportPanel> {
                 SizedBox(height: sectionSpacing),
                 _buildExcelSettingsCard(context, cardPadding),
               ],
-
               SizedBox(height: sectionSpacing),
-
               _buildFormatInfoCard(context, cardPadding),
             ],
           ),
@@ -81,7 +79,8 @@ class _ExportPanelState extends State<ExportPanel> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+        side:
+            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
       ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
@@ -90,13 +89,14 @@ class _ExportPanelState extends State<ExportPanel> {
           children: [
             Row(
               children: [
-                Icon(Icons.swap_horiz, color: theme.colorScheme.primary, size: 20),
+                Icon(Icons.swap_horiz,
+                    color: theme.colorScheme.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   '导入 / 导出',
                   style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -104,8 +104,8 @@ class _ExportPanelState extends State<ExportPanel> {
             Text(
               '支持 JSON（完整数据）和 Excel（可视化表格）两种格式。',
               style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             SizedBox(height: cardPadding),
 
@@ -181,7 +181,9 @@ class _ExportPanelState extends State<ExportPanel> {
           children: [
             Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: 6),
-            Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+            Text(title,
+                style: theme.textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w600)),
           ],
         ),
         const SizedBox(height: 2),
@@ -190,8 +192,8 @@ class _ExportPanelState extends State<ExportPanel> {
           child: Text(
             description,
             style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -214,7 +216,8 @@ class _ExportPanelState extends State<ExportPanel> {
       icon: Icon(icon, size: 18),
       label: Text(label),
       style: ElevatedButton.styleFrom(
-        foregroundColor: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+        foregroundColor:
+            color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
         backgroundColor: color,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -227,12 +230,15 @@ class _ExportPanelState extends State<ExportPanel> {
     final theme = Theme.of(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final settings = settingsProvider.exportSettings;
+    final currentSessionTitle =
+        Provider.of<SessionProvider>(context).currentSession?.title.trim();
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+        side:
+            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
       ),
       child: Padding(
         padding: EdgeInsets.all(cardPadding),
@@ -241,13 +247,14 @@ class _ExportPanelState extends State<ExportPanel> {
           children: [
             Row(
               children: [
-                Icon(Icons.settings, color: theme.colorScheme.primary, size: 20),
+                Icon(Icons.settings,
+                    color: theme.colorScheme.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'Excel 导出设置',
                   style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const Spacer(),
                 TextButton.icon(
@@ -261,11 +268,10 @@ class _ExportPanelState extends State<ExportPanel> {
             Text(
               '预览并快速调整最常用的导出选项，完整选项请进入高级设置。',
               style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             SizedBox(height: cardPadding),
-
             _buildSettingRow(
               context,
               label: '文件名模板',
@@ -276,24 +282,32 @@ class _ExportPanelState extends State<ExportPanel> {
             _buildSettingRow(
               context,
               label: 'Excel 抬头',
-              value: settings.headerText,
+              value: settings.useSessionTitleAsHeader
+                  ? (currentSessionTitle?.isNotEmpty == true
+                      ? currentSessionTitle!
+                      : settings.headerText)
+                  : settings.headerText,
               icon: Icons.title,
             ),
             const Divider(height: 24),
             _buildSettingRow(
               context,
               label: '导出路径',
-              value: settings.exportPath.isEmpty ? '默认下载文件夹' : settings.exportPath,
+              value:
+                  settings.exportPath.isEmpty ? '默认下载文件夹' : settings.exportPath,
               icon: Icons.folder,
             ),
             const Divider(height: 24),
             Row(
               children: [
-                _buildColorChip(context, '抬头背景', settings.headerBackgroundColor),
+                _buildColorChip(
+                    context, '抬头背景', settings.headerBackgroundColor),
                 const SizedBox(width: 12),
-                _buildColorChip(context, '表头背景', settings.headerRowBackgroundColor),
+                _buildColorChip(
+                    context, '表头背景', settings.headerRowBackgroundColor),
                 const SizedBox(width: 12),
-                _buildColorChip(context, '主控栏', settings.controllerBackgroundColor),
+                _buildColorChip(
+                    context, '主控栏', settings.controllerBackgroundColor),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildToggleChip(
@@ -334,8 +348,8 @@ class _ExportPanelState extends State<ExportPanel> {
               Text(
                 label,
                 style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
@@ -361,8 +375,8 @@ class _ExportPanelState extends State<ExportPanel> {
         Text(
           label,
           style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 4),
         Container(
@@ -394,13 +408,16 @@ class _ExportPanelState extends State<ExportPanel> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Switch(value: value, onChanged: onChanged, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            Switch(
+                value: value,
+                onChanged: onChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
             const SizedBox(width: 4),
             Text(
               label,
               style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -416,18 +433,21 @@ class _ExportPanelState extends State<ExportPanel> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+        border:
+            Border.all(color: theme.colorScheme.outlineVariant.withAlpha(128)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.info_outline, size: 18, color: theme.colorScheme.primary),
+              Icon(Icons.info_outline,
+                  size: 18, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Text(
                 '文件格式说明',
-                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -436,9 +456,9 @@ class _ExportPanelState extends State<ExportPanel> {
             '• JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。\n'
             '• Excel：使用 .xlsx 格式，包含分组主控栏、颜色样式和底部信息，适合分享与打印。',
             style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  height: 1.5,
-                ),
+              color: theme.colorScheme.onSurfaceVariant,
+              height: 1.5,
+            ),
           ),
         ],
       ),
@@ -446,12 +466,17 @@ class _ExportPanelState extends State<ExportPanel> {
   }
 
   void _showExportSettingsDialog(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    ExportSettings settings = ExportSettings.fromJson(settingsProvider.exportSettings.toJson());
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
+    ExportSettings settings =
+        ExportSettings.fromJson(settingsProvider.exportSettings.toJson());
 
-    final exportPathController = TextEditingController(text: settings.exportPath);
-    final fileNameController = TextEditingController(text: settings.fileNameTemplate);
-    final headerTextController = TextEditingController(text: settings.headerText);
+    final exportPathController =
+        TextEditingController(text: settings.exportPath);
+    final fileNameController =
+        TextEditingController(text: settings.fileNameTemplate);
+    final headerTextController =
+        TextEditingController(text: settings.headerText);
 
     showDialog(
       context: context,
@@ -570,6 +595,16 @@ class _ExportPanelState extends State<ExportPanel> {
             helperText: '使用模板变量自动生成文件名',
           ),
           const SizedBox(height: 20),
+          _buildSwitchTile(
+            context,
+            title: context.l10n.excelUseSessionTitleAsHeader,
+            subtitle: context.l10n.excelUseSessionTitleAsHeaderHint,
+            value: settings.useSessionTitleAsHeader,
+            onChanged: (value) {
+              setState(() => settings.useSessionTitleAsHeader = value);
+            },
+          ),
+          const SizedBox(height: 20),
           _buildTextFieldGroup(
             context,
             label: 'Excel 抬头文字',
@@ -594,7 +629,8 @@ class _ExportPanelState extends State<ExportPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        Text(label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -629,7 +665,8 @@ class _ExportPanelState extends State<ExportPanel> {
     );
   }
 
-  Widget _buildStyleSettingsTab(BuildContext context, ExportSettings settings, StateSetter setState) {
+  Widget _buildStyleSettingsTab(
+      BuildContext context, ExportSettings settings, StateSetter setState) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -647,7 +684,8 @@ class _ExportPanelState extends State<ExportPanel> {
             context,
             '表头背景色',
             settings.headerRowBackgroundColor,
-            (color) => setState(() => settings.headerRowBackgroundColor = color),
+            (color) =>
+                setState(() => settings.headerRowBackgroundColor = color),
             settings.fontFamily,
           ),
           const SizedBox(height: 16),
@@ -655,7 +693,8 @@ class _ExportPanelState extends State<ExportPanel> {
             context,
             '主控栏背景色',
             settings.controllerBackgroundColor,
-            (color) => setState(() => settings.controllerBackgroundColor = color),
+            (color) =>
+                setState(() => settings.controllerBackgroundColor = color),
             settings.fontFamily,
           ),
           const SizedBox(height: 16),
@@ -682,7 +721,8 @@ class _ExportPanelState extends State<ExportPanel> {
             title: '双色交替',
             subtitle: '启用交替行颜色',
             value: settings.useAlternateColors,
-            onChanged: (value) => setState(() => settings.useAlternateColors = value),
+            onChanged: (value) =>
+                setState(() => settings.useAlternateColors = value),
           ),
           _buildSwitchTile(
             context,
@@ -726,7 +766,8 @@ class _ExportPanelState extends State<ExportPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(fontSize: 14)),
-              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(subtitle,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ],
           ),
         ),
@@ -735,10 +776,13 @@ class _ExportPanelState extends State<ExportPanel> {
     );
   }
 
-  Widget _buildFontDropdown(BuildContext context, ExportSettings settings, StateSetter setState) {
-    final availableFonts = Provider.of<SettingsProvider>(context, listen: false).availableFonts;
+  Widget _buildFontDropdown(
+      BuildContext context, ExportSettings settings, StateSetter setState) {
+    final availableFonts =
+        Provider.of<SettingsProvider>(context, listen: false).availableFonts;
     final normalizedFamily = AppConfig.normalizeFontFamily(settings.fontFamily);
-    final initialValue = normalizedFamily.isEmpty ? 'SarasaGothicSC' : normalizedFamily;
+    final initialValue =
+        normalizedFamily.isEmpty ? 'SarasaGothicSC' : normalizedFamily;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,7 +797,9 @@ class _ExportPanelState extends State<ExportPanel> {
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
           items: [
-            const DropdownMenuItem(value: '', child: Text('系统默认', overflow: TextOverflow.ellipsis)),
+            const DropdownMenuItem(
+                value: '',
+                child: Text('系统默认', overflow: TextOverflow.ellipsis)),
             ...availableFonts.map((font) => DropdownMenuItem(
                   value: font,
                   child: Text(
@@ -780,7 +826,10 @@ class _ExportPanelState extends State<ExportPanel> {
         children: [
           Text(
             '模板变量说明',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           _buildTemplateHelpItem(context, '{yyyy}', '四位年份，如：2024'),
@@ -794,12 +843,18 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 16),
           Text(
             '使用示例',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          _buildExampleItem(context, '文件名：点名记录_{yyyy}-{MM}-{dd}', '点名记录_2024-03-28.xlsx'),
-          _buildExampleItem(context, '文件名：通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}', '通联_2024-03-28_143045.xlsx'),
-          _buildExampleItem(context, '抬头：{yyyy}年{MM}月{dd}日点名记录', '2024年03月28日点名记录'),
+          _buildExampleItem(
+              context, '文件名：点名记录_{yyyy}-{MM}-{dd}', '点名记录_2024-03-28.xlsx'),
+          _buildExampleItem(context, '文件名：通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}',
+              '通联_2024-03-28_143045.xlsx'),
+          _buildExampleItem(
+              context, '抬头：{yyyy}年{MM}月{dd}日点名记录', '2024年03月28日点名记录'),
           const SizedBox(height: 16),
           _buildInfoBox(
             context,
@@ -869,7 +924,8 @@ class _ExportPanelState extends State<ExportPanel> {
     );
   }
 
-  Widget _buildTemplateHelpItem(BuildContext context, String variable, String description) {
+  Widget _buildTemplateHelpItem(
+      BuildContext context, String variable, String description) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -910,7 +966,8 @@ class _ExportPanelState extends State<ExportPanel> {
     );
   }
 
-  Widget _buildExampleItem(BuildContext context, String template, String result) {
+  Widget _buildExampleItem(
+      BuildContext context, String template, String result) {
     final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -937,7 +994,8 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.arrow_forward, size: 14, color: theme.colorScheme.primary),
+              Icon(Icons.arrow_forward,
+                  size: 14, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1009,19 +1067,28 @@ class _ExportPanelState extends State<ExportPanel> {
                       height: 150,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade400, width: 1),
+                        border:
+                            Border.all(color: Colors.grey.shade400, width: 1),
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(7),
                         child: GestureDetector(
                           onPanStart: (details) {
-                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor.hue, setState, (newHsv) {
+                            _updateHsvFromTap(
+                                details.localPosition,
+                                const Size(280, 150),
+                                hsvColor.hue,
+                                setState, (newHsv) {
                               hsvColor = newHsv;
                               currentColor = hsvColor.toColor();
                             });
                           },
                           onPanUpdate: (details) {
-                            _updateHsvFromTap(details.localPosition, const Size(280, 150), hsvColor.hue, setState, (newHsv) {
+                            _updateHsvFromTap(
+                                details.localPosition,
+                                const Size(280, 150),
+                                hsvColor.hue,
+                                setState, (newHsv) {
                               hsvColor = newHsv;
                               currentColor = hsvColor.toColor();
                             });
@@ -1046,14 +1113,18 @@ class _ExportPanelState extends State<ExportPanel> {
                           decoration: BoxDecoration(
                             color: currentColor,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade400, width: 2),
+                            border: Border.all(
+                                color: Colors.grey.shade400, width: 2),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: TextStyle(fontSize: 14, fontFamily: fontFamily.isEmpty ? null : fontFamily),
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontFamily:
+                                    fontFamily.isEmpty ? null : fontFamily),
                           ),
                         ),
                       ],
@@ -1088,7 +1159,8 @@ class _ExportPanelState extends State<ExportPanel> {
                               SliderTheme(
                                 data: SliderThemeData(
                                   trackHeight: 20,
-                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                                  thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 10),
                                   overlayShape: SliderComponentShape.noOverlay,
                                   activeTrackColor: Colors.transparent,
                                   inactiveTrackColor: Colors.transparent,
@@ -1139,37 +1211,43 @@ class _ExportPanelState extends State<ExportPanel> {
                       children: [
                         _buildQuickColorButton(const Color(0xFF2196F3), () {
                           setState(() {
-                            hsvColor = HSVColor.fromColor(const Color(0xFF2196F3));
+                            hsvColor =
+                                HSVColor.fromColor(const Color(0xFF2196F3));
                             currentColor = hsvColor.toColor();
                           });
                         }),
                         _buildQuickColorButton(const Color(0xFF4CAF50), () {
                           setState(() {
-                            hsvColor = HSVColor.fromColor(const Color(0xFF4CAF50));
+                            hsvColor =
+                                HSVColor.fromColor(const Color(0xFF4CAF50));
                             currentColor = hsvColor.toColor();
                           });
                         }),
                         _buildQuickColorButton(const Color(0xFFF44336), () {
                           setState(() {
-                            hsvColor = HSVColor.fromColor(const Color(0xFFF44336));
+                            hsvColor =
+                                HSVColor.fromColor(const Color(0xFFF44336));
                             currentColor = hsvColor.toColor();
                           });
                         }),
                         _buildQuickColorButton(const Color(0xFFFF9800), () {
                           setState(() {
-                            hsvColor = HSVColor.fromColor(const Color(0xFFFF9800));
+                            hsvColor =
+                                HSVColor.fromColor(const Color(0xFFFF9800));
                             currentColor = hsvColor.toColor();
                           });
                         }),
                         _buildQuickColorButton(const Color(0xFF9C27B0), () {
                           setState(() {
-                            hsvColor = HSVColor.fromColor(const Color(0xFF9C27B0));
+                            hsvColor =
+                                HSVColor.fromColor(const Color(0xFF9C27B0));
                             currentColor = hsvColor.toColor();
                           });
                         }),
                         _buildQuickColorButton(const Color(0xFF607D8B), () {
                           setState(() {
-                            hsvColor = HSVColor.fromColor(const Color(0xFF607D8B));
+                            hsvColor =
+                                HSVColor.fromColor(const Color(0xFF607D8B));
                             currentColor = hsvColor.toColor();
                           });
                         }),
@@ -1197,7 +1275,8 @@ class _ExportPanelState extends State<ExportPanel> {
     );
   }
 
-  void _updateHsvFromTap(Offset position, Size size, double hue, StateSetter setState, Function(HSVColor) onUpdate) {
+  void _updateHsvFromTap(Offset position, Size size, double hue,
+      StateSetter setState, Function(HSVColor) onUpdate) {
     double saturation = (position.dx / size.width).clamp(0.0, 1.0);
     double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
     final newHsv = HSVColor.fromAHSV(1.0, hue, saturation, value);
@@ -1222,7 +1301,8 @@ class _ExportPanelState extends State<ExportPanel> {
 
   Future<void> _exportJSON(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
     final settings = settingsProvider.exportSettings;
     final logs = logProvider.logs;
 
@@ -1234,7 +1314,8 @@ class _ExportPanelState extends State<ExportPanel> {
     try {
       final jsonBytes = ExportService.generateJsonBytes(logs);
       final now = DateTime.now();
-      String filename = ExportService.generateFileName(settings.fileNameTemplate, now);
+      String filename =
+          ExportService.generateFileName(settings.fileNameTemplate, now);
       if (!filename.endsWith('.json')) {
         filename += '.json';
       }
@@ -1269,7 +1350,10 @@ class _ExportPanelState extends State<ExportPanel> {
 
   Future<void> _exportExcel(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
     final settings = settingsProvider.exportSettings;
     final logs = logProvider.logs;
 
@@ -1280,13 +1364,19 @@ class _ExportPanelState extends State<ExportPanel> {
 
     try {
       final now = DateTime.now();
-      final bytes = ExportService.generateExcelBytes(logs, settings, now);
+      final bytes = ExportService.generateExcelBytes(
+        logs,
+        settings,
+        now,
+        sessionTitle: sessionProvider.currentSession?.title,
+      );
       if (bytes == null) {
         _showSnackBar('导出失败: 无法生成 Excel 文件');
         return;
       }
 
-      String filename = ExportService.generateFileName(settings.fileNameTemplate, now);
+      String filename =
+          ExportService.generateFileName(settings.fileNameTemplate, now);
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';
       }
@@ -1321,7 +1411,8 @@ class _ExportPanelState extends State<ExportPanel> {
 
   Future<void> _importJSON(BuildContext context) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -1336,7 +1427,8 @@ class _ExportPanelState extends State<ExportPanel> {
 
       final importResult = parseJsonImport(content);
 
-      await logProvider.importLogs(importResult.logs, sessionId: sessionProvider.currentSessionId);
+      await logProvider.importLogs(importResult.logs,
+          sessionId: sessionProvider.currentSessionId);
       scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('导入成功: ${importResult.logs.length} 条记录')),
       );

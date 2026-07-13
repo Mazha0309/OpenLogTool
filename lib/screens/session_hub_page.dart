@@ -9,6 +9,7 @@ import 'package:openlogtool/screens/collaboration_screen.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
+import 'package:openlogtool/widgets/session_title_editor.dart';
 import 'package:provider/provider.dart';
 
 /// “会话”区的统一入口。详细成员、邀请和冲突管理继续复用协作页面。
@@ -21,15 +22,31 @@ class SessionHubPage extends StatelessWidget {
     final logs = context.watch<LogProvider>();
     final collaboration = context.watch<CollaborationProvider>();
     final settings = context.watch<SettingsProvider>();
+    final renameAvailability = session == null
+        ? null
+        : sessionRenameAvailability(
+            sessionStatus: session.status,
+            collaborationState: collaboration.state,
+            hasCollaborationBinding: collaboration.binding != null,
+            isCollaborationOwner: collaboration.isOwner,
+            isBusy: collaboration.isBusy,
+            hasOpenSessionConflict: collaboration.hasOpenSessionConflict,
+          );
     final isCompact = MediaQuery.sizeOf(context).width < 720;
     final displayData = session == null
         ? null
         : _displayData(session.title, logs, collaboration);
+    final appearance = ControllerWindowAppearance(
+      themeColor: settings.themeColor,
+      isDarkMode: settings.isDarkMode,
+      fontFamily: settings.fontFamily,
+    );
     if (displayData != null && supportsControllerDesktopWindows) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ControllerWindowService.updateOpenWindows(
           data: displayData,
           preferences: settings.controllerDisplayPreferences,
+          appearance: appearance,
         ).catchError((Object error) {
           debugPrint('[ControllerWindow] update failed: $error');
         });
@@ -85,12 +102,42 @@ class SessionHubPage extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  session.title,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleLarge
-                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        session.title,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Tooltip(
+                                      message: sessionRenameAvailabilityLabel(
+                                        context.l10n,
+                                        renameAvailability!,
+                                      ),
+                                      child: IconButton(
+                                        key: const Key('rename-session'),
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: renameAvailability ==
+                                                SessionRenameAvailability
+                                                    .allowed
+                                            ? () => _renameSession(
+                                                  context,
+                                                  session.title,
+                                                  collaboration,
+                                                )
+                                            : null,
+                                        icon: const Icon(Icons.edit_outlined),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 Text(
                                   '${session.status == 'active' ? context.l10n.sessionActive : context.l10n.sessionClosed} · '
@@ -182,6 +229,7 @@ class SessionHubPage extends StatelessWidget {
                           ControllerWindowMode.floating,
                           displayData!,
                           settings,
+                          appearance,
                         ),
                         icon: const Icon(Icons.picture_in_picture_alt),
                         label: Text(context.l10n.openFloatingWindow),
@@ -193,6 +241,7 @@ class SessionHubPage extends StatelessWidget {
                           ControllerWindowMode.secondDisplay,
                           displayData!,
                           settings,
+                          appearance,
                         ),
                         icon: const Icon(Icons.monitor),
                         label: Text(context.l10n.openSecondDisplayWindow),
@@ -278,17 +327,58 @@ class SessionHubPage extends StatelessWidget {
         ),
       );
 
+  static Future<void> _renameSession(
+    BuildContext context,
+    String currentTitle,
+    CollaborationProvider collaboration,
+  ) async {
+    final collaborationSession = collaboration.binding != null;
+    final title = await showSessionRenameDialog(
+      context,
+      currentTitle: currentTitle,
+      collaborationSession: collaborationSession,
+    );
+    if (title == null || !context.mounted) return;
+
+    try {
+      if (collaborationSession) {
+        await collaboration.renameCurrentSession(title);
+      } else {
+        await context.read<SessionProvider>().renameCurrentSession(title);
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            collaborationSession
+                ? context.l10n.renameCollaborationSessionSaved
+                : context.l10n.renameSessionSaved,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.renameSessionFailed(error.toString())),
+        ),
+      );
+    }
+  }
+
   static Future<void> _openDesktopWindow(
     BuildContext context,
     ControllerWindowMode mode,
     ControllerDisplayDto data,
     SettingsProvider settings,
+    ControllerWindowAppearance appearance,
   ) async {
     try {
       await ControllerWindowService.open(
         mode: mode,
         data: data,
         preferences: settings.controllerDisplayPreferences,
+        appearance: appearance,
       );
     } catch (error) {
       if (!context.mounted) return;

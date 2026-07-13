@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class ExportSettings {
   String headerText;
+  bool useSessionTitleAsHeader;
   String headerDateFormat;
   Color headerBackgroundColor;
   Color headerRowBackgroundColor;
@@ -16,6 +17,7 @@ class ExportSettings {
 
   ExportSettings({
     this.headerText = '{yyyy}-{MM}-{dd}日点名记录',
+    this.useSessionTitleAsHeader = false,
     this.headerDateFormat = 'yyyy-MM-dd',
     this.headerBackgroundColor = const Color(0xFF1E84D2),
     this.headerRowBackgroundColor = const Color(0xFFCFE7FF),
@@ -26,12 +28,13 @@ class ExportSettings {
     this.fontFamily = 'SarasaGothicSC',
     this.showFooter = true,
     this.exportPath = '',
-  this.fileNameTemplate = '点名记录_{yyyy}-{MM}-{dd}',
+    this.fileNameTemplate = '点名记录_{yyyy}-{MM}-{dd}',
   });
 
   Map<String, dynamic> toJson() {
     return {
       'headerText': headerText,
+      'useSessionTitleAsHeader': useSessionTitleAsHeader,
       'headerDateFormat': headerDateFormat,
       'headerBackgroundColor': headerBackgroundColor.toARGB32(),
       'headerRowBackgroundColor': headerRowBackgroundColor.toARGB32(),
@@ -57,22 +60,28 @@ class ExportSettings {
 
     return ExportSettings(
       headerText: json['headerText'] ?? '{yyyy}-{MM}-{dd}日点名记录',
+      useSessionTitleAsHeader: json['useSessionTitleAsHeader'] == true,
       headerDateFormat: json['headerDateFormat'] ?? 'yyyy-MM-dd',
-      headerBackgroundColor: parseColor(json['headerBackgroundColor'], 0xFF1E84D2),
-      headerRowBackgroundColor: parseColor(json['headerRowBackgroundColor'], 0xFFCFE7FF),
-      controllerBackgroundColor: parseColor(json['controllerBackgroundColor'], 0xFFFFFFC3),
-      tableBackgroundColor: parseColor(json['tableBackgroundColor'], 0xFFFFFFFF),
+      headerBackgroundColor:
+          parseColor(json['headerBackgroundColor'], 0xFF1E84D2),
+      headerRowBackgroundColor:
+          parseColor(json['headerRowBackgroundColor'], 0xFFCFE7FF),
+      controllerBackgroundColor:
+          parseColor(json['controllerBackgroundColor'], 0xFFFFFFC3),
+      tableBackgroundColor:
+          parseColor(json['tableBackgroundColor'], 0xFFFFFFFF),
       alternateRowColor: parseColor(json['alternateRowColor'], 0xFFC0E5F2),
       useAlternateColors: json['useAlternateColors'] ?? true,
       fontFamily: json['fontFamily'] ?? 'SarasaGothicSC',
       showFooter: json['showFooter'] ?? true,
       exportPath: json['exportPath'] ?? '',
-        fileNameTemplate: json['fileNameTemplate'] ?? '点名记录_{yyyy}-{MM}-{dd}',
+      fileNameTemplate: json['fileNameTemplate'] ?? '点名记录_{yyyy}-{MM}-{dd}',
     );
   }
 
   ExportSettings copyWith({
     String? headerText,
+    bool? useSessionTitleAsHeader,
     String? headerDateFormat,
     Color? headerBackgroundColor,
     Color? headerRowBackgroundColor,
@@ -87,10 +96,15 @@ class ExportSettings {
   }) {
     return ExportSettings(
       headerText: headerText ?? this.headerText,
+      useSessionTitleAsHeader:
+          useSessionTitleAsHeader ?? this.useSessionTitleAsHeader,
       headerDateFormat: headerDateFormat ?? this.headerDateFormat,
-      headerBackgroundColor: headerBackgroundColor ?? this.headerBackgroundColor,
-      headerRowBackgroundColor: headerRowBackgroundColor ?? this.headerRowBackgroundColor,
-      controllerBackgroundColor: controllerBackgroundColor ?? this.controllerBackgroundColor,
+      headerBackgroundColor:
+          headerBackgroundColor ?? this.headerBackgroundColor,
+      headerRowBackgroundColor:
+          headerRowBackgroundColor ?? this.headerRowBackgroundColor,
+      controllerBackgroundColor:
+          controllerBackgroundColor ?? this.controllerBackgroundColor,
       tableBackgroundColor: tableBackgroundColor ?? this.tableBackgroundColor,
       alternateRowColor: alternateRowColor ?? this.alternateRowColor,
       useAlternateColors: useAlternateColors ?? this.useAlternateColors,

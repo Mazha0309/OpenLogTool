@@ -95,11 +95,14 @@ class ExportService {
   static String generateFileName(String template, DateTime now) {
     String filename = template;
     filename = filename.replaceAll('{yyyy}', now.year.toString());
-    filename = filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
+    filename =
+        filename.replaceAll('{MM}', now.month.toString().padLeft(2, '0'));
     filename = filename.replaceAll('{dd}', now.day.toString().padLeft(2, '0'));
     filename = filename.replaceAll('{HH}', now.hour.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
-    filename = filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
+    filename =
+        filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
+    filename =
+        filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
     return filename;
   }
 
@@ -122,8 +125,9 @@ class ExportService {
   static Uint8List? generateExcelBytes(
     List<LogEntry> logs,
     ExportSettings settings,
-    DateTime now,
-  ) {
+    DateTime now, {
+    String? sessionTitle,
+  }) {
     final excel = excel_lib.Excel.createExcel();
     final sheet = excel['点名记录'];
 
@@ -134,10 +138,10 @@ class ExportService {
 
     final headerColor =
         excel_lib.ExcelColor.fromInt(settings.headerBackgroundColor.toARGB32());
-    final headerRowColor =
-        excel_lib.ExcelColor.fromInt(settings.headerRowBackgroundColor.toARGB32());
-    final controllerColor =
-        excel_lib.ExcelColor.fromInt(settings.controllerBackgroundColor.toARGB32());
+    final headerRowColor = excel_lib.ExcelColor.fromInt(
+        settings.headerRowBackgroundColor.toARGB32());
+    final controllerColor = excel_lib.ExcelColor.fromInt(
+        settings.controllerBackgroundColor.toARGB32());
     final alternateColor =
         excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
     const whiteColor = excel_lib.ExcelColor.white;
@@ -151,7 +155,11 @@ class ExportService {
         settings.fontFamily.isEmpty ? null : settings.fontFamily;
 
     // Header
-    String headerText = generateFileName(settings.headerText, now);
+    final normalizedSessionTitle = sessionTitle?.trim() ?? '';
+    final headerText =
+        settings.useSessionTitleAsHeader && normalizedSessionTitle.isNotEmpty
+            ? normalizedSessionTitle
+            : generateFileName(settings.headerText, now);
     sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
     sheet.merge(
       excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
@@ -178,7 +186,20 @@ class ExportService {
     sheet.setRowHeight(0, 30);
 
     // Column headers
-    final headers = ['#', '时间', '主控', '呼号', 'RST发', 'RST收', 'QTH', '设备', '功率', '天线', '高度', '备注'];
+    final headers = [
+      '#',
+      '时间',
+      '主控',
+      '呼号',
+      'RST发',
+      'RST收',
+      'QTH',
+      '设备',
+      '功率',
+      '天线',
+      '高度',
+      '备注'
+    ];
     sheet.insertRowIterables(
       headers.map((e) => excel_lib.TextCellValue(e)).toList(),
       1,
@@ -201,8 +222,9 @@ class ExportService {
     });
     sheet.setRowHeight(1, 25);
 
-    // Walk logs in natural order. When the controller changes from
-    // the previous log, print a new controller header row.
+    // A controller row starts each contiguous controller/time segment. If the
+    // same controller appears again after another controller (A → B → A),
+    // create a fresh row so the later stint keeps its own start time.
     int globalIndex = 1;
     int currentRow = 2;
     String? lastController;
@@ -215,7 +237,19 @@ class ExportService {
         final controllerTime = calculateControllerTime(log.time);
 
         final controllerRow = <String>[
-          '点名主控:', controllerTime, log.controller, '', '', '', '', '', '', '', '', ''];
+          '点名主控:',
+          controllerTime,
+          log.controller,
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ];
         sheet.insertRowIterables(
           controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(),
           currentRow,
@@ -240,7 +274,7 @@ class ExportService {
         currentRow++;
       }
 
-      final rowColor = settings.useAlternateColors && blockRowColorIndex % 2 == 1
+      final rowColor = settings.useAlternateColors && blockRowColorIndex.isOdd
           ? alternateColor
           : whiteColor;
       blockRowColorIndex++;

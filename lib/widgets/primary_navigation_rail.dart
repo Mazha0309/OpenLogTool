@@ -26,54 +26,126 @@ class PrimaryNavigationRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveExpanded = isDesktop && expanded;
-    return NavigationRail(
-      key: Key(isDesktop ? 'desktop-navigation' : 'tablet-navigation'),
-      selectedIndex: selectedIndex,
-      onDestinationSelected: onDestinationSelected,
-      extended: effectiveExpanded,
-      labelType: effectiveExpanded
-          ? NavigationRailLabelType.none
-          : isDesktop
-              ? NavigationRailLabelType.none
-              : NavigationRailLabelType.selected,
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: isDesktop
-            ? effectiveExpanded
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.graphic_eq, size: 28),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'OpenLogTool',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        key: const Key('collapse-primary-sidebar'),
-                        tooltip: context.l10n.collapseSidebar,
-                        onPressed: () => onExpandedChanged(false),
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                    ],
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.graphic_eq, size: 28),
-                      const SizedBox(height: 6),
-                      IconButton(
-                        key: const Key('expand-primary-sidebar'),
-                        tooltip: context.l10n.expandSidebar,
-                        onPressed: () => onExpandedChanged(true),
-                        icon: const Icon(Icons.chevron_right),
-                      ),
-                    ],
-                  )
-            : const Icon(Icons.graphic_eq, size: 28),
+    return RepaintBoundary(
+      child: NavigationRail(
+        key: Key(isDesktop ? 'desktop-navigation' : 'tablet-navigation'),
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        extended: effectiveExpanded,
+        minWidth: 72,
+        minExtendedWidth: 224,
+        labelType: effectiveExpanded
+            ? NavigationRailLabelType.none
+            : isDesktop
+                ? NavigationRailLabelType.none
+                : NavigationRailLabelType.selected,
+        leadingAtTop: true,
+        leading: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: isDesktop
+              ? Builder(
+                  builder: (context) => _AnimatedDesktopRailHeader(
+                    animation: NavigationRail.extendedAnimation(context),
+                    expanded: expanded,
+                    onExpandedChanged: onExpandedChanged,
+                  ),
+                )
+              : const SizedBox(
+                  height: 48,
+                  child: Center(child: Icon(Icons.graphic_eq, size: 28)),
+                ),
+        ),
+        destinations: destinations,
       ),
-      destinations: destinations,
     );
   }
+}
+
+/// Uses the rail's own width animation instead of swapping between a row and a
+/// column at the start of the transition. The old swap changed the header's
+/// height immediately while the rail was still animating, which caused the
+/// destinations and content pane to visibly jump.
+class _AnimatedDesktopRailHeader extends StatelessWidget {
+  const _AnimatedDesktopRailHeader({
+    required this.animation,
+    required this.expanded,
+    required this.onExpandedChanged,
+  });
+
+  final Animation<double> animation;
+  final bool expanded;
+  final ValueChanged<bool> onExpandedChanged;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        key: const Key('primary-sidebar-header'),
+        height: 48,
+        child: AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            final progress = animation.value;
+            return SizedBox(
+              width: 72 + (152 * progress),
+              child: ClipRect(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (progress > 0)
+                      Positioned(
+                        left: 16,
+                        right: 52,
+                        top: 0,
+                        bottom: 0,
+                        child: Opacity(
+                          opacity: progress,
+                          child: const Row(
+                            children: [
+                              Icon(Icons.graphic_eq, size: 26),
+                              SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  'OpenLogTool',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                  softWrap: false,
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.lerp(
+                        Alignment.center,
+                        Alignment.centerRight,
+                        progress,
+                      )!,
+                      child: Padding(
+                        padding: EdgeInsets.only(right: progress * 4),
+                        child: IconButton(
+                          key: Key(
+                            expanded
+                                ? 'collapse-primary-sidebar'
+                                : 'expand-primary-sidebar',
+                          ),
+                          tooltip: expanded
+                              ? context.l10n.collapseSidebar
+                              : context.l10n.expandSidebar,
+                          onPressed: () => onExpandedChanged(!expanded),
+                          icon: Icon(
+                            expanded
+                                ? Icons.keyboard_double_arrow_left
+                                : Icons.keyboard_double_arrow_right,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
 }

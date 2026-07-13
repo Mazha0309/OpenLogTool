@@ -7,6 +7,18 @@ import 'package:openlogtool/src/bridge/models/dict_item.dart' as bridge;
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/dictionary_pinyin_helper.dart';
 
+typedef DictionaryUpsertItem = Future<void> Function({
+  required String dictType,
+  required String raw,
+  String? pinyin,
+  String? abbreviation,
+});
+
+typedef DictionaryGetItemByRaw = Future<bridge.DictItem?> Function({
+  required String dictType,
+  required String raw,
+});
+
 class _RawPinyinAbbrev {
   final String raw;
   final String? pinyin;
@@ -22,6 +34,8 @@ class DictionaryProvider with ChangeNotifier {
   List<DictionaryItem> _callsignDict = [];
   List<DictionaryItem> _qthDict = [];
   Future<void> Function()? _onDictionaryChanged;
+  final DictionaryUpsertItem _upsertItem;
+  final DictionaryGetItemByRaw _getItemByRaw;
 
   List<DictionaryItem> get deviceDict => _deviceDict;
   List<DictionaryItem> get antennaDict => _antennaDict;
@@ -38,8 +52,13 @@ class DictionaryProvider with ChangeNotifier {
     }
   }
 
-  DictionaryProvider() {
-    scheduleMicrotask(_loadDictionaries);
+  DictionaryProvider({
+    bool autoload = true,
+    DictionaryUpsertItem? upsertItem,
+    DictionaryGetItemByRaw? getItemByRaw,
+  })  : _upsertItem = upsertItem ?? RustApi.upsertDictItem,
+        _getItemByRaw = getItemByRaw ?? RustApi.getDictItemByRaw {
+    if (autoload) scheduleMicrotask(_loadDictionaries);
   }
 
   @override
@@ -100,7 +119,7 @@ class DictionaryProvider with ChangeNotifier {
     for (final item in target) {
       if (item.abbreviation.isNotEmpty && item.pinyin.isNotEmpty) continue;
       final generated = DictionaryPinyinHelper.generate(item.raw);
-      await RustApi.upsertDictItem(
+      await _upsertItem(
         dictType: dictType,
         raw: item.raw,
         pinyin: generated.pinyin,
@@ -120,7 +139,7 @@ class DictionaryProvider with ChangeNotifier {
         if (raw == null || raw.isEmpty) continue;
         final pinyin = item['pinyin']?.toString().trim();
         final abbreviation = item['abbreviation']?.toString().trim();
-        await RustApi.upsertDictItem(
+        await _upsertItem(
           dictType: dictType,
           raw: raw,
           pinyin: pinyin?.isNotEmpty == true ? pinyin : null,
@@ -191,21 +210,17 @@ class DictionaryProvider with ChangeNotifier {
     if (raw.isEmpty || target.any((d) => d.raw == raw)) return;
     try {
       final generated = DictionaryPinyinHelper.generate(raw);
-      await RustApi.upsertDictItem(
+      await _upsertItem(
         dictType: dictType,
         raw: raw,
         pinyin: generated.pinyin,
         abbreviation: generated.abbreviation,
       );
-      final persisted = await RustApi.getDictItemByRaw(dictType: dictType, raw: raw);
-      target.add(persisted != null
-          ? _toOldDictItem(persisted)
-          : DictionaryItem(
-              raw: raw,
-              pinyin: generated.pinyin,
-              abbreviation: generated.abbreviation,
-              type: dictType,
-            ));
+      final persisted = await _getItemByRaw(dictType: dictType, raw: raw);
+      if (persisted == null) {
+        throw StateError('DICT_ITEM_PERSIST_FAILED: $dictType/$raw');
+      }
+      target.add(_toOldDictItem(persisted));
       target.sort((a, b) => a.raw.compareTo(b.raw));
       _safeNotify();
       await _notifyDictionaryChanged();
@@ -239,21 +254,17 @@ class DictionaryProvider with ChangeNotifier {
     for (final raw in items) {
       if (target.any((d) => d.raw == raw)) continue;
       final generated = DictionaryPinyinHelper.generate(raw);
-      await RustApi.upsertDictItem(
+      await _upsertItem(
         dictType: dictType,
         raw: raw,
         pinyin: generated.pinyin,
         abbreviation: generated.abbreviation,
       );
-      final persisted = await RustApi.getDictItemByRaw(dictType: dictType, raw: raw);
-      target.add(persisted != null
-          ? _toOldDictItem(persisted)
-          : DictionaryItem(
-              raw: raw,
-              pinyin: generated.pinyin,
-              abbreviation: generated.abbreviation,
-              type: dictType,
-            ));
+      final persisted = await _getItemByRaw(dictType: dictType, raw: raw);
+      if (persisted == null) {
+        throw StateError('DICT_ITEM_PERSIST_FAILED: $dictType/$raw');
+      }
+      target.add(_toOldDictItem(persisted));
     }
     target.sort((a, b) => a.raw.compareTo(b.raw));
     _safeNotify();
@@ -271,14 +282,14 @@ class DictionaryProvider with ChangeNotifier {
           'antenna_dictionary', jsonData['antennas'], _antennaDict);
       counts['callsign'] = await _importTypedJson(
           'callsign_dictionary', jsonData['callsigns'], _callsignDict);
-      counts['qth'] = await _importTypedJson(
-          'qth_dictionary', jsonData['qths'], _qthDict);
+      counts['qth'] =
+          await _importTypedJson('qth_dictionary', jsonData['qths'], _qthDict);
     } else if (jsonData is List) {
-      final items = _extractItems(jsonData);
-      if (items.isNotEmpty) {
-        await importDevices(items);
-        counts['device'] = items.length;
-      }
+      counts['device'] = await _importTypedJson(
+        'device_dictionary',
+        jsonData,
+        _deviceDict,
+      );
     }
 
     return counts;
@@ -291,6 +302,7 @@ class DictionaryProvider with ChangeNotifier {
   ) async {
     final items = _extractTypedItems(data);
     if (items.isEmpty) return 0;
+    var added = 0;
     for (final item in items) {
       if (target.any((d) => d.raw == item.raw)) continue;
       final pinyin = item.pinyin?.isNotEmpty == true
@@ -299,23 +311,26 @@ class DictionaryProvider with ChangeNotifier {
       final abbreviation = item.abbreviation?.isNotEmpty == true
           ? item.abbreviation!
           : DictionaryPinyinHelper.generate(item.raw).abbreviation;
-      await RustApi.upsertDictItem(
+      await _upsertItem(
         dictType: dictType,
         raw: item.raw,
         pinyin: pinyin,
         abbreviation: abbreviation,
       );
-      target.add(DictionaryItem(
+      final persisted = await _getItemByRaw(
+        dictType: dictType,
         raw: item.raw,
-        pinyin: pinyin,
-        abbreviation: abbreviation,
-        type: dictType,
-      ));
+      );
+      if (persisted == null) {
+        throw StateError('DICT_ITEM_PERSIST_FAILED: $dictType/${item.raw}');
+      }
+      target.add(_toOldDictItem(persisted));
+      added++;
     }
     target.sort((a, b) => a.raw.compareTo(b.raw));
     _safeNotify();
     await _notifyDictionaryChanged();
-    return items.length;
+    return added;
   }
 
   List<_RawPinyinAbbrev> _extractTypedItems(dynamic data) {
@@ -333,21 +348,6 @@ class DictionaryProvider with ChangeNotifier {
           pinyin: item['pinyin']?.toString().trim(),
           abbreviation: item['abbreviation']?.toString().trim(),
         ));
-      }
-    }
-    return result;
-  }
-
-  List<String> _extractItems(dynamic data) {
-    if (data is! List) return [];
-    final result = <String>[];
-    for (final item in data) {
-      if (item is String) {
-        final trimmed = item.trim();
-        if (trimmed.isNotEmpty) result.add(trimmed);
-      } else if (item is Map) {
-        final raw = item['raw']?.toString().trim();
-        if (raw != null && raw.isNotEmpty) result.add(raw);
       }
     }
     return result;

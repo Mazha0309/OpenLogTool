@@ -156,6 +156,30 @@ class SessionProvider with ChangeNotifier {
     _safeNotify();
   }
 
+  Future<void> renameCurrentSession(String title) async {
+    final normalized = title.trim();
+    if (normalized.isEmpty || normalized.length > 200) {
+      throw ArgumentError('会话标题长度应为 1–200 个字符');
+    }
+    final sessionId = _currentSessionId;
+    final session = _currentSession;
+    if (sessionId == null || session == null) {
+      throw StateError('NO_CURRENT_SESSION');
+    }
+    if (session.status != 'active') {
+      throw StateError('SESSION_CLOSED');
+    }
+    if (normalized == session.title) return;
+
+    await RustApi.updateCollaborationSessionTitle(
+      sessionId: sessionId,
+      title: normalized,
+    );
+    if (_currentSessionId == sessionId) {
+      await reloadCurrentSession();
+    }
+  }
+
   Future<void> handleSessionDeleted(String sessionId) async {
     if (_currentSessionId == sessionId) {
       _currentSession = null;

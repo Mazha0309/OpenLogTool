@@ -12,6 +12,7 @@ import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'dart:io';
@@ -82,9 +83,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-    final themeColor = settingsProvider.themeColor;
-    final fontFamily = settingsProvider.fontFamily;
+    final appearance = context.select<SettingsProvider,
+        ({Color color, bool dark, String? fontFamily})>(
+      (settings) => (
+        color: settings.themeColor,
+        dark: settings.isDarkMode,
+        fontFamily: settings.fontFamily,
+      ),
+    );
 
     return MaterialApp(
       title: 'OpenLogTool',
@@ -92,69 +98,17 @@ class MyApp extends StatelessWidget {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       localeResolutionCallback: resolveAppLocale,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.light,
-        ),
-        fontFamily: fontFamily,
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
+      theme: buildAppTheme(
+        brightness: Brightness.light,
+        seedColor: appearance.color,
+        fontFamily: appearance.fontFamily,
       ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: themeColor,
-          brightness: Brightness.dark,
-        ),
-        fontFamily: fontFamily,
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade800),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
+      darkTheme: buildAppTheme(
+        brightness: Brightness.dark,
+        seedColor: appearance.color,
+        fontFamily: appearance.fontFamily,
       ),
-      themeMode: settingsProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      themeMode: appearance.dark ? ThemeMode.dark : ThemeMode.light,
       home: const HomeScreen(),
     );
   }

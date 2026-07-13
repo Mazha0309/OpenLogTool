@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
 enum ControllerWindowMode { floating, secondDisplay }
@@ -19,11 +20,55 @@ bool get supportsControllerDesktopWindows =>
       TargetPlatform.macOS,
     }.contains(defaultTargetPlatform);
 
+/// Visual settings copied from the main application into a controller child
+/// process. Child processes intentionally do not read SharedPreferences, so a
+/// full appearance snapshot is part of every launch/update message.
+class ControllerWindowAppearance {
+  const ControllerWindowAppearance({
+    this.themeColor = const Color(0xFF2196F3),
+    this.isDarkMode = false,
+    this.fontFamily,
+  });
+
+  factory ControllerWindowAppearance.fromJson(Object? value) {
+    if (value == null) return const ControllerWindowAppearance();
+    final map = _objectMap(value, 'controllerWindowAppearance');
+    final colorValue = map['themeColor'];
+    if (colorValue != null && colorValue is! int) {
+      throw const FormatException('Controller theme color must be an integer');
+    }
+    final rawFont = map['fontFamily'];
+    if (rawFont != null && rawFont is! String) {
+      throw const FormatException('Controller font family must be a string');
+    }
+    final parsedColor =
+        colorValue is int ? Color(colorValue) : const Color(0xFF2196F3);
+    final parsedFont =
+        rawFont is String && rawFont.trim().isNotEmpty ? rawFont : null;
+    return ControllerWindowAppearance(
+      themeColor: parsedColor,
+      isDarkMode: map['isDarkMode'] == true,
+      fontFamily: parsedFont,
+    );
+  }
+
+  final Color themeColor;
+  final bool isDarkMode;
+  final String? fontFamily;
+
+  Map<String, Object?> toJson() => {
+        'themeColor': themeColor.toARGB32(),
+        'isDarkMode': isDarkMode,
+        'fontFamily': fontFamily,
+      };
+}
+
 class ControllerWindowLaunch {
   const ControllerWindowLaunch({
     required this.mode,
     required this.data,
     required this.preferences,
+    this.appearance = const ControllerWindowAppearance(),
   });
 
   factory ControllerWindowLaunch.fromArguments(String arguments) {
@@ -55,6 +100,7 @@ class ControllerWindowLaunch {
       mode: mode.single,
       data: ControllerDisplayDto.fromJson(map['data']),
       preferences: ControllerDisplayPreferences.fromJson(map['preferences']),
+      appearance: ControllerWindowAppearance.fromJson(map['appearance']),
     );
   }
 
@@ -63,12 +109,14 @@ class ControllerWindowLaunch {
   final ControllerWindowMode mode;
   final ControllerDisplayDto data;
   final ControllerDisplayPreferences preferences;
+  final ControllerWindowAppearance appearance;
 
   Map<String, Object?> toJson() => {
         'businessId': businessId,
         'mode': mode.name,
         'data': data.toJson(),
         'preferences': preferences.toJson(),
+        'appearance': appearance.toJson(),
       };
 
   String toArguments() => jsonEncode(toJson());
@@ -328,12 +376,14 @@ class ControllerWindowSnapshotCache {
     required Iterable<ControllerWindowMode> modes,
     required ControllerDisplayDto data,
     required ControllerDisplayPreferences preferences,
+    required ControllerWindowAppearance appearance,
   }) {
     for (final mode in modes) {
       _latest[mode] = ControllerWindowLaunch(
         mode: mode,
         data: data,
         preferences: preferences,
+        appearance: appearance,
       );
     }
   }
@@ -372,6 +422,7 @@ class ControllerWindowService {
     required ControllerWindowMode mode,
     required ControllerDisplayDto data,
     required ControllerDisplayPreferences preferences,
+    required ControllerWindowAppearance appearance,
   }) async {
     if (!supportsControllerDesktopWindows) {
       throw UnsupportedError('CONTROLLER_WINDOWS_UNSUPPORTED');
@@ -380,6 +431,7 @@ class ControllerWindowService {
       mode: mode,
       data: data,
       preferences: preferences,
+      appearance: appearance,
     );
     _snapshots.remember(launch);
 
@@ -468,6 +520,7 @@ class ControllerWindowService {
   static Future<void> updateOpenWindows({
     required ControllerDisplayDto data,
     required ControllerDisplayPreferences preferences,
+    required ControllerWindowAppearance appearance,
   }) async {
     if (!supportsControllerDesktopWindows) return;
     final activeModes = <ControllerWindowMode>{
@@ -478,6 +531,7 @@ class ControllerWindowService {
       modes: activeModes,
       data: data,
       preferences: preferences,
+      appearance: appearance,
     );
     for (final entry in _children.entries.toList(growable: false)) {
       final child = entry.value;
@@ -609,6 +663,8 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
   late ControllerDisplayDto _data = widget.session.launch.data;
   late ControllerDisplayPreferences _preferences =
       widget.session.launch.preferences;
+  late ControllerWindowAppearance _appearance =
+      widget.session.launch.appearance;
   late int _lastRevision = widget.session.initialRevision;
   late final StreamSubscription<ControllerWindowMessage> _commands;
   var _windowReady = false;
@@ -641,6 +697,7 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
           setState(() {
             _data = launch.data;
             _preferences = launch.preferences;
+            _appearance = launch.appearance;
           });
         }
         if (message.type == ControllerWindowMessageType.show && _windowReady) {
@@ -719,18 +776,17 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         localeResolutionCallback: resolveAppLocale,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1565C0)),
+        theme: buildAppTheme(
+          brightness: Brightness.light,
+          seedColor: _appearance.themeColor,
+          fontFamily: _appearance.fontFamily,
         ),
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF64B5F6),
-            brightness: Brightness.dark,
-          ),
+        darkTheme: buildAppTheme(
+          brightness: Brightness.dark,
+          seedColor: _appearance.themeColor,
+          fontFamily: _appearance.fontFamily,
         ),
-        themeMode: ThemeMode.system,
+        themeMode: _appearance.isDarkMode ? ThemeMode.dark : ThemeMode.light,
         home: ControllerDisplayScreen(
           data: _data,
           preferences: _preferences,

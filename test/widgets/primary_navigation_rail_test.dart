@@ -20,8 +20,17 @@ void main() {
     );
     expect(collapse.tooltip, '收起侧边栏');
     expect(find.text('OpenLogTool'), findsOneWidget);
+    final expandedHeaderSize =
+        tester.getSize(find.byKey(const Key('primary-sidebar-header')));
 
     await tester.tap(find.byKey(const Key('collapse-primary-sidebar')));
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byKey(const Key('primary-sidebar-header'))).height,
+      expandedHeaderSize.height,
+    );
     await tester.pumpAndSettle();
 
     expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,

@@ -819,6 +819,300 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'服务器地址必须是完整的 http(s) URL。'**
   String get serverAddressInvalid;
+
+  /// No description provided for @excelUseSessionTitleAsHeader.
+  ///
+  /// In zh, this message translates to:
+  /// **'抬头使用当前会话名'**
+  String get excelUseSessionTitleAsHeader;
+
+  /// No description provided for @excelUseSessionTitleAsHeaderHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。'**
+  String get excelUseSessionTitleAsHeaderHint;
+
+  /// No description provided for @themeColorPickerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择主题颜色'**
+  String get themeColorPickerTitle;
+
+  /// No description provided for @themeColorPresets.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设颜色'**
+  String get themeColorPresets;
+
+  /// No description provided for @themeColorCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义颜色'**
+  String get themeColorCustom;
+
+  /// No description provided for @themeColorHex.
+  ///
+  /// In zh, this message translates to:
+  /// **'HEX 颜色'**
+  String get themeColorHex;
+
+  /// No description provided for @themeColorHue.
+  ///
+  /// In zh, this message translates to:
+  /// **'色相'**
+  String get themeColorHue;
+
+  /// No description provided for @themeColorBlue.
+  ///
+  /// In zh, this message translates to:
+  /// **'蓝色'**
+  String get themeColorBlue;
+
+  /// No description provided for @themeColorGreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'绿色'**
+  String get themeColorGreen;
+
+  /// No description provided for @themeColorRed.
+  ///
+  /// In zh, this message translates to:
+  /// **'红色'**
+  String get themeColorRed;
+
+  /// No description provided for @themeColorOrange.
+  ///
+  /// In zh, this message translates to:
+  /// **'橙色'**
+  String get themeColorOrange;
+
+  /// No description provided for @themeColorPurple.
+  ///
+  /// In zh, this message translates to:
+  /// **'紫色'**
+  String get themeColorPurple;
+
+  /// No description provided for @themeColorPink.
+  ///
+  /// In zh, this message translates to:
+  /// **'粉色'**
+  String get themeColorPink;
+
+  /// No description provided for @save.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get save;
+
+  /// No description provided for @add.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加'**
+  String get add;
+
+  /// No description provided for @renameSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改会话名'**
+  String get renameSession;
+
+  /// No description provided for @renameSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改会话名'**
+  String get renameSessionTitle;
+
+  /// No description provided for @sessionTitleLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话名'**
+  String get sessionTitleLabel;
+
+  /// No description provided for @renameCollaborationSessionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只有会话所有者可以修改；保存后将同步给其他书记员和主控显示。'**
+  String get renameCollaborationSessionHint;
+
+  /// No description provided for @renameSessionSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话名已更新'**
+  String get renameSessionSaved;
+
+  /// No description provided for @renameCollaborationSessionSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话名已保存，正在同步给其他成员'**
+  String get renameCollaborationSessionSaved;
+
+  /// No description provided for @renameSessionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改会话名失败：{error}'**
+  String renameSessionFailed(String error);
+
+  /// No description provided for @renameSessionBlockedClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭的会话不能修改名称'**
+  String get renameSessionBlockedClosed;
+
+  /// No description provided for @renameSessionBlockedBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作操作进行中，暂时不能修改名称'**
+  String get renameSessionBlockedBusy;
+
+  /// No description provided for @renameSessionBlockedConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先解决会话冲突，再修改名称'**
+  String get renameSessionBlockedConflict;
+
+  /// No description provided for @renameSessionBlockedNotReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作会话尚未就绪，暂时不能修改名称'**
+  String get renameSessionBlockedNotReady;
+
+  /// No description provided for @renameSessionBlockedOwner.
+  ///
+  /// In zh, this message translates to:
+  /// **'只有会话所有者可以修改名称'**
+  String get renameSessionBlockedOwner;
+
+  /// No description provided for @dictionaryManagementTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库管理'**
+  String get dictionaryManagementTitle;
+
+  /// No description provided for @dictionaryManagementHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理点名时可搜索和一键复用的设备、天线、呼号与 QTH 内容。'**
+  String get dictionaryManagementHint;
+
+  /// No description provided for @deviceLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备词库'**
+  String get deviceLibrary;
+
+  /// No description provided for @antennaLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'天线词库'**
+  String get antennaLibrary;
+
+  /// No description provided for @callsignLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'呼号词库'**
+  String get callsignLibrary;
+
+  /// No description provided for @qthLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'QTH 词库'**
+  String get qthLibrary;
+
+  /// No description provided for @libraryItemCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'共 {count} 条'**
+  String libraryItemCount(int count);
+
+  /// No description provided for @importLibraryJson.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 JSON'**
+  String get importLibraryJson;
+
+  /// No description provided for @expandAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开全部'**
+  String get expandAll;
+
+  /// No description provided for @collapseAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'折叠全部'**
+  String get collapseAll;
+
+  /// No description provided for @addLibraryItem.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加{name}'**
+  String addLibraryItem(String name);
+
+  /// No description provided for @searchLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索{name}'**
+  String searchLibrary(String name);
+
+  /// No description provided for @libraryEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库中还没有内容'**
+  String get libraryEmpty;
+
+  /// No description provided for @noLibrarySearchResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的词库内容'**
+  String get noLibrarySearchResults;
+
+  /// No description provided for @libraryItemAdded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已添加：{value}'**
+  String libraryItemAdded(String value);
+
+  /// No description provided for @libraryItemAlreadyExists.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库中已有“{value}”'**
+  String libraryItemAlreadyExists(String value);
+
+  /// No description provided for @libraryItemAddFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加失败：{error}'**
+  String libraryItemAddFailed(String error);
+
+  /// No description provided for @libraryImportEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件中没有可导入的词库内容'**
+  String get libraryImportEmpty;
+
+  /// No description provided for @libraryImportCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} {count} 条'**
+  String libraryImportCount(String name, int count);
+
+  /// No description provided for @libraryImportSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已导入：{summary}'**
+  String libraryImportSucceeded(String summary);
+
+  /// No description provided for @libraryImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入词库失败：{error}'**
+  String libraryImportFailed(String error);
+
+  /// No description provided for @listSeparator.
+  ///
+  /// In zh, this message translates to:
+  /// **'，'**
+  String get listSeparator;
 }
 
 class _AppLocalizationsDelegate
