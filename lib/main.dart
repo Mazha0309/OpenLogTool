@@ -24,13 +24,36 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show ExternalLibrary;
 
 ExternalLibrary? _bundledRustLibrary() {
-  if (kIsWeb || !Platform.isLinux) return null;
-  final libraryPath = p.join(
-    p.dirname(Platform.resolvedExecutable),
-    'lib',
-    'libopenlogtool_core.so',
-  );
-  if (!File(libraryPath).existsSync()) return null;
+  if (kIsWeb) return null;
+
+  if (Platform.isAndroid) {
+    return ExternalLibrary.open('libopenlogtool_core.so');
+  }
+
+  final executableDirectory = p.dirname(Platform.resolvedExecutable);
+  final libraryPath = switch (Platform.operatingSystem) {
+    'linux' => p.join(
+        executableDirectory,
+        'lib',
+        'libopenlogtool_core.so',
+      ),
+    'windows' => p.join(executableDirectory, 'openlogtool_core.dll'),
+    'macos' => p.normalize(
+        p.join(
+          executableDirectory,
+          '..',
+          'Frameworks',
+          'libopenlogtool_core.dylib',
+        ),
+      ),
+    _ => throw UnsupportedError(
+        'OpenLogTool does not bundle a Rust core for '
+        '${Platform.operatingSystem}.',
+      ),
+  };
+  if (!File(libraryPath).existsSync()) {
+    throw StateError('Bundled Rust core is missing: $libraryPath');
+  }
   return ExternalLibrary.open(libraryPath);
 }
 
@@ -45,9 +68,9 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  // Always use the Rust library shipped with this Linux bundle. The generated
-  // development fallback is relative to the process working directory and can
-  // otherwise pick up a stale rust/target/release library from the source tree.
+  // Always use the Rust library shipped with this application. The generated
+  // desktop fallback is relative to the process working directory and can
+  // otherwise pick up a stale library from the source tree.
   await RustLib.init(externalLibrary: _bundledRustLibrary());
 
   String dbPath;

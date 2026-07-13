@@ -43,7 +43,7 @@
 ### 主题设置
 - 自定义主题颜色
 - 暗色/亮色模式
-- 宽屏布局开关
+- 可折叠侧边栏与响应式布局
 
 ### 跨平台
 - Linux
@@ -56,7 +56,8 @@
 ### 环境要求
 - Flutter SDK 3.41+
 - Dart SDK 3.11+
-- Rust toolchain（用于 `flutter_rust_bridge` 核心）
+- Rust toolchain 1.91.1（仓库中的 `rust-toolchain.toml` 会固定版本）
+- Android 构建额外需要 Android NDK 28.2.13676358 与 cargo-ndk 4.1.2
 
 ### 构建
 
@@ -67,8 +68,27 @@ flutter pub get
 flutter build linux
 flutter build windows
 flutter build macos
-flutter build android
+flutter build apk
 ```
+
+Linux、Windows 和 macOS 的平台工程会在 Flutter 构建时自动编译并打包 Rust
+动态库。首次构建 Android 前还需要安装对应 Rust targets 和固定版本的
+cargo-ndk；macOS 的 Release 默认生成 universal App：
+
+```bash
+# Android（在 Linux 或 macOS 上执行）
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+cargo install --locked cargo-ndk --version 4.1.2
+flutter build apk --release
+
+# macOS universal Release
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+flutter build macos --release
+```
+
+Android 发布包允许连接局域网内的明文 HTTP 自建服务器，以匹配应用中可配置的
+`http://` 地址；通过公网访问或承载真实账号时应使用 HTTPS，避免凭据和点名记录
+在传输中暴露。
 
 ## 技术栈
 

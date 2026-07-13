@@ -86,7 +86,7 @@ set(RUST_LIB "${RUST_PROJECT_DIR}/target/${RUST_TARGET_DIR}/libopenlogtool_core.
 # OUTPUT-only CMake rule would incorrectly reuse an existing .so after Rust
 # sources or generated FRB bindings changed.
 add_custom_target(rust_core
-  COMMAND cargo build ${RUST_BUILD_FLAGS} --lib
+  COMMAND cargo build ${RUST_BUILD_FLAGS} --locked --lib
   BYPRODUCTS "${RUST_LIB}"
   WORKING_DIRECTORY ${RUST_PROJECT_DIR}
   COMMENT "Building Rust core library (openlogtool_core, ${CMAKE_BUILD_TYPE})"

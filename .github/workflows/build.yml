@@ -1,397 +1,845 @@
-name: Build OpenLogTool
+name: OpenLogTool CI
 
 on:
   push:
     branches: ['**']
+    tags: ['v*']
   pull_request:
     branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openlogtool-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 env:
   FLUTTER_VERSION: '3.41.4'
+  RUST_VERSION: '1.91.1'
+  FRB_CODEGEN_VERSION: '2.12.0'
+  CARGO_NDK_VERSION: '4.1.2'
+  ANDROID_NDK_VERSION: '28.2.13676358'
+  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+  APPIMAGETOOL_SHA256: a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0
+  APPIMAGE_RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
+  APPIMAGE_RUNTIME_SHA256: 1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf
 
 jobs:
-  # 读取提交号作为版本号
-  get-version:
-    runs-on: ubuntu-latest
+  version:
+    name: Resolve version
+    runs-on: ubuntu-22.04
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version_name: ${{ steps.version.outputs.version_name }}
       short_sha: ${{ steps.version.outputs.short_sha }}
-      build_number: ${{ steps.version.outputs.build_number }}
+      artifact_version: ${{ steps.version.outputs.artifact_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
-      - name: Get version info
+      - name: Resolve version
         id: version
+        shell: bash
         run: |
-          # 获取提交SHA
-          SHA=${{ github.sha }}
-          SHORT_SHA=${SHA:0:7}
-          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-          
-          # 获取构建次数作为版本号
-          BUILD_NUMBER=${{ github.run_number }}
-          # 确保版本号从1开始
-          VERSION=$((BUILD_NUMBER))
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          version_with_build=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)
+          version_name=${version_with_build%%+*}
+          short_sha=${GITHUB_SHA:0:7}
+          artifact_version="${version_name}-${short_sha}.${GITHUB_RUN_NUMBER}"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "artifact_version=$artifact_version" >> "$GITHUB_OUTPUT"
 
-  # 构建 Android APK
-  build-android:
-    needs: get-version
-    runs-on: ubuntu-latest
+  quality:
+    name: Flutter and Rust quality gate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get pubspec version
-        run: |
-          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
-          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Generate version file
-        env:
-          CI_COMMIT_SHA: ${{ github.sha }}
-          CI_BUILD_NUMBER: ${{ needs.get-version.outputs.build_number }}
-        run: dart tool/gen_version.dart
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
 
-      - name: Create keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '\n' | base64 -d > android/app/keystore.jks
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool
 
-      - name: Create keystore properties
-        run: |
-          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=keystore.jks\n' \
-            "${{ secrets.KEYSTORE_STORE_PASSWORD }}" \
-            "${{ secrets.KEYSTORE_KEY_PASSWORD }}" \
-            "${{ secrets.KEYSTORE_KEY_ALIAS }}" > android/app/keystore.properties
-          echo "=== keystore.properties content ==="
-          cat android/app/keystore.properties
-
-      - name: Verify keystore
-        run: |
-          ls -la android/app/keystore.jks
-          keytool -list -v -keystore android/app/keystore.jks -storepass "${{ secrets.KEYSTORE_STORE_PASSWORD }}" -alias "${{ secrets.KEYSTORE_KEY_ALIAS }}"
-
-      - name: Set Gradle version
-        run: |
-          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}-${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
-          echo "=== After sed replacement ==="
-          grep "appVersionName" android/app/build.gradle.kts
-
-      - name: Debug gradle config
-        run: |
-          echo "=== Full gradle content ==="
-          head -35 android/app/build.gradle.kts
-
-      - name: Get dependencies
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Clean Gradle cache
-        run: |
-          rm -rf android/.gradle
-          rm -rf android/app/build
-          rm -rf build
+      - name: Cache flutter_rust_bridge codegen
+        id: frb-codegen-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cargo/bin/flutter_rust_bridge_codegen
+          key: ${{ runner.os }}-${{ runner.arch }}-frb-codegen-${{ env.FRB_CODEGEN_VERSION }}-rust-${{ env.RUST_VERSION }}
 
-      - name: Build APK with version
+      - name: Install flutter_rust_bridge codegen
+        if: steps.frb-codegen-cache.outputs.cache-hit != 'true'
+        run: >-
+          cargo install --locked flutter_rust_bridge_codegen
+          --version "${FRB_CODEGEN_VERSION}"
+
+      - name: Verify generated sources
+        run: |
+          flutter gen-l10n
+          flutter_rust_bridge_codegen generate
+          git diff --exit-code -- \
+            lib/l10n/generated \
+            lib/src/bridge \
+            rust/src/frb_generated.rs
+
+      - name: Analyze Flutter
+        run: flutter analyze --no-pub
+
+      - name: Test Flutter
+        run: flutter test --no-pub
+
+      - name: Test Rust
+        run: cargo test --locked --manifest-path rust/Cargo.toml
+
+  build-android:
+    name: Build and verify Android
+    needs: [version, quality]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust and Android targets
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool-android
+
+      - name: Select pinned Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK is missing}}"
+          ndk_path="$sdk_root/ndk/$ANDROID_NDK_VERSION"
+          if [ ! -d "$ndk_path" ]; then
+            "$sdk_root/cmdline-tools/latest/bin/sdkmanager" \
+              "ndk;$ANDROID_NDK_VERSION"
+          fi
+          test -d "$ndk_path"
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ndk_path" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ndk_path" >> "$GITHUB_ENV"
+
+      - name: Cache cargo-ndk
+        id: cargo-ndk-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-ndk
+            ~/.cargo/bin/cargo-ndk-env
+            ~/.cargo/bin/cargo-ndk-runner
+            ~/.cargo/bin/cargo-ndk-test
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-ndk-${{ env.CARGO_NDK_VERSION }}-rust-${{ env.RUST_VERSION }}
+
+      - name: Install cargo-ndk
+        if: steps.cargo-ndk-cache.outputs.cache-hit != 'true'
+        run: >-
+          cargo install --locked cargo-ndk
+          --version "$CARGO_NDK_VERSION"
+
+      - name: Verify cargo-ndk version
+        run: test "$(cargo ndk --version)" = "cargo-ndk $CARGO_NDK_VERSION"
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Configure Android release signing
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?KEYSTORE_BASE64 is required for a release tag}"
+          : "${KEYSTORE_STORE_PASSWORD:?KEYSTORE_STORE_PASSWORD is required}"
+          : "${KEYSTORE_KEY_PASSWORD:?KEYSTORE_KEY_PASSWORD is required}"
+          : "${KEYSTORE_KEY_ALIAS:?KEYSTORE_KEY_ALIAS is required}"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode \
+            > android/app/keystore.jks
+          printf '%s\n' \
+            "storeFile=keystore.jks" \
+            "storePassword=$KEYSTORE_STORE_PASSWORD" \
+            "keyPassword=$KEYSTORE_KEY_PASSWORD" \
+            "keyAlias=$KEYSTORE_KEY_ALIAS" \
+            > android/app/keystore.properties
+
+      - name: Generate build version
         env:
           CI_COMMIT_SHA: ${{ github.sha }}
           CI_BUILD_NUMBER: ${{ github.run_number }}
-          VERSION_NAME: ${{ env.VERSION_NAME }}
-          GRADLE_OPTS: "-Dorg.gradle.project.VERSION_NAME=${{ env.VERSION_NAME }} -Dorg.gradle.project.CI_COMMIT_SHA=${{ github.sha }} -Dorg.gradle.project.CI_BUILD_NUMBER=${{ github.run_number }}"
-        run: |
-          flutter build apk --release \
-            --build-name="${{ env.VERSION_NAME }}.${{ needs.get-version.outputs.short_sha }}" \
-            --build-number="${{ needs.get-version.outputs.build_number }}"
+        run: dart tool/gen_version.dart
 
-      - name: Rename APK
-        run: |
-          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/OpenLogTool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}.apk"
+      - name: Build Android release
+        run: >-
+          flutter build apk --release --no-pub
+          --build-name="${{ needs.version.outputs.version_name }}"
+          --build-number="${{ github.run_number }}"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Verify APK and Rust libraries
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$apk"
+          unzip -t "$apk"
+          extracted_libraries="$(mktemp -d)"
+          trap 'rm -rf "$extracted_libraries"' EXIT
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            source_library="android/app/src/main/jniLibs/$abi/libopenlogtool_core.so"
+            test -s "$source_library"
+            zipinfo -1 "$apk" |
+              grep -Fx "lib/$abi/libopenlogtool_core.so"
+            unzip -p "$apk" "lib/$abi/libopenlogtool_core.so" \
+              > "$extracted_libraries/$abi.so"
+            test -s "$extracted_libraries/$abi.so"
+            readelf --dyn-syms --wide "$extracted_libraries/$abi.so" |
+              awk '$NF == "frb_init_frb_dart_api_dl" { found = 1 }
+                END { exit found ? 0 : 1 }'
+            case "$abi" in
+              arm64-v8a) expected_machine='AArch64' ;;
+              armeabi-v7a) expected_machine='ARM' ;;
+              x86_64) expected_machine='X86-64' ;;
+            esac
+            readelf -h "$extracted_libraries/$abi.so" |
+              grep -E "Machine:.*$expected_machine"
+          done
+          apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner |
+            sort -V | tail -n 1)
+          test -n "$apksigner"
+          "$apksigner" verify --verbose "$apk"
+
+      - name: Package Android artifact
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          artifact="OpenLogTool-$ARTIFACT_VERSION-Android-universal.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/$artifact"
+          (
+            cd dist
+            sha256sum "$artifact" > "$artifact.sha256"
+          )
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: openlogtool-android-apk
-          path: build/app/outputs/flutter-apk/OpenLogTool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}.apk
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-android-universal
+          path: |
+            dist/*.apk
+            dist/*.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
 
-  # 构建 Linux
   build-linux:
-    needs: get-version
-    runs-on: ubuntu-latest
+    name: Build and smoke-test Linux
+    needs: [version, quality]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get pubspec version
-        run: |
-          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
-          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Set Gradle version
-        run: |
-          sed -i 's/VERSION_PLACEHOLDER/${{ env.VERSION_NAME }}/' android/app/build.gradle.kts
-          sed -i 's/COMMIT_PLACEHOLDER/${{ needs.get-version.outputs.short_sha }}/' android/app/build.gradle.kts
-          sed -i 's/BUILD_PLACEHOLDER/${{ needs.get-version.outputs.build_number }}/' android/app/build.gradle.kts
-          head -15 android/app/build.gradle.kts
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
 
-      - name: Setup Linux dependencies
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool
+
+      - name: Install Linux build and smoke-test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+          sudo apt-get install -y \
+            clang cmake libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            ninja-build pkg-config xauth xvfb
 
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
 
-      - name: Get dependencies
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build Linux
-        run: flutter build linux --release
+      - name: Generate build version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+        run: dart tool/gen_version.dart
 
-      - name: Install AppImage tools
+      - name: Build Linux release
+        run: flutter build linux --release --no-pub
+
+      - name: Verify bundled Rust core
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget fuse libfuse2 file
+          set -euo pipefail
+          executable=build/linux/x64/release/bundle/openlogtool
+          source_library=rust/target/release/libopenlogtool_core.so
+          bundled_library=build/linux/x64/release/bundle/lib/libopenlogtool_core.so
+          test -x "$executable"
+          test -f "$source_library"
+          test -f "$bundled_library"
+          cmp --silent "$source_library" "$bundled_library"
+          readelf -d "$executable" | grep -F '$ORIGIN/lib'
+          sha256sum "$source_library" "$bundled_library"
 
-      - name: Download AppImageKit
+      - name: Smoke-test Flutter bundle
         run: |
-          mkdir -p appimage-temp
-          cd appimage-temp
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-          cd ..
+          set -euo pipefail
+          smoke_root="$RUNNER_TEMP/openlogtool-bundle-smoke"
+          mkdir -p "$smoke_root"/{home,config,data,cache}
+          set +e
+          (
+            cd "$RUNNER_TEMP"
+            env \
+              HOME="$smoke_root/home" \
+              XDG_CONFIG_HOME="$smoke_root/config" \
+              XDG_DATA_HOME="$smoke_root/data" \
+              XDG_CACHE_HOME="$smoke_root/cache" \
+              timeout 10s xvfb-run -a \
+              "$GITHUB_WORKSPACE/build/linux/x64/release/bundle/openlogtool"
+          ) >"$smoke_root/output.log" 2>&1
+          status=$?
+          set -e
+          cat "$smoke_root/output.log"
+          if [ "$status" -ne 124 ]; then
+            echo "Expected the running application to be stopped by timeout; exit code was $status" >&2
+            exit 1
+          fi
 
-      - name: Create AppDir structure
+      - name: Package and smoke-test archive
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
         run: |
-          # Flutter bundle structure: executable uses RUNPATH=$ORIGIN/lib
-          # So we need to keep the same structure: bin/openlogtool and bin/lib/
-          mkdir -p AppDir/usr/bin/lib
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-          
-          # Copy Flutter bundle - keep original structure
-          cp build/linux/x64/release/bundle/openlogtool AppDir/usr/bin/
-          cp -r build/linux/x64/release/bundle/lib/* AppDir/usr/bin/lib/
-          cp -r build/linux/x64/release/bundle/data AppDir/usr/bin/
-          
-          # Create AppRun script
-          cat > AppDir/AppRun << 'APPRUN_EOF'
-          #!/bin/bash
-          SELF=$(readlink -f "$0")
-          HERE=${SELF%/*}
-          export PATH="${HERE}/usr/bin:${PATH}"
-          # LD_LIBRARY_PATH not needed - binary uses RUNPATH=$ORIGIN/lib
-          exec "${HERE}/usr/bin/openlogtool" "$@"
-          APPRUN_EOF
-          chmod +x AppDir/AppRun
-          
-          # Create desktop file
-          cat > AppDir/openlogtool.desktop << 'DESKTOP_EOF'
-          [Desktop Entry]
-          Name=OpenLogTool
-          Comment=点名记录工具
-          Exec=openlogtool
-          Icon=openlogtool
-          Terminal=false
-          Type=Application
-          Categories=Utility;
-          DESKTOP_EOF
-          
-          cp AppDir/openlogtool.desktop AppDir/usr/share/applications/
-          
-          # Copy actual icon file
-          cp icon.png AppDir/openlogtool.png
-          cp AppDir/openlogtool.png AppDir/usr/share/icons/hicolor/256x256/apps/openlogtool.png
-          cp AppDir/openlogtool.png AppDir/.DirIcon
+          set -euo pipefail
+          release_dir=build/linux/x64/release
+          archive="openlogtool-${ARTIFACT_VERSION}-linux-x86_64.tar.gz"
+          tar -C "$release_dir" -czf "$release_dir/$archive" bundle
+          (
+            cd "$release_dir"
+            sha256sum "$archive" > "$archive.sha256"
+          )
 
-      - name: Build AppImage
+          package_root="$RUNNER_TEMP/openlogtool-package"
+          smoke_root="$RUNNER_TEMP/openlogtool-package-smoke"
+          mkdir -p "$package_root" "$smoke_root"/{home,config,data,cache}
+          tar -xzf "$release_dir/$archive" -C "$package_root"
+
+          set +e
+          (
+            cd "$RUNNER_TEMP"
+            env \
+              HOME="$smoke_root/home" \
+              XDG_CONFIG_HOME="$smoke_root/config" \
+              XDG_DATA_HOME="$smoke_root/data" \
+              XDG_CACHE_HOME="$smoke_root/cache" \
+              timeout 10s xvfb-run -a "$package_root/bundle/openlogtool"
+          ) >"$smoke_root/output.log" 2>&1
+          status=$?
+          set -e
+          cat "$smoke_root/output.log"
+          if [ "$status" -ne 124 ]; then
+            echo "Extracted package failed its startup smoke test; exit code was $status" >&2
+            exit 1
+          fi
+
+      - name: Package and smoke-test AppImage
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
         run: |
-          cd appimage-temp
-          export VERSION="${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}"
-          export ARCH=x86_64
-          ./appimagetool-x86_64.AppImage ../AppDir ../build/linux/x64/release/OpenLogTool-"$VERSION".${{ needs.get-version.outputs.build_number }}-linux-x86_64.AppImage
-          
-          ls -la ../build/linux/x64/release/*.AppImage 2>/dev/null || echo "No AppImage generated"
+          set -euo pipefail
+          release_dir=build/linux/x64/release
+          appdir="$RUNNER_TEMP/OpenLogTool.AppDir"
+          appimagetool="$RUNNER_TEMP/appimagetool-x86_64.AppImage"
+          appimage_runtime="$RUNNER_TEMP/runtime-x86_64"
+          appimage="$release_dir/OpenLogTool-${ARTIFACT_VERSION}-linux-x86_64.AppImage"
+          smoke_root="$RUNNER_TEMP/openlogtool-appimage-smoke"
 
-      - name: Package as tar.gz
-        run: |
-          cd build/linux/x64/release
-          tar -czvf openlogtool-${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}-linux-x86_64.tar.gz bundle/
+          curl --fail --location --retry 3 --silent --show-error \
+            "$APPIMAGETOOL_URL" --output "$appimagetool"
+          printf '%s  %s\n' "$APPIMAGETOOL_SHA256" "$appimagetool" |
+            sha256sum --check --strict
+          chmod +x "$appimagetool"
+          curl --fail --location --retry 3 --silent --show-error \
+            "$APPIMAGE_RUNTIME_URL" --output "$appimage_runtime"
+          printf '%s  %s\n' "$APPIMAGE_RUNTIME_SHA256" "$appimage_runtime" |
+            sha256sum --check --strict
 
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+          mkdir -p "$appdir/usr/bin" "$smoke_root"/{home,config,data,cache}
+          cp -a "$release_dir/bundle/." "$appdir/usr/bin/"
+          ln -s usr/bin/openlogtool "$appdir/AppRun"
+          printf '%s\n' \
+            '[Desktop Entry]' \
+            'Name=OpenLogTool' \
+            'Comment=Amateur radio net logging tool' \
+            'Exec=openlogtool' \
+            'Icon=openlogtool' \
+            'Terminal=false' \
+            'Type=Application' \
+            'Categories=Utility;' \
+            > "$appdir/openlogtool.desktop"
+          cp icon.png "$appdir/openlogtool.png"
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
+            VERSION="$ARTIFACT_VERSION" \
+            "$appimagetool" --runtime-file "$appimage_runtime" \
+            "$appdir" "$appimage"
+          test -x "$appimage"
+          (
+            cd "$release_dir"
+            sha256sum "$(basename "$appimage")" \
+              > "$(basename "$appimage").sha256"
+          )
+
+          set +e
+          (
+            cd "$RUNNER_TEMP"
+            env \
+              APPIMAGE_EXTRACT_AND_RUN=1 \
+              HOME="$smoke_root/home" \
+              XDG_CONFIG_HOME="$smoke_root/config" \
+              XDG_DATA_HOME="$smoke_root/data" \
+              XDG_CACHE_HOME="$smoke_root/cache" \
+              timeout 15s xvfb-run -a "$GITHUB_WORKSPACE/$appimage"
+          ) >"$smoke_root/output.log" 2>&1
+          status=$?
+          set -e
+          cat "$smoke_root/output.log"
+          if [ "$status" -ne 124 ]; then
+            echo "AppImage failed its startup smoke test; exit code was $status" >&2
+            exit 1
+          fi
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: openlogtool-linux
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-linux-x86_64
           path: |
             build/linux/x64/release/*.tar.gz
+            build/linux/x64/release/*.tar.gz.sha256
             build/linux/x64/release/*.AppImage
+            build/linux/x64/release/*.AppImage.sha256
+          if-no-files-found: error
+          retention-days: 14
 
-  # 构建 Windows
   build-windows:
-    needs: get-version
-    runs-on: windows-latest
+    name: Build and smoke-test Windows
+    needs: [version, quality]
+    runs-on: windows-2022
+    timeout-minutes: 50
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get pubspec version
-        shell: pwsh
-        run: |
-          $line = Select-String -Path "pubspec.yaml" -Pattern "^version:"
-          $version = $line.Line -replace "^version:\s*", "" -replace "\+.*", ""
-          echo "VERSION_NAME=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool-windows
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Ensure Windows desktop project exists
-        shell: pwsh
-        run: |
-          if (!(Test-Path "windows/runner/CMakeLists.txt")) {
-            Write-Host "Windows desktop scaffolding missing, generating with flutter create..."
-            flutter create . --platforms=windows
-          }
-
-      - name: Get dependencies
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Install Inno Setup
+      - name: Generate build version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+        run: dart tool/gen_version.dart
+
+      - name: Build Windows release
+        run: >-
+          flutter build windows --release --no-pub
+          --build-name="${{ needs.version.outputs.version_name }}"
+          --build-number="${{ github.run_number }}"
+
+      - name: Verify bundled Rust core
+        shell: pwsh
         run: |
-          choco install innosetup -y
+          $source = "rust/target/release/openlogtool_core.dll"
+          $bundled = "build/windows/x64/runner/Release/openlogtool_core.dll"
+          foreach ($path in @($source, $bundled)) {
+            if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing Rust DLL: $path"
+            }
+          }
+          $sourceHash = (Get-FileHash $source -Algorithm SHA256).Hash
+          $bundledHash = (Get-FileHash $bundled -Algorithm SHA256).Hash
+          if ($sourceHash -ne $bundledHash) {
+            throw "The bundled Rust DLL does not match Cargo output"
+          }
 
-      - name: Build Windows
-        run: flutter build windows --release
+      - name: Package and smoke-test Windows archive
+        shell: pwsh
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
+        run: ./tool/package_windows.ps1 -Version $env:ARTIFACT_VERSION -OutputDirectory dist -SmokeTest
 
-      - name: Update Installer Version
+      - name: Install pinned Inno Setup
+        shell: pwsh
+        run: choco install innosetup --version=6.7.1 --no-progress --yes
+
+      - name: Build and smoke-test Windows installer
+        shell: pwsh
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
         run: |
-          $version = "${{ env.VERSION_NAME }}.${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}"
-          (Get-Content windows/installer.iss) -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`"" | Set-Content windows/installer.iss
-          Get-Content windows/installer.iss | Select-String "MyAppVersion"
+          iscc "/DMyAppVersion=$env:ARTIFACT_VERSION" windows/installer.iss
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE"
+          }
 
-      - name: Build Installer
-        run: iscc windows/installer.iss
+          $installer = Get-Item "windows/installer/OpenLogTool-Setup-$env:ARTIFACT_VERSION.exe"
+          $installRoot = Join-Path $env:RUNNER_TEMP "OpenLogToolInstallerSmoke"
+          $arguments = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$installRoot"
+          )
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList $arguments -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) {
+            throw "Installer exited with code $($installProcess.ExitCode)"
+          }
 
-      - name: Upload Windows Installer
-        uses: actions/upload-artifact@v4
+          $installedExe = Join-Path $installRoot "openlogtool.exe"
+          $installedRust = Join-Path $installRoot "openlogtool_core.dll"
+          foreach ($path in @($installedExe, $installedRust)) {
+            if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Installed file is missing: $path"
+            }
+          }
+          $bundleRust = "build/windows/x64/runner/Release/openlogtool_core.dll"
+          $installedHash = (Get-FileHash $installedRust -Algorithm SHA256).Hash
+          $bundleHash = (Get-FileHash $bundleRust -Algorithm SHA256).Hash
+          if ($installedHash -ne $bundleHash) {
+            throw "The installed Rust DLL does not match the tested bundle"
+          }
+
+          $application = Start-Process -FilePath $installedExe -WorkingDirectory $installRoot -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            if ($application.HasExited) {
+              throw "Installed app exited with code $($application.ExitCode)"
+            }
+          }
+          finally {
+            if (!$application.HasExited) {
+              Stop-Process -Id $application.Id -Force
+              $application.WaitForExit()
+            }
+          }
+
+          $destination = Join-Path "dist" $installer.Name
+          Copy-Item -LiteralPath $installer.FullName -Destination $destination
+          $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hashLine = "$hash  $(Split-Path $destination -Leaf)$([Environment]::NewLine)"
+          [System.IO.File]::WriteAllText("$destination.sha256", $hashLine)
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: openlogtool-windows-installer
-          path: windows/installer/OpenLogTool-Setup-*.exe
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-windows-x64
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/*.exe
+            dist/*.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
 
-
-  # 构建 macOS
   build-macos:
-    needs: get-version
-    runs-on: macos-latest
+    name: Build and smoke-test macOS universal
+    needs: [version, quality]
+    runs-on: macos-15
+    timeout-minutes: 55
+    env:
+      MACOS_RUST_ARCHS: arm64 x86_64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get pubspec version
-        run: |
-          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
-          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust and Darwin targets
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool-macos-universal
 
       - name: Enable macOS desktop
         run: flutter config --enable-macos-desktop
 
-      - name: Get dependencies
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build macOS
-        run: |
-          flutter build macos --release
-          echo "=== Build output ==="
-          ls -la build/macos/Build/Products/Release/
-          find build/macos/Build/Products/Release/ -name "*.app" -type d
-          
-      - name: Package macOS app
-        run: |
-          cd build/macos/Build/Products/Release/
-          # 检查生成的 .app 目录
-          ls -la *.app/
-          
-          # 创建 DMG 文件
-          # 使用 create-dmg 工具创建美观的 DMG
-          brew install create-dmg || true
-          
-          # 创建 DMG
-          create-dmg \
-            --volname "OpenLogTool Installer" \
-            --window-pos 200 120 \
-            --window-size 800 400 \
-            --icon-size 100 \
-            --app-drop-link 600 185 \
-            --icon "openlogtool.app" 200 185 \
-            "openlogtool-macos-${{ env.VERSION_NAME }}.dmg" \
-            "openlogtool.app" || {
-              # 如果 create-dmg 失败，使用 hdiutil 创建基本 DMG
-              echo "create-dmg failed, using hdiutil..."
-              hdiutil create -volname "OpenLogTool" -srcfolder "openlogtool.app" -ov -format UDZO "openlogtool-macos-${{ env.VERSION_NAME }}.dmg"
-            }
-          
-          echo "=== Packaged file ==="
-          ls -la *.dmg
+      - name: Generate build version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+        run: dart tool/gen_version.dart
 
-      - name: Upload macOS
-        uses: actions/upload-artifact@v4
+      - name: Build macOS universal release
+        run: >-
+          flutter build macos --release --no-pub
+          --build-name="${{ needs.version.outputs.version_name }}"
+          --build-number="${{ github.run_number }}"
+
+      - name: Verify and smoke-test macOS app
+        run: |
+          set -euo pipefail
+          app=build/macos/Build/Products/Release/openlogtool.app
+          executable="$app/Contents/MacOS/openlogtool"
+          library="$app/Contents/Frameworks/libopenlogtool_core.dylib"
+          test -x "$executable"
+          test -s "$library"
+          xcrun lipo -verify_arch arm64 x86_64 "$executable"
+          xcrun lipo -verify_arch arm64 x86_64 "$library"
+          xcrun otool -D "$library" | tail -n +2 |
+            grep -Fx '@rpath/libopenlogtool_core.dylib'
+          xcrun otool -l "$executable" | grep -A3 LC_RPATH |
+            grep -F '@executable_path/../Frameworks'
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+          smoke_root="$RUNNER_TEMP/openlogtool-macos-smoke"
+          mkdir -p "$smoke_root/home"
+          HOME="$smoke_root/home" "$executable" \
+            >"$smoke_root/output.log" 2>&1 &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" || status=$?
+            cat "$smoke_root/output.log"
+            echo "macOS app exited during smoke test (${status:-0})" >&2
+            exit 1
+          fi
+          kill -TERM "$pid" 2>/dev/null || true
+          wait "$pid" || true
+
+      - name: Package and verify macOS artifacts
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
+        run: |
+          set -euo pipefail
+          app=build/macos/Build/Products/Release/openlogtool.app
+          mkdir -p dist
+          zip_name="OpenLogTool-$ARTIFACT_VERSION-macOS-universal.zip"
+          dmg_name="OpenLogTool-$ARTIFACT_VERSION-macOS-universal.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$zip_name"
+
+          dmg_stage="$RUNNER_TEMP/openlogtool-dmg-stage"
+          mkdir -p "$dmg_stage"
+          ditto "$app" "$dmg_stage/openlogtool.app"
+          ln -s /Applications "$dmg_stage/Applications"
+          hdiutil create \
+            -volname OpenLogTool \
+            -srcfolder "$dmg_stage" \
+            -ov \
+            -format UDZO \
+            "dist/$dmg_name"
+          hdiutil verify "dist/$dmg_name"
+
+          dmg_mount="$RUNNER_TEMP/openlogtool-dmg-mount"
+          mkdir -p "$dmg_mount"
+          device=""
+          trap 'if [ -n "${device:-}" ]; then hdiutil detach "$device" || true; fi' EXIT
+          attach_output=$(hdiutil attach -nobrowse -readonly \
+            -mountpoint "$dmg_mount" "dist/$dmg_name")
+          printf '%s\n' "$attach_output"
+          device=$(printf '%s\n' "$attach_output" | awk 'END {print $1}')
+          test -d "$dmg_mount/openlogtool.app"
+          test -L "$dmg_mount/Applications"
+          codesign --verify --deep --strict --verbose=2 \
+            "$dmg_mount/openlogtool.app"
+          hdiutil detach "$device"
+          device=""
+
+          extracted="$RUNNER_TEMP/openlogtool-macos-package"
+          mkdir -p "$extracted"
+          ditto -x -k "dist/$zip_name" "$extracted"
+          packaged_app="$extracted/openlogtool.app"
+          packaged_executable="$packaged_app/Contents/MacOS/openlogtool"
+          packaged_library="$packaged_app/Contents/Frameworks/libopenlogtool_core.dylib"
+          test -x "$packaged_executable"
+          test -s "$packaged_library"
+          xcrun lipo -verify_arch arm64 x86_64 "$packaged_library"
+          codesign --verify --deep --strict --verbose=2 "$packaged_app"
+
+          smoke_root="$RUNNER_TEMP/openlogtool-macos-package-smoke"
+          mkdir -p "$smoke_root/home"
+          HOME="$smoke_root/home" "$packaged_executable" \
+            >"$smoke_root/output.log" 2>&1 &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" || status=$?
+            cat "$smoke_root/output.log"
+            echo "Packaged macOS app exited during smoke test (${status:-0})" >&2
+            exit 1
+          fi
+          kill -TERM "$pid" 2>/dev/null || true
+          wait "$pid" || true
+
+          (
+            cd dist
+            shasum -a 256 "$zip_name" > "$zip_name.sha256"
+            shasum -a 256 "$dmg_name" > "$dmg_name.sha256"
+          )
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: openlogtool-macos
-          path: build/macos/Build/Products/Release/*.dmg
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-macos-universal
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/*.dmg
+            dist/*.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
 
-  # 创建 Release（仅在 main 分支推送时）
   release:
-    needs: [get-version, build-android, build-linux, build-windows, build-macos]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    name: Publish cross-platform release
+    needs:
+      - version
+      - build-android
+      - build-linux
+      - build-windows
+      - build-macos
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get pubspec version
-        run: |
-          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | sed 's/+.*//')
-          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          persist-credentials: false
+
+      - name: Validate release tag
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          expected_tag="v${VERSION_NAME}"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            echo "Release tag must be $expected_tag, got $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: openlogtool-${{ needs.version.outputs.artifact_version }}-*
+          merge-multiple: true
           path: artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Verify release inventory
+        run: |
+          set -euo pipefail
+          compgen -G 'artifacts/*.apk' >/dev/null
+          compgen -G 'artifacts/*.tar.gz' >/dev/null
+          compgen -G 'artifacts/*.AppImage' >/dev/null
+          compgen -G 'artifacts/*.exe' >/dev/null
+          compgen -G 'artifacts/*Windows*.zip' >/dev/null
+          compgen -G 'artifacts/*.dmg' >/dev/null
+          compgen -G 'artifacts/*macOS*.zip' >/dev/null
+          (
+            cd artifacts
+            for checksum in *.sha256; do
+              sha256sum --check "$checksum"
+            done
+            find . -maxdepth 1 -type f ! -name '*.sha256' \
+              ! -name SHA256SUMS -print0 |
+              sort -z |
+              xargs -0 sha256sum > SHA256SUMS
+          )
+          find artifacts -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: v${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}
-          name: OpenLogTool v${{ env.VERSION_NAME }}-${{ needs.get-version.outputs.short_sha }}.${{ needs.get-version.outputs.build_number }}
-          draft: false
-          prerelease: false
+          tag_name: ${{ github.ref_name }}
+          name: OpenLogTool ${{ github.ref_name }}
           generate_release_notes: true
-          files: |
-            artifacts/openlogtool-android-apk/*.apk
-            artifacts/openlogtool-linux/*.tar.gz
-            artifacts/openlogtool-linux/*.AppImage
-            artifacts/openlogtool-windows-installer/*.exe
-            artifacts/openlogtool-macos/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: true
+          files: artifacts/*
