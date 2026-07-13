@@ -639,7 +639,7 @@ jobs:
           $destination = Join-Path "dist" $installer.Name
           Copy-Item -LiteralPath $installer.FullName -Destination $destination
           $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
-          $hashLine = "$hash  $(Split-Path $destination -Leaf)$([Environment]::NewLine)"
+          $hashLine = "$hash  $(Split-Path $destination -Leaf)`n"
           [System.IO.File]::WriteAllText("$destination.sha256", $hashLine)
 
       - name: Upload Windows artifacts
@@ -842,6 +842,7 @@ jobs:
           (
             cd artifacts
             for checksum in *.sha256; do
+              sed -i 's/\r$//' "$checksum"
               sha256sum --check "$checksum"
             done
             find . -maxdepth 1 -type f ! -name '*.sha256' \
