@@ -20,9 +20,11 @@ class CollaborationScreen extends StatefulWidget {
   const CollaborationScreen({
     super.key,
     this.publicShareUriOpener,
+    this.focusPublicShare = false,
   });
 
   final PublicShareUriOpener? publicShareUriOpener;
+  final bool focusPublicShare;
 
   @override
   State<CollaborationScreen> createState() => _CollaborationScreenState();
@@ -30,7 +32,9 @@ class CollaborationScreen extends StatefulWidget {
 
 class _CollaborationScreenState extends State<CollaborationScreen> {
   final _inviteCodeController = TextEditingController();
+  final _publicShareAnchorKey = GlobalKey();
   InviteRole _inviteRole = InviteRole.editor;
+  String? _focusedPublicShareTarget;
 
   @override
   void initState() {
@@ -60,11 +64,19 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                   (collaboration.conflictCount > 0 ||
                       collaboration.conflictsLoading ||
                       collaboration.openConflicts.isNotEmpty));
-          final showAccessSection =
-              collaboration.supportsPublicShareManagement ||
-                  (server.isLoggedIn &&
-                      collaboration.state == CollaborationState.ready &&
-                      collaboration.isOwner);
+          final showOwnerAccess = server.isLoggedIn &&
+              collaboration.state == CollaborationState.ready &&
+              collaboration.isOwner;
+          final showPublicSharePrerequisite =
+              widget.focusPublicShare && !showOwnerAccess;
+          final hasKnownOwnerAccess = server.isLoggedIn &&
+              collaboration.binding != null &&
+              collaboration.effectiveRole == SessionRole.owner;
+          if (widget.focusPublicShare) {
+            _schedulePublicShareFocus(
+              showOwnerAccess ? 'management' : 'prerequisite',
+            );
+          }
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -86,6 +98,15 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                         _statusCard(collaboration),
                       if (sessions.currentSession != null)
                         _sessionCard(collaboration, sessions),
+                      if (showPublicSharePrerequisite) ...[
+                        const SizedBox(height: 20),
+                        KeyedSubtree(
+                          key: _publicShareAnchorKey,
+                          child: _publicShareAccessRequiredCard(
+                            preparingOwnerAccess: hasKnownOwnerAccess,
+                          ),
+                        ),
+                      ],
                       if (server.isLoggedIn && collaboration.canJoinWithInvite)
                         _joinCard(collaboration),
                       if (showSyncSection) ...[
@@ -139,21 +160,20 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             ),
                           ),
                       ],
-                      if (showAccessSection) ...[
+                      if (showOwnerAccess) ...[
                         const SizedBox(height: 20),
                         _sectionHeader(
                           Icons.group_outlined,
                           context.l10n.collaborationAccessSection,
                           context.l10n.collaborationAccessSectionHint,
                         ),
-                        if (server.isLoggedIn &&
-                            collaboration.state == CollaborationState.ready &&
-                            collaboration.isOwner) ...[
-                          _publicShareCard(collaboration),
-                          if (collaboration.supportsInvites)
-                            _inviteManagementCard(collaboration),
-                          _memberManagementCard(collaboration, server),
-                        ],
+                        KeyedSubtree(
+                          key: _publicShareAnchorKey,
+                          child: _publicShareCard(collaboration),
+                        ),
+                        if (collaboration.supportsInvites)
+                          _inviteManagementCard(collaboration),
+                        _memberManagementCard(collaboration, server),
                       ],
                     ],
                   ),
@@ -195,6 +215,64 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     if (mounted && collaboration.supportsPublicShareManagement) {
       await _run(collaboration.refreshPublicShares);
     }
+  }
+
+  void _schedulePublicShareFocus(String target) {
+    if (_focusedPublicShareTarget == target) return;
+    _focusedPublicShareTarget = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final targetContext = _publicShareAnchorKey.currentContext;
+      if (targetContext == null) {
+        _focusedPublicShareTarget = null;
+        return;
+      }
+      await Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+    });
+  }
+
+  Widget _publicShareAccessRequiredCard({
+    required bool preparingOwnerAccess,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      key: const Key('public-share-access-required'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              preparingOwnerAccess ? Icons.sync : Icons.public_off_outlined,
+              color: colors.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.publicShareManagement,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    preparingOwnerAccess
+                        ? context.l10n.publicShareManagementHint
+                        : context.l10n.publicShareAccessRequired,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _publicShareCard(CollaborationProvider collaboration) {

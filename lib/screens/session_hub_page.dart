@@ -208,6 +208,19 @@ class SessionHubPage extends StatelessWidget {
                             icon: const Icon(Icons.group_outlined),
                             label: Text(context.l10n.manageCollaboration),
                           ),
+                          FilledButton.tonalIcon(
+                            key: const Key('open-live-share-management'),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => const CollaborationScreen(
+                                  focusPublicShare: true,
+                                ),
+                              ),
+                            ),
+                            icon: const Icon(Icons.public),
+                            label: Text(context.l10n.openLiveShare),
+                          ),
                           if (settings.controllerDeviceModeEnabled)
                             OutlinedButton.icon(
                               key: const Key('enter-controller-device-mode'),

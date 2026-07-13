@@ -4,6 +4,7 @@ import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
+import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/screens/session_hub_page.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
@@ -15,6 +16,46 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets(
+      'SessionHubPage exposes a direct Live Share entry for the current session',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (_, __, ___) async => [],
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final entry = find.byKey(const Key('open-live-share-management'));
+    expect(entry, findsOneWidget);
+    expect(find.text('Live Share 公开页面'), findsOneWidget);
+
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('public-share-access-required')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -326,6 +367,9 @@ class _SessionHubTestAppState extends State<_SessionHubTestApp> {
           ),
           ChangeNotifierProvider<LogProvider>.value(value: widget.logProvider),
           ChangeNotifierProvider(create: (_) => CollaborationProvider()),
+          ChangeNotifierProvider(
+            create: (_) => ServerProvider(autoLoadSettings: false),
+          ),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ],
         child: MaterialApp(

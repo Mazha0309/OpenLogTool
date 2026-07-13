@@ -138,6 +138,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get manageCollaboration => 'Collaboration & members';
 
   @override
+  String get openLiveShare => 'Live Share';
+
+  @override
   String get enterControllerScreen => 'Enter controller display';
 
   @override
@@ -853,6 +856,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Create a read-only web page for controllers, remote scribes, or observers. It can be viewed without signing in; the link secret is shown only when created.';
 
   @override
+  String get publicShareAccessRequired =>
+      'Live Share is managed by the collaboration session owner. Sign in and publish this session first, or ask the owner to create the public link.';
+
+  @override
   String get publicShareUnsupported =>
       'This server does not provide the secure Live Share page. Upgrade or enable public sharing on the server to create one.';
 
@@ -1479,6 +1486,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get manageCollaboration => 'Collaboration & members';
 
   @override
+  String get openLiveShare => 'Live Share';
+
+  @override
   String get enterControllerScreen => 'Enter controller display';
 
   @override
@@ -1823,6 +1833,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get publicShareManagementHint =>
       'Create a read-only web page for controllers, remote scribes, or observers. It can be viewed without signing in; the link secret is shown only when created.';
+
+  @override
+  String get publicShareAccessRequired =>
+      'Live Share is managed by the collaboration session owner. Sign in and publish this session first, or ask the owner to create the public link.';
 
   @override
   String get publicShareUnsupported =>

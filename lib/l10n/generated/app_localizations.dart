@@ -322,6 +322,12 @@ abstract class AppLocalizations {
   /// **'协作与成员'**
   String get manageCollaboration;
 
+  /// No description provided for @openLiveShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'Live Share 公开页面'**
+  String get openLiveShare;
+
   /// No description provided for @enterControllerScreen.
   ///
   /// In zh, this message translates to:
@@ -1545,6 +1551,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'为主控、远程书记员或观众生成只读网页；无需登录即可查看当前点名进度。链接密钥仅在创建时显示。'**
   String get publicShareManagementHint;
+
+  /// No description provided for @publicShareAccessRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'Live Share 由当前协作会话的 Owner 管理。请先登录并发布此会话；如果你是协作成员，请联系 Owner 创建公开链接。'**
+  String get publicShareAccessRequired;
 
   /// No description provided for @publicShareUnsupported.
   ///

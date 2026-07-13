@@ -136,6 +136,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageCollaboration => '协作与成员';
 
   @override
+  String get openLiveShare => 'Live Share 公开页面';
+
+  @override
   String get enterControllerScreen => '进入主控屏';
 
   @override
@@ -813,6 +816,10 @@ class AppLocalizationsZh extends AppLocalizations {
       '为主控、远程书记员或观众生成只读网页；无需登录即可查看当前点名进度。链接密钥仅在创建时显示。';
 
   @override
+  String get publicShareAccessRequired =>
+      'Live Share 由当前协作会话的 Owner 管理。请先登录并发布此会话；如果你是协作成员，请联系 Owner 创建公开链接。';
+
+  @override
   String get publicShareUnsupported =>
       '当前服务器未提供安全的 Live Share 公开页面。升级或启用服务端公开分享功能后即可创建。';
 
@@ -1419,6 +1426,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get manageCollaboration => '协作与成员';
 
   @override
+  String get openLiveShare => 'Live Share 公开页面';
+
+  @override
   String get enterControllerScreen => '进入主控屏';
 
   @override
@@ -1753,6 +1763,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get publicShareManagementHint =>
       '为主控、远程书记员或观众生成只读网页；无需登录即可查看当前点名进度。链接密钥仅在创建时显示。';
+
+  @override
+  String get publicShareAccessRequired =>
+      'Live Share 由当前协作会话的 Owner 管理。请先登录并发布此会话；如果你是协作成员，请联系 Owner 创建公开链接。';
 
   @override
   String get publicShareUnsupported =>
