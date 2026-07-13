@@ -20,6 +20,19 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show ExternalLibrary;
+
+ExternalLibrary? _bundledRustLibrary() {
+  if (kIsWeb || !Platform.isLinux) return null;
+  final libraryPath = p.join(
+    p.dirname(Platform.resolvedExecutable),
+    'lib',
+    'libopenlogtool_core.so',
+  );
+  if (!File(libraryPath).existsSync()) return null;
+  return ExternalLibrary.open(libraryPath);
+}
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +45,10 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  await RustLib.init();
+  // Always use the Rust library shipped with this Linux bundle. The generated
+  // development fallback is relative to the process working directory and can
+  // otherwise pick up a stale rust/target/release library from the source tree.
+  await RustLib.init(externalLibrary: _bundledRustLibrary());
 
   String dbPath;
   try {

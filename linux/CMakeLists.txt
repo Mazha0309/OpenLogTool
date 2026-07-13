@@ -81,14 +81,18 @@ else()
 endif()
 set(RUST_LIB "${RUST_PROJECT_DIR}/target/${RUST_TARGET_DIR}/libopenlogtool_core.so")
 
-add_custom_command(
-  OUTPUT ${RUST_LIB}
+# Always ask Cargo to build the core before linking/installing the Flutter
+# bundle. Cargo performs its own incremental dependency tracking, while an
+# OUTPUT-only CMake rule would incorrectly reuse an existing .so after Rust
+# sources or generated FRB bindings changed.
+add_custom_target(rust_core
   COMMAND cargo build ${RUST_BUILD_FLAGS} --lib
+  BYPRODUCTS "${RUST_LIB}"
   WORKING_DIRECTORY ${RUST_PROJECT_DIR}
   COMMENT "Building Rust core library (openlogtool_core, ${CMAKE_BUILD_TYPE})"
+  VERBATIM
 )
 
-add_custom_target(rust_core DEPENDS ${RUST_LIB})
 add_dependencies(${BINARY_NAME} rust_core)
 
 # Generated plugin build rules, which manage building the plugins and adding
