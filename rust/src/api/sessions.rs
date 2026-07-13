@@ -38,6 +38,87 @@ pub async fn close_session(session_id: String) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Reopens a closed, local-only session on this device.
+///
+/// Collaboration sessions must be reopened through the synchronized
+/// collaboration API. To keep the local recorder unambiguous, any other
+/// active local-only session is closed in the same transaction.
+pub async fn reopen_local_session(session_id: String) -> anyhow::Result<Session> {
+    reopen_local_session_from_pool(get_db()?, &session_id).await
+}
+
+async fn reopen_local_session_from_pool(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> anyhow::Result<Session> {
+    if session_id.trim().is_empty() {
+        anyhow::bail!("SESSION_ID_REQUIRED");
+    }
+
+    let mut tx = pool.begin().await?;
+    let session: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT status, deleted_at FROM sessions WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (status, deleted_at) = session.ok_or_else(|| anyhow::anyhow!("SESSION_NOT_FOUND"))?;
+    if deleted_at.is_some() {
+        anyhow::bail!("SESSION_DELETED");
+    }
+    if status != "closed" {
+        anyhow::bail!("SESSION_NOT_CLOSED");
+    }
+
+    let binding_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM collaboration_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if binding_count.0 != 0 {
+        anyhow::bail!("LOCAL_REOPEN_COLLABORATION_FORBIDDEN");
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    // A remote collaboration session may remain active alongside the local
+    // recorder. This replacement strategy only closes other local-only
+    // sessions affected by this reopen operation.
+    sqlx::query(
+        "UPDATE sessions
+         SET status = 'closed', closed_at = ?, updated_at = ?
+         WHERE session_id != ?
+           AND status = 'active'
+           AND deleted_at IS NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM collaboration_bindings binding
+               WHERE binding.session_id = sessions.session_id
+           )",
+    )
+    .bind(&now)
+    .bind(&now)
+    .bind(session_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE sessions
+         SET status = 'active', closed_at = NULL, updated_at = ?
+         WHERE session_id = ?",
+    )
+    .bind(&now)
+    .bind(session_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let reopened = sqlx::query_as::<_, SessionRow>(
+        "SELECT * FROM sessions WHERE session_id = ? AND deleted_at IS NULL",
+    )
+    .bind(session_id)
+    .fetch_one(&mut *tx)
+    .await?
+    .into_session();
+    tx.commit().await?;
+    Ok(reopened)
+}
+
 /// Permanently removes a closed session from this device.
 ///
 /// This is deliberately a local-only operation. Deleting the collaboration
@@ -140,7 +221,7 @@ impl SessionRow {
 
 #[cfg(test)]
 mod tests {
-    use super::hard_delete_session_from_pool;
+    use super::{hard_delete_session_from_pool, reopen_local_session_from_pool};
     use crate::db::migrations;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::SqlitePool;
@@ -195,6 +276,173 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(count.0, 1);
+    }
+
+    #[tokio::test]
+    async fn local_reopen_activates_closed_session_and_closes_other_local_active() {
+        let pool = setup().await;
+        insert_session(&pool, "closed-session", "closed").await;
+        insert_session(&pool, "local-active", "active").await;
+        insert_session(&pool, "remote-active", "active").await;
+        sqlx::query(
+            "INSERT INTO collaboration_bindings (
+                server_instance_id, server_origin, account_id, session_id,
+                membership_id, membership_version, role, replica_state,
+                joined_at, updated_at
+             ) VALUES (
+                'server', 'https://example.test', 'account', 'remote-active',
+                'membership', 1, 'owner', 'ready', ?, ?
+             )",
+        )
+        .bind(NOW)
+        .bind(NOW)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        reopen_local_session_from_pool(&pool, "closed-session")
+            .await
+            .unwrap();
+
+        let reopened: (String, Option<String>, String) = sqlx::query_as(
+            "SELECT status, closed_at, updated_at FROM sessions WHERE session_id = ?",
+        )
+        .bind("closed-session")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(reopened.0, "active");
+        assert_eq!(reopened.1, None);
+        assert_ne!(reopened.2, NOW);
+
+        let local_active: (String, Option<String>) = sqlx::query_as(
+            "SELECT status, closed_at FROM sessions WHERE session_id = 'local-active'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(local_active.0, "closed");
+        assert!(local_active.1.is_some());
+
+        let remote_active: (String, Option<String>) = sqlx::query_as(
+            "SELECT status, closed_at FROM sessions WHERE session_id = 'remote-active'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(remote_active.0, "active");
+        assert_eq!(remote_active.1, None);
+    }
+
+    #[tokio::test]
+    async fn local_reopen_rolls_back_other_session_changes_when_target_update_fails() {
+        let pool = setup().await;
+        insert_session(&pool, "closed-session", "closed").await;
+        insert_session(&pool, "local-active", "active").await;
+        sqlx::query(
+            "CREATE TRIGGER fail_reopen_target
+             BEFORE UPDATE ON sessions
+             WHEN OLD.session_id = 'closed-session' AND NEW.status = 'active'
+             BEGIN
+               SELECT RAISE(ABORT, 'forced reopen failure');
+             END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let error = reopen_local_session_from_pool(&pool, "closed-session")
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("forced reopen failure"));
+        let sessions: Vec<(String, String, Option<String>, String)> = sqlx::query_as(
+            "SELECT session_id, status, closed_at, updated_at
+             FROM sessions ORDER BY session_id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            sessions,
+            vec![
+                (
+                    "closed-session".to_string(),
+                    "closed".to_string(),
+                    Some(NOW.to_string()),
+                    NOW.to_string(),
+                ),
+                (
+                    "local-active".to_string(),
+                    "active".to_string(),
+                    None,
+                    NOW.to_string(),
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn local_reopen_rejects_archived_session() {
+        let pool = setup().await;
+        insert_session(&pool, "archived-session", "archived").await;
+
+        let error = reopen_local_session_from_pool(&pool, "archived-session")
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("SESSION_NOT_CLOSED"));
+        let session: (String, Option<String>) = sqlx::query_as(
+            "SELECT status, closed_at FROM sessions WHERE session_id = 'archived-session'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(session.0, "archived");
+        assert!(session.1.is_some());
+    }
+
+    #[tokio::test]
+    async fn local_reopen_rejects_collaboration_session_without_changes() {
+        let pool = setup().await;
+        insert_session(&pool, "collaboration-session", "closed").await;
+        insert_session(&pool, "local-active", "active").await;
+        sqlx::query(
+            "INSERT INTO collaboration_bindings (
+                server_instance_id, server_origin, account_id, session_id,
+                membership_id, membership_version, role, replica_state,
+                joined_at, updated_at
+             ) VALUES (
+                'server', 'https://example.test', 'account', 'collaboration-session',
+                'membership', 1, 'owner', 'ready', ?, ?
+             )",
+        )
+        .bind(NOW)
+        .bind(NOW)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let error = reopen_local_session_from_pool(&pool, "collaboration-session")
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("LOCAL_REOPEN_COLLABORATION_FORBIDDEN"));
+        let statuses: Vec<(String, String)> =
+            sqlx::query_as("SELECT session_id, status FROM sessions ORDER BY session_id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            statuses,
+            vec![
+                ("collaboration-session".to_string(), "closed".to_string()),
+                ("local-active".to_string(), "active".to_string()),
+            ]
+        );
     }
 
     #[tokio::test]

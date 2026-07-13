@@ -128,6 +128,178 @@ void main() {
     expect(find.textContaining('打开会话失败'), findsOneWidget);
     expect(find.byKey(const Key('workbench-after-history')), findsNothing);
   });
+
+  testWidgets(
+      'current closed local session has a visible reactivate action and returns to workbench',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'closed-session',
+        title: '上周点名',
+        status: 'closed',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'closed-session',
+    );
+    final loadedSessionIds = <String>[];
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (sessionId, page, pageSize) async {
+        loadedSessionIds.add(sessionId);
+        return [];
+      },
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('reopen-current-local-session')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('reopen-current-local-session')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('重新激活本地会话'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('confirm-reopen-local-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sessionProvider.currentSession.status, 'active');
+    expect(sessionProvider.currentSessionId, 'closed-session');
+    expect(loadedSessionIds, contains('closed-session'));
+    expect(logProvider.currentSessionReadOnly, isFalse);
+    expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
+  });
+
+  testWidgets(
+      'reactivating a non-current history session selects it and makes logs writable',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+      _session(
+        id: 'closed-session',
+        title: '上周点名',
+        status: 'closed',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (_, __, ___) async => [],
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-session-history')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('reopen-history-session-closed-session')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('confirm-reopen-local-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sessionProvider.currentSessionId, 'closed-session');
+    expect(sessionProvider.currentSession.status, 'active');
+    expect(logProvider.currentSessionReadOnly, isFalse);
+    expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
+    final refreshedSessions = await sessionProvider.listAvailableSessions();
+    expect(
+      refreshedSessions
+          .singleWhere((session) => session.sessionId == 'current-session')
+          .status,
+      'closed',
+    );
+  });
+
+  testWidgets(
+      'reactivated history session stays selected but read-only when logs fail to load',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+      _session(
+        id: 'broken-session',
+        title: '日志损坏场次',
+        status: 'closed',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+    );
+    var brokenLoadAttempts = 0;
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (sessionId, _, __) async {
+        if (sessionId == 'broken-session' && brokenLoadAttempts++ == 0) {
+          throw StateError('broken reopened log page');
+        }
+        return [];
+      },
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-session-history')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('reopen-history-session-broken-session')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('confirm-reopen-local-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sessionProvider.currentSessionId, 'broken-session');
+    expect(sessionProvider.currentSession.status, 'active');
+    expect(logProvider.currentSessionId, 'broken-session');
+    expect(logProvider.currentSessionReadOnly, isTrue);
+    expect(find.byKey(const Key('session-history-dialog')), findsNothing);
+    expect(find.textContaining('已重新激活，但日志暂时加载失败'), findsOneWidget);
+    expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(brokenLoadAttempts, 2);
+    expect(logProvider.currentSessionId, 'broken-session');
+    expect(logProvider.currentSessionReadOnly, isFalse);
+  });
 }
 
 class _SessionHubTestApp extends StatefulWidget {
@@ -205,6 +377,51 @@ class _FakeSessionProvider extends SessionProvider {
     _currentSession = _sessions.firstWhere(
       (session) => session.sessionId == sessionId,
     );
+    notifyListeners();
+  }
+
+  @override
+  Future<void> reloadCurrentSession() async {
+    _currentSession = _sessions.firstWhere(
+      (session) => session.sessionId == _currentSession.sessionId,
+    );
+    notifyListeners();
+  }
+
+  @override
+  Future<void> reopenLocalSession(String sessionId) async {
+    for (var candidate = 0; candidate < _sessions.length; candidate += 1) {
+      final existing = _sessions[candidate];
+      if (existing.sessionId != sessionId && existing.status == 'active') {
+        _sessions[candidate] = Session(
+          sessionId: existing.sessionId,
+          title: existing.title,
+          status: 'closed',
+          shareCode: existing.shareCode,
+          createdAt: existing.createdAt,
+          updatedAt: '2026-07-13T12:00:00Z',
+          closedAt: '2026-07-13T12:00:00Z',
+          deletedAt: existing.deletedAt,
+        );
+      }
+    }
+    final index = _sessions.indexWhere(
+      (session) => session.sessionId == sessionId,
+    );
+    if (index < 0) throw StateError('Session not found: $sessionId');
+    final previous = _sessions[index];
+    final reopened = Session(
+      sessionId: previous.sessionId,
+      title: previous.title,
+      status: 'active',
+      shareCode: previous.shareCode,
+      createdAt: previous.createdAt,
+      updatedAt: '2026-07-13T12:00:00Z',
+      closedAt: null,
+      deletedAt: previous.deletedAt,
+    );
+    _sessions[index] = reopened;
+    _currentSession = reopened;
     notifyListeners();
   }
 }

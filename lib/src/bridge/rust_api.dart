@@ -127,6 +127,10 @@ class RustApi {
     return sessions.closeSession(sessionId: sessionId);
   }
 
+  static Future<Session> reopenLocalSession({required String sessionId}) {
+    return sessions.reopenLocalSession(sessionId: sessionId);
+  }
+
   static Future<void> hardDeleteSession({required String sessionId}) {
     return sessions.hardDeleteSession(sessionId: sessionId);
   }

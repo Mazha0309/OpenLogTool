@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -8,40 +10,157 @@ import 'package:provider/provider.dart';
 typedef SessionHistoryLoader = Future<List<Session>> Function();
 typedef SessionHistoryAction = Future<void> Function(Session session);
 
+String localSessionReopenErrorText(BuildContext context, Object error) {
+  final raw = error.toString();
+  if (raw.contains('LOCAL_REOPEN_COLLABORATION_FORBIDDEN')) {
+    return context.l10n.historySessionCollaborationReopenRequired;
+  }
+  return context.l10n.historySessionReopenFailed(raw);
+}
+
+Future<bool> confirmReopenLocalSession(
+  BuildContext context, {
+  required String sessionTitle,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(dialogContext.l10n.historySessionReopenTitle),
+      content: Text(
+        dialogContext.l10n.historySessionReopenConfirmation(sessionTitle),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text(dialogContext.l10n.cancel),
+        ),
+        FilledButton.icon(
+          key: const Key('confirm-reopen-local-session'),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          icon: const Icon(Icons.play_arrow),
+          label: Text(dialogContext.l10n.historySessionReopenAction),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
+void showReopenedSessionLogsUnavailable(
+  BuildContext context, {
+  required LogProvider logs,
+  required String sessionId,
+  required String sessionTitle,
+}) {
+  if (!context.mounted) return;
+  final l10n = context.l10n;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        l10n.historySessionReopenedLogsUnavailable(sessionTitle),
+      ),
+      action: SnackBarAction(
+        label: l10n.retry,
+        onPressed: () {
+          unawaited(
+            _retryReopenedSessionLogs(
+              context,
+              logs: logs,
+              sessionId: sessionId,
+              sessionTitle: sessionTitle,
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+Future<void> _retryReopenedSessionLogs(
+  BuildContext context, {
+  required LogProvider logs,
+  required String sessionId,
+  required String sessionTitle,
+}) async {
+  try {
+    await logs.reloadForSession(sessionId, propagateErrors: true);
+  } catch (_) {
+    if (context.mounted) {
+      showReopenedSessionLogsUnavailable(
+        context,
+        logs: logs,
+        sessionId: sessionId,
+        sessionTitle: sessionTitle,
+      );
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(context.l10n.historySessionSwitched(sessionTitle))),
+  );
+}
+
 Future<void> showSessionHistoryDialog(
   BuildContext context, {
   VoidCallback? onSessionOpened,
 }) async {
   final sessionProvider = context.read<SessionProvider>();
   final logProvider = context.read<LogProvider>();
+  String? reopenedWithoutLogsSessionId;
+  Future<void> loadAndSwitch(Session session) async {
+    final previousSessionId = sessionProvider.currentSessionId;
+    try {
+      // Load the target before persisting it as current. This keeps a failed
+      // history open from leaving the two providers out of sync.
+      await logProvider.reloadForSession(
+        session.sessionId,
+        propagateErrors: true,
+      );
+      await sessionProvider.switchToSession(session.sessionId);
+    } catch (error, stackTrace) {
+      try {
+        await logProvider.reloadForSession(
+          previousSessionId,
+          propagateErrors: true,
+        );
+      } catch (rollbackError, rollbackStackTrace) {
+        debugPrint(
+          '[SessionHistory] log rollback failed: '
+          '$rollbackError\n$rollbackStackTrace',
+        );
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
   final selected = await showDialog<Session>(
     context: context,
     builder: (_) => SessionHistoryDialog(
       currentSessionId: sessionProvider.currentSessionId,
       loadSessions: sessionProvider.listAvailableSessions,
-      openSession: (session) async {
-        final previousSessionId = sessionProvider.currentSessionId;
+      openSession: loadAndSwitch,
+      reopenSession: (session) async {
+        await sessionProvider.reopenLocalSession(session.sessionId);
         try {
-          // Load the target before persisting it as current. This keeps a
-          // failed history open from leaving the two providers out of sync.
           await logProvider.reloadForSession(
             session.sessionId,
             propagateErrors: true,
           );
-          await sessionProvider.switchToSession(session.sessionId);
         } catch (error, stackTrace) {
           try {
-            await logProvider.reloadForSession(
-              previousSessionId,
-              propagateErrors: true,
-            );
-          } catch (rollbackError, rollbackStackTrace) {
+            await sessionProvider.reloadCurrentSession();
+          } catch (refreshError, refreshStackTrace) {
             debugPrint(
-              '[SessionHistory] log rollback failed: '
-              '$rollbackError\n$rollbackStackTrace',
+              '[SessionHistory] reopened session refresh failed: '
+              '$refreshError\n$refreshStackTrace',
             );
           }
-          Error.throwWithStackTrace(error, stackTrace);
+          reopenedWithoutLogsSessionId = session.sessionId;
+          debugPrint(
+            '[SessionHistory] reopened session log load failed: '
+            '$error\n$stackTrace',
+          );
         }
       },
       closeSession: (session) => logProvider.closeSession(session.sessionId),
@@ -51,9 +170,21 @@ Future<void> showSessionHistoryDialog(
   );
   if (selected == null || !context.mounted) return;
   onSessionOpened?.call();
-  ScaffoldMessenger.of(context).showSnackBar(
+  if (reopenedWithoutLogsSessionId == selected.sessionId) {
+    showReopenedSessionLogsUnavailable(
+      context,
+      logs: logProvider,
+      sessionId: selected.sessionId,
+      sessionTitle: selected.title,
+    );
+    return;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  final message = context.l10n.historySessionSwitched(selected.title);
+  messenger.showSnackBar(
     SnackBar(
-        content: Text(context.l10n.historySessionSwitched(selected.title))),
+      content: Text(message),
+    ),
   );
 }
 
@@ -63,6 +194,7 @@ class SessionHistoryDialog extends StatefulWidget {
     required this.currentSessionId,
     required this.loadSessions,
     required this.openSession,
+    required this.reopenSession,
     required this.closeSession,
     required this.deleteSession,
   });
@@ -70,6 +202,7 @@ class SessionHistoryDialog extends StatefulWidget {
   final String? currentSessionId;
   final SessionHistoryLoader loadSessions;
   final SessionHistoryAction openSession;
+  final SessionHistoryAction reopenSession;
   final SessionHistoryAction closeSession;
   final SessionHistoryAction deleteSession;
 
@@ -152,6 +285,34 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
         SnackBar(
           content:
               Text(context.l10n.historySessionCloseFailed(error.toString())),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _reopen(Session session) async {
+    if (_busySessionId != null) return;
+    final confirmed = await confirmReopenLocalSession(
+      context,
+      sessionTitle: session.title,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busySessionId = session.sessionId);
+    try {
+      await widget.reopenSession(session);
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      Navigator.of(context).pop(session);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busySessionId = null;
+        _sessions = widget.loadSessions();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(localSessionReopenErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -250,6 +411,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
   Widget _sessionTile(Session session) {
     final isCurrent = widget.currentSessionId == session.sessionId;
     final isActive = session.status == 'active';
+    final isClosed = session.status == 'closed';
     final busy = _busySessionId == session.sessionId;
     final createdAt = DateTime.tryParse(session.createdAt)?.toLocal();
     final createdLabel = createdAt == null
@@ -267,7 +429,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
       title: Text(session.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         '$createdLabel · '
-        '${isActive ? context.l10n.sessionActive : context.l10n.sessionClosed}',
+        '${isActive ? context.l10n.sessionActive : isClosed ? context.l10n.sessionClosed : session.status}',
       ),
       trailing: busy
           ? const SizedBox.square(
@@ -275,7 +437,26 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : isCurrent
-              ? Chip(label: Text(context.l10n.historySessionCurrent))
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Chip(label: Text(context.l10n.historySessionCurrent)),
+                    if (isClosed)
+                      IconButton(
+                        key: Key(
+                          'reopen-history-session-${session.sessionId}',
+                        ),
+                        tooltip: context.l10n.historySessionReopenAction,
+                        onPressed: _busySessionId == null
+                            ? () => _reopen(session)
+                            : null,
+                        icon: Icon(
+                          Icons.play_circle_outline,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                  ],
+                )
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -298,7 +479,21 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                           color: Theme.of(context).colorScheme.error,
                         ),
                       ),
-                    if (!isActive)
+                    if (isClosed)
+                      IconButton(
+                        key: Key(
+                          'reopen-history-session-${session.sessionId}',
+                        ),
+                        tooltip: context.l10n.historySessionReopenAction,
+                        onPressed: _busySessionId == null
+                            ? () => _reopen(session)
+                            : null,
+                        icon: Icon(
+                          Icons.play_circle_outline,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    if (isClosed)
                       IconButton(
                         key: Key(
                           'delete-history-session-${session.sessionId}',

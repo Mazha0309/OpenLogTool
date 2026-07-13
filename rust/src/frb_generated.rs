@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -626423656;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 888035934;
 
 // Section: executor
 
@@ -1896,6 +1896,43 @@ fn wire__crate__api__sessions__reopen_collaboration_session_impl(
         },
     )
 }
+fn wire__crate__api__sessions__reopen_local_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "reopen_local_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::sessions::reopen_local_session(api_session_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__dictionaries__reset_dictionaries_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -3039,61 +3076,64 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        47 => wire__crate__api__dictionaries__reset_dictionaries_impl(
+        47 => {
+            wire__crate__api__sessions__reopen_local_session_impl(port, ptr, rust_vec_len, data_len)
+        }
+        48 => wire__crate__api__dictionaries__reset_dictionaries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        48 => wire__crate__api__collaboration__resolve_collaboration_conflict_impl(
+        49 => wire__crate__api__collaboration__resolve_collaboration_conflict_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        49 => wire__crate__api__logs__restore_log_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__collaboration__save_collaboration_live_draft_cache_impl(
+        50 => wire__crate__api__logs__restore_log_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__collaboration__save_collaboration_live_draft_cache_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        51 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__collaboration__set_collaboration_head_seq_impl(
+        52 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__collaboration__set_collaboration_head_seq_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        54 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
+        55 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        56 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__collaboration__update_collaboration_membership_impl(
+        57 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__collaboration__update_collaboration_membership_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        58 => wire__crate__api__collaboration__update_collaboration_offline_record_impl(
+        59 => wire__crate__api__collaboration__update_collaboration_offline_record_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        59 => wire__crate__api__sessions__update_collaboration_session_title_impl(
+        60 => wire__crate__api__sessions__update_collaboration_session_title_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        60 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
-        61 => {
+        61 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
+        62 => {
             wire__crate__api__dictionaries__upsert_dict_item_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),

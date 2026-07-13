@@ -4,9 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
 
+typedef LocalSessionReopener = Future<Session> Function(String sessionId);
+typedef CurrentSessionIdWriter = Future<bool> Function(String sessionId);
+
 class SessionProvider with ChangeNotifier {
   static const _key = 'current_session_id';
 
+  final LocalSessionReopener _localSessionReopener;
+  final CurrentSessionIdWriter? _currentSessionIdWriter;
   bool _disposed = false;
   String? _currentSessionId;
   Session? _currentSession;
@@ -17,7 +22,12 @@ class SessionProvider with ChangeNotifier {
 
   Future<void> get ready => _initCompleter?.future ?? Future.value();
 
-  SessionProvider() {
+  SessionProvider({
+    LocalSessionReopener? localSessionReopener,
+    CurrentSessionIdWriter? currentSessionIdWriter,
+  })  : _localSessionReopener = localSessionReopener ??
+            ((sessionId) => RustApi.reopenLocalSession(sessionId: sessionId)),
+        _currentSessionIdWriter = currentSessionIdWriter {
     final completer = Completer<void>();
     _initCompleter = completer;
     scheduleMicrotask(() async {
@@ -152,6 +162,32 @@ class SessionProvider with ChangeNotifier {
     _safeNotify();
   }
 
+  /// Reactivates and selects a closed local-only session.
+  ///
+  /// Rust atomically closes any other active local-only session and returns
+  /// the new canonical local row, so this provider cannot keep presenting the
+  /// previous session as writable after the operation succeeds.
+  Future<void> reopenLocalSession(String sessionId) async {
+    final reopened = await _localSessionReopener(sessionId);
+
+    // The database transaction has already committed. Adopt its canonical
+    // result before touching preferences so an I/O failure cannot leave the
+    // in-memory provider pointing at a session Rust just closed.
+    _currentSession = reopened;
+    _currentSessionId = reopened.sessionId;
+    _safeNotify();
+    try {
+      await _persistCurrentSessionId(reopened.sessionId);
+    } catch (error, stackTrace) {
+      // Persistence only controls which session is restored on next launch.
+      // The committed database state remains authoritative for this process.
+      debugPrint(
+        '[Session] failed to persist reopened session selection: '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
   Future<void> reloadCurrentSession() async {
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
@@ -206,8 +242,13 @@ class SessionProvider with ChangeNotifier {
   }
 
   Future<void> _persistCurrentSessionId(String sessionId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = await prefs.setString(_key, sessionId);
+    final writer = _currentSessionIdWriter;
+    final saved = writer != null
+        ? await writer(sessionId)
+        : await (await SharedPreferences.getInstance()).setString(
+            _key,
+            sessionId,
+          );
     if (!saved) {
       throw StateError('Failed to persist current session: $sessionId');
     }

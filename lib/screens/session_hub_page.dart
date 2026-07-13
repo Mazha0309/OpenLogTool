@@ -179,6 +179,24 @@ class SessionHubPage extends StatelessWidget {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
+                          if (session.status == 'closed')
+                            FilledButton.icon(
+                              key: const Key(
+                                'reopen-current-local-session',
+                              ),
+                              onPressed: collaboration.binding == null
+                                  ? () => _reopenCurrentLocalSession(
+                                        context,
+                                        session.sessionId,
+                                        session.title,
+                                        onSessionOpened,
+                                      )
+                                  : null,
+                              icon: const Icon(Icons.play_arrow),
+                              label: Text(
+                                context.l10n.historySessionReopenAction,
+                              ),
+                            ),
                           FilledButton.icon(
                             key: const Key('open-collaboration-management'),
                             onPressed: () => Navigator.push(
@@ -371,6 +389,70 @@ class SessionHubPage extends StatelessWidget {
         ),
       );
     }
+  }
+
+  static Future<void> _reopenCurrentLocalSession(
+    BuildContext context,
+    String sessionId,
+    String sessionTitle,
+    VoidCallback? onSessionOpened,
+  ) async {
+    final confirmed = await confirmReopenLocalSession(
+      context,
+      sessionTitle: sessionTitle,
+    );
+    if (!confirmed || !context.mounted) return;
+
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    try {
+      await sessions.reopenLocalSession(sessionId);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(localSessionReopenErrorText(context, error)),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await logs.reloadForSession(sessionId, propagateErrors: true);
+    } catch (error, stackTrace) {
+      try {
+        await sessions.reloadCurrentSession();
+      } catch (refreshError, refreshStackTrace) {
+        debugPrint(
+          '[SessionHub] reopened session refresh failed: '
+          '$refreshError\n$refreshStackTrace',
+        );
+      }
+      debugPrint(
+        '[SessionHub] reopened session log load failed: '
+        '$error\n$stackTrace',
+      );
+      if (!context.mounted) return;
+      onSessionOpened?.call();
+      showReopenedSessionLogsUnavailable(
+        context,
+        logs: logs,
+        sessionId: sessionId,
+        sessionTitle: sessionTitle,
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final message = context.l10n.historySessionReopened(sessionTitle);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+    onSessionOpened?.call();
   }
 
   static Future<void> _openDesktopWindow(

@@ -175,6 +175,36 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get historySessionReopenAction => '重新激活';
+
+  @override
+  String get historySessionReopenTitle => '重新激活本地会话';
+
+  @override
+  String historySessionReopenConfirmation(String title) {
+    return '重新激活“$title”并切换到该会话吗？当前进行中的其他本地会话将自动关闭，协作会话不受影响。目标如果是协作会话，请在“协作与成员”中重新打开。';
+  }
+
+  @override
+  String historySessionReopened(String title) {
+    return '已重新激活并切换到会话：$title';
+  }
+
+  @override
+  String historySessionReopenFailed(String error) {
+    return '重新激活本地会话失败：$error';
+  }
+
+  @override
+  String historySessionReopenedLogsUnavailable(String title) {
+    return '会话“$title”已重新激活，但日志暂时加载失败。为安全起见当前保持只读，请重试加载。';
+  }
+
+  @override
+  String get historySessionCollaborationReopenRequired =>
+      '这是协作会话。请先打开该会话，再到“协作与成员”中重新打开。';
+
+  @override
   String get historySessionDeleteTitle => '永久删除本机会话';
 
   @override
@@ -1357,6 +1387,36 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String historySessionCloseFailed(String error) {
     return '关闭会话失败：$error';
   }
+
+  @override
+  String get historySessionReopenAction => '重新激活';
+
+  @override
+  String get historySessionReopenTitle => '重新激活本地会话';
+
+  @override
+  String historySessionReopenConfirmation(String title) {
+    return '重新激活“$title”并切换到该会话吗？当前进行中的其他本地会话将自动关闭，协作会话不受影响。目标如果是协作会话，请在“协作与成员”中重新打开。';
+  }
+
+  @override
+  String historySessionReopened(String title) {
+    return '已重新激活并切换到会话：$title';
+  }
+
+  @override
+  String historySessionReopenFailed(String error) {
+    return '重新激活本地会话失败：$error';
+  }
+
+  @override
+  String historySessionReopenedLogsUnavailable(String title) {
+    return '会话“$title”已重新激活，但日志暂时加载失败。为安全起见当前保持只读，请重试加载。';
+  }
+
+  @override
+  String get historySessionCollaborationReopenRequired =>
+      '这是协作会话。请先打开该会话，再到“协作与成员”中重新打开。';
 
   @override
   String get historySessionDeleteTitle => '永久删除本机会话';

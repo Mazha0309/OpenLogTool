@@ -179,6 +179,36 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get historySessionReopenAction => 'Reactivate';
+
+  @override
+  String get historySessionReopenTitle => 'Reactivate local session';
+
+  @override
+  String historySessionReopenConfirmation(String title) {
+    return 'Reactivate “$title” and switch to it? Any other active local session will be closed automatically; collaboration sessions are not affected. Reopen a collaboration target from Collaboration & members.';
+  }
+
+  @override
+  String historySessionReopened(String title) {
+    return 'Reactivated and switched to session: $title';
+  }
+
+  @override
+  String historySessionReopenFailed(String error) {
+    return 'Could not reactivate local session: $error';
+  }
+
+  @override
+  String historySessionReopenedLogsUnavailable(String title) {
+    return 'Session “$title” was reactivated, but its logs could not be loaded. It is temporarily read-only; retry loading.';
+  }
+
+  @override
+  String get historySessionCollaborationReopenRequired =>
+      'This is a collaboration session. Open it first, then reopen it from Collaboration & members.';
+
+  @override
   String get historySessionDeleteTitle => 'Permanently delete local session';
 
   @override
@@ -1416,6 +1446,36 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String historySessionCloseFailed(String error) {
     return 'Could not close session: $error';
   }
+
+  @override
+  String get historySessionReopenAction => 'Reactivate';
+
+  @override
+  String get historySessionReopenTitle => 'Reactivate local session';
+
+  @override
+  String historySessionReopenConfirmation(String title) {
+    return 'Reactivate “$title” and switch to it? Any other active local session will be closed automatically; collaboration sessions are not affected. Reopen a collaboration target from Collaboration & members.';
+  }
+
+  @override
+  String historySessionReopened(String title) {
+    return 'Reactivated and switched to session: $title';
+  }
+
+  @override
+  String historySessionReopenFailed(String error) {
+    return 'Could not reactivate local session: $error';
+  }
+
+  @override
+  String historySessionReopenedLogsUnavailable(String title) {
+    return 'Session “$title” was reactivated, but its logs could not be loaded. It is temporarily read-only; retry loading.';
+  }
+
+  @override
+  String get historySessionCollaborationReopenRequired =>
+      'This is a collaboration session. Open it first, then reopen it from Collaboration & members.';
 
   @override
   String get historySessionDeleteTitle => 'Permanently delete local session';

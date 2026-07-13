@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import '../models/session.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `hard_delete_session_from_pool`, `into_session`
+// These functions are ignored because they are not marked as `pub`: `hard_delete_session_from_pool`, `into_session`, `reopen_local_session_from_pool`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SessionRow`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from_row`
 
@@ -19,6 +19,15 @@ Future<List<Session>> listSessions() =>
 
 Future<void> closeSession({required String sessionId}) =>
     RustLib.instance.api.crateApiSessionsCloseSession(sessionId: sessionId);
+
+/// Reopens a closed, local-only session on this device.
+///
+/// Collaboration sessions must be reopened through the synchronized
+/// collaboration API. To keep the local recorder unambiguous, any other
+/// active local-only session is closed in the same transaction.
+Future<Session> reopenLocalSession({required String sessionId}) =>
+    RustLib.instance.api
+        .crateApiSessionsReopenLocalSession(sessionId: sessionId);
 
 /// Permanently removes a closed session from this device.
 ///

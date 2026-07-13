@@ -13,13 +13,14 @@ async fn get_log_by_sync_id_in_tx(
     Ok(row.map(LogEntryRow::into_entry))
 }
 
-pub async fn insert_log(entry: &LogEntry) -> anyhow::Result<LogEntry> {
-    let pool = get_db()?;
-    let mut tx = pool.begin().await?;
+async fn ensure_active_session_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    session_id: &str,
+) -> anyhow::Result<()> {
     let session: Option<(String, Option<String>)> =
         sqlx::query_as("SELECT status, deleted_at FROM sessions WHERE session_id = ?")
-            .bind(&entry.session_id)
-            .fetch_optional(&mut *tx)
+            .bind(session_id)
+            .fetch_optional(&mut **tx)
             .await?;
     let Some((status, deleted_at)) = session else {
         anyhow::bail!("SESSION_NOT_FOUND");
@@ -30,6 +31,13 @@ pub async fn insert_log(entry: &LogEntry) -> anyhow::Result<LogEntry> {
     if status != "active" {
         anyhow::bail!("SESSION_CLOSED");
     }
+    Ok(())
+}
+
+pub async fn insert_log(entry: &LogEntry) -> anyhow::Result<LogEntry> {
+    let pool = get_db()?;
+    let mut tx = pool.begin().await?;
+    ensure_active_session_in_tx(&mut tx, &entry.session_id).await?;
     sqlx::query(
         "INSERT INTO logs (sync_id, session_id, time, controller, callsign,
          rst_sent, rst_rcvd, qth, device, power, antenna, height, remarks,
@@ -164,6 +172,7 @@ pub async fn update_log(
         .await?
         .filter(|entry| entry.deleted_at.is_none())
         .ok_or_else(|| anyhow::anyhow!("Log not found or already deleted"))?;
+    ensure_active_session_in_tx(&mut tx, &before.session_id).await?;
     let now = chrono::Utc::now().to_rfc3339();
     let result = sqlx::query(
         "UPDATE logs SET
@@ -208,6 +217,7 @@ pub async fn soft_delete_log(sync_id: &str) -> anyhow::Result<()> {
         tx.commit().await?;
         return Ok(());
     }
+    ensure_active_session_in_tx(&mut tx, &entry.session_id).await?;
     let remove_row = crate::db::collaboration::queue_log_delete(&mut tx, &entry).await?;
     if remove_row {
         sqlx::query("DELETE FROM logs WHERE sync_id = ?")
@@ -255,6 +265,7 @@ pub async fn get_all_logs_in_session(session_id: &str) -> anyhow::Result<Vec<Log
 pub async fn undo_last_log(session_id: &str) -> anyhow::Result<()> {
     let pool = get_db()?;
     let mut tx = pool.begin().await?;
+    ensure_active_session_in_tx(&mut tx, session_id).await?;
     let row = sqlx::query_as::<_, LogEntryRow>(
         "SELECT * FROM logs WHERE session_id = ? AND deleted_at IS NULL
          ORDER BY id DESC LIMIT 1",
@@ -292,6 +303,7 @@ pub async fn restore_log(sync_id: &str) -> anyhow::Result<LogEntry> {
         .await?
         .filter(|entry| entry.deleted_at.is_some())
         .ok_or_else(|| anyhow::anyhow!("Log not found or not deleted"))?;
+    ensure_active_session_in_tx(&mut tx, &entry.session_id).await?;
     entry.deleted_at = None;
     entry.updated_at = chrono::Utc::now().to_rfc3339();
     crate::db::collaboration::queue_log_restore(&mut tx, &entry).await?;

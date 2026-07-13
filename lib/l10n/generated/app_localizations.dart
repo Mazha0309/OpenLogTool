@@ -388,6 +388,48 @@ abstract class AppLocalizations {
   /// **'关闭会话失败：{error}'**
   String historySessionCloseFailed(String error);
 
+  /// No description provided for @historySessionReopenAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新激活'**
+  String get historySessionReopenAction;
+
+  /// No description provided for @historySessionReopenTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新激活本地会话'**
+  String get historySessionReopenTitle;
+
+  /// No description provided for @historySessionReopenConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新激活“{title}”并切换到该会话吗？当前进行中的其他本地会话将自动关闭，协作会话不受影响。目标如果是协作会话，请在“协作与成员”中重新打开。'**
+  String historySessionReopenConfirmation(String title);
+
+  /// No description provided for @historySessionReopened.
+  ///
+  /// In zh, this message translates to:
+  /// **'已重新激活并切换到会话：{title}'**
+  String historySessionReopened(String title);
+
+  /// No description provided for @historySessionReopenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新激活本地会话失败：{error}'**
+  String historySessionReopenFailed(String error);
+
+  /// No description provided for @historySessionReopenedLogsUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话“{title}”已重新激活，但日志暂时加载失败。为安全起见当前保持只读，请重试加载。'**
+  String historySessionReopenedLogsUnavailable(String title);
+
+  /// No description provided for @historySessionCollaborationReopenRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是协作会话。请先打开该会话，再到“协作与成员”中重新打开。'**
+  String get historySessionCollaborationReopenRequired;
+
   /// No description provided for @historySessionDeleteTitle.
   ///
   /// In zh, this message translates to:

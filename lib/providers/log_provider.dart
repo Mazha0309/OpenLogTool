@@ -37,6 +37,7 @@ class LogProvider with ChangeNotifier {
 
   List<old.LogEntry> get logs => _logs;
   int get logCount => _logs.length;
+  String? get currentSessionId => _currentSessionId;
   bool get canUndo =>
       _undoStack.isNotEmpty &&
       !currentSessionReadOnly &&
@@ -230,6 +231,10 @@ class LogProvider with ChangeNotifier {
       if (generation != _loadGeneration || _currentSessionId != sid) return;
       _logs = [];
       if (propagateErrors) {
+        // A session whose records could not be loaded must never remain
+        // writable. Keep it selected so providers stay aligned, but fail
+        // closed until a later successful reload.
+        _currentSessionWritable = false;
         _safeNotify();
         rethrow;
       }
