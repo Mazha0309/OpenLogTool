@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/controller_display.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 /// 跨平台只读主控屏。安卓平板、独立电脑和桌面子窗口共用此页面。
 class ControllerDisplayScreen extends StatefulWidget {
@@ -74,44 +75,88 @@ class _ControllerDisplayScreenState extends State<ControllerDisplayScreen> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final horizontal = constraints.maxWidth >= 1000;
-                  final panels = [
-                    Expanded(
-                      flex: 3,
-                      child: _RecordPanel(
-                        key: const Key('controller-current-panel'),
-                        title: context.l10n.currentOrdinal(data.currentOrdinal),
-                        icon: Icons.radio,
-                        record: data.current,
-                        fields: _preferences.fieldsFor(previous: false),
-                        accent: theme.colorScheme.primary,
-                        locks: data.locks,
-                        prominent: true,
+                  final viewSize = MediaQuery.sizeOf(context);
+                  final portrait = viewSize.height > viewSize.width;
+                  final horizontal = !portrait && constraints.maxWidth >= 720;
+                  final padding =
+                      EdgeInsets.all(constraints.maxWidth < 720 ? 8 : 16);
+
+                  if (horizontal) {
+                    return Padding(
+                      key: const Key('controller-landscape-layout'),
+                      padding: padding,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: _RecordPanel(
+                              key: const Key('controller-current-panel'),
+                              title: context.l10n
+                                  .currentOrdinal(data.currentOrdinal),
+                              icon: Icons.radio,
+                              record: data.current,
+                              fields: _preferences.fieldsFor(previous: false),
+                              accent: theme.colorScheme.primary,
+                              locks: data.locks,
+                              prominent: true,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: _RecordPanel(
+                              key: const Key('controller-previous-panel'),
+                              title: context.l10n.previousSavedRecord,
+                              icon: Icons.history,
+                              record: data.previous,
+                              fields: _preferences.fieldsFor(previous: true),
+                              accent: theme.colorScheme.tertiary,
+                              locks: const [],
+                            ),
+                          ),
+                        ],
                       ),
+                    );
+                  }
+
+                  // 竖屏让整个记录区统一滚动，卡片按内容自然展开。这样手机和
+                  // 平板不必把两张卡片强塞进有限高度，也不会出现两个很小的
+                  // 嵌套滚动区。窄横屏也复用这个更稳妥的紧凑布局。
+                  return SingleChildScrollView(
+                    key: Key(
+                      portrait
+                          ? 'controller-portrait-layout'
+                          : 'controller-compact-layout',
                     ),
-                    SizedBox(
-                      width: horizontal ? 16 : 0,
-                      height: horizontal ? 0 : 12,
+                    padding: padding,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _RecordPanel(
+                          key: const Key('controller-current-panel'),
+                          title:
+                              context.l10n.currentOrdinal(data.currentOrdinal),
+                          icon: Icons.radio,
+                          record: data.current,
+                          fields: _preferences.fieldsFor(previous: false),
+                          accent: theme.colorScheme.primary,
+                          locks: data.locks,
+                          prominent: true,
+                          expandBody: false,
+                        ),
+                        const SizedBox(height: 12),
+                        _RecordPanel(
+                          key: const Key('controller-previous-panel'),
+                          title: context.l10n.previousSavedRecord,
+                          icon: Icons.history,
+                          record: data.previous,
+                          fields: _preferences.fieldsFor(previous: true),
+                          accent: theme.colorScheme.tertiary,
+                          locks: const [],
+                          expandBody: false,
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      flex: 2,
-                      child: _RecordPanel(
-                        key: const Key('controller-previous-panel'),
-                        title: context.l10n.previousSavedRecord,
-                        icon: Icons.history,
-                        record: data.previous,
-                        fields: _preferences.fieldsFor(previous: true),
-                        accent: theme.colorScheme.tertiary,
-                        locks: const [],
-                      ),
-                    ),
-                  ];
-                  return Padding(
-                    padding:
-                        EdgeInsets.all(constraints.maxWidth < 720 ? 8 : 16),
-                    child: horizontal
-                        ? Row(children: panels)
-                        : Column(children: panels),
                   );
                 },
               ),
@@ -228,6 +273,46 @@ class _ControllerHeader extends StatelessWidget {
         : context.l10n.updatedAt(
             DateFormat('HH:mm:ss').format(data.lastUpdatedAt!.toLocal()),
           );
+    final title = Text(
+      data.sessionTitle.isEmpty
+          ? context.l10n.controllerScreenFallbackTitle
+          : data.sessionTitle,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+    );
+    final summary = Text(
+      '${context.l10n.savedPositionCount(data.totalRecords)} · $updatedAt'
+      '${data.lastUpdatedBy == null ? '' : ' · ${context.l10n.editorEditing(data.lastUpdatedBy!)}'}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall,
+    );
+
+    Widget statusChip() => _StatusChip(
+          label: controllerConnectionLabel(
+            context.l10n,
+            data.connectionState,
+          ),
+          icon: connected ? Icons.cloud_done : Icons.cloud_off,
+          color: connected ? Colors.green : theme.colorScheme.error,
+        );
+
+    Widget configureButton() => IconButton.filledTonal(
+          key: const Key('configure-controller-display'),
+          tooltip: context.l10n.configureControllerDisplay(
+            controllerDetailLabel(context.l10n, detail),
+          ),
+          onPressed: onConfigure,
+          icon: const Icon(Icons.tune),
+        );
+
+    Widget closeButton() => IconButton(
+          tooltip: context.l10n.exitControllerScreen,
+          onPressed: onClose,
+          icon: const Icon(Icons.close_fullscreen),
+        );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -236,60 +321,61 @@ class _ControllerHeader extends StatelessWidget {
           bottom: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
       ),
-      child: Row(
-        children: [
-          Icon(Icons.podcasts, color: theme.colorScheme.primary, size: 30),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 640) {
+            return Row(
               children: [
-                Text(
-                  data.sessionTitle.isEmpty
-                      ? context.l10n.controllerScreenFallbackTitle
-                      : data.sessionTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                Icon(
+                  Icons.podcasts,
+                  color: theme.colorScheme.primary,
+                  size: 30,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${context.l10n.savedPositionCount(data.totalRecords)} · $updatedAt'
-                  '${data.lastUpdatedBy == null ? '' : ' · ${context.l10n.editorEditing(data.lastUpdatedBy!)}'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [title, const SizedBox(height: 2), summary],
+                  ),
                 ),
+                statusChip(),
+                const SizedBox(width: 8),
+                configureButton(),
+                if (showCloseButton) ...[
+                  const SizedBox(width: 4),
+                  closeButton(),
+                ],
               ],
-            ),
-          ),
-          _StatusChip(
-            label: controllerConnectionLabel(
-              context.l10n,
-              data.connectionState,
-            ),
-            icon: connected ? Icons.cloud_done : Icons.cloud_off,
-            color: connected ? Colors.green : theme.colorScheme.error,
-          ),
-          const SizedBox(width: 8),
-          IconButton.filledTonal(
-            key: const Key('configure-controller-display'),
-            tooltip: context.l10n.configureControllerDisplay(
-              controllerDetailLabel(context.l10n, detail),
-            ),
-            onPressed: onConfigure,
-            icon: const Icon(Icons.tune),
-          ),
-          if (showCloseButton) ...[
-            const SizedBox(width: 4),
-            IconButton(
-              tooltip: context.l10n.exitControllerScreen,
-              onPressed: onClose,
-              icon: const Icon(Icons.close_fullscreen),
-            ),
-          ],
-        ],
+            );
+          }
+
+          return Column(
+            key: const Key('controller-compact-header'),
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.podcasts,
+                    color: theme.colorScheme.primary,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: title),
+                  configureButton(),
+                  if (showCloseButton) closeButton(),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: summary),
+                  const SizedBox(width: 8),
+                  statusChip(),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -337,6 +423,7 @@ class _RecordPanel extends StatelessWidget {
     required this.accent,
     required this.locks,
     this.prominent = false,
+    this.expandBody = true,
   });
 
   final String title;
@@ -346,11 +433,78 @@ class _RecordPanel extends StatelessWidget {
   final Color accent;
   final List<ControllerFieldLock> locks;
   final bool prominent;
+  final bool expandBody;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final value = record;
+    final recordContent = value == null
+        ? SizedBox(
+            height: 120,
+            child: Center(
+              child: Text(
+                context.l10n.noPreviousRecord,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (prominent &&
+                    fields.contains(ControllerDisplayField.callsign))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      value.callsign.trim().isEmpty
+                          ? context.l10n.waitingForCallsign
+                          : value.callsign,
+                      key: const Key('controller-prominent-callsign'),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final tileWidth = constraints.maxWidth >= 760
+                        ? (constraints.maxWidth - 24) / 3
+                        : constraints.maxWidth >= 440
+                            ? (constraints.maxWidth - 12) / 2
+                            : constraints.maxWidth;
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        for (final field in fields)
+                          SizedBox(
+                            width: tileWidth,
+                            child: _FieldTile(
+                              field: field,
+                              value: value.valueFor(field),
+                              lock: _lockFor(field),
+                              accent: accent,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          );
+    final body = value != null && expandBody
+        ? SingleChildScrollView(child: recordContent)
+        : recordContent;
+
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -376,67 +530,7 @@ class _RecordPanel extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(
-            child: value == null
-                ? Center(
-                    child: Text(
-                      context.l10n.noPreviousRecord,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (prominent &&
-                            fields.contains(ControllerDisplayField.callsign))
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Text(
-                              value.callsign.trim().isEmpty
-                                  ? context.l10n.waitingForCallsign
-                                  : value.callsign,
-                              key: const Key('controller-prominent-callsign'),
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.displaySmall?.copyWith(
-                                color: accent,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                          ),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final tileWidth = constraints.maxWidth >= 760
-                                ? (constraints.maxWidth - 24) / 3
-                                : constraints.maxWidth >= 440
-                                    ? (constraints.maxWidth - 12) / 2
-                                    : constraints.maxWidth;
-                            return Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                for (final field in fields)
-                                  SizedBox(
-                                    width: tileWidth,
-                                    child: _FieldTile(
-                                      field: field,
-                                      value: value.valueFor(field),
-                                      lock: _lockFor(field),
-                                      accent: accent,
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-          ),
+          if (expandBody) Expanded(child: body) else body,
         ],
       ),
     );
@@ -466,6 +560,11 @@ class _FieldTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // 旧缓存、桌面子窗口初始化参数和手工构造的 DTO 都可能仍携带
+    // RFC 3339/ISO 原值。在最终渲染边界再格式化一次，且不回写模型。
+    final displayValue = field == ControllerDisplayField.time
+        ? formatLogTimeForDisplay(value)
+        : value;
     return Container(
       key: Key('controller-field-${field.wireName}'),
       constraints: const BoxConstraints(minHeight: 74),
@@ -507,7 +606,7 @@ class _FieldTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           SelectableText(
-            value.trim().isEmpty ? '—' : value,
+            displayValue.trim().isEmpty ? '—' : displayValue,
             maxLines: field == ControllerDisplayField.remarks ? 3 : 1,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/models/controller_display.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 void main() {
   test('maps the live-draft response into controller display data', () {
@@ -85,5 +86,16 @@ void main() {
     });
 
     expect(record.time, '20:15');
+  });
+
+  test('a directly constructed record keeps its timestamp unchanged', () {
+    const timestamp = '2026-07-13T12:15:00Z';
+    const record = ControllerRecordDisplay(time: timestamp);
+
+    expect(record.time, timestamp);
+    expect(record.valueFor(ControllerDisplayField.time), timestamp);
+    expect(record.toJson()['time'], timestamp);
+    expect(formatLogTimeForDisplay(record.time), matches(r'^\d{2}:\d{2}$'));
+    expect(formatLogTimeForDisplay(record.time), isNot(timestamp));
   });
 }

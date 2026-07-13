@@ -3,9 +3,9 @@ String normalizeLogTimeForStorage(
   DateTime? reference,
 }) {
   final normalized = value.trim();
-  if (normalized.contains('T')) {
-    final parsed = DateTime.tryParse(normalized);
-    if (parsed != null) return parsed.toUtc().toIso8601String();
+  final parsedTimestamp = _tryParseIsoTimestamp(normalized);
+  if (parsedTimestamp != null) {
+    return parsedTimestamp.toUtc().toIso8601String();
   }
 
   final match = _clockTimePattern.firstMatch(normalized);
@@ -37,15 +37,13 @@ String formatLogTimeForDisplay(
   bool includeDate = false,
 }) {
   final normalized = value.trim();
-  if (normalized.contains('T')) {
-    final parsed = DateTime.tryParse(normalized);
-    if (parsed != null) {
-      final local = parsed.toLocal();
-      final time = '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}';
-      if (!includeDate) return time;
-      return '${local.year.toString().padLeft(4, '0')}-'
-          '${_twoDigits(local.month)}-${_twoDigits(local.day)} $time';
-    }
+  final parsedTimestamp = _tryParseIsoTimestamp(normalized);
+  if (parsedTimestamp != null) {
+    final local = parsedTimestamp.toLocal();
+    final time = '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}';
+    if (!includeDate) return time;
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${_twoDigits(local.month)}-${_twoDigits(local.day)} $time';
   }
 
   final match = _clockTimePattern.firstMatch(normalized);
@@ -62,9 +60,7 @@ String formatLogTimeForDisplay(
 bool isValidLogTimeInput(String value, {bool allowEmpty = false}) {
   final normalized = value.trim();
   if (normalized.isEmpty) return allowEmpty;
-  if (normalized.contains('T') && DateTime.tryParse(normalized) != null) {
-    return true;
-  }
+  if (_tryParseIsoTimestamp(normalized) != null) return true;
   final match = _clockTimePattern.firstMatch(normalized);
   if (match == null) return false;
   final hour = int.tryParse(match.group(1)!);
@@ -79,5 +75,15 @@ bool isValidLogTimeInput(String value, {bool allowEmpty = false}) {
 }
 
 final RegExp _clockTimePattern = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$');
+final RegExp _isoTimestampPattern =
+    RegExp(r'^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}');
+
+DateTime? _tryParseIsoTimestamp(String value) {
+  if (!_isoTimestampPattern.hasMatch(value)) return null;
+  final parseable = value.length > 10 && value[10] == 't'
+      ? value.replaceRange(10, 11, 'T')
+      : value;
+  return DateTime.tryParse(parseable);
+}
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

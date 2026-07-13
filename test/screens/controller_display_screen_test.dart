@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 void main() {
   testWidgets('shows current, previous and collaboration status',
@@ -32,6 +33,10 @@ void main() {
     expect(find.text('BH4BBB'), findsOneWidget);
     expect(find.text('书记员甲'), findsOneWidget);
     expect(find.byKey(const Key('controller-stale-banner')), findsNothing);
+    expect(
+      find.byKey(const Key('controller-landscape-layout')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -60,6 +65,52 @@ void main() {
     expect(find.textContaining('数据可能已过期'), findsOneWidget);
     expect(find.byKey(const Key('controller-field-controller')), findsWidgets);
     expect(find.byKey(const Key('controller-field-qth')), findsNothing);
+    expect(
+      find.byKey(const Key('controller-portrait-layout')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('controller-compact-header')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'full-detail portrait layout scrolls and formats a raw ISO timestamp',
+      (tester) async {
+    tester.view.physicalSize = const Size(600, 960);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const rawTimestamp = '2026-07-13T12:15:00Z';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(currentTime: rawTimestamp),
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('controller-portrait-layout')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('controller-field-remarks')),
+      findsNWidgets(2),
+    );
+    expect(find.text(rawTimestamp), findsNothing);
+    expect(
+      find.text(formatLogTimeForDisplay(rawTimestamp)),
+      findsOneWidget,
+    );
+    expect(find.text('20:12'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -121,15 +172,17 @@ void main() {
 ControllerDisplayDto _data({
   ControllerConnectionState connectionState =
       ControllerConnectionState.connected,
+  String currentTime = '20:15',
+  String previousTime = '20:12',
 }) =>
     ControllerDisplayDto(
       sessionTitle: '周日晚间点名',
       currentOrdinal: 8,
       totalRecords: 7,
-      current: const ControllerRecordDisplay(
+      current: ControllerRecordDisplay(
         controller: 'BG5CRL',
         callsign: 'BA4AAA',
-        time: '20:15',
+        time: currentTime,
         rstSent: '59',
         rstRcvd: '57',
         qth: '上海',
@@ -139,10 +192,10 @@ ControllerDisplayDto _data({
         height: '12m',
         remarks: '移动设台',
       ),
-      previous: const ControllerRecordDisplay(
+      previous: ControllerRecordDisplay(
         controller: 'BG5CRL',
         callsign: 'BH4BBB',
-        time: '20:12',
+        time: previousTime,
         rstSent: '59',
         rstRcvd: '59',
         qth: '苏州',

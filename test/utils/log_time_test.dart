@@ -19,6 +19,7 @@ void main() {
   });
 
   test('legacy wall-clock values remain readable', () {
+    expect(formatLogTimeForDisplay(''), '');
     expect(formatLogTimeForDisplay('8:05'), '08:05');
     expect(formatLogTimeForDisplay('16:49'), '16:49');
     expect(isValidLogTimeInput('16:49'), isTrue);
@@ -32,5 +33,13 @@ void main() {
 
     expect(formatLogTimeForDisplay(stored), '20:30');
     expect(normalizeLogTimeForStorage(stored), stored);
+  });
+
+  test('ISO timestamps with a space or lowercase t display locally', () {
+    const canonical = '2026-07-13T12:30:00Z';
+    final expected = formatLogTimeForDisplay(canonical);
+
+    expect(formatLogTimeForDisplay('2026-07-13 12:30:00Z'), expected);
+    expect(formatLogTimeForDisplay('2026-07-13t12:30:00Z'), expected);
   });
 }
