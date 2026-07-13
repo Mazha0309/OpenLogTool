@@ -3,8 +3,15 @@ import 'dart:async';
 import 'package:openlogtool/models/log_entry.dart' as old;
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
+import 'package:openlogtool/src/bridge/models/session.dart' as session_bridge;
 
 typedef LogMutationGuard = String? Function(old.LogEntry log);
+typedef SessionListLoader = Future<List<session_bridge.Session>> Function();
+typedef SessionLogPageLoader = Future<List<bridge.LogEntry>> Function(
+  String sessionId,
+  int page,
+  int pageSize,
+);
 
 class LogProvider with ChangeNotifier {
   static const int _maxUndoStack = 50;
@@ -19,7 +26,11 @@ class LogProvider with ChangeNotifier {
   Future<void> Function()? _onDataChanged;
   Future<void> Function(old.LogEntry log, bool isDelete)? _onLogChanged;
   LogMutationGuard? _logMutationGuard;
+  final SessionListLoader _sessionListLoader;
+  final SessionLogPageLoader _sessionLogPageLoader;
   String? _currentSessionId;
+  bool _currentSessionWritable = false;
+  int _sessionStateGeneration = 0;
   int _loadGeneration = 0;
   final Set<String> _collaborationReadOnlySessions = <String>{};
 
@@ -35,7 +46,8 @@ class LogProvider with ChangeNotifier {
       _logs.every((log) => mutationBlockReason(log) == null);
   bool get currentSessionReadOnly =>
       _currentSessionId != null &&
-      _collaborationReadOnlySessions.contains(_currentSessionId);
+      (!_currentSessionWritable ||
+          _collaborationReadOnlySessions.contains(_currentSessionId));
 
   void setCollaborationReadOnly(String sessionId, bool readOnly) {
     final changed = readOnly
@@ -64,6 +76,11 @@ class LogProvider with ChangeNotifier {
 
   void _ensureWritable(String? sessionId) {
     if (sessionId != null &&
+        sessionId == _currentSessionId &&
+        !_currentSessionWritable) {
+      throw StateError('SESSION_CLOSED: 已关闭的会话只能查看');
+    }
+    if (sessionId != null &&
         _collaborationReadOnlySessions.contains(sessionId)) {
       throw StateError(
         'COLLABORATION_SESSION_READ_ONLY: 当前角色、会话状态或同步状态不允许写入',
@@ -90,7 +107,34 @@ class LogProvider with ChangeNotifier {
     String? sessionId, {
     bool propagateErrors = false,
   }) async {
+    final stateGeneration = ++_sessionStateGeneration;
     _currentSessionId = sessionId;
+    _currentSessionWritable = false;
+    if (sessionId != null) {
+      try {
+        final sessions = await _sessionListLoader();
+        if (stateGeneration != _sessionStateGeneration ||
+            _currentSessionId != sessionId) {
+          return;
+        }
+        _currentSessionWritable = sessions.any(
+          (session) =>
+              session.sessionId == sessionId &&
+              session.status == 'active' &&
+              session.deletedAt == null,
+        );
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[LogProvider] session state load failed: $error\n$stackTrace',
+        );
+        if (stateGeneration != _sessionStateGeneration ||
+            _currentSessionId != sessionId) {
+          return;
+        }
+        _safeNotify();
+        if (propagateErrors) rethrow;
+      }
+    }
     await _loadLogs(propagateErrors: propagateErrors);
   }
 
@@ -138,7 +182,16 @@ class LogProvider with ChangeNotifier {
     return null;
   }
 
-  LogProvider() {
+  LogProvider({
+    SessionListLoader? sessionListLoader,
+    SessionLogPageLoader? sessionLogPageLoader,
+  })  : _sessionListLoader = sessionListLoader ?? RustApi.listSessions,
+        _sessionLogPageLoader = sessionLogPageLoader ??
+            ((sessionId, page, pageSize) => RustApi.getLogs(
+                  sessionId: sessionId,
+                  page: page,
+                  pageSize: pageSize,
+                )) {
     scheduleMicrotask(_loadLogs);
   }
 
@@ -161,11 +214,7 @@ class LogProvider with ChangeNotifier {
       const pageSize = 500;
       final bridgeLogs = <bridge.LogEntry>[];
       for (var page = 1;; page += 1) {
-        final batch = await RustApi.getLogs(
-          sessionId: sid,
-          page: page,
-          pageSize: pageSize,
-        );
+        final batch = await _sessionLogPageLoader(sid, page, pageSize);
         if (generation != _loadGeneration || _currentSessionId != sid) return;
         bridgeLogs.addAll(batch);
         if (batch.length < pageSize) break;
@@ -321,27 +370,8 @@ class LogProvider with ChangeNotifier {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHistory() async {
-    try {
-      final sessions = await RustApi.listSessions();
-      return sessions
-          .where((s) => s.deletedAt == null)
-          .map((s) => {
-                'session_id': s.sessionId,
-                'title': s.title,
-                'status': s.status,
-                'created_at': s.createdAt,
-              })
-          .toList();
-    } catch (e, st) {
-      debugPrint('[LogProvider] getHistory failed: $e\n$st');
-      return [];
-    }
-  }
-
   Future<void> switchToSession(String sessionId) async {
-    _currentSessionId = sessionId;
-    await _loadLogs();
+    await reloadForSession(sessionId);
   }
 
   Future<void> hardDeleteSession(String sessionId) async {
@@ -350,6 +380,8 @@ class LogProvider with ChangeNotifier {
       await RustApi.closeSession(sessionId: sessionId);
       if (_currentSessionId == sessionId) {
         _currentSessionId = null;
+        _currentSessionWritable = false;
+        _sessionStateGeneration += 1;
         _logs = [];
         _safeNotify();
       }

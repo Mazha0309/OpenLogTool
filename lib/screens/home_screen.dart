@@ -15,6 +15,7 @@ import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
 import 'package:openlogtool/widgets/primary_navigation_rail.dart';
+import 'package:openlogtool/widgets/session_history_dialog.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -95,7 +96,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     final pages = <Widget>[
       const _WorkbenchPage(),
-      const SessionHubPage(),
+      SessionHubPage(
+        onSessionOpened: () {
+          if (mounted) setState(() => _selectedIndex = 0);
+        },
+      ),
       const ImportExportPage(),
       const SettingsPage(),
     ];
@@ -316,14 +321,19 @@ class AddRecordPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logProvider = Provider.of<LogProvider>(context);
+    final currentSession = context.watch<SessionProvider>().currentSession;
+    final sessionClosed =
+        currentSession != null && currentSession.status != 'active';
+    final readOnly = logProvider.currentSessionReadOnly || sessionClosed;
     final conflictedLogIds =
         context.watch<CollaborationProvider>().conflictedLogIds;
     final content = _buildStackedLayout(
       context,
       logProvider,
       conflictedLogIds,
+      readOnly,
     );
-    if (!logProvider.currentSessionReadOnly) return content;
+    if (!readOnly) return content;
     return Column(
       children: [
         Container(
@@ -334,7 +344,13 @@ class AddRecordPage extends StatelessWidget {
             children: [
               const Icon(Icons.lock_outline, size: 18),
               const SizedBox(width: 8),
-              Expanded(child: Text(context.l10n.sharedDraftReadOnly)),
+              Expanded(
+                child: Text(
+                  sessionClosed
+                      ? context.l10n.historySessionReadOnly
+                      : context.l10n.sharedDraftReadOnly,
+                ),
+              ),
             ],
           ),
         ),
@@ -347,6 +363,7 @@ class AddRecordPage extends StatelessWidget {
     BuildContext context,
     LogProvider logProvider,
     Set<String> conflictedLogIds,
+    bool readOnly,
   ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -375,7 +392,7 @@ class AddRecordPage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  LogForm(readOnly: logProvider.currentSessionReadOnly),
+                  LogForm(readOnly: readOnly),
                 ],
               ),
             ),
@@ -388,7 +405,7 @@ class AddRecordPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildLogHeader(context, logProvider),
+                  _buildLogHeader(context, logProvider, readOnly),
                   const SizedBox(height: 12),
                   const Text(
                     '已有记录',
@@ -399,7 +416,7 @@ class AddRecordPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   LogTable(
-                    readOnly: logProvider.currentSessionReadOnly,
+                    readOnly: readOnly,
                     conflictedLogIds: conflictedLogIds,
                   ),
                 ],
@@ -435,7 +452,11 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  Widget _buildLogHeader(BuildContext context, LogProvider logProvider) {
+  Widget _buildLogHeader(
+    BuildContext context,
+    LogProvider logProvider,
+    bool readOnly,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -449,7 +470,7 @@ class AddRecordPage extends StatelessWidget {
           children: [
             Consumer<LogProvider>(
               builder: (_, lp, __) => FilledButton(
-                onPressed: !logProvider.currentSessionReadOnly && lp.canUndo
+                onPressed: !readOnly && lp.canUndo
                     ? () => _showUndoConfirmation(context)
                     : null,
                 child: const Text('撤销'),
@@ -470,127 +491,12 @@ class AddRecordPage extends StatelessWidget {
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.history),
-              tooltip: '历史记录',
-              onPressed: () => _showHistoryDialog(context),
+              tooltip: context.l10n.historySessions,
+              onPressed: () => showSessionHistoryDialog(context),
             ),
           ],
         ),
       ],
-    );
-  }
-
-  void _showHistoryDialog(BuildContext context) async {
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final sessionProvider =
-        Provider.of<SessionProvider>(context, listen: false);
-    final sessions = await logProvider.getHistory();
-
-    if (sessions.isEmpty) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(const SnackBar(content: Text('暂无历史记录')));
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('历史记录'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: sessions.length,
-            itemBuilder: (_, index) {
-              final item = sessions[index];
-              final sessionId = item['session_id'] as String;
-              final name = item['title'] as String;
-              final status = item['status'] as String;
-              final createdAt = DateTime.parse(item['created_at'] as String);
-              final isCurrent = sessionProvider.currentSessionId == sessionId;
-
-              return ListTile(
-                title: Text(name),
-                subtitle: Text(
-                    '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
-                    ' · ${status == "active" ? "进行中" : "已关闭"}${isCurrent ? ' · 当前' : ''}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.open_in_new),
-                      tooltip: '打开',
-                      onPressed: isCurrent
-                          ? null
-                          : () async {
-                              await sessionProvider.switchToSession(sessionId);
-                              await logProvider.reloadForSession(sessionId);
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              if (context.mounted) {
-                                context.showLoggedSnackBar(
-                                  SnackBar(content: Text('已切换到: $name')),
-                                );
-                              }
-                            },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      tooltip: '关闭',
-                      onPressed: isCurrent
-                          ? null
-                          : () => _showDeleteSessionConfirmation(ctx,
-                              logProvider, sessionProvider, sessionId, name),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          FilledButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteSessionConfirmation(
-      BuildContext context,
-      LogProvider logProvider,
-      SessionProvider sessionProvider,
-      String sessionId,
-      String name) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('确认关闭'),
-        content: Text('确定要关闭 "$name" 吗？关闭后可在历史记录中查看，但无法再添加记录。'),
-        actions: [
-          TextButton(
-              child: const Text('取消'), onPressed: () => Navigator.pop(ctx)),
-          TextButton(
-            child: const Text('关闭', style: TextStyle(color: Colors.red)),
-            onPressed: () async {
-              await logProvider.hardDeleteSession(sessionId);
-              if (sessionProvider.currentSessionId == sessionId) {
-                await sessionProvider.handleSessionDeleted(sessionId);
-              }
-              if (ctx.mounted) {
-                Navigator.pop(ctx);
-              }
-              if (context.mounted) {
-                Navigator.pop(context); // close history dialog
-                _showHistoryDialog(context);
-              }
-            },
-          ),
-        ],
-      ),
     );
   }
 

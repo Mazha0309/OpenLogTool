@@ -132,7 +132,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historySessions => '历史会话';
 
   @override
-  String get historySessionsHint => '历史记录的切换、关闭与查看暂沿用点名台记录区的“历史记录”入口。';
+  String get historySessionsHint => '查看和切换过去的点名会话；已关闭会话将以只读方式打开。';
+
+  @override
+  String get historySessionsEmpty => '暂无历史会话';
+
+  @override
+  String historySessionsLoadFailed(String error) {
+    return '加载历史会话失败：$error';
+  }
+
+  @override
+  String get historySessionOpen => '打开会话';
+
+  @override
+  String get historySessionCurrent => '当前会话';
+
+  @override
+  String historySessionSwitched(String title) {
+    return '已打开会话：$title';
+  }
+
+  @override
+  String historySessionOpenFailed(String error) {
+    return '打开会话失败：$error';
+  }
+
+  @override
+  String get historySessionCloseTitle => '关闭会话';
+
+  @override
+  String historySessionCloseConfirmation(String title) {
+    return '确定关闭“$title”吗？关闭后仍可在历史会话中只读查看。';
+  }
+
+  @override
+  String get historySessionClosed => '会话已关闭';
+
+  @override
+  String historySessionCloseFailed(String error) {
+    return '关闭会话失败：$error';
+  }
+
+  @override
+  String get historySessionReadOnly => '当前为已关闭的历史会话，只能查看已有记录。';
 
   @override
   String controllerWindowOpenFailed(String error) {
@@ -1248,7 +1291,50 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get historySessions => '历史会话';
 
   @override
-  String get historySessionsHint => '历史记录的切换、关闭与查看暂沿用点名台记录区的“历史记录”入口。';
+  String get historySessionsHint => '查看和切换过去的点名会话；已关闭会话将以只读方式打开。';
+
+  @override
+  String get historySessionsEmpty => '暂无历史会话';
+
+  @override
+  String historySessionsLoadFailed(String error) {
+    return '加载历史会话失败：$error';
+  }
+
+  @override
+  String get historySessionOpen => '打开会话';
+
+  @override
+  String get historySessionCurrent => '当前会话';
+
+  @override
+  String historySessionSwitched(String title) {
+    return '已打开会话：$title';
+  }
+
+  @override
+  String historySessionOpenFailed(String error) {
+    return '打开会话失败：$error';
+  }
+
+  @override
+  String get historySessionCloseTitle => '关闭会话';
+
+  @override
+  String historySessionCloseConfirmation(String title) {
+    return '确定关闭“$title”吗？关闭后仍可在历史会话中只读查看。';
+  }
+
+  @override
+  String get historySessionClosed => '会话已关闭';
+
+  @override
+  String historySessionCloseFailed(String error) {
+    return '关闭会话失败：$error';
+  }
+
+  @override
+  String get historySessionReadOnly => '当前为已关闭的历史会话，只能查看已有记录。';
 
   @override
   String controllerWindowOpenFailed(String error) {

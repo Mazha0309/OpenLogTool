@@ -136,7 +136,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historySessionsHint =>
-      'For now, switch, close, and view past sessions from History in the Net Desk record area.';
+      'View and switch to past net sessions. Closed sessions open read-only.';
+
+  @override
+  String get historySessionsEmpty => 'There are no past sessions';
+
+  @override
+  String historySessionsLoadFailed(String error) {
+    return 'Could not load session history: $error';
+  }
+
+  @override
+  String get historySessionOpen => 'Open session';
+
+  @override
+  String get historySessionCurrent => 'Current session';
+
+  @override
+  String historySessionSwitched(String title) {
+    return 'Opened session: $title';
+  }
+
+  @override
+  String historySessionOpenFailed(String error) {
+    return 'Could not open session: $error';
+  }
+
+  @override
+  String get historySessionCloseTitle => 'Close session';
+
+  @override
+  String historySessionCloseConfirmation(String title) {
+    return 'Close “$title”? It will remain available read-only in Session history.';
+  }
+
+  @override
+  String get historySessionClosed => 'Session closed';
+
+  @override
+  String historySessionCloseFailed(String error) {
+    return 'Could not close session: $error';
+  }
+
+  @override
+  String get historySessionReadOnly =>
+      'This is a closed historical session. Existing records are read-only.';
 
   @override
   String controllerWindowOpenFailed(String error) {
@@ -1306,7 +1350,51 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get historySessionsHint =>
-      'For now, switch, close, and view past sessions from History in the Net Desk record area.';
+      'View and switch to past net sessions. Closed sessions open read-only.';
+
+  @override
+  String get historySessionsEmpty => 'There are no past sessions';
+
+  @override
+  String historySessionsLoadFailed(String error) {
+    return 'Could not load session history: $error';
+  }
+
+  @override
+  String get historySessionOpen => 'Open session';
+
+  @override
+  String get historySessionCurrent => 'Current session';
+
+  @override
+  String historySessionSwitched(String title) {
+    return 'Opened session: $title';
+  }
+
+  @override
+  String historySessionOpenFailed(String error) {
+    return 'Could not open session: $error';
+  }
+
+  @override
+  String get historySessionCloseTitle => 'Close session';
+
+  @override
+  String historySessionCloseConfirmation(String title) {
+    return 'Close “$title”? It will remain available read-only in Session history.';
+  }
+
+  @override
+  String get historySessionClosed => 'Session closed';
+
+  @override
+  String historySessionCloseFailed(String error) {
+    return 'Could not close session: $error';
+  }
+
+  @override
+  String get historySessionReadOnly =>
+      'This is a closed historical session. Existing records are read-only.';
 
   @override
   String controllerWindowOpenFailed(String error) {

@@ -128,8 +128,18 @@ class SessionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> switchToSession(String sessionId) async {
+  Future<List<Session>> listAvailableSessions() async {
+    await ready;
     final sessions = await RustApi.listSessions();
+    final available = sessions
+        .where((session) => session.deletedAt == null)
+        .toList(growable: false);
+    return [...available]
+      ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+  }
+
+  Future<void> switchToSession(String sessionId) async {
+    final sessions = await listAvailableSessions();
     final match = sessions.where((s) => s.sessionId == sessionId).toList();
     if (match.isEmpty) {
       throw StateError('Session not found: $sessionId');

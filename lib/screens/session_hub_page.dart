@@ -9,12 +9,15 @@ import 'package:openlogtool/screens/collaboration_screen.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
+import 'package:openlogtool/widgets/session_history_dialog.dart';
 import 'package:openlogtool/widgets/session_title_editor.dart';
 import 'package:provider/provider.dart';
 
 /// “会话”区的统一入口。详细成员、邀请和冲突管理继续复用协作页面。
 class SessionHubPage extends StatelessWidget {
-  const SessionHubPage({super.key});
+  const SessionHubPage({super.key, this.onSessionOpened});
+
+  final VoidCallback? onSessionOpened;
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +263,10 @@ class SessionHubPage extends StatelessWidget {
             title: Text(context.l10n.historySessions),
             subtitle: Text(context.l10n.historySessionsHint),
             trailing: const Icon(Icons.chevron_right),
-            onTap: null,
+            onTap: () => showSessionHistoryDialog(
+              context,
+              onSessionOpened: onSessionOpened,
+            ),
           ),
         ),
       ],

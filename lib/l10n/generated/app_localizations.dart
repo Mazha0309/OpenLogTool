@@ -325,8 +325,74 @@ abstract class AppLocalizations {
   /// No description provided for @historySessionsHint.
   ///
   /// In zh, this message translates to:
-  /// **'历史记录的切换、关闭与查看暂沿用点名台记录区的“历史记录”入口。'**
+  /// **'查看和切换过去的点名会话；已关闭会话将以只读方式打开。'**
   String get historySessionsHint;
+
+  /// No description provided for @historySessionsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无历史会话'**
+  String get historySessionsEmpty;
+
+  /// No description provided for @historySessionsLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载历史会话失败：{error}'**
+  String historySessionsLoadFailed(String error);
+
+  /// No description provided for @historySessionOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开会话'**
+  String get historySessionOpen;
+
+  /// No description provided for @historySessionCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前会话'**
+  String get historySessionCurrent;
+
+  /// No description provided for @historySessionSwitched.
+  ///
+  /// In zh, this message translates to:
+  /// **'已打开会话：{title}'**
+  String historySessionSwitched(String title);
+
+  /// No description provided for @historySessionOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开会话失败：{error}'**
+  String historySessionOpenFailed(String error);
+
+  /// No description provided for @historySessionCloseTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭会话'**
+  String get historySessionCloseTitle;
+
+  /// No description provided for @historySessionCloseConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定关闭“{title}”吗？关闭后仍可在历史会话中只读查看。'**
+  String historySessionCloseConfirmation(String title);
+
+  /// No description provided for @historySessionClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话已关闭'**
+  String get historySessionClosed;
+
+  /// No description provided for @historySessionCloseFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭会话失败：{error}'**
+  String historySessionCloseFailed(String error);
+
+  /// No description provided for @historySessionReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前为已关闭的历史会话，只能查看已有记录。'**
+  String get historySessionReadOnly;
 
   /// No description provided for @controllerWindowOpenFailed.
   ///
