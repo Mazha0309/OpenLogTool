@@ -226,6 +226,42 @@ abstract class AppLocalizations {
   /// **'当前记录'**
   String get currentRecord;
 
+  /// No description provided for @startNewRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始新记录'**
+  String get startNewRecord;
+
+  /// No description provided for @newRecordName.
+  ///
+  /// In zh, this message translates to:
+  /// **'新记录名称'**
+  String get newRecordName;
+
+  /// No description provided for @newRecordNameHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入本次记录名称（可留空）'**
+  String get newRecordNameHint;
+
+  /// No description provided for @automaticName.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动命名'**
+  String get automaticName;
+
+  /// No description provided for @newRecordStarted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开始新记录：{name}'**
+  String newRecordStarted(String name);
+
+  /// No description provided for @createNewRecordFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建新记录失败：{error}'**
+  String createNewRecordFailed(String error);
+
   /// No description provided for @currentOrdinal.
   ///
   /// In zh, this message translates to:
@@ -777,6 +813,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{name} 正在编辑'**
   String fieldLockedBy(String name);
+
+  /// No description provided for @finishEditing.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束编辑'**
+  String get finishEditing;
 
   /// No description provided for @offlineReviewTitle.
   ///
@@ -1495,14 +1537,32 @@ abstract class AppLocalizations {
   /// No description provided for @publicShareManagement.
   ///
   /// In zh, this message translates to:
-  /// **'公开主控页面'**
+  /// **'Live Share · 公开只读页面'**
   String get publicShareManagement;
 
   /// No description provided for @publicShareManagementHint.
   ///
   /// In zh, this message translates to:
-  /// **'仅在服务器同时提供安全公开页面时启用。链接密钥只在创建时显示。'**
+  /// **'为主控、远程书记员或观众生成只读网页；无需登录即可查看当前点名进度。链接密钥仅在创建时显示。'**
   String get publicShareManagementHint;
+
+  /// No description provided for @publicShareUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前服务器未提供安全的 Live Share 公开页面。升级或启用服务端公开分享功能后即可创建。'**
+  String get publicShareUnsupported;
+
+  /// No description provided for @publicShareCreatedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开只读页面已创建'**
+  String get publicShareCreatedTitle;
+
+  /// No description provided for @publicShareCreatedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请立即保存此链接；出于安全考虑，刷新或重新登录后无法再次取回链接密钥。'**
+  String get publicShareCreatedHint;
 
   /// No description provided for @createPublicShare.
   ///
@@ -1516,6 +1576,12 @@ abstract class AppLocalizations {
   /// **'复制链接'**
   String get copyPublicShareLink;
 
+  /// No description provided for @openPublicShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'在浏览器打开'**
+  String get openPublicShare;
+
   /// No description provided for @revokePublicShare.
   ///
   /// In zh, this message translates to:
@@ -1527,6 +1593,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'公开链接已复制'**
   String get publicShareLinkCopied;
+
+  /// No description provided for @publicShareNoActiveLinks.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有有效的公开链接。创建后可将只读页面交给主控或远程查看者。'**
+  String get publicShareNoActiveLinks;
+
+  /// No description provided for @publicShareSecretUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已有有效公开链接，但其密钥只在创建时返回。若链接没有保存，请撤销旧链接并创建新链接。'**
+  String get publicShareSecretUnavailable;
+
+  /// No description provided for @publicShareLinksTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开链接记录'**
+  String get publicShareLinksTitle;
+
+  /// No description provided for @publicShareUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已撤销或已过期'**
+  String get publicShareUnavailable;
+
+  /// No description provided for @publicShareOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开浏览器；你仍可复制链接后手动打开。'**
+  String get publicShareOpenFailed;
 
   /// No description provided for @publicShareExpiresAt.
   ///
@@ -1557,6 +1653,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'展开侧边栏'**
   String get expandSidebar;
+
+  /// No description provided for @limitWorkbenchWidthSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'限制点名台内容宽度'**
+  String get limitWorkbenchWidthSetting;
+
+  /// No description provided for @limitWorkbenchWidthHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。'**
+  String get limitWorkbenchWidthHint;
 
   /// No description provided for @serverConnectionFailed.
   ///
@@ -1647,6 +1755,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'登录后可以参与协作，并管理当前账号自己的资料和登录设备。'**
   String get serverSignedOutHint;
+
+  /// No description provided for @tokenStoragePrivateFileWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统钥匙环不可用；登录凭据已保存到仅当前 Linux 用户可读的私有文件。钥匙环恢复可用后会自动迁回安全存储。'**
+  String get tokenStoragePrivateFileWarning;
+
+  /// No description provided for @tokenStorageMemoryOnlyWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'安全凭据存储不可用；本次登录仅在应用运行期间有效，退出后需要重新登录。'**
+  String get tokenStorageMemoryOnlyWarning;
 
   /// No description provided for @serverLogin.
   ///

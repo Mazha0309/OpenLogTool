@@ -13,6 +13,7 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/log_time.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
+import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 
 /// 日志表单组件
 /// 用于添加和编辑点名记录
@@ -47,6 +48,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final Set<String> _focusedDraftFields = <String>{};
   Timer? _lockExpiryTimer;
   bool _applyingSharedDraft = false;
+  bool _historyReuseInProgress = false;
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
 
@@ -227,6 +229,81 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     return formatLogTimeForDisplay(value);
   }
 
+  void _unfocusDraftFields() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    for (final focusNode in _draftFocusNodes.values) {
+      if (focusNode.hasFocus) focusNode.unfocus();
+    }
+  }
+
+  Future<void> _reuseHistoryRecord(bridge.LogEntry record) async {
+    final values = <String, String>{
+      if (record.device?.isNotEmpty ?? false) 'device': record.device!,
+      if (record.antenna?.isNotEmpty ?? false) 'antenna': record.antenna!,
+      if (record.qth?.isNotEmpty ?? false) 'qth': record.qth!,
+      if (record.power?.isNotEmpty ?? false) 'power': record.power!,
+      if (record.height?.isNotEmpty ?? false) 'height': record.height!,
+      if (record.rstSent?.isNotEmpty ?? false) 'rstSent': record.rstSent!,
+      if (record.rstRcvd?.isNotEmpty ?? false) 'rstRcvd': record.rstRcvd!,
+      if (record.controller.isNotEmpty) 'controller': record.controller,
+    };
+    if (values.isEmpty || !mounted) return;
+
+    final collaboration = context.read<CollaborationProvider>();
+    if (collaboration.liveDraftSnapshot != null) {
+      for (final field in values.keys) {
+        final holder = collaboration.lockForField(field);
+        if (holder != null &&
+            holder.expiresAt.isAfter(DateTime.now()) &&
+            collaboration.fieldLockedByAnotherUser(field)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(context.l10n.fieldLockedBy(holder.username))),
+          );
+          return;
+        }
+      }
+
+      for (final field in values.keys) {
+        _draftDebounce.remove(field)?.cancel();
+      }
+      _unfocusDraftFields();
+      setState(() => _historyReuseInProgress = true);
+      try {
+        await collaboration.updateLiveDraftFieldsAtomically(values);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(context.l10n.operationFailed(error.toString()))),
+          );
+        }
+        return;
+      } finally {
+        if (mounted) setState(() => _historyReuseInProgress = false);
+      }
+      if (!mounted) return;
+      // The provider adopts the canonical multi-field response and notifies
+      // this form. Let _syncSharedDraft drive the controllers so a newer edit
+      // made while the request was in flight is never overwritten here.
+      return;
+    }
+
+    _applyingSharedDraft = true;
+    try {
+      for (final entry in values.entries) {
+        final controller = _draftControllers[entry.key];
+        if (controller == null || controller.text == entry.value) continue;
+        controller.value = TextEditingValue(
+          text: entry.value,
+          selection: TextSelection.collapsed(offset: entry.value.length),
+        );
+      }
+    } finally {
+      _applyingSharedDraft = false;
+    }
+  }
+
   Future<void> _submitForm() async {
     final collaboration = context.read<CollaborationProvider>();
     if (widget.readOnly ||
@@ -399,7 +476,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     _scheduleLockExpiryRefresh(activeForeignLocks);
     final firstForeignLock =
         activeForeignLocks.isEmpty ? null : activeForeignLocks.first;
-    final canSubmit = !readOnly && firstForeignLock == null;
+    final canSubmit =
+        !readOnly && firstForeignLock == null && !_historyReuseInProgress;
 
     bool fieldEnabled(String field) => !readOnly && !isActiveForeignLock(field);
 
@@ -425,224 +503,244 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         final calculatedFieldWidth =
             (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
 
-        return Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 使用 Wrap 实现响应式自动换行布局，输入框会根据可用空间自动调整宽度
-              Wrap(
-                spacing: spacing,
-                runSpacing: isNarrow ? 8 : spacing,
-                alignment: WrapAlignment.start,
-                children: [
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _controllerController,
-                      label: fieldLabel('controller', '主控呼号 *'),
-                      hintText: '输入主控呼号',
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入主控呼号';
-                        }
-                        return null;
-                      },
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _draftFocusNodes['controller'],
-                      enabled: fieldEnabled('controller'),
+        return AbsorbPointer(
+          key: const Key('history-reuse-guard'),
+          absorbing: _historyReuseInProgress,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 使用 Wrap 实现响应式自动换行布局，输入框会根据可用空间自动调整宽度
+                Wrap(
+                  spacing: spacing,
+                  runSpacing: isNarrow ? 8 : spacing,
+                  alignment: WrapAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _controllerController,
+                        label: fieldLabel('controller', '主控呼号 *'),
+                        hintText: '输入主控呼号',
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入主控呼号';
+                          }
+                          return null;
+                        },
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        focusNode: _draftFocusNodes['controller'],
+                        enabled: fieldEnabled('controller'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: CallsignHistoryField(
-                      callsignController: _callsignController,
-                      deviceController: _deviceController,
-                      antennaController: _antennaController,
-                      qthController: _qthController,
-                      powerController: _powerController,
-                      heightController: _heightController,
-                      reportController: _reportController,
-                      rstRcvdController: _rstRcvdController,
-                      timeController: _timeController,
-                      controllerController: _controllerController,
-                      label: fieldLabel('callsign', '点名呼号'),
-                      hintText: '输入呼号',
-                      focusNode: _callsignFocusNode,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      enabled: fieldEnabled('callsign'),
-                      historyEnabled: settingsProvider.callSignQthLinkEnabled,
-                      canFillField: fieldEnabled,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return context.l10n.callsignRequired;
-                        }
-                        return null;
-                      },
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: CallsignHistoryField(
+                        callsignController: _callsignController,
+                        deviceController: _deviceController,
+                        antennaController: _antennaController,
+                        qthController: _qthController,
+                        powerController: _powerController,
+                        heightController: _heightController,
+                        reportController: _reportController,
+                        rstRcvdController: _rstRcvdController,
+                        controllerController: _controllerController,
+                        label: fieldLabel('callsign', '点名呼号'),
+                        hintText: '输入呼号',
+                        focusNode: _callsignFocusNode,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        enabled: fieldEnabled('callsign'),
+                        historyEnabled: settingsProvider.callSignQthLinkEnabled,
+                        onReuseRecord: _reuseHistoryRecord,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return context.l10n.callsignRequired;
+                          }
+                          return null;
+                        },
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildAutocompleteField(
-                      controller: _deviceController,
-                      label: fieldLabel('device', '设备'),
-                      hintText: '输入设备名称',
-                      options: dictionaryProvider.deviceDict,
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      draftField: 'device',
-                      enabled: fieldEnabled('device'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildAutocompleteField(
+                        controller: _deviceController,
+                        label: fieldLabel('device', '设备'),
+                        hintText: '输入设备名称',
+                        options: dictionaryProvider.deviceDict,
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        draftField: 'device',
+                        enabled: fieldEnabled('device'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildAutocompleteField(
-                      controller: _antennaController,
-                      label: fieldLabel('antenna', '天线'),
-                      hintText: '输入天线名称',
-                      options: dictionaryProvider.antennaDict,
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      draftField: 'antenna',
-                      enabled: fieldEnabled('antenna'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildAutocompleteField(
+                        controller: _antennaController,
+                        label: fieldLabel('antenna', '天线'),
+                        hintText: '输入天线名称',
+                        options: dictionaryProvider.antennaDict,
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        draftField: 'antenna',
+                        enabled: fieldEnabled('antenna'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _powerController,
-                      label: fieldLabel('power', '功率'),
-                      hintText: '输入功率',
-                      keyboardType: TextInputType.number,
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _draftFocusNodes['power'],
-                      enabled: fieldEnabled('power'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _powerController,
+                        label: fieldLabel('power', '功率'),
+                        hintText: '输入功率',
+                        keyboardType: TextInputType.number,
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        focusNode: _draftFocusNodes['power'],
+                        enabled: fieldEnabled('power'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildAutocompleteField(
-                      controller: _qthController,
-                      label: fieldLabel('qth', 'QTH'),
-                      hintText: '输入QTH',
-                      options: dictionaryProvider.qthDict,
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      draftField: 'qth',
-                      enabled: fieldEnabled('qth'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildAutocompleteField(
+                        controller: _qthController,
+                        label: fieldLabel('qth', 'QTH'),
+                        hintText: '输入QTH',
+                        options: dictionaryProvider.qthDict,
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        draftField: 'qth',
+                        enabled: fieldEnabled('qth'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _heightController,
-                      label: fieldLabel('height', '高度'),
-                      hintText: '输入高度',
-                      keyboardType: TextInputType.number,
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _draftFocusNodes['height'],
-                      enabled: fieldEnabled('height'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _heightController,
+                        label: fieldLabel('height', '高度'),
+                        hintText: '输入高度',
+                        keyboardType: TextInputType.number,
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        focusNode: _draftFocusNodes['height'],
+                        enabled: fieldEnabled('height'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _timeController,
-                      label: fieldLabel('time', '时间'),
-                      hintText: 'HH:mm',
-                      upperCase: false,
-                      validator: (value) => isValidLogTimeInput(
-                        value ?? '',
-                        allowEmpty: true,
-                      )
-                          ? null
-                          : context.l10n.logTimeInvalid,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _draftFocusNodes['time'],
-                      enabled: fieldEnabled('time'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _timeController,
+                        label: fieldLabel('time', '时间'),
+                        hintText: 'HH:mm',
+                        upperCase: false,
+                        validator: (value) => isValidLogTimeInput(
+                          value ?? '',
+                          allowEmpty: true,
+                        )
+                            ? null
+                            : context.l10n.logTimeInvalid,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        focusNode: _draftFocusNodes['time'],
+                        enabled: fieldEnabled('time'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _reportController,
-                      label: fieldLabel('rstSent', 'RST发'),
-                      hintText: '59',
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _draftFocusNodes['rstSent'],
-                      enabled: fieldEnabled('rstSent'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _reportController,
+                        label: fieldLabel('rstSent', 'RST发'),
+                        hintText: '59',
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        focusNode: _draftFocusNodes['rstSent'],
+                        enabled: fieldEnabled('rstSent'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _rstRcvdController,
-                      label: fieldLabel('rstRcvd', 'RST收'),
-                      hintText: '59',
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: canSubmit ? (_) => _submitForm() : null,
-                      focusNode: _draftFocusNodes['rstRcvd'],
-                      enabled: fieldEnabled('rstRcvd'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _rstRcvdController,
+                        label: fieldLabel('rstRcvd', 'RST收'),
+                        hintText: '59',
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.next,
+                        focusNode: _draftFocusNodes['rstRcvd'],
+                        enabled: fieldEnabled('rstRcvd'),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: calculatedFieldWidth,
-                    child: _buildMaterialTextField(
-                      controller: _remarksController,
-                      label: fieldLabel('remarks', '备注'),
-                      hintText: '可选备注',
-                      upperCase: false,
-                      isCompact: isNarrow,
-                      textInputAction: TextInputAction.next,
-                      focusNode: _draftFocusNodes['remarks'],
-                      enabled: fieldEnabled('remarks'),
+                    SizedBox(
+                      width: calculatedFieldWidth,
+                      child: _buildMaterialTextField(
+                        controller: _remarksController,
+                        label: fieldLabel('remarks', '备注'),
+                        hintText: '可选备注',
+                        upperCase: false,
+                        isCompact: isNarrow,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _unfocusDraftFields(),
+                        focusNode: _draftFocusNodes['remarks'],
+                        enabled: fieldEnabled('remarks'),
+                      ),
                     ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                if (sharedDraft &&
+                    collaboration.ownedLiveDraftLocks.isNotEmpty) ...[
+                  OutlinedButton.icon(
+                    key: const Key('finish-draft-editing'),
+                    onPressed:
+                        _historyReuseInProgress ? null : _unfocusDraftFields,
+                    icon: const Icon(Icons.keyboard_hide_outlined),
+                    label: Text(context.l10n.finishEditing),
                   ),
+                  const SizedBox(height: 8),
                 ],
-              ),
 
-              const SizedBox(height: 12),
-
-              // 操作按钮 - 占满宽度
-              SizedBox(
-                height: isNarrow ? 44 : 48,
-                child: FilledButton.icon(
-                  onPressed: canSubmit ? _submitForm : null,
-                  icon: Icon(
-                    readOnly || firstForeignLock != null
-                        ? Icons.lock_outline
-                        : Icons.add,
-                  ),
-                  label: Text(
-                    readOnly
-                        ? context.l10n.sharedDraftReadOnly
-                        : firstForeignLock != null
-                            ? context.l10n.fieldLockedBy(
-                                firstForeignLock.username,
-                              )
-                            : context.l10n.saveRecord,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
+                // 操作按钮 - 占满宽度
+                SizedBox(
+                  height: isNarrow ? 44 : 48,
+                  child: FilledButton.icon(
+                    onPressed: canSubmit ? _submitForm : null,
+                    icon: Icon(
+                      _historyReuseInProgress
+                          ? Icons.auto_fix_high
+                          : readOnly || firstForeignLock != null
+                              ? Icons.lock_outline
+                              : Icons.add,
+                    ),
+                    label: Text(
+                      _historyReuseInProgress
+                          ? context.l10n.reuseDatabaseInformation
+                          : readOnly
+                              ? context.l10n.sharedDraftReadOnly
+                              : firstForeignLock != null
+                                  ? context.l10n.fieldLockedBy(
+                                      firstForeignLock.username,
+                                    )
+                                  : context.l10n.saveRecord,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding:
+                          EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -685,6 +783,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       textCapitalization:
           upperCase ? TextCapitalization.characters : TextCapitalization.none,
       inputFormatters: upperCase ? [UpperCaseTextFormatter()] : [],
+      onTapOutside: (_) => focusNode?.unfocus(),
     );
   }
 
@@ -772,6 +871,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           textInputAction: textInputAction ?? TextInputAction.next,
           textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
+          onTapOutside: (_) => fieldFocusNode.unfocus(),
         );
       },
       optionsViewBuilder: (

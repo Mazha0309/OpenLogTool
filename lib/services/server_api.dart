@@ -80,13 +80,21 @@ final class ServerApi {
 
   final TokenStore tokenStore;
   final Duration timeout;
-  final String? deviceId;
+  String? deviceId;
   final void Function()? onAuthInvalidated;
   final Uri _apiBaseUri;
   final http.Client _httpClient;
   final bool _ownsHttpClient;
 
   final Map<String, Future<AuthSessionDto>> _refreshesInFlight = {};
+
+  /// Updates the device label used by subsequent authentication refreshes.
+  /// Existing requests keep their captured request body and can still commit a
+  /// rotated token into the same store, so changing the label cannot strand a
+  /// newly issued refresh token.
+  void updateDeviceId(String? value) {
+    deviceId = value;
+  }
 
   Future<ServerInfoDto> getServerInfo() async {
     final response = await _publicRequest('GET', '/server-info');
@@ -741,7 +749,9 @@ final class ServerApi {
     return _apiBaseUri.replace(
       path: '$rootPath/live/${_segment(share.publicShareId)}',
       query: null,
-      fragment: secret,
+      // The public page intentionally reads the capability from a named
+      // fragment parameter and immediately removes it from browser history.
+      fragment: 'token=$secret',
     );
   }
 

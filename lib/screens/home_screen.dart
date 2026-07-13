@@ -56,24 +56,24 @@ class _HomeScreenState extends State<HomeScreen> {
     await sp.ready;
     if (!mounted) return;
     if (sp.currentSessionId == null) {
-      final ctrl = TextEditingController();
-      showDialog(
+      var recordName = '';
+      await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('新记录名称'),
+          title: Text(ctx.l10n.newRecordName),
           content: TextField(
-            controller: ctrl,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: '输入本次记录名称（可留空）',
-              border: OutlineInputBorder(),
+            onChanged: (value) => recordName = value,
+            decoration: InputDecoration(
+              hintText: ctx.l10n.newRecordNameHint,
+              border: const OutlineInputBorder(),
             ),
           ),
           actions: [
             FilledButton(
-              child: const Text('开始新记录'),
+              child: Text(ctx.l10n.startNewRecord),
               onPressed: () async {
-                final name = ctrl.text.trim();
+                final name = recordName.trim();
                 await sp.startNewSession(title: name.isEmpty ? null : name);
                 await lp.reloadForSession(sp.currentSessionId);
                 if (ctx.mounted) Navigator.pop(ctx);
@@ -87,7 +87,10 @@ class _HomeScreenState extends State<HomeScreen> {
     lp.reloadForSession(sp.currentSessionId);
   }
 
-  void _onItemTapped(int index) => setState(() => _selectedIndex = index);
+  void _onItemTapped(int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _selectedIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -332,6 +335,7 @@ class AddRecordPage extends StatelessWidget {
       logProvider,
       conflictedLogIds,
       readOnly,
+      currentSession?.sessionId,
     );
     if (!readOnly) return content;
     return Column(
@@ -364,67 +368,84 @@ class AddRecordPage extends StatelessWidget {
     LogProvider logProvider,
     Set<String> conflictedLogIds,
     bool readOnly,
+    String? currentSessionId,
   ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        context.l10n.currentRecord,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+    final stackedContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      context.l10n.currentRecord,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const Spacer(),
-                      _currentOrdinalBadge(context, logProvider.logCount),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  LogForm(readOnly: readOnly),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildLogHeader(context, logProvider, readOnly),
-                  const SizedBox(height: 12),
-                  const Text(
-                    '已有记录',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  LogTable(
-                    readOnly: readOnly,
-                    conflictedLogIds: conflictedLogIds,
-                  ),
-                ],
-              ),
+                    const Spacer(),
+                    _currentOrdinalBadge(context, logProvider.logCount),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                LogForm(
+                  key: ValueKey('log-form-${currentSessionId ?? 'none'}'),
+                  readOnly: readOnly,
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildLogHeader(context, readOnly),
+                const SizedBox(height: 12),
+                const Text(
+                  '已有记录',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                LogTable(
+                  readOnly: readOnly,
+                  conflictedLogIds: conflictedLogIds,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    final limitWidth = context.select<SettingsProvider, bool>(
+      (settings) => settings.limitWorkbenchWidth,
+    );
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: limitWidth
+          ? Center(
+              child: ConstrainedBox(
+                key: const Key('workbench-width-limit'),
+                constraints: const BoxConstraints(maxWidth: 1440),
+                child: stackedContent,
+              ),
+            )
+          : stackedContent,
     );
   }
 
@@ -454,19 +475,21 @@ class AddRecordPage extends StatelessWidget {
 
   Widget _buildLogHeader(
     BuildContext context,
-    LogProvider logProvider,
     bool readOnly,
   ) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Flexible(
-          child: Consumer<LogProvider>(
-            builder: (_, lp, __) => Chip(label: Text('${lp.logCount} 条记录')),
-          ),
+        Consumer<LogProvider>(
+          builder: (_, lp, __) => Chip(label: Text('${lp.logCount} 条记录')),
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             Consumer<LogProvider>(
               builder: (_, lp, __) => FilledButton(
@@ -476,19 +499,12 @@ class AddRecordPage extends StatelessWidget {
                 child: const Text('撤销'),
               ),
             ),
-            const SizedBox(width: 8),
-            Consumer<LogProvider>(
-              builder: (_, lp, __) => FilledButton(
-                style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    foregroundColor: Colors.white),
-                onPressed: lp.canClearAllLogs
-                    ? () => _showClearConfirmation(context)
-                    : null,
-                child: const Text('清空'),
-              ),
+            FilledButton.tonalIcon(
+              key: const Key('start-new-record'),
+              onPressed: () => _showNewSessionNameDialog(context),
+              icon: const Icon(Icons.note_add_outlined),
+              label: Text(context.l10n.startNewRecord),
             ),
-            const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.history),
               tooltip: context.l10n.historySessions,
@@ -500,59 +516,33 @@ class AddRecordPage extends StatelessWidget {
     );
   }
 
-  void _showClearConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认清空记录'),
-        content: const Text('您确定要清空所有点名记录吗？此操作不可撤销！'),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(context);
-              _showNewSessionNameDialog(context);
-            },
-            child: const Text('确认清空'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showNewSessionNameDialog(BuildContext context) {
-    final controller = TextEditingController();
+  Future<void> _showNewSessionNameDialog(BuildContext context) async {
+    var recordName = '';
     final sessionProvider =
         Provider.of<SessionProvider>(context, listen: false);
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    showDialog(
+    await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('新记录名称'),
+        title: Text(ctx.l10n.newRecordName),
         content: TextField(
-          controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入本次记录名称（可留空）',
-            border: OutlineInputBorder(),
+          onChanged: (value) => recordName = value,
+          decoration: InputDecoration(
+            hintText: ctx.l10n.newRecordNameHint,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
-            child: const Text('取消'),
+            child: Text(ctx.l10n.cancel),
             onPressed: () => Navigator.pop(ctx),
           ),
           FilledButton(
-            child: const Text('开始新记录'),
+            child: Text(ctx.l10n.startNewRecord),
             onPressed: () async {
               try {
-                final name = controller.text.trim();
+                final name = recordName.trim();
                 await sessionProvider.startNewSession(
                     title: name.isEmpty ? null : name);
                 await logProvider
@@ -561,20 +551,23 @@ class AddRecordPage extends StatelessWidget {
                 if (context.mounted) {
                   context.showLoggedSnackBar(
                     SnackBar(
-                        content:
-                            Text('已开始新记录：${name.isEmpty ? "自动命名" : name}')),
+                      content: Text(
+                        context.l10n.newRecordStarted(
+                          name.isEmpty ? context.l10n.automaticName : name,
+                        ),
+                      ),
+                    ),
                   );
                 }
               } catch (e, st) {
                 debugPrint('[SessionDialog] ERROR: $e\n$st');
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
+                if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   context.showLoggedSnackBar(
                     SnackBar(
-                        content: Text('创建新记录失败: $e'),
-                        backgroundColor: Colors.red),
+                      content: Text(context.l10n.createNewRecordFailed('$e')),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }

@@ -17,6 +17,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _controllerDeviceModeEnabledKey =
       'controllerDeviceModeEnabled';
   static const String _primarySidebarExpandedKey = 'primarySidebarExpanded';
+  static const String _limitWorkbenchWidthKey = 'limitWorkbenchWidth';
 
   Color _themeColor = const Color(0xFF2196F3);
   bool _isDarkMode = false;
@@ -28,6 +29,7 @@ class SettingsProvider with ChangeNotifier {
   bool _duplicateCallsignWarningEnabled = true;
   bool _controllerDeviceModeEnabled = false;
   bool _primarySidebarExpanded = true;
+  bool _limitWorkbenchWidth = true;
   ControllerDisplayPreferences _controllerDisplayPreferences =
       const ControllerDisplayPreferences();
 
@@ -41,6 +43,7 @@ class SettingsProvider with ChangeNotifier {
   bool get duplicateCallsignWarningEnabled => _duplicateCallsignWarningEnabled;
   bool get controllerDeviceModeEnabled => _controllerDeviceModeEnabled;
   bool get primarySidebarExpanded => _primarySidebarExpanded;
+  bool get limitWorkbenchWidth => _limitWorkbenchWidth;
   ControllerDisplayPreferences get controllerDisplayPreferences =>
       _controllerDisplayPreferences;
 
@@ -78,6 +81,7 @@ class SettingsProvider with ChangeNotifier {
     _controllerDeviceModeEnabled =
         prefs.getBool(_controllerDeviceModeEnabledKey) ?? false;
     _primarySidebarExpanded = prefs.getBool(_primarySidebarExpandedKey) ?? true;
+    _limitWorkbenchWidth = prefs.getBool(_limitWorkbenchWidthKey) ?? true;
     final controllerPreferencesJson =
         prefs.getString(controllerDisplayPreferencesStorageKey);
     if (controllerPreferencesJson != null) {
@@ -152,6 +156,13 @@ class SettingsProvider with ChangeNotifier {
     await _saveSetting(_primarySidebarExpandedKey, expanded);
   }
 
+  Future<void> setLimitWorkbenchWidth(bool enabled) async {
+    if (_limitWorkbenchWidth == enabled) return;
+    _limitWorkbenchWidth = enabled;
+    notifyListeners();
+    await _saveSetting(_limitWorkbenchWidthKey, enabled);
+  }
+
   Future<void> setControllerDisplayPreferences(
     ControllerDisplayPreferences preferences,
   ) async {
@@ -191,6 +202,7 @@ class SettingsProvider with ChangeNotifier {
     _callSignQthLinkEnabled = true;
     _controllerDeviceModeEnabled = false;
     _primarySidebarExpanded = true;
+    _limitWorkbenchWidth = true;
     _duplicateCallsignWarningEnabled = true;
     _controllerDisplayPreferences = const ControllerDisplayPreferences();
 
@@ -202,6 +214,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.remove(_callSignQthLinkKey);
     await prefs.remove(_controllerDeviceModeEnabledKey);
     await prefs.remove(_primarySidebarExpandedKey);
+    await prefs.remove(_limitWorkbenchWidthKey);
     await prefs.remove(_duplicateCallsignWarningKey);
     await prefs.remove(controllerDisplayPreferencesStorageKey);
 

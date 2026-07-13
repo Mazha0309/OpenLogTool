@@ -35,4 +35,42 @@ void main() {
     expect(find.text('呼号历史一键复用'), findsOneWidget);
     settings.dispose();
   });
+
+  testWidgets('workbench width limit can be toggled from layout settings',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = SettingsProvider();
+    await tester.pumpWidget(
+      ChangeNotifierProvider<SettingsProvider>.value(
+        value: settings,
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: LayoutSettings(isNarrow: false, cardPadding: 16),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final toggle = find.byKey(const Key('limit-workbench-width-toggle'));
+    expect(toggle, findsOneWidget);
+    expect(settings.limitWorkbenchWidth, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(settings.limitWorkbenchWidth, isFalse);
+    expect(
+      (await SharedPreferences.getInstance()).getBool(
+        'limitWorkbenchWidth',
+      ),
+      isFalse,
+    );
+    settings.dispose();
+  });
 }

@@ -12,9 +12,17 @@ import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/widgets/collaboration_conflict_center.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+typedef PublicShareUriOpener = Future<bool> Function(Uri uri);
 
 class CollaborationScreen extends StatefulWidget {
-  const CollaborationScreen({super.key});
+  const CollaborationScreen({
+    super.key,
+    this.publicShareUriOpener,
+  });
+
+  final PublicShareUriOpener? publicShareUriOpener;
 
   @override
   State<CollaborationScreen> createState() => _CollaborationScreenState();
@@ -78,7 +86,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                         _statusCard(collaboration),
                       if (sessions.currentSession != null)
                         _sessionCard(collaboration, sessions),
-                      if (server.isLoggedIn && collaboration.binding == null)
+                      if (server.isLoggedIn && collaboration.canJoinWithInvite)
                         _joinCard(collaboration),
                       if (showSyncSection) ...[
                         const SizedBox(height: 20),
@@ -138,11 +146,10 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                           context.l10n.collaborationAccessSection,
                           context.l10n.collaborationAccessSectionHint,
                         ),
-                        if (collaboration.supportsPublicShareManagement)
-                          _publicShareCard(collaboration),
                         if (server.isLoggedIn &&
                             collaboration.state == CollaborationState.ready &&
                             collaboration.isOwner) ...[
+                          _publicShareCard(collaboration),
                           if (collaboration.supportsInvites)
                             _inviteManagementCard(collaboration),
                           _memberManagementCard(collaboration, server),
@@ -192,9 +199,16 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
 
   Widget _publicShareCard(CollaborationProvider collaboration) {
     final created = collaboration.lastCreatedPublicShare;
-    final createdUri = created?.secret == null
-        ? null
-        : collaboration.publicSharePageUri(created!);
+    final createdUri = created != null &&
+            created.active &&
+            (created.secret?.isNotEmpty ?? false)
+        ? collaboration.publicSharePageUri(created)
+        : null;
+    final activeShares = collaboration.publicShares
+        .where((share) => share.active)
+        .toList(growable: false);
+    final supported = collaboration.supportsPublicShareManagement;
+    final colors = Theme.of(context).colorScheme;
     return Card(
       key: const Key('public-share-management'),
       child: Padding(
@@ -209,79 +223,193 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             const SizedBox(height: 4),
             Text(context.l10n.publicShareManagementHint),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: collaboration.isBusy
-                      ? null
-                      : () => unawaited(
-                            _run(
-                              () async {
-                                final share =
-                                    await collaboration.createPublicShare();
-                                await _copyPublicShare(collaboration, share);
-                                return share;
-                              },
-                              success: context.l10n.publicShareLinkCopied,
+            if (!supported)
+              Container(
+                key: const Key('public-share-unsupported'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(context.l10n.publicShareUnsupported)),
+                  ],
+                ),
+              )
+            else ...[
+              if (createdUri != null)
+                Container(
+                  key: const Key('public-share-ready'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.public, color: colors.onPrimaryContainer),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              context.l10n.publicShareCreatedTitle,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(color: colors.onPrimaryContainer),
                             ),
                           ),
-                  icon: const Icon(Icons.add_link),
-                  label: Text(context.l10n.createPublicShare),
-                ),
-                OutlinedButton.icon(
-                  onPressed: collaboration.isBusy
-                      ? null
-                      : () => unawaited(
-                            _run(collaboration.refreshPublicShares),
-                          ),
-                  icon: const Icon(Icons.refresh),
-                  label: Text(context.l10n.refresh),
-                ),
-              ],
-            ),
-            if (createdUri != null) ...[
-              const SizedBox(height: 12),
-              SelectableText(createdUri.toString()),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => unawaited(
-                    _copyPublicShare(collaboration, created!),
-                  ),
-                  icon: const Icon(Icons.copy),
-                  label: Text(context.l10n.copyPublicShareLink),
-                ),
-              ),
-            ],
-            for (final share in collaboration.publicShares)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  share.active ? Icons.public : Icons.link_off,
-                ),
-                title: SelectableText(share.publicShareId),
-                subtitle: Text(
-                  context.l10n.publicShareExpiresAt(
-                    share.expiresAt.toLocal().toString(),
-                  ),
-                ),
-                trailing: share.active
-                    ? TextButton(
-                        onPressed: collaboration.isBusy
-                            ? null
-                            : () => unawaited(
-                                  _run(
-                                    () => collaboration.revokePublicShare(
-                                      share.publicShareId,
-                                    ),
-                                  ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        context.l10n.publicShareCreatedHint,
+                        style: TextStyle(color: colors.onPrimaryContainer),
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        createdUri.toString(),
+                        key: const Key('public-share-uri'),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.tonalIcon(
+                            key: const Key('copy-public-share-link'),
+                            onPressed: () => unawaited(
+                              _run(
+                                () => _copyPublicShare(
+                                  collaboration,
+                                  created!,
                                 ),
-                        child: Text(context.l10n.revokePublicShare),
-                      )
-                    : null,
+                                success: context.l10n.publicShareLinkCopied,
+                              ),
+                            ),
+                            icon: const Icon(Icons.copy),
+                            label: Text(context.l10n.copyPublicShareLink),
+                          ),
+                          OutlinedButton.icon(
+                            key: const Key('open-public-share-link'),
+                            onPressed: () => unawaited(
+                              _openPublicShare(collaboration, created!),
+                            ),
+                            icon: const Icon(Icons.open_in_new),
+                            label: Text(context.l10n.openPublicShare),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              else if (activeShares.isEmpty)
+                Container(
+                  key: const Key('public-share-empty'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: colors.outlineVariant),
+                  ),
+                  child: Text(context.l10n.publicShareNoActiveLinks),
+                )
+              else
+                Container(
+                  key: const Key('public-share-secret-unavailable'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    context.l10n.publicShareSecretUnavailable,
+                    style: TextStyle(color: colors.onTertiaryContainer),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    key: const Key('create-public-share-link'),
+                    onPressed: collaboration.isBusy
+                        ? null
+                        : () => unawaited(
+                              _run(
+                                () async {
+                                  final share =
+                                      await collaboration.createPublicShare();
+                                  await _copyPublicShare(collaboration, share);
+                                  return share;
+                                },
+                                success: context.l10n.publicShareLinkCopied,
+                              ),
+                            ),
+                    icon: const Icon(Icons.add_link),
+                    label: Text(context.l10n.createPublicShare),
+                  ),
+                  OutlinedButton.icon(
+                    key: const Key('refresh-public-share-links'),
+                    onPressed: collaboration.isBusy
+                        ? null
+                        : () => unawaited(
+                              _run(collaboration.refreshPublicShares),
+                            ),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(context.l10n.refresh),
+                  ),
+                ],
               ),
+              if (collaboration.publicShares.isNotEmpty) ...[
+                const Divider(height: 28),
+                Text(
+                  context.l10n.publicShareLinksTitle,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                for (final share in collaboration.publicShares)
+                  ListTile(
+                    key: Key('public-share-${share.publicShareId}'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      share.active ? Icons.public : Icons.link_off,
+                    ),
+                    title: SelectableText(share.publicShareId),
+                    subtitle: Text(
+                      share.active
+                          ? context.l10n.publicShareExpiresAt(
+                              share.expiresAt.toLocal().toString(),
+                            )
+                          : context.l10n.publicShareUnavailable,
+                    ),
+                    trailing: share.active
+                        ? TextButton(
+                            onPressed: collaboration.isBusy
+                                ? null
+                                : () => unawaited(
+                                      _run(
+                                        () => collaboration.revokePublicShare(
+                                          share.publicShareId,
+                                        ),
+                                      ),
+                                    ),
+                            child: Text(context.l10n.revokePublicShare),
+                          )
+                        : null,
+                  ),
+              ],
+            ],
           ],
         ),
       ),
@@ -295,6 +423,24 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       Clipboard.setData(
         ClipboardData(text: collaboration.publicSharePageUri(share).toString()),
       );
+
+  Future<void> _openPublicShare(
+    CollaborationProvider collaboration,
+    PublicShareDto share,
+  ) async {
+    final uri = collaboration.publicSharePageUri(share);
+    final opener = widget.publicShareUriOpener ??
+        (value) => launchUrl(value, mode: LaunchMode.externalApplication);
+    try {
+      final opened = await opener(uri);
+      if (!opened) throw StateError('URL_LAUNCH_REJECTED');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.publicShareOpenFailed)),
+      );
+    }
+  }
 
   Widget _offlineReviewCard(CollaborationProvider collaboration) {
     return Card(
@@ -473,6 +619,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
 
   Widget _joinCard(CollaborationProvider collaboration) {
     return Card(
+      key: const Key('join-collaboration-card'),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -486,6 +633,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             Text(context.l10n.joinCollaborationHint),
             const SizedBox(height: 12),
             TextField(
+              key: const Key('collaboration-invite-code'),
               controller: _inviteCodeController,
               enabled: !collaboration.isBusy,
               textCapitalization: TextCapitalization.characters,
@@ -497,6 +645,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
+              key: const Key('join-collaboration-button'),
               onPressed: collaboration.isBusy
                   ? null
                   : () => _run(

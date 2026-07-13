@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/account_dto.dart';
 import 'package:openlogtool/providers/server_provider.dart';
+import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/utils/server_connection_error.dart';
@@ -121,6 +122,10 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
+                if (server.tokenStorageStatus.isDegraded) ...[
+                  const SizedBox(height: 12),
+                  _tokenStorageWarning(server.tokenStorageStatus),
+                ],
                 const Divider(height: 28),
                 if (!server.isLoggedIn)
                   _signedOutActions(server)
@@ -131,6 +136,44 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
           ),
         );
       },
+    );
+  }
+
+  Widget _tokenStorageWarning(TokenStorageStatus status) {
+    final colors = Theme.of(context).colorScheme;
+    final memoryOnly = status.backend == TokenStorageBackend.memoryOnly;
+    return Container(
+      key: Key('token-storage-warning-${status.backend.name}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: memoryOnly ? colors.errorContainer : colors.tertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            memoryOnly ? Icons.error_outline : Icons.key_off_outlined,
+            color: memoryOnly
+                ? colors.onErrorContainer
+                : colors.onTertiaryContainer,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              memoryOnly
+                  ? context.l10n.tokenStorageMemoryOnlyWarning
+                  : context.l10n.tokenStoragePrivateFileWarning,
+              style: TextStyle(
+                color: memoryOnly
+                    ? colors.onErrorContainer
+                    : colors.onTertiaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

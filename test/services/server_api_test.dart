@@ -921,7 +921,7 @@ void main() {
       expect(created.secret, 'link-secret');
       expect(
         api.publicSharePageUri(created).toString(),
-        'https://example.test/live/share-1#link-secret',
+        'https://example.test/live/share-1#token=link-secret',
       );
       final page = await api.listPublicShares(
         sessionId: 'session-1',

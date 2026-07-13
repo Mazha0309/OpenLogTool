@@ -80,6 +80,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get currentRecord => '当前记录';
 
   @override
+  String get startNewRecord => '开始新记录';
+
+  @override
+  String get newRecordName => '新记录名称';
+
+  @override
+  String get newRecordNameHint => '输入本次记录名称（可留空）';
+
+  @override
+  String get automaticName => '自动命名';
+
+  @override
+  String newRecordStarted(String name) {
+    return '已开始新记录：$name';
+  }
+
+  @override
+  String createNewRecordFailed(String error) {
+    return '创建新记录失败：$error';
+  }
+
+  @override
   String currentOrdinal(int ordinal) {
     return '当前第 $ordinal 位';
   }
@@ -394,6 +416,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String fieldLockedBy(String name) {
     return '$name 正在编辑';
   }
+
+  @override
+  String get finishEditing => '结束编辑';
 
   @override
   String get offlineReviewTitle => '离线记录待复核';
@@ -781,10 +806,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callsignHistoryFillHint => '匹配数据库中的既有呼号记录，并可一键带入设备、天线、QTH 等字段。';
 
   @override
-  String get publicShareManagement => '公开主控页面';
+  String get publicShareManagement => 'Live Share · 公开只读页面';
 
   @override
-  String get publicShareManagementHint => '仅在服务器同时提供安全公开页面时启用。链接密钥只在创建时显示。';
+  String get publicShareManagementHint =>
+      '为主控、远程书记员或观众生成只读网页；无需登录即可查看当前点名进度。链接密钥仅在创建时显示。';
+
+  @override
+  String get publicShareUnsupported =>
+      '当前服务器未提供安全的 Live Share 公开页面。升级或启用服务端公开分享功能后即可创建。';
+
+  @override
+  String get publicShareCreatedTitle => '公开只读页面已创建';
+
+  @override
+  String get publicShareCreatedHint => '请立即保存此链接；出于安全考虑，刷新或重新登录后无法再次取回链接密钥。';
 
   @override
   String get createPublicShare => '创建公开链接';
@@ -793,10 +829,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copyPublicShareLink => '复制链接';
 
   @override
+  String get openPublicShare => '在浏览器打开';
+
+  @override
   String get revokePublicShare => '撤销';
 
   @override
   String get publicShareLinkCopied => '公开链接已复制';
+
+  @override
+  String get publicShareNoActiveLinks => '当前没有有效的公开链接。创建后可将只读页面交给主控或远程查看者。';
+
+  @override
+  String get publicShareSecretUnavailable =>
+      '已有有效公开链接，但其密钥只在创建时返回。若链接没有保存，请撤销旧链接并创建新链接。';
+
+  @override
+  String get publicShareLinksTitle => '公开链接记录';
+
+  @override
+  String get publicShareUnavailable => '已撤销或已过期';
+
+  @override
+  String get publicShareOpenFailed => '无法打开浏览器；你仍可复制链接后手动打开。';
 
   @override
   String publicShareExpiresAt(String time) {
@@ -814,6 +869,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get expandSidebar => '展开侧边栏';
+
+  @override
+  String get limitWorkbenchWidthSetting => '限制点名台内容宽度';
+
+  @override
+  String get limitWorkbenchWidthHint => '宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。';
 
   @override
   String serverConnectionFailed(String detail) {
@@ -871,6 +932,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get serverSignedOutHint => '登录后可以参与协作，并管理当前账号自己的资料和登录设备。';
+
+  @override
+  String get tokenStoragePrivateFileWarning =>
+      '系统钥匙环不可用；登录凭据已保存到仅当前 Linux 用户可读的私有文件。钥匙环恢复可用后会自动迁回安全存储。';
+
+  @override
+  String get tokenStorageMemoryOnlyWarning =>
+      '安全凭据存储不可用；本次登录仅在应用运行期间有效，退出后需要重新登录。';
 
   @override
   String get serverLogin => '登录';
@@ -1294,6 +1363,28 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get currentRecord => '当前记录';
 
   @override
+  String get startNewRecord => '开始新记录';
+
+  @override
+  String get newRecordName => '新记录名称';
+
+  @override
+  String get newRecordNameHint => '输入本次记录名称（可留空）';
+
+  @override
+  String get automaticName => '自动命名';
+
+  @override
+  String newRecordStarted(String name) {
+    return '已开始新记录：$name';
+  }
+
+  @override
+  String createNewRecordFailed(String error) {
+    return '创建新记录失败：$error';
+  }
+
+  @override
   String currentOrdinal(int ordinal) {
     return '当前第 $ordinal 位';
   }
@@ -1657,10 +1748,21 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get callsignHistoryFillHint => '匹配数据库中的既有呼号记录，并可一键带入设备、天线、QTH 等字段。';
 
   @override
-  String get publicShareManagement => '公开主控页面';
+  String get publicShareManagement => 'Live Share · 公开只读页面';
 
   @override
-  String get publicShareManagementHint => '仅在服务器同时提供安全公开页面时启用。链接密钥只在创建时显示。';
+  String get publicShareManagementHint =>
+      '为主控、远程书记员或观众生成只读网页；无需登录即可查看当前点名进度。链接密钥仅在创建时显示。';
+
+  @override
+  String get publicShareUnsupported =>
+      '当前服务器未提供安全的 Live Share 公开页面。升级或启用服务端公开分享功能后即可创建。';
+
+  @override
+  String get publicShareCreatedTitle => '公开只读页面已创建';
+
+  @override
+  String get publicShareCreatedHint => '请立即保存此链接；出于安全考虑，刷新或重新登录后无法再次取回链接密钥。';
 
   @override
   String get createPublicShare => '创建公开链接';
@@ -1669,10 +1771,29 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get copyPublicShareLink => '复制链接';
 
   @override
+  String get openPublicShare => '在浏览器打开';
+
+  @override
   String get revokePublicShare => '撤销';
 
   @override
   String get publicShareLinkCopied => '公开链接已复制';
+
+  @override
+  String get publicShareNoActiveLinks => '当前没有有效的公开链接。创建后可将只读页面交给主控或远程查看者。';
+
+  @override
+  String get publicShareSecretUnavailable =>
+      '已有有效公开链接，但其密钥只在创建时返回。若链接没有保存，请撤销旧链接并创建新链接。';
+
+  @override
+  String get publicShareLinksTitle => '公开链接记录';
+
+  @override
+  String get publicShareUnavailable => '已撤销或已过期';
+
+  @override
+  String get publicShareOpenFailed => '无法打开浏览器；你仍可复制链接后手动打开。';
 
   @override
   String publicShareExpiresAt(String time) {
@@ -1690,6 +1811,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get expandSidebar => '展开侧边栏';
+
+  @override
+  String get limitWorkbenchWidthSetting => '限制点名台内容宽度';
+
+  @override
+  String get limitWorkbenchWidthHint => '宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。';
 
   @override
   String serverConnectionFailed(String detail) {
@@ -1747,6 +1874,14 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get serverSignedOutHint => '登录后可以参与协作，并管理当前账号自己的资料和登录设备。';
+
+  @override
+  String get tokenStoragePrivateFileWarning =>
+      '系统钥匙环不可用；登录凭据已保存到仅当前 Linux 用户可读的私有文件。钥匙环恢复可用后会自动迁回安全存储。';
+
+  @override
+  String get tokenStorageMemoryOnlyWarning =>
+      '安全凭据存储不可用；本次登录仅在应用运行期间有效，退出后需要重新登录。';
 
   @override
   String get serverLogin => '登录';

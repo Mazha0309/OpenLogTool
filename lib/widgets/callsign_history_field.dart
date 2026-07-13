@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
@@ -10,6 +12,10 @@ typedef CallsignHistoryLoader = Future<List<bridge.LogEntry>> Function(
   int limit,
 );
 
+typedef CallsignHistoryReuseCallback = Future<void> Function(
+  bridge.LogEntry record,
+);
+
 class CallsignHistoryField extends StatefulWidget {
   final TextEditingController callsignController;
   final TextEditingController deviceController;
@@ -19,7 +25,6 @@ class CallsignHistoryField extends StatefulWidget {
   final TextEditingController heightController;
   final TextEditingController? reportController;
   final TextEditingController? rstRcvdController;
-  final TextEditingController? timeController;
   final TextEditingController? controllerController;
   final String label;
   final String hintText;
@@ -31,6 +36,7 @@ class CallsignHistoryField extends StatefulWidget {
   final String? Function(String?)? validator;
   final CallsignHistoryLoader? historyLoader;
   final bool Function(String field)? canFillField;
+  final CallsignHistoryReuseCallback? onReuseRecord;
 
   const CallsignHistoryField({
     super.key,
@@ -42,7 +48,6 @@ class CallsignHistoryField extends StatefulWidget {
     required this.heightController,
     this.reportController,
     this.rstRcvdController,
-    this.timeController,
     this.controllerController,
     required this.label,
     required this.hintText,
@@ -54,6 +59,7 @@ class CallsignHistoryField extends StatefulWidget {
     this.validator,
     this.historyLoader,
     this.canFillField,
+    this.onReuseRecord,
   });
 
   @override
@@ -65,7 +71,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   final FocusNode _ownFocusNode = FocusNode();
-  final bool _isSelecting = false;
+  bool _isSelecting = false;
   int _historyRequestGeneration = 0;
 
   FocusNode get _effFocus => widget.focusNode ?? _ownFocusNode;
@@ -134,6 +140,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
       _showOverlay();
     } else if (!_effFocus.hasFocus) {
       Future.delayed(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
         if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
       });
     }
@@ -184,7 +191,23 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
 
   bool _canFill(String field) => widget.canFillField?.call(field) ?? true;
 
-  void _fillFromRecord(bridge.LogEntry log) {
+  Future<void> _fillFromRecord(bridge.LogEntry log) async {
+    _isSelecting = true;
+    _hideOverlay();
+    try {
+      final onReuseRecord = widget.onReuseRecord;
+      if (onReuseRecord != null) {
+        await onReuseRecord(log);
+        return;
+      }
+
+      _fillControllersFromRecord(log);
+    } finally {
+      _isSelecting = false;
+    }
+  }
+
+  void _fillControllersFromRecord(bridge.LogEntry log) {
     if (_canFill('device') && (log.device?.isNotEmpty ?? false)) {
       widget.deviceController.text = log.device!;
     }
@@ -210,17 +233,11 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
         (log.rstRcvd?.isNotEmpty ?? false)) {
       widget.rstRcvdController!.text = log.rstRcvd!;
     }
-    if (_canFill('time') &&
-        widget.timeController != null &&
-        log.time.isNotEmpty) {
-      widget.timeController!.text = formatLogTimeForDisplay(log.time);
-    }
     if (_canFill('controller') &&
         widget.controllerController != null &&
         log.controller.isNotEmpty) {
       widget.controllerController!.text = log.controller;
     }
-    _hideOverlay();
   }
 
   void _showOverlay() {
@@ -228,132 +245,185 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     if (!_canUseHistory || _history.isEmpty) return;
 
     final overlay = Overlay.of(context);
-    final size = (context.findRenderObject() as RenderBox).size;
+    final overlayBox = overlay.context.findRenderObject() as RenderBox;
+    final fieldBox = context.findRenderObject() as RenderBox;
+    final overlaySize = overlayBox.size;
+    final fieldSize = fieldBox.size;
+    final fieldOrigin = fieldBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    const screenMargin = 8.0;
+    const anchorGap = 4.0;
+    final mediaQuery = MediaQuery.of(context);
+    final view = View.of(context);
+    final rawBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    final bottomInset = math.max(
+      mediaQuery.viewInsets.bottom,
+      rawBottomInset,
+    );
+    final panelWidth = math.min(320.0, overlaySize.width - screenMargin * 2);
+    final maxLeft = overlaySize.width - screenMargin - panelWidth;
+    final panelLeft = fieldOrigin.dx.clamp(screenMargin, maxLeft).toDouble();
+    final desiredHeight = math.min(260.0, 42.0 + _history.length * 58.0);
+    final visibleTop = mediaQuery.padding.top + screenMargin;
+    final visibleBottom = overlaySize.height -
+        bottomInset -
+        mediaQuery.padding.bottom -
+        screenMargin;
+    final belowSpace = math.max(
+      0.0,
+      visibleBottom - (fieldOrigin.dy + fieldSize.height + anchorGap),
+    );
+    final aboveSpace = math.max(
+      0.0,
+      fieldOrigin.dy - anchorGap - visibleTop,
+    );
+    final openBelow = belowSpace >= math.min(desiredHeight, 120.0) ||
+        belowSpace >= aboveSpace;
+    final availableHeight = openBelow ? belowSpace : aboveSpace;
+    final panelHeight = math.min(desiredHeight, availableHeight);
+    final followerOffset = Offset(
+      panelLeft - fieldOrigin.dx,
+      openBelow ? fieldSize.height + anchorGap : -panelHeight - anchorGap,
+    );
     final list = _history;
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) => Positioned(
-        width: 320,
+        width: panelWidth,
         child: CompositedTransformFollower(
           link: _layerLink,
           showWhenUnlinked: false,
-          offset: Offset(0, size.height + 4),
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(10),
-            surfaceTintColor: Colors.transparent,
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: 260),
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: Theme.of(ctx).colorScheme.outlineVariant),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                    decoration: BoxDecoration(
-                      border: Border(
-                          bottom: BorderSide(
-                              color: Theme.of(ctx).colorScheme.outlineVariant)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.auto_fix_high,
-                            size: 14, color: Theme.of(ctx).colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Text(context.l10n.reuseDatabaseInformation,
-                            style: TextStyle(
+          offset: followerOffset,
+          child: TextFieldTapRegion(
+            child: Material(
+              key: const Key('callsign-history-overlay'),
+              elevation: 8,
+              borderRadius: BorderRadius.circular(10),
+              surfaceTintColor: Colors.transparent,
+              child: Container(
+                constraints: BoxConstraints(maxHeight: panelHeight),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: Theme.of(ctx).colorScheme.outlineVariant),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                            bottom: BorderSide(
+                                color:
+                                    Theme.of(ctx).colorScheme.outlineVariant)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.auto_fix_high,
+                              size: 14,
+                              color: Theme.of(ctx).colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              context.l10n.reuseDatabaseInformation,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Theme.of(ctx)
-                                    .colorScheme
-                                    .onSurfaceVariant)),
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      itemCount: list.length,
-                      itemBuilder: (_, i) {
-                        final log = list[i];
-                        final details = [
-                          if (log.qth != null && log.qth!.isNotEmpty) log.qth,
-                          if (log.device != null && log.device!.isNotEmpty)
-                            log.device,
-                          if (log.antenna != null && log.antenna!.isNotEmpty)
-                            log.antenna,
-                        ].join(' · ');
-                        return InkWell(
-                          onTap: () => _fillFromRecord(log),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              border: i < list.length - 1
-                                  ? Border(
-                                      bottom: BorderSide(
-                                          color: Theme.of(ctx)
-                                              .colorScheme
-                                              .outlineVariant
-                                              .withAlpha(80)))
-                                  : null,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.history,
-                                    size: 14,
-                                    color: Theme.of(ctx).colorScheme.primary),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _formatTime(log.time),
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: Theme.of(ctx)
-                                                .colorScheme
-                                                .primary),
-                                      ),
-                                      if (details.isNotEmpty)
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 2),
-                                          child: Text(details,
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Theme.of(ctx)
-                                                      .colorScheme
-                                                      .onSurfaceVariant),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(Icons.chevron_right,
-                                    size: 16,
-                                    color: Theme.of(ctx)
-                                        .colorScheme
-                                        .onSurfaceVariant),
-                              ],
+                                color:
+                                    Theme.of(ctx).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    Flexible(
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: list.length,
+                        itemBuilder: (_, i) {
+                          final log = list[i];
+                          final details = [
+                            if (log.qth != null && log.qth!.isNotEmpty) log.qth,
+                            if (log.device != null && log.device!.isNotEmpty)
+                              log.device,
+                            if (log.antenna != null && log.antenna!.isNotEmpty)
+                              log.antenna,
+                          ].join(' · ');
+                          return InkWell(
+                            onTap: () async => _fillFromRecord(log),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                border: i < list.length - 1
+                                    ? Border(
+                                        bottom: BorderSide(
+                                            color: Theme.of(ctx)
+                                                .colorScheme
+                                                .outlineVariant
+                                                .withAlpha(80)))
+                                    : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.history,
+                                      size: 14,
+                                      color: Theme.of(ctx).colorScheme.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _formatTime(log.time),
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Theme.of(ctx)
+                                                  .colorScheme
+                                                  .primary),
+                                        ),
+                                        if (details.isNotEmpty)
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 2),
+                                            child: Text(details,
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Theme.of(ctx)
+                                                        .colorScheme
+                                                        .onSurfaceVariant),
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right,
+                                      size: 16,
+                                      color: Theme.of(ctx)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -402,6 +472,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
         textInputAction: widget.textInputAction ?? TextInputAction.next,
         textCapitalization: TextCapitalization.characters,
         inputFormatters: [UpperCaseTextFormatter()],
+        onTapOutside: (_) => _effFocus.unfocus(),
       ),
     );
   }

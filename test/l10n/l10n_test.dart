@@ -36,6 +36,8 @@ void main() {
     expect(collaborationStateLabel(en, 'ready'), 'Connected');
     expect(zh.callsignHistoryFillSetting, '呼号历史一键复用');
     expect(en.callsignHistoryFillSetting, 'Reuse callsign history');
+    expect(zh.limitWorkbenchWidthSetting, '限制点名台内容宽度');
+    expect(en.limitWorkbenchWidthSetting, 'Limit Net Desk content width');
     expect(zh.historySessions, '历史会话');
     expect(zh.historySessionsHint, isNot(contains('历史记录')));
     expect(en.historySessionOpen, 'Open session');
@@ -47,8 +49,14 @@ void main() {
     expect(zh.expandSidebar, '展开侧边栏');
     expect(en.collapseSidebar, 'Collapse sidebar');
     expect(en.expandSidebar, 'Expand sidebar');
+    expect(zh.finishEditing, '结束编辑');
+    expect(en.finishEditing, 'Finish editing');
     expect(zh.serverSettingsTitle, '服务器与账户');
     expect(en.serverSettingsTitle, 'Server and account');
+    expect(zh.tokenStoragePrivateFileWarning, contains('Linux 用户'));
+    expect(en.tokenStoragePrivateFileWarning, contains('private file'));
+    expect(zh.tokenStorageMemoryOnlyWarning, contains('退出后需要重新登录'));
+    expect(en.tokenStorageMemoryOnlyWarning, contains('after exiting'));
     expect(zh.collaborationConnectionSection, '连接与会话');
     expect(en.collaborationConnectionSection, 'Connection and session');
     expect(zh.logNotOwnedReadOnlyHint, '只能修改或删除自己创建的记录。');

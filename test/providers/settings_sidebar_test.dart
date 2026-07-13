@@ -26,6 +26,37 @@ void main() {
     expect(restored.primarySidebarExpanded, isFalse);
     restored.dispose();
   });
+
+  test('workbench width limit defaults on and persists', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = SettingsProvider();
+    await _waitForInitialLoad(settings);
+
+    expect(settings.limitWorkbenchWidth, isTrue);
+    await settings.setLimitWorkbenchWidth(false);
+    expect(settings.limitWorkbenchWidth, isFalse);
+    expect(
+      (await SharedPreferences.getInstance()).getBool(
+        'limitWorkbenchWidth',
+      ),
+      isFalse,
+    );
+    settings.dispose();
+
+    final restored = SettingsProvider();
+    await _waitForInitialLoad(restored);
+    expect(restored.limitWorkbenchWidth, isFalse);
+
+    await restored.resetToDefaults();
+    expect(restored.limitWorkbenchWidth, isTrue);
+    expect(
+      (await SharedPreferences.getInstance()).containsKey(
+        'limitWorkbenchWidth',
+      ),
+      isFalse,
+    );
+    restored.dispose();
+  });
 }
 
 Future<void> _waitForInitialLoad(SettingsProvider settings) {

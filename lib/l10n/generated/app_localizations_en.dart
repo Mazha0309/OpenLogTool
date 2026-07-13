@@ -80,6 +80,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get currentRecord => 'Current record';
 
   @override
+  String get startNewRecord => 'Start new record';
+
+  @override
+  String get newRecordName => 'New record name';
+
+  @override
+  String get newRecordNameHint => 'Enter a name for this record (optional)';
+
+  @override
+  String get automaticName => 'automatic name';
+
+  @override
+  String newRecordStarted(String name) {
+    return 'Started new record: $name';
+  }
+
+  @override
+  String createNewRecordFailed(String error) {
+    return 'Could not create a new record: $error';
+  }
+
+  @override
   String currentOrdinal(int ordinal) {
     return 'Current #$ordinal';
   }
@@ -403,6 +425,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String fieldLockedBy(String name) {
     return 'Editing by $name';
   }
+
+  @override
+  String get finishEditing => 'Finish editing';
 
   @override
   String get offlineReviewTitle => 'Offline records need review';
@@ -821,11 +846,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'Match existing callsign records and fill the radio, antenna, QTH, and related fields in one tap.';
 
   @override
-  String get publicShareManagement => 'Public controller page';
+  String get publicShareManagement => 'Live Share · public read-only page';
 
   @override
   String get publicShareManagementHint =>
-      'Available only when the server also provides the safe public page. The link secret is shown only when created.';
+      'Create a read-only web page for controllers, remote scribes, or observers. It can be viewed without signing in; the link secret is shown only when created.';
+
+  @override
+  String get publicShareUnsupported =>
+      'This server does not provide the secure Live Share page. Upgrade or enable public sharing on the server to create one.';
+
+  @override
+  String get publicShareCreatedTitle => 'Public read-only page created';
+
+  @override
+  String get publicShareCreatedHint =>
+      'Save this link now. For security, its secret cannot be retrieved again after a refresh or sign-in.';
 
   @override
   String get createPublicShare => 'Create public link';
@@ -834,10 +870,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get copyPublicShareLink => 'Copy link';
 
   @override
+  String get openPublicShare => 'Open in browser';
+
+  @override
   String get revokePublicShare => 'Revoke';
 
   @override
   String get publicShareLinkCopied => 'Public link copied';
+
+  @override
+  String get publicShareNoActiveLinks =>
+      'There are no active public links. Create one for a controller or remote observer.';
+
+  @override
+  String get publicShareSecretUnavailable =>
+      'An active public link exists, but its secret was returned only when created. If it was not saved, revoke it and create a new link.';
+
+  @override
+  String get publicShareLinksTitle => 'Public link history';
+
+  @override
+  String get publicShareUnavailable => 'Revoked or expired';
+
+  @override
+  String get publicShareOpenFailed =>
+      'Could not open the browser. You can still copy the link and open it manually.';
 
   @override
   String publicShareExpiresAt(String time) {
@@ -855,6 +912,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get expandSidebar => 'Expand sidebar';
+
+  @override
+  String get limitWorkbenchWidthSetting => 'Limit Net Desk content width';
+
+  @override
+  String get limitWorkbenchWidthHint =>
+      'Center Net Desk content and limit it to 1440 pixels on wide screens to keep fields from stretching too far.';
 
   @override
   String serverConnectionFailed(String detail) {
@@ -914,6 +978,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get serverSignedOutHint =>
       'Sign in to collaborate and manage only your own account and sign-in devices.';
+
+  @override
+  String get tokenStoragePrivateFileWarning =>
+      'The system keyring is unavailable. Your sign-in is stored in a private file readable only by your Linux user and will move back to secure storage when a keyring becomes available.';
+
+  @override
+  String get tokenStorageMemoryOnlyWarning =>
+      'Secure credential storage is unavailable. This sign-in lasts only while the app is running; you will need to sign in again after exiting.';
 
   @override
   String get serverLogin => 'Sign in';
@@ -1349,6 +1421,28 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get currentRecord => 'Current record';
 
   @override
+  String get startNewRecord => 'Start new record';
+
+  @override
+  String get newRecordName => 'New record name';
+
+  @override
+  String get newRecordNameHint => 'Enter a name for this record (optional)';
+
+  @override
+  String get automaticName => 'automatic name';
+
+  @override
+  String newRecordStarted(String name) {
+    return 'Started new record: $name';
+  }
+
+  @override
+  String createNewRecordFailed(String error) {
+    return 'Could not create a new record: $error';
+  }
+
+  @override
   String currentOrdinal(int ordinal) {
     return 'Current #$ordinal';
   }
@@ -1724,11 +1818,22 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Match existing callsign records and fill the radio, antenna, QTH, and related fields in one tap.';
 
   @override
-  String get publicShareManagement => 'Public controller page';
+  String get publicShareManagement => 'Live Share · public read-only page';
 
   @override
   String get publicShareManagementHint =>
-      'Available only when the server also provides the safe public page. The link secret is shown only when created.';
+      'Create a read-only web page for controllers, remote scribes, or observers. It can be viewed without signing in; the link secret is shown only when created.';
+
+  @override
+  String get publicShareUnsupported =>
+      'This server does not provide the secure Live Share page. Upgrade or enable public sharing on the server to create one.';
+
+  @override
+  String get publicShareCreatedTitle => 'Public read-only page created';
+
+  @override
+  String get publicShareCreatedHint =>
+      'Save this link now. For security, its secret cannot be retrieved again after a refresh or sign-in.';
 
   @override
   String get createPublicShare => 'Create public link';
@@ -1737,10 +1842,31 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get copyPublicShareLink => 'Copy link';
 
   @override
+  String get openPublicShare => 'Open in browser';
+
+  @override
   String get revokePublicShare => 'Revoke';
 
   @override
   String get publicShareLinkCopied => 'Public link copied';
+
+  @override
+  String get publicShareNoActiveLinks =>
+      'There are no active public links. Create one for a controller or remote observer.';
+
+  @override
+  String get publicShareSecretUnavailable =>
+      'An active public link exists, but its secret was returned only when created. If it was not saved, revoke it and create a new link.';
+
+  @override
+  String get publicShareLinksTitle => 'Public link history';
+
+  @override
+  String get publicShareUnavailable => 'Revoked or expired';
+
+  @override
+  String get publicShareOpenFailed =>
+      'Could not open the browser. You can still copy the link and open it manually.';
 
   @override
   String publicShareExpiresAt(String time) {
@@ -1758,6 +1884,13 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get expandSidebar => 'Expand sidebar';
+
+  @override
+  String get limitWorkbenchWidthSetting => 'Limit Net Desk content width';
+
+  @override
+  String get limitWorkbenchWidthHint =>
+      'Center Net Desk content and limit it to 1440 pixels on wide screens to keep fields from stretching too far.';
 
   @override
   String serverConnectionFailed(String detail) {
@@ -1817,6 +1950,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get serverSignedOutHint =>
       'Sign in to collaborate and manage only your own account and sign-in devices.';
+
+  @override
+  String get tokenStoragePrivateFileWarning =>
+      'The system keyring is unavailable. Your sign-in is stored in a private file readable only by your Linux user and will move back to secure storage when a keyring becomes available.';
+
+  @override
+  String get tokenStorageMemoryOnlyWarning =>
+      'Secure credential storage is unavailable. This sign-in lasts only while the app is running; you will need to sign in again after exiting.';
 
   @override
   String get serverLogin => 'Sign in';

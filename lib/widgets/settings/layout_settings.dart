@@ -46,6 +46,15 @@ class LayoutSettings extends StatelessWidget {
             SizedBox(height: isNarrow ? 12 : 16),
             _buildSwitchRow(
               context: context,
+              switchKey: const Key('limit-workbench-width-toggle'),
+              title: context.l10n.limitWorkbenchWidthSetting,
+              subtitle: context.l10n.limitWorkbenchWidthHint,
+              value: settingsProvider.limitWorkbenchWidth,
+              onChanged: settingsProvider.setLimitWorkbenchWidth,
+            ),
+            const Divider(height: 16),
+            _buildSwitchRow(
+              context: context,
               title: '分页显示记录',
               subtitle: '每 5 条记录分为一页显示',
               value: settingsProvider.paginationEnabled,
@@ -75,6 +84,7 @@ class LayoutSettings extends StatelessWidget {
 
   Widget _buildSwitchRow({
     required BuildContext context,
+    Key? switchKey,
     required String title,
     required String subtitle,
     required bool value,
@@ -104,7 +114,7 @@ class LayoutSettings extends StatelessWidget {
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged),
+        Switch(key: switchKey, value: value, onChanged: onChanged),
       ],
     );
   }

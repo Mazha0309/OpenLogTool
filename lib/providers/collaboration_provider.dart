@@ -159,6 +159,223 @@ String? collaborationLogMutationBlockReason({
   return null;
 }
 
+typedef LiveDraftAtomicLockAcquirer = Future<LiveDraftLockDto> Function(
+  String field,
+);
+typedef LiveDraftAtomicPatchSender = Future<LiveDraftPatchResultDto> Function(
+  int clientSeq,
+  List<LiveDraftPatchUpdateDto> updates,
+);
+typedef LiveDraftAtomicLockReleaser = Future<void> Function(
+  String field,
+  LiveDraftLockDto lock,
+);
+
+@visibleForTesting
+final class LiveDraftAtomicPatchExecution {
+  const LiveDraftAtomicPatchExecution({
+    required this.result,
+    required this.appliedClientSeq,
+  });
+
+  final LiveDraftPatchResultDto result;
+  final int appliedClientSeq;
+}
+
+@visibleForTesting
+final class LiveDraftAtomicStateMerge {
+  const LiveDraftAtomicStateMerge({
+    required this.localFields,
+    required this.dirtyFields,
+    required this.baseRevisions,
+  });
+
+  final LiveDraftFieldsDto localFields;
+  final Set<String> dirtyFields;
+  final Map<String, int> baseRevisions;
+}
+
+/// Merges an accepted atomic PATCH without overwriting edits made while the
+/// request was in flight.
+@visibleForTesting
+LiveDraftAtomicStateMerge mergeAcceptedLiveDraftAtomicPatch({
+  required Set<String> targetFields,
+  required LiveDraftFieldsDto beforeLocalFields,
+  required Set<String> beforeDirtyFields,
+  required Map<String, int> beforeBaseRevisions,
+  required LiveDraftFieldsDto currentLocalFields,
+  required Set<String> currentDirtyFields,
+  required Map<String, int> currentBaseRevisions,
+  required LiveDraftDto canonicalDraft,
+}) {
+  final dirtyFields = Set<String>.of(currentDirtyFields);
+  final baseRevisions = Map<String, int>.of(currentBaseRevisions);
+  final mergedValues = <String, String>{};
+  for (final field in liveDraftFieldNames) {
+    if (!targetFields.contains(field)) {
+      mergedValues[field] = dirtyFields.contains(field)
+          ? currentLocalFields[field]
+          : canonicalDraft.fields[field];
+      continue;
+    }
+
+    final changedWhilePending =
+        currentLocalFields[field] != beforeLocalFields[field] ||
+            currentDirtyFields.contains(field) !=
+                beforeDirtyFields.contains(field) ||
+            (currentDirtyFields.contains(field) &&
+                currentBaseRevisions[field] != beforeBaseRevisions[field]);
+    if (!changedWhilePending) {
+      mergedValues[field] = canonicalDraft.fields[field];
+      dirtyFields.remove(field);
+      baseRevisions.remove(field);
+      continue;
+    }
+
+    final currentValue = currentLocalFields[field];
+    mergedValues[field] = currentValue;
+    if (currentValue == canonicalDraft.fields[field]) {
+      dirtyFields.remove(field);
+      baseRevisions.remove(field);
+    } else {
+      dirtyFields.add(field);
+      baseRevisions[field] = canonicalDraft.fieldRevisions[field] ?? 0;
+    }
+  }
+  return LiveDraftAtomicStateMerge(
+    localFields: LiveDraftFieldsDto(mergedValues),
+    dirtyFields: Set<String>.unmodifiable(dirtyFields),
+    baseRevisions: Map<String, int>.unmodifiable(baseRevisions),
+  );
+}
+
+@visibleForTesting
+LiveDraftDto selectLiveDraftCanonicalAfterAtomicPatch({
+  required LiveDraftDto current,
+  required LiveDraftDto accepted,
+}) {
+  if (current.draftId != accepted.draftId ||
+      current.version > accepted.version) {
+    return current;
+  }
+  return accepted;
+}
+
+/// Acquires every required field lease before issuing exactly one PATCH.
+///
+/// Locks already owned by the caller are retained. Locks acquired by this
+/// operation are best-effort released in reverse order on both success and
+/// failure. The server validates every lease and field revision in one
+/// transaction, so no requested field can be committed on its own.
+@visibleForTesting
+Future<LiveDraftAtomicPatchExecution> executeLiveDraftAtomicPatch({
+  required Map<String, String> values,
+  required Map<String, int> expectedRevisions,
+  required Map<String, LiveDraftLockDto> ownedLocks,
+  required int nextClientSeq,
+  required LiveDraftAtomicLockAcquirer acquireLock,
+  required LiveDraftAtomicPatchSender sendPatch,
+  required LiveDraftAtomicLockReleaser releaseLock,
+  required void Function(int clientSeq) onClientSeqChanged,
+  DateTime? now,
+}) async {
+  if (values.isEmpty) {
+    throw ArgumentError.value(values, 'values', 'must not be empty');
+  }
+  if (nextClientSeq < 1) {
+    throw ArgumentError.value(nextClientSeq, 'nextClientSeq');
+  }
+  for (final field in values.keys) {
+    if (!liveDraftFieldNames.contains(field)) {
+      throw ArgumentError.value(field, 'values', 'unsupported field');
+    }
+    if (!expectedRevisions.containsKey(field)) {
+      throw ArgumentError.value(
+        expectedRevisions,
+        'expectedRevisions',
+        'missing revision for $field',
+      );
+    }
+  }
+
+  final orderedFields =
+      liveDraftFieldNames.where(values.containsKey).toList(growable: false);
+  final acquiredHere = <String, LiveDraftLockDto>{};
+  final leases = <String, LiveDraftLockDto>{};
+  final currentTime = now ?? DateTime.now();
+  try {
+    for (final field in orderedFields) {
+      final existing = ownedLocks[field];
+      if (existing != null &&
+          existing.field == field &&
+          existing.expiresAt.isAfter(currentTime)) {
+        leases[field] = existing;
+        continue;
+      }
+      final acquired = await acquireLock(field);
+      leases[field] = acquired;
+      acquiredHere[field] = acquired;
+    }
+
+    final updates = [
+      for (final field in orderedFields)
+        LiveDraftPatchUpdateDto(
+          field: field,
+          value: values[field],
+          expectedRevision: expectedRevisions[field]!,
+          leaseId: leases[field]!.leaseId,
+        ),
+    ];
+    var clientSeq = nextClientSeq;
+    late LiveDraftPatchResultDto result;
+    try {
+      result = await sendPatch(clientSeq, updates);
+    } on ServerApiException catch (error) {
+      if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_GAP') {
+        final expected = _expectedLiveDraftClientSeq(error);
+        if (expected == null) rethrow;
+        onClientSeqChanged(expected - 1);
+        clientSeq = expected;
+        result = await sendPatch(clientSeq, updates);
+      } else if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_REUSED') {
+        onClientSeqChanged(clientSeq);
+        clientSeq += 1;
+        result = await sendPatch(clientSeq, updates);
+      } else {
+        rethrow;
+      }
+    }
+    if (result.appliedClientSeq != clientSeq) {
+      throw const FormatException(
+        'live draft response acknowledged another clientSeq',
+      );
+    }
+    onClientSeqChanged(result.appliedClientSeq);
+    return LiveDraftAtomicPatchExecution(
+      result: result,
+      appliedClientSeq: result.appliedClientSeq,
+    );
+  } finally {
+    for (final field in orderedFields.reversed) {
+      final lock = acquiredHere[field];
+      if (lock == null) continue;
+      try {
+        await releaseLock(field, lock);
+      } catch (_) {
+        // Releasing a temporary lease is cleanup only. The lease is bounded
+        // and must not hide an acquisition or PATCH failure.
+      }
+    }
+  }
+}
+
+int? _expectedLiveDraftClientSeq(ServerApiException error) {
+  final details = error.details;
+  if (details is! Map) return null;
+  final expected = details['expectedClientSeq'];
+  return expected is int && expected > 0 ? expected : null;
+}
+
 class CollaborationProvider with ChangeNotifier {
   CollaborationProvider({
     CollaborationReplicaPort? replica,
@@ -292,6 +509,15 @@ class CollaborationProvider with ChangeNotifier {
   List<PublicShareDto> get publicShares => _publicShares;
   PublicShareDto? get lastCreatedPublicShare => _lastCreatedPublicShare;
   bool get isBusy => _operationInProgress;
+  bool get canJoinWithInvite {
+    final currentBinding = binding;
+    return currentBinding == null ||
+        state == CollaborationState.revoked ||
+        currentBinding.replicaState == 'revoked' ||
+        currentBinding.revokedAt != null ||
+        failedOperation == 'join';
+  }
+
   CollaborationSyncState? get syncState => _syncState;
   CollaborationTransportPhase get transportPhase =>
       _syncState?.transportPhase ?? CollaborationTransportPhase.stopped;
@@ -541,7 +767,10 @@ class CollaborationProvider with ChangeNotifier {
     }
     final api = server.api;
     try {
-      final info = server.serverInfo ?? await api.getServerInfo();
+      // Keep the provider capability cache populated after a persisted login
+      // is restored. Public-share and invite UI gates read ServerProvider's
+      // cached serverInfo rather than this method's local value.
+      final info = server.serverInfo ?? await server.checkServer();
       if (!isCurrent()) return;
       _requireFeatures(info, _refreshFeatures);
       if (info.serverInstanceId != currentBinding.serverInstanceId) {
@@ -876,6 +1105,7 @@ class CollaborationProvider with ChangeNotifier {
       throw ArgumentError('邀请码应为 10 位字符');
     }
     await _runOperation((context) async {
+      final rejoiningRevokedBinding = binding != null && canJoinWithInvite;
       try {
         final info = await _ensureServerCapabilities(
           context,
@@ -893,6 +1123,7 @@ class CollaborationProvider with ChangeNotifier {
           credentialValue: normalizedCode,
         );
         _assertOperationCurrent(context);
+        _failedOperation = 'join';
         _state = CollaborationState.joining;
         _setProgress('兑换邀请码', 0.2);
         final redeemed = await context.api.redeemInvite(
@@ -979,7 +1210,9 @@ class CollaborationProvider with ChangeNotifier {
         _clearError();
       } catch (error) {
         if (_isOperationCurrent(context)) {
-          _state = CollaborationState.failed;
+          _state = rejoiningRevokedBinding
+              ? CollaborationState.revoked
+              : CollaborationState.failed;
           _failedOperation = 'join';
           _safeNotify();
         }
@@ -1074,6 +1307,22 @@ class CollaborationProvider with ChangeNotifier {
     _dirtyLiveDraftFields = {..._dirtyLiveDraftFields, field};
     _safeNotify();
     return _serializeLiveDraft(() => _flushLiveDraftField(field));
+  }
+
+  Future<void> updateLiveDraftFieldsAtomically(Map<String, String> updates) {
+    if (updates.isEmpty) return Future<void>.value();
+    for (final field in updates.keys) {
+      if (!liveDraftFieldNames.contains(field)) {
+        return Future<void>.error(ArgumentError.value(field, 'updates'));
+      }
+    }
+    if (!canEditLiveDraft) {
+      return Future<void>.error(StateError('LIVE_DRAFT_READ_ONLY'));
+    }
+    final requested = Map<String, String>.unmodifiable(updates);
+    return _serializeLiveDraft(
+      () => _updateLiveDraftFieldsAtomically(requested),
+    );
   }
 
   Future<LiveDraftCommitDisposition> commitCurrentLiveDraft() =>
@@ -2342,6 +2591,166 @@ class CollaborationProvider with ChangeNotifier {
     _replaceLiveDraftLock(lock);
     _ensureLiveDraftRenewalTimer();
     return lock;
+  }
+
+  Future<void> _releaseTemporaryLiveDraftField(
+    String field,
+    LiveDraftLockDto lock,
+    ({
+      ServerApi api,
+      LocalCollaborationBinding binding,
+      String deviceId,
+    }) context,
+  ) async {
+    final current = _ownedLiveDraftLocks[field];
+    if (current?.leaseId == lock.leaseId) {
+      _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(field);
+      _removeLiveDraftLock(lock.leaseId);
+      if (_ownedLiveDraftLocks.isEmpty) {
+        _liveDraftRenewalTimer?.cancel();
+        _liveDraftRenewalTimer = null;
+      }
+    }
+    try {
+      await context.api.releaseLiveDraftLock(
+        sessionId: context.binding.sessionId,
+        leaseId: lock.leaseId,
+        deviceId: context.deviceId,
+      );
+    } on ServerApiException catch (error) {
+      if (!{'LIVE_DRAFT_LOCK_NOT_FOUND', 'LIVE_DRAFT_LOCK_EXPIRED'}
+          .contains(error.code)) {
+        // This operation no longer depends on the temporary lease. A failed
+        // cleanup is bounded by the server lease expiry and must not turn an
+        // already atomic PATCH into an apparent mutation failure.
+      }
+    }
+  }
+
+  Future<void> _updateLiveDraftFieldsAtomically(
+    Map<String, String> updates,
+  ) async {
+    final context = _requireLiveDraftContext(requireEdit: true);
+    final snapshot = _liveDraftSnapshot;
+    final local = _localLiveDraftFields;
+    if (snapshot == null || local == null) {
+      throw StateError('LIVE_DRAFT_NOT_LOADED');
+    }
+
+    final beforeDirtyFields = Set<String>.of(_dirtyLiveDraftFields);
+    final beforeBaseRevisions = Map<String, int>.of(_liveDraftBaseRevisions);
+    final targetFields = <String>{};
+    final desiredValues = <String, String>{};
+    final pendingFields = <String>[];
+    for (final field in liveDraftFieldNames) {
+      if (!updates.containsKey(field)) continue;
+      final rawValue = updates[field]!;
+      final value =
+          field == 'time' ? _normalizeLiveDraftTime(rawValue) : rawValue;
+      final localNeedsChange = local[field] != value;
+      final remoteNeedsChange = snapshot.draft.fields[field] != value;
+      if (!localNeedsChange &&
+          !remoteNeedsChange &&
+          !beforeDirtyFields.contains(field)) {
+        continue;
+      }
+      targetFields.add(field);
+      desiredValues[field] = value;
+      if (remoteNeedsChange) pendingFields.add(field);
+    }
+    if (targetFields.isEmpty) return;
+
+    final sentValues = {
+      for (final field in pendingFields) field: desiredValues[field]!,
+    };
+    final sentRevisions = {
+      for (final field in pendingFields)
+        field: beforeDirtyFields.contains(field)
+            ? (beforeBaseRevisions[field] ??
+                snapshot.draft.fieldRevisions[field] ??
+                0)
+            : (snapshot.draft.fieldRevisions[field] ?? 0),
+    };
+    try {
+      LiveDraftDto acceptedDraft = snapshot.draft;
+      if (sentValues.isNotEmpty) {
+        final execution = await executeLiveDraftAtomicPatch(
+          values: sentValues,
+          expectedRevisions: sentRevisions,
+          ownedLocks: Map<String, LiveDraftLockDto>.of(_ownedLiveDraftLocks),
+          nextClientSeq: _liveDraftClientSeq + 1,
+          acquireLock: (field) =>
+              _acquireLiveDraftFieldInternal(field, context),
+          sendPatch: (clientSeq, updates) => context.api.updateLiveDraft(
+            sessionId: context.binding.sessionId,
+            deviceId: context.deviceId,
+            clientSeq: clientSeq,
+            updates: updates,
+          ),
+          releaseLock: (field, lock) =>
+              _releaseTemporaryLiveDraftField(field, lock, context),
+          onClientSeqChanged: (value) => _liveDraftClientSeq = value,
+        );
+        acceptedDraft = execution.result.draft;
+      }
+
+      final currentSnapshot = _liveDraftSnapshot;
+      final currentLocal = _localLiveDraftFields;
+      if (currentSnapshot == null || currentLocal == null) return;
+      final currentDraft = currentSnapshot.draft;
+      final canonicalDraft = selectLiveDraftCanonicalAfterAtomicPatch(
+        current: currentDraft,
+        accepted: acceptedDraft,
+      );
+      final merged = mergeAcceptedLiveDraftAtomicPatch(
+        targetFields: targetFields,
+        beforeLocalFields: local,
+        beforeDirtyFields: beforeDirtyFields,
+        beforeBaseRevisions: beforeBaseRevisions,
+        currentLocalFields: currentLocal,
+        currentDirtyFields: _dirtyLiveDraftFields,
+        currentBaseRevisions: _liveDraftBaseRevisions,
+        canonicalDraft: canonicalDraft,
+      );
+      _dirtyLiveDraftFields = merged.dirtyFields;
+      _liveDraftBaseRevisions = merged.baseRevisions;
+      _localLiveDraftFields = merged.localFields;
+      if (!identical(canonicalDraft, currentDraft)) {
+        _liveDraftSnapshot = LiveDraftSnapshotDto(
+          draft: canonicalDraft,
+          locks: currentSnapshot.locks,
+          currentOrdinal: currentSnapshot.currentOrdinal,
+          totalRecords: currentSnapshot.totalRecords,
+          previousRecord: currentSnapshot.previousRecord,
+        );
+      }
+      _clearLiveDraftError();
+      await _persistLiveDraftState();
+      _safeNotify();
+    } on ServerApiException catch (error) {
+      _setLiveDraftError(error.code, error.message);
+      if (error.code == 'LIVE_DRAFT_LOCK_REQUIRED') {
+        final details = error.details;
+        final field = details is Map ? details['field'] : null;
+        if (field is String) {
+          final stale = _ownedLiveDraftLocks[field];
+          _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(field);
+          if (stale != null) _removeLiveDraftLock(stale.leaseId);
+        }
+      }
+      if ({
+        'LIVE_DRAFT_FIELD_CONFLICT',
+        'LIVE_DRAFT_VERSION_CONFLICT',
+        'LIVE_DRAFT_FIELD_LOCKED',
+        'LIVE_DRAFT_LOCK_REQUIRED',
+        'LIVE_DRAFT_CLIENT_SEQ_GAP',
+        'LIVE_DRAFT_CLIENT_SEQ_REUSED',
+      }.contains(error.code)) {
+        unawaited(refreshLiveDraft());
+      }
+      await _persistLiveDraftState();
+      rethrow;
+    }
   }
 
   Future<void> _flushLiveDraftField(String field) async {

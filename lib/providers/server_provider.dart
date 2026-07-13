@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:openlogtool/models/account_dto.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/services/scoped_token_store.dart';
+import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,12 +12,16 @@ typedef ServerApiFactory = ServerApi Function({
   required String? deviceId,
   required void Function() onAuthInvalidated,
 });
+typedef TokenStoreFactory = TokenStore Function(String serverUrl);
 
 class ServerProvider with ChangeNotifier {
   ServerProvider({
     ServerApiFactory? apiFactory,
+    TokenStoreFactory? tokenStoreFactory,
     bool autoLoadSettings = true,
-  }) : _apiFactory = apiFactory ?? _defaultApiFactory {
+  })  : _apiFactory = apiFactory ?? _defaultApiFactory,
+        _tokenStoreFactory = tokenStoreFactory ?? _defaultTokenStoreFactory {
+    _tokenStore = _tokenStoreScopes.scope(MemoryTokenStore());
     if (autoLoadSettings) {
       Future.microtask(() async {
         try {
@@ -28,8 +34,11 @@ class ServerProvider with ChangeNotifier {
   }
 
   final ServerApiFactory _apiFactory;
+  final TokenStoreFactory _tokenStoreFactory;
+  final ScopedTokenStoreCoordinator _tokenStoreScopes =
+      ScopedTokenStoreCoordinator();
   String _serverUrl = '';
-  MemoryTokenStore _tokenStore = MemoryTokenStore();
+  late TokenStore _tokenStore;
   ServerApi? _api;
   ServerInfoDto? _serverInfo;
   ApiUserDto? _user;
@@ -39,6 +48,10 @@ class ServerProvider with ChangeNotifier {
   String? _deviceId;
   bool _isBusy = false;
   String? _lastErrorCode;
+  TokenStorageStatus _tokenStorageStatus = const TokenStorageStatus(
+    backend: TokenStorageBackend.platformSecure,
+  );
+  ValueListenable<TokenStorageStatus>? _tokenStorageStatusSource;
   Future<void> _lastUrlSave = Future<void>.value();
   int _contextRevision = 0;
 
@@ -54,6 +67,7 @@ class ServerProvider with ChangeNotifier {
   List<DeviceSessionDto> get deviceSessions => _deviceSessions;
   String? get deviceId => _deviceId;
   String? get lastErrorCode => _lastErrorCode;
+  TokenStorageStatus get tokenStorageStatus => _tokenStorageStatus;
   ServerInfoDto? get serverInfo => _serverInfo;
   int get contextRevision => _contextRevision;
 
@@ -68,16 +82,21 @@ class ServerProvider with ChangeNotifier {
     final startedAtRevision = _contextRevision;
     final prefs = await SharedPreferences.getInstance();
     final savedServerUrl = prefs.getString('server_url') ?? '';
-    // v0 stored a long-lived token in SharedPreferences. v1 deliberately keeps
-    // credentials in the TokenStore boundary; the default app store is memory-only
-    // until a platform secure-storage implementation is wired in.
+    // v0 stored credentials in SharedPreferences. Authentication now lives only
+    // in the platform credential store.
     await prefs.remove('server_token');
     await prefs.remove('server_username');
     if (_contextRevision != startedAtRevision) return;
     if (_serverUrl != savedServerUrl) {
       _serverUrl = savedServerUrl;
       final oldTokenStore = _replaceAuthContext();
-      await oldTokenStore.clear();
+      final installedTokenStore = _tokenStore;
+      await _tokenStoreScopes.clearRetired(oldTokenStore);
+      if (_contextRevision != startedAtRevision ||
+          _serverUrl != savedServerUrl ||
+          !identical(_tokenStore, installedTokenStore)) {
+        return;
+      }
       _serverInfo = null;
       _lastErrorCode = null;
       _user = null;
@@ -85,6 +104,39 @@ class ServerProvider with ChangeNotifier {
       _passwordChangeChallenge = null;
       _deviceSessions = const [];
       _contextRevision += 1;
+    }
+    final restoreRevision = _contextRevision;
+    final restoreStore = _tokenStore;
+    if (_serverUrl.isNotEmpty) {
+      try {
+        final session = await restoreStore.read();
+        if (_contextRevision != restoreRevision ||
+            !identical(_tokenStore, restoreStore)) {
+          return;
+        }
+        if (session != null) {
+          if (!session.refreshTokenExpiresAt.isAfter(DateTime.now())) {
+            await restoreStore.clear();
+            if (_contextRevision != restoreRevision ||
+                !identical(_tokenStore, restoreStore)) {
+              return;
+            }
+          } else {
+            _user = session.user;
+            _account = null;
+            _passwordChangeChallenge = null;
+            _deviceSessions = const [];
+            _lastErrorCode = null;
+            _contextRevision += 1;
+          }
+        }
+      } catch (error) {
+        if (_contextRevision == restoreRevision &&
+            identical(_tokenStore, restoreStore)) {
+          _lastErrorCode = 'TOKEN_STORAGE_UNAVAILABLE';
+          debugPrint('[ServerProvider] restore authentication error: $error');
+        }
+      }
     }
     notifyListeners();
   }
@@ -102,7 +154,7 @@ class ServerProvider with ChangeNotifier {
     _deviceSessions = const [];
     _contextRevision += 1;
     notifyListeners();
-    await oldTokenStore.clear();
+    await _tokenStoreScopes.clearRetired(oldTokenStore);
     _lastUrlSave = _lastUrlSave.then((_) async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('server_url', normalized);
@@ -113,9 +165,7 @@ class ServerProvider with ChangeNotifier {
   Future<void> setDeviceId(String deviceId) async {
     if (_deviceId == deviceId) return;
     _deviceId = deviceId;
-    _api?.close();
-    _api = null;
-    _contextRevision += 1;
+    _api?.updateDeviceId(deviceId);
     notifyListeners();
   }
 
@@ -136,7 +186,7 @@ class ServerProvider with ChangeNotifier {
     _setBusy(true);
     try {
       final attempt = _beginAuthentication();
-      await attempt.oldTokenStore.clear();
+      await _tokenStoreScopes.clearRetired(attempt.oldTokenStore);
       _ensureCurrentRevision(attempt.revision);
       await _ensureServerInfo();
       final requestedApi = api;
@@ -160,7 +210,7 @@ class ServerProvider with ChangeNotifier {
     _setBusy(true);
     try {
       final attempt = _beginAuthentication();
-      await attempt.oldTokenStore.clear();
+      await _tokenStoreScopes.clearRetired(attempt.oldTokenStore);
       _ensureCurrentRevision(attempt.revision);
       await _ensureServerInfo();
       final requestedApi = api;
@@ -337,10 +387,25 @@ class ServerProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
-    final apiToLogout = _user != null ? api : null;
-    final oldTokenStore = _tokenStore;
-    _tokenStore = MemoryTokenStore();
-    _api = null;
+    final requestedAtRevision = _contextRevision;
+    final requestedStore = _tokenStore;
+    AuthSessionDto? sessionToRevoke;
+    if (_user != null) {
+      try {
+        sessionToRevoke = await requestedStore.read();
+      } catch (error) {
+        debugPrint('[ServerProvider] read session for logout error: $error');
+      }
+    }
+    if (_contextRevision != requestedAtRevision ||
+        !identical(_tokenStore, requestedStore)) {
+      return;
+    }
+
+    final apiToLogout = sessionToRevoke == null
+        ? null
+        : _buildDetachedApi(MemoryTokenStore(sessionToRevoke));
+    final oldTokenStore = _replaceAuthContext();
     _user = null;
     _account = null;
     _passwordChangeChallenge = null;
@@ -348,11 +413,15 @@ class ServerProvider with ChangeNotifier {
     _lastErrorCode = null;
     _contextRevision += 1;
     notifyListeners();
+    final clearRetiredSession = _tokenStoreScopes.clearRetired(oldTokenStore);
     try {
       await apiToLogout?.logout();
     } finally {
-      await oldTokenStore.clear();
-      apiToLogout?.close();
+      try {
+        await clearRetiredSession;
+      } finally {
+        apiToLogout?.close();
+      }
     }
   }
 
@@ -394,8 +463,22 @@ class ServerProvider with ChangeNotifier {
     return builtApi;
   }
 
+  ServerApi _buildDetachedApi(TokenStore tokenStore) {
+    final uri = Uri.tryParse(_serverUrl);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw StateError('服务器地址必须是完整的 http(s) URL');
+    }
+    return _apiFactory(
+      baseUri: uri,
+      tokenStore: tokenStore,
+      deviceId: _deviceId,
+      onAuthInvalidated: () {},
+    );
+  }
+
   void _handleAuthInvalidated(ServerApi source) {
     if (!identical(_api, source) || _user == null) return;
+    _replaceAuthContext();
     _user = null;
     _account = null;
     _deviceSessions = const [];
@@ -404,15 +487,15 @@ class ServerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  MemoryTokenStore _replaceAuthContext() {
+  TokenStore _replaceAuthContext() {
     final oldTokenStore = _tokenStore;
-    _tokenStore = MemoryTokenStore();
+    _tokenStore = _createTokenStore();
     _api?.close();
     _api = null;
     return oldTokenStore;
   }
 
-  ({int revision, MemoryTokenStore oldTokenStore}) _beginAuthentication() {
+  ({int revision, TokenStore oldTokenStore}) _beginAuthentication() {
     final oldTokenStore = _replaceAuthContext();
     _user = null;
     _account = null;
@@ -452,7 +535,7 @@ class ServerProvider with ChangeNotifier {
     _lastErrorCode = null;
     _contextRevision += 1;
     notifyListeners();
-    await oldTokenStore.clear();
+    await _tokenStoreScopes.clearRetired(oldTokenStore);
   }
 
   static ServerApi _defaultApiFactory({
@@ -468,8 +551,49 @@ class ServerProvider with ChangeNotifier {
         onAuthInvalidated: onAuthInvalidated,
       );
 
+  TokenStore _createTokenStore() {
+    final rawStore = _serverUrl.isEmpty
+        ? MemoryTokenStore()
+        : _tokenStoreFactory(_serverUrl);
+    _watchTokenStorageStatus(rawStore);
+    return _tokenStoreScopes.scope(rawStore);
+  }
+
+  void _watchTokenStorageStatus(TokenStore rawStore) {
+    _tokenStorageStatusSource?.removeListener(_handleTokenStorageStatus);
+    final ValueListenable<TokenStorageStatus>? source;
+    if (rawStore is TokenStorageStatusSource) {
+      source = (rawStore as TokenStorageStatusSource).storageStatus;
+    } else {
+      source = null;
+    }
+    _tokenStorageStatusSource = source;
+    _tokenStorageStatus = source?.value ??
+        const TokenStorageStatus(
+          backend: TokenStorageBackend.platformSecure,
+        );
+    source?.addListener(_handleTokenStorageStatus);
+  }
+
+  void _handleTokenStorageStatus() {
+    final source = _tokenStorageStatusSource;
+    if (source == null) return;
+    final next = source.value;
+    if (_tokenStorageStatus.backend == next.backend &&
+        _tokenStorageStatus.reason == next.reason) {
+      return;
+    }
+    _tokenStorageStatus = next;
+    notifyListeners();
+  }
+
+  static TokenStore _defaultTokenStoreFactory(String serverUrl) =>
+      SecureTokenStore(serverUrl: serverUrl);
+
   @override
   void dispose() {
+    _tokenStorageStatusSource?.removeListener(_handleTokenStorageStatus);
+    _tokenStoreScopes.invalidateCurrentScope();
     _api?.close();
     super.dispose();
   }
