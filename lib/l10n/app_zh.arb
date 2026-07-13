@@ -196,5 +196,13 @@
   "@libraryImportSucceeded": {"placeholders": {"summary": {"type": "String"}}},
   "libraryImportFailed": "导入词库失败：{error}",
   "@libraryImportFailed": {"placeholders": {"error": {"type": "String"}}},
-  "listSeparator": "，"
+  "listSeparator": "，",
+  "fontPickerTitle": "选择字体",
+  "fontSearchHint": "搜索字体",
+  "fontResultCount": "共 {count} 个字体",
+  "@fontResultCount": {"placeholders": {"count": {"type": "int"}}},
+  "fontSystemDefault": "系统默认",
+  "fontBuiltIn": "内置",
+  "fontPreview": "预览",
+  "fontPreviewSample": "OpenLogTool · CQ CQ · 点名记录 123"
 }

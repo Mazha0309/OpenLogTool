@@ -316,124 +316,34 @@ class AddRecordPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logProvider = Provider.of<LogProvider>(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context);
     final conflictedLogIds =
         context.watch<CollaborationProvider>().conflictedLogIds;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWideScreen =
-            constraints.maxWidth > 1200 && settingsProvider.wideLayoutEnabled;
-
-        final content = isWideScreen
-            ? _buildWideLayout(context, logProvider, conflictedLogIds)
-            : _buildNarrowLayout(context, logProvider, conflictedLogIds);
-        if (!logProvider.currentSessionReadOnly) {
-          return content;
-        }
-        return Column(
-          children: [
-            Container(
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.secondaryContainer,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.lock_outline, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(context.l10n.sharedDraftReadOnly),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(child: content),
-          ],
-        );
-      },
+    final content = _buildStackedLayout(
+      context,
+      logProvider,
+      conflictedLogIds,
+    );
+    if (!logProvider.currentSessionReadOnly) return content;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_outline, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text(context.l10n.sharedDraftReadOnly)),
+            ],
+          ),
+        ),
+        Expanded(child: content),
+      ],
     );
   }
 
-  Widget _buildWideLayout(
-    BuildContext context,
-    LogProvider logProvider,
-    Set<String> conflictedLogIds,
-  ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 1,
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          context.l10n.currentRecord,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        _currentOrdinalBadge(context, logProvider.logCount),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: LogForm(
-                        readOnly: logProvider.currentSessionReadOnly,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 2,
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildLogHeader(context, logProvider),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '已有记录',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    LogTable(
-                      readOnly: logProvider.currentSessionReadOnly,
-                      conflictedLogIds: conflictedLogIds,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNarrowLayout(
+  Widget _buildStackedLayout(
     BuildContext context,
     LogProvider logProvider,
     Set<String> conflictedLogIds,
@@ -798,66 +708,27 @@ class ImportExportPage extends StatelessWidget {
   const ImportExportPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWideScreen =
-            constraints.maxWidth > 900 && settingsProvider.wideLayoutEnabled;
-
-        if (isWideScreen) {
-          return const SingleChildScrollView(
-            padding: EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: ExportPanel(),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Flexible(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: DictionaryManager(),
-                    ),
-                  ),
-                ),
-              ],
+  Widget build(BuildContext context) => const SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(12.0),
+                child: ExportPanel(),
+              ),
             ),
-          );
-        } else {
-          return const SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12.0),
-                    child: ExportPanel(),
-                  ),
-                ),
-                SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12.0),
-                    child: DictionaryManager(),
-                  ),
-                ),
-              ],
+            SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(12.0),
+                child: DictionaryManager(),
+              ),
             ),
-          );
-        }
-      },
-    );
-  }
+          ],
+        ),
+      );
 }
 
 class SettingsPage extends StatelessWidget {

@@ -5,11 +5,13 @@ import 'package:openlogtool/widgets/primary_navigation_rail.dart';
 
 void main() {
   testWidgets('desktop rail can collapse and expand', (tester) async {
+    var contentLayoutCount = 0;
     await tester.pumpWidget(
-      const _RailHarness(
-        locale: Locale('zh', 'CN'),
+      _RailHarness(
+        locale: const Locale('zh', 'CN'),
         isDesktop: true,
         initiallyExpanded: true,
+        onContentLayout: () => contentLayoutCount += 1,
       ),
     );
 
@@ -22,16 +24,34 @@ void main() {
     expect(find.text('OpenLogTool'), findsOneWidget);
     final expandedHeaderSize =
         tester.getSize(find.byKey(const Key('primary-sidebar-header')));
+    final expandedRailWidth =
+        tester.getSize(find.byKey(const Key('desktop-navigation'))).width;
+    final expandedRailState = tester.state(find.byType(NavigationRail));
+    final layoutsBeforeCollapse = contentLayoutCount;
 
-    await tester.tap(find.byKey(const Key('collapse-primary-sidebar')));
-    await tester.pump(const Duration(milliseconds: 80));
+    collapse.onPressed!();
+    await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byKey(const Key('desktop-navigation'))).width,
+      lessThan(expandedRailWidth),
+    );
     expect(
       tester.getSize(find.byKey(const Key('primary-sidebar-header'))).height,
       expandedHeaderSize.height,
     );
-    await tester.pumpAndSettle();
+    expect(tester.state(find.byType(NavigationRail)),
+        isNot(same(expandedRailState)));
+    expect(contentLayoutCount, greaterThan(layoutsBeforeCollapse));
+    final layoutsAfterAtomicSwitch = contentLayoutCount;
+
+    // Additional frames must not keep changing the adjacent content width.
+    // NavigationRail's normal extended animation would lay it out on each pump.
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(contentLayoutCount, layoutsAfterAtomicSwitch);
+    expect(tester.hasRunningAnimations, isFalse);
 
     expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
         isFalse);
@@ -41,10 +61,15 @@ void main() {
     );
     expect(expand.tooltip, '展开侧边栏');
 
-    await tester.tap(find.byKey(const Key('expand-primary-sidebar')));
-    await tester.pumpAndSettle();
+    expand.onPressed!();
+    await tester.pump();
     expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
         isTrue);
+    expect(
+      tester.getSize(find.byKey(const Key('desktop-navigation'))).width,
+      expandedRailWidth,
+    );
+    expect(tester.hasRunningAnimations, isFalse);
   });
 
   testWidgets('tablet remains compact and has no manual toggle',
@@ -71,11 +96,13 @@ class _RailHarness extends StatefulWidget {
     required this.locale,
     required this.isDesktop,
     required this.initiallyExpanded,
+    this.onContentLayout,
   });
 
   final Locale locale;
   final bool isDesktop;
   final bool initiallyExpanded;
+  final VoidCallback? onContentLayout;
 
   @override
   State<_RailHarness> createState() => _RailHarnessState();
@@ -111,7 +138,14 @@ class _RailHarnessState extends State<_RailHarness> {
                   ),
                 ],
               ),
-              const Expanded(child: SizedBox()),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    widget.onContentLayout?.call();
+                    return const SizedBox.expand();
+                  },
+                ),
+              ),
             ],
           ),
         ),

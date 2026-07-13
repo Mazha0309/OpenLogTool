@@ -6,7 +6,6 @@ import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/models/export_settings.dart';
 
 class SettingsProvider with ChangeNotifier {
-  static const String _wideLayoutKey = 'wideLayoutEnabled';
   static const String _themeColorKey = 'themeColor';
   static const String _isDarkModeKey = 'isDarkMode';
   static const String _fontFamilyKey = 'fontFamily';
@@ -19,7 +18,6 @@ class SettingsProvider with ChangeNotifier {
       'controllerDeviceModeEnabled';
   static const String _primarySidebarExpandedKey = 'primarySidebarExpanded';
 
-  bool _wideLayoutEnabled = false;
   Color _themeColor = const Color(0xFF2196F3);
   bool _isDarkMode = false;
   String _fontFamily = '';
@@ -33,7 +31,6 @@ class SettingsProvider with ChangeNotifier {
   ControllerDisplayPreferences _controllerDisplayPreferences =
       const ControllerDisplayPreferences();
 
-  bool get wideLayoutEnabled => _wideLayoutEnabled;
   Color get themeColor => _themeColor;
   bool get isDarkMode => _isDarkMode;
   String? get fontFamily => _fontFamily.isEmpty ? null : _fontFamily;
@@ -56,7 +53,6 @@ class SettingsProvider with ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
 
-    _wideLayoutEnabled = prefs.getBool(_wideLayoutKey) ?? false;
     _isDarkMode = prefs.getBool(_isDarkModeKey) ?? false;
     _fontFamily = prefs.getString(_fontFamilyKey) ?? '';
 
@@ -97,18 +93,6 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleWideLayout() async {
-    _wideLayoutEnabled = !_wideLayoutEnabled;
-    await _saveSetting(_wideLayoutKey, _wideLayoutEnabled);
-    notifyListeners();
-  }
-
-  Future<void> setWideLayout(bool enabled) async {
-    _wideLayoutEnabled = enabled;
-    await _saveSetting(_wideLayoutKey, enabled);
-    notifyListeners();
-  }
-
   Future<void> setThemeColor(Color color) async {
     _themeColor = color;
     await _saveSetting(_themeColorKey, color.toARGB32());
@@ -128,9 +112,13 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> setFontFamily(String? fontFamily) async {
-    _fontFamily = fontFamily ?? '';
-    await _saveSetting(_fontFamilyKey, _fontFamily);
+    final normalized = fontFamily?.trim() ?? '';
+    if (_fontFamily == normalized) return;
+    _fontFamily = normalized;
+    // Apply the selected font immediately. Persisting first made the picker
+    // feel unresponsive, especially on slower desktop storage.
     notifyListeners();
+    await _saveSetting(_fontFamilyKey, _fontFamily);
   }
 
   Future<void> setCallSignQthLink(bool enabled) async {
@@ -196,7 +184,6 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> resetToDefaults() async {
-    _wideLayoutEnabled = false;
     _themeColor = const Color(0xFF2196F3);
     _isDarkMode = false;
     _fontFamily = '';
@@ -208,7 +195,6 @@ class SettingsProvider with ChangeNotifier {
     _controllerDisplayPreferences = const ControllerDisplayPreferences();
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_wideLayoutKey);
     await prefs.remove(_themeColorKey);
     await prefs.remove(_isDarkModeKey);
     await prefs.remove(_fontFamilyKey);

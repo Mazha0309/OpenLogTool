@@ -179,5 +179,12 @@
   "libraryImportCount": "{name} {count} 条",
   "libraryImportSucceeded": "已导入：{summary}",
   "libraryImportFailed": "导入词库失败：{error}",
-  "listSeparator": "，"
+  "listSeparator": "，",
+  "fontPickerTitle": "选择字体",
+  "fontSearchHint": "搜索字体",
+  "fontResultCount": "共 {count} 个字体",
+  "fontSystemDefault": "系统默认",
+  "fontBuiltIn": "内置",
+  "fontPreview": "预览",
+  "fontPreviewSample": "OpenLogTool · CQ CQ · 点名记录 123"
 }

@@ -46,14 +46,6 @@ class LayoutSettings extends StatelessWidget {
             SizedBox(height: isNarrow ? 12 : 16),
             _buildSwitchRow(
               context: context,
-              title: '启用宽屏平行布局',
-              subtitle: '在窗口宽度足够时，将添加记录和已有记录并排显示',
-              value: settingsProvider.wideLayoutEnabled,
-              onChanged: (v) => settingsProvider.setWideLayout(v),
-            ),
-            const Divider(height: 16),
-            _buildSwitchRow(
-              context: context,
               title: '分页显示记录',
               subtitle: '每 5 条记录分为一页显示',
               value: settingsProvider.paginationEnabled,

@@ -168,5 +168,12 @@
   "libraryImportCount": "{name}: {count}",
   "libraryImportSucceeded": "Imported: {summary}",
   "libraryImportFailed": "Could not import libraries: {error}",
-  "listSeparator": ", "
+  "listSeparator": ", ",
+  "fontPickerTitle": "Choose font",
+  "fontSearchHint": "Search fonts",
+  "fontResultCount": "{count} fonts",
+  "fontSystemDefault": "System default",
+  "fontBuiltIn": "Built in",
+  "fontPreview": "Preview",
+  "fontPreviewSample": "OpenLogTool · CQ CQ · Net log 123"
 }

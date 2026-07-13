@@ -15,6 +15,7 @@ import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
+import 'package:openlogtool/widgets/font_picker_dialog.dart';
 import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
 
 class SettingsPanel extends StatelessWidget {
@@ -620,7 +621,6 @@ class SettingsPanel extends StatelessWidget {
               const Text('• 设备、天线、呼号、QTH 词库管理'),
               const Text('• 数据导入导出 (JSON, Excel)'),
               const Text('• 暗色/亮色主题切换'),
-              const Text('• 宽屏平行布局'),
               const Text('• 自定义主题颜色'),
               const Text('• 一键清除数据库'),
               const SizedBox(height: 12),
@@ -641,18 +641,18 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
-  void _showFontPicker(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-
-    showDialog(
+  Future<void> _showFontPicker(BuildContext context) async {
+    final settingsProvider = context.read<SettingsProvider>();
+    final result = await showDialog<FontPickerResult>(
       context: context,
-      builder: (context) => _FontPickerDialog(
+      builder: (_) => FontPickerDialog(
         availableFonts: settingsProvider.availableFonts,
         currentFont: settingsProvider.fontFamily,
-        onSelected: (font) => settingsProvider.setFontFamily(font),
       ),
     );
+    if (result == null || !context.mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    await settingsProvider.setFontFamily(result.fontFamily);
   }
 
   void _showLoginDialog(BuildContext context, ServerProvider serverProvider) {
@@ -763,143 +763,6 @@ class SettingsPanel extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _FontPickerDialog extends StatefulWidget {
-  final List<String> availableFonts;
-  final String? currentFont;
-  final ValueChanged<String?> onSelected;
-
-  const _FontPickerDialog({
-    required this.availableFonts,
-    required this.currentFont,
-    required this.onSelected,
-  });
-
-  @override
-  State<_FontPickerDialog> createState() => _FontPickerDialogState();
-}
-
-class _FontPickerDialogState extends State<_FontPickerDialog> {
-  late final TextEditingController _searchController;
-  String _query = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  List<String> get _filteredFonts {
-    if (_query.isEmpty) return widget.availableFonts;
-    final lower = _query.toLowerCase();
-    return widget.availableFonts
-        .where((font) => font.toLowerCase().contains(lower))
-        .toList();
-  }
-
-  void _select(String? font) {
-    widget.onSelected(font);
-    Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final filtered = _filteredFonts;
-
-    return AlertDialog(
-      title: const Text('选择字体'),
-      content: SizedBox(
-        width: 360,
-        height: 460,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _searchController,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: '搜索字体...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
-                      )
-                    : null,
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-              onChanged: (value) => setState(() => _query = value),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '共 ${filtered.length} 个字体',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: filtered.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    final isSelected = widget.currentFont == null ||
-                        widget.currentFont!.isEmpty;
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.font_download_outlined),
-                      title: const Text('系统默认'),
-                      trailing: isSelected
-                          ? Icon(Icons.check, color: theme.colorScheme.primary)
-                          : null,
-                      selected: isSelected,
-                      onTap: () => _select(null),
-                    );
-                  }
-
-                  final font = filtered[index - 1];
-                  final isSelected = font == widget.currentFont;
-                  final isBuiltin = font == 'SarasaGothicSC';
-
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      isBuiltin ? '$font (内置)' : font,
-                      style: TextStyle(fontFamily: font),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: isSelected
-                        ? Icon(Icons.check, color: theme.colorScheme.primary)
-                        : null,
-                    selected: isSelected,
-                    onTap: () => _select(font),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-      ],
     );
   }
 }

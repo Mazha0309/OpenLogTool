@@ -1113,6 +1113,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'，'**
   String get listSeparator;
+
+  /// No description provided for @fontPickerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择字体'**
+  String get fontPickerTitle;
+
+  /// No description provided for @fontSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索字体'**
+  String get fontSearchHint;
+
+  /// No description provided for @fontResultCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'共 {count} 个字体'**
+  String fontResultCount(int count);
+
+  /// No description provided for @fontSystemDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统默认'**
+  String get fontSystemDefault;
+
+  /// No description provided for @fontBuiltIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置'**
+  String get fontBuiltIn;
+
+  /// No description provided for @fontPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览'**
+  String get fontPreview;
+
+  /// No description provided for @fontPreviewSample.
+  ///
+  /// In zh, this message translates to:
+  /// **'OpenLogTool · CQ CQ · 点名记录 123'**
+  String get fontPreviewSample;
 }
 
 class _AppLocalizationsDelegate

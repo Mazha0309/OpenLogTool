@@ -593,6 +593,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get listSeparator => ', ';
+
+  @override
+  String get fontPickerTitle => 'Choose font';
+
+  @override
+  String get fontSearchHint => 'Search fonts';
+
+  @override
+  String fontResultCount(int count) {
+    return '$count fonts';
+  }
+
+  @override
+  String get fontSystemDefault => 'System default';
+
+  @override
+  String get fontBuiltIn => 'Built in';
+
+  @override
+  String get fontPreview => 'Preview';
+
+  @override
+  String get fontPreviewSample => 'OpenLogTool · CQ CQ · Net log 123';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -1184,4 +1207,27 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get listSeparator => ', ';
+
+  @override
+  String get fontPickerTitle => 'Choose font';
+
+  @override
+  String get fontSearchHint => 'Search fonts';
+
+  @override
+  String fontResultCount(int count) {
+    return '$count fonts';
+  }
+
+  @override
+  String get fontSystemDefault => 'System default';
+
+  @override
+  String get fontBuiltIn => 'Built in';
+
+  @override
+  String get fontPreview => 'Preview';
+
+  @override
+  String get fontPreviewSample => 'OpenLogTool · CQ CQ · Net log 123';
 }

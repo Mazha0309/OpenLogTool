@@ -26,9 +26,15 @@ class PrimaryNavigationRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveExpanded = isDesktop && expanded;
-    return RepaintBoundary(
+    return KeyedSubtree(
+      key: Key(isDesktop ? 'desktop-navigation' : 'tablet-navigation'),
       child: NavigationRail(
-        key: Key(isDesktop ? 'desktop-navigation' : 'tablet-navigation'),
+        // Recreate the rail at its final width. Updating `extended` on the same
+        // state runs Material's 200 ms width animation; because the rail is a
+        // child of a Row, that forces the entire IndexedStack beside it to be
+        // laid out on every tick. An atomic state swap performs one layout and
+        // remains responsive even while the log table is busy.
+        key: ValueKey('navigation-rail-$effectiveExpanded'),
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
         extended: effectiveExpanded,
@@ -43,12 +49,9 @@ class PrimaryNavigationRail extends StatelessWidget {
         leading: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: isDesktop
-              ? Builder(
-                  builder: (context) => _AnimatedDesktopRailHeader(
-                    animation: NavigationRail.extendedAnimation(context),
-                    expanded: expanded,
-                    onExpandedChanged: onExpandedChanged,
-                  ),
+              ? _DesktopRailHeader(
+                  expanded: effectiveExpanded,
+                  onExpandedChanged: onExpandedChanged,
                 )
               : const SizedBox(
                   height: 48,
@@ -61,18 +64,12 @@ class PrimaryNavigationRail extends StatelessWidget {
   }
 }
 
-/// Uses the rail's own width animation instead of swapping between a row and a
-/// column at the start of the transition. The old swap changed the header's
-/// height immediately while the rail was still animating, which caused the
-/// destinations and content pane to visibly jump.
-class _AnimatedDesktopRailHeader extends StatelessWidget {
-  const _AnimatedDesktopRailHeader({
-    required this.animation,
+class _DesktopRailHeader extends StatelessWidget {
+  const _DesktopRailHeader({
     required this.expanded,
     required this.onExpandedChanged,
   });
 
-  final Animation<double> animation;
   final bool expanded;
   final ValueChanged<bool> onExpandedChanged;
 
@@ -80,72 +77,38 @@ class _AnimatedDesktopRailHeader extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         key: const Key('primary-sidebar-header'),
         height: 48,
-        child: AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            final progress = animation.value;
-            return SizedBox(
-              width: 72 + (152 * progress),
-              child: ClipRect(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (progress > 0)
-                      Positioned(
-                        left: 16,
-                        right: 52,
-                        top: 0,
-                        bottom: 0,
-                        child: Opacity(
-                          opacity: progress,
-                          child: const Row(
-                            children: [
-                              Icon(Icons.graphic_eq, size: 26),
-                              SizedBox(width: 10),
-                              Flexible(
-                                child: Text(
-                                  'OpenLogTool',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  softWrap: false,
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    Align(
-                      alignment: Alignment.lerp(
-                        Alignment.center,
-                        Alignment.centerRight,
-                        progress,
-                      )!,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: progress * 4),
-                        child: IconButton(
-                          key: Key(
-                            expanded
-                                ? 'collapse-primary-sidebar'
-                                : 'expand-primary-sidebar',
-                          ),
-                          tooltip: expanded
-                              ? context.l10n.collapseSidebar
-                              : context.l10n.expandSidebar,
-                          onPressed: () => onExpandedChanged(!expanded),
-                          icon: Icon(
-                            expanded
-                                ? Icons.keyboard_double_arrow_left
-                                : Icons.keyboard_double_arrow_right,
-                          ),
-                        ),
-                      ),
+        width: expanded ? 224 : 72,
+        child: expanded
+            ? Row(
+                children: [
+                  const SizedBox(width: 16),
+                  const Icon(Icons.graphic_eq, size: 26),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'OpenLogTool',
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      softWrap: false,
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
-                  ],
+                  ),
+                  IconButton(
+                    key: const Key('collapse-primary-sidebar'),
+                    tooltip: context.l10n.collapseSidebar,
+                    onPressed: () => onExpandedChanged(false),
+                    icon: const Icon(Icons.keyboard_double_arrow_left),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              )
+            : Center(
+                child: IconButton(
+                  key: const Key('expand-primary-sidebar'),
+                  tooltip: context.l10n.expandSidebar,
+                  onPressed: () => onExpandedChanged(true),
+                  icon: const Icon(Icons.keyboard_double_arrow_right),
                 ),
               ),
-            );
-          },
-        ),
       );
 }

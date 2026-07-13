@@ -572,6 +572,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get listSeparator => '，';
+
+  @override
+  String get fontPickerTitle => '选择字体';
+
+  @override
+  String get fontSearchHint => '搜索字体';
+
+  @override
+  String fontResultCount(int count) {
+    return '共 $count 个字体';
+  }
+
+  @override
+  String get fontSystemDefault => '系统默认';
+
+  @override
+  String get fontBuiltIn => '内置';
+
+  @override
+  String get fontPreview => '预览';
+
+  @override
+  String get fontPreviewSample => 'OpenLogTool · CQ CQ · 点名记录 123';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -1142,4 +1165,27 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get listSeparator => '，';
+
+  @override
+  String get fontPickerTitle => '选择字体';
+
+  @override
+  String get fontSearchHint => '搜索字体';
+
+  @override
+  String fontResultCount(int count) {
+    return '共 $count 个字体';
+  }
+
+  @override
+  String get fontSystemDefault => '系统默认';
+
+  @override
+  String get fontBuiltIn => '内置';
+
+  @override
+  String get fontPreview => '预览';
+
+  @override
+  String get fontPreviewSample => 'OpenLogTool · CQ CQ · 点名记录 123';
 }
