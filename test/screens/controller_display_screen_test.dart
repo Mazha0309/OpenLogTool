@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
@@ -12,6 +13,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final data = _data();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -19,7 +21,7 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: ControllerDisplayScreen(
-          data: _data(),
+          data: data,
           showCloseButton: false,
         ),
       ),
@@ -27,7 +29,13 @@ void main() {
 
     expect(find.text('周日晚间点名'), findsOneWidget);
     expect(find.text('当前第 8 位'), findsOneWidget);
-    expect(find.text('已保存 7 位 · 更新 20:00:00 · 书记员乙 编辑'), findsOneWidget);
+    final updatedAt = DateFormat('HH:mm:ss').format(
+      data.lastUpdatedAt!.toLocal(),
+    );
+    expect(
+      find.text('已保存 7 位 · 更新 $updatedAt · 书记员乙 编辑'),
+      findsOneWidget,
+    );
     expect(find.text('BA4AAA'), findsWidgets);
     expect(find.text('上一位已保存记录'), findsOneWidget);
     expect(find.text('BH4BBB'), findsOneWidget);
