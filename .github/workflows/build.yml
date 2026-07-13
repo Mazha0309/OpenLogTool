@@ -126,6 +126,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -705,8 +711,8 @@ jobs:
           library="$app/Contents/Frameworks/libopenlogtool_core.dylib"
           test -x "$executable"
           test -s "$library"
-          xcrun lipo -verify_arch arm64 x86_64 "$executable"
-          xcrun lipo -verify_arch arm64 x86_64 "$library"
+          xcrun lipo "$executable" -verify_arch arm64 x86_64
+          xcrun lipo "$library" -verify_arch arm64 x86_64
           xcrun otool -D "$library" | tail -n +2 |
             grep -Fx '@rpath/libopenlogtool_core.dylib'
           xcrun otool -l "$executable" | grep -A3 LC_RPATH |
@@ -774,7 +780,7 @@ jobs:
           packaged_library="$packaged_app/Contents/Frameworks/libopenlogtool_core.dylib"
           test -x "$packaged_executable"
           test -s "$packaged_library"
-          xcrun lipo -verify_arch arm64 x86_64 "$packaged_library"
+          xcrun lipo "$packaged_library" -verify_arch arm64 x86_64
           codesign --verify --deep --strict --verbose=2 "$packaged_app"
 
           smoke_root="$RUNNER_TEMP/openlogtool-macos-package-smoke"

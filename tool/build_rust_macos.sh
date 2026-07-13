@@ -117,7 +117,7 @@ for architecture in "${architecture_list[@]}"; do
   case "$architecture" in
     arm64e | aarch64) architecture="arm64" ;;
   esac
-  xcrun lipo -verify_arch "$architecture" "$MERGED_LIBRARY"
+  xcrun lipo "$MERGED_LIBRARY" -verify_arch "$architecture"
 done
 
 # Keep the identity independent of the checkout path. Dart opens this dylib
