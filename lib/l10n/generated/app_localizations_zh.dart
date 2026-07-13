@@ -175,6 +175,28 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get historySessionDeleteTitle => '永久删除本机会话';
+
+  @override
+  String historySessionDeleteWarning(String title) {
+    return '将永久删除本机“$title”的所有日志及本地协作副本。此操作不可撤销，但不会删除或关闭服务器上的共享会话。请输入完整会话名以确认：';
+  }
+
+  @override
+  String get historySessionDeleteNameLabel => '完整会话名';
+
+  @override
+  String get historySessionDeleteAction => '永久删除本机数据';
+
+  @override
+  String get historySessionDeleted => '已永久删除本机会话';
+
+  @override
+  String historySessionDeleteFailed(String error) {
+    return '永久删除本机会话失败：$error';
+  }
+
+  @override
   String get historySessionReadOnly => '当前为已关闭的历史会话，只能查看已有记录。';
 
   @override
@@ -1334,6 +1356,28 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String historySessionCloseFailed(String error) {
     return '关闭会话失败：$error';
+  }
+
+  @override
+  String get historySessionDeleteTitle => '永久删除本机会话';
+
+  @override
+  String historySessionDeleteWarning(String title) {
+    return '将永久删除本机“$title”的所有日志及本地协作副本。此操作不可撤销，但不会删除或关闭服务器上的共享会话。请输入完整会话名以确认：';
+  }
+
+  @override
+  String get historySessionDeleteNameLabel => '完整会话名';
+
+  @override
+  String get historySessionDeleteAction => '永久删除本机数据';
+
+  @override
+  String get historySessionDeleted => '已永久删除本机会话';
+
+  @override
+  String historySessionDeleteFailed(String error) {
+    return '永久删除本机会话失败：$error';
   }
 
   @override

@@ -259,6 +259,7 @@ class SessionHubPage extends StatelessWidget {
         const SizedBox(height: 12),
         Card(
           child: ListTile(
+            key: const Key('open-session-history'),
             leading: const Icon(Icons.history),
             title: Text(context.l10n.historySessions),
             subtitle: Text(context.l10n.historySessionsHint),

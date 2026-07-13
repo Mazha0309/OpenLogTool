@@ -388,6 +388,42 @@ abstract class AppLocalizations {
   /// **'关闭会话失败：{error}'**
   String historySessionCloseFailed(String error);
 
+  /// No description provided for @historySessionDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除本机会话'**
+  String get historySessionDeleteTitle;
+
+  /// No description provided for @historySessionDeleteWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'将永久删除本机“{title}”的所有日志及本地协作副本。此操作不可撤销，但不会删除或关闭服务器上的共享会话。请输入完整会话名以确认：'**
+  String historySessionDeleteWarning(String title);
+
+  /// No description provided for @historySessionDeleteNameLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整会话名'**
+  String get historySessionDeleteNameLabel;
+
+  /// No description provided for @historySessionDeleteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除本机数据'**
+  String get historySessionDeleteAction;
+
+  /// No description provided for @historySessionDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已永久删除本机会话'**
+  String get historySessionDeleted;
+
+  /// No description provided for @historySessionDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除本机会话失败：{error}'**
+  String historySessionDeleteFailed(String error);
+
   /// No description provided for @historySessionReadOnly.
   ///
   /// In zh, this message translates to:

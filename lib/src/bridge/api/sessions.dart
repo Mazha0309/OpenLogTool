@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import '../models/session.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `into_session`
+// These functions are ignored because they are not marked as `pub`: `hard_delete_session_from_pool`, `into_session`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SessionRow`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from_row`
 
@@ -19,6 +19,15 @@ Future<List<Session>> listSessions() =>
 
 Future<void> closeSession({required String sessionId}) =>
     RustLib.instance.api.crateApiSessionsCloseSession(sessionId: sessionId);
+
+/// Permanently removes a closed session from this device.
+///
+/// This is deliberately a local-only operation. Deleting the collaboration
+/// binding also cascades through every local replica table, but no mutation is
+/// sent to the server and the shared server session is left untouched.
+Future<void> hardDeleteSession({required String sessionId}) =>
+    RustLib.instance.api
+        .crateApiSessionsHardDeleteSession(sessionId: sessionId);
 
 Future<Session> joinSession({required String shareCode}) =>
     RustLib.instance.api.crateApiSessionsJoinSession(shareCode: shareCode);

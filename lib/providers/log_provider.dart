@@ -108,6 +108,9 @@ class LogProvider with ChangeNotifier {
     String? sessionId, {
     bool propagateErrors = false,
   }) async {
+    if (_currentSessionId != sessionId) {
+      _undoStack.clear();
+    }
     final stateGeneration = ++_sessionStateGeneration;
     _currentSessionId = sessionId;
     _currentSessionWritable = false;
@@ -383,17 +386,30 @@ class LogProvider with ChangeNotifier {
     await reloadForSession(sessionId);
   }
 
-  Future<void> hardDeleteSession(String sessionId) async {
+  Future<void> closeSession(String sessionId) async {
     _ensureWritable(sessionId);
     try {
       await RustApi.closeSession(sessionId: sessionId);
       if (_currentSessionId == sessionId) {
-        _currentSessionId = null;
-        _currentSessionWritable = false;
-        _sessionStateGeneration += 1;
-        _logs = [];
+        await reloadForSession(sessionId, propagateErrors: true);
+      } else {
         _safeNotify();
       }
+    } catch (e, st) {
+      debugPrint('[LogProvider] closeSession failed: $e\n$st');
+      rethrow;
+    }
+  }
+
+  Future<void> hardDeleteSession(String sessionId) async {
+    if (_currentSessionId == sessionId) {
+      throw StateError('CURRENT_SESSION_DELETE_FORBIDDEN');
+    }
+    try {
+      await RustApi.hardDeleteSession(sessionId: sessionId);
+      _collaborationReadOnlySessions.remove(sessionId);
+      _undoStack.removeWhere((log) => log.sessionId == sessionId);
+      _safeNotify();
     } catch (e, st) {
       debugPrint('[LogProvider] hardDeleteSession failed: $e\n$st');
       rethrow;

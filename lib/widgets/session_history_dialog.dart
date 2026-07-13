@@ -44,7 +44,8 @@ Future<void> showSessionHistoryDialog(
           Error.throwWithStackTrace(error, stackTrace);
         }
       },
-      closeSession: (session) =>
+      closeSession: (session) => logProvider.closeSession(session.sessionId),
+      deleteSession: (session) =>
           logProvider.hardDeleteSession(session.sessionId),
     ),
   );
@@ -63,12 +64,14 @@ class SessionHistoryDialog extends StatefulWidget {
     required this.loadSessions,
     required this.openSession,
     required this.closeSession,
+    required this.deleteSession,
   });
 
   final String? currentSessionId;
   final SessionHistoryLoader loadSessions;
   final SessionHistoryAction openSession;
   final SessionHistoryAction closeSession;
+  final SessionHistoryAction deleteSession;
 
   @override
   State<SessionHistoryDialog> createState() => _SessionHistoryDialogState();
@@ -149,6 +152,39 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
         SnackBar(
           content:
               Text(context.l10n.historySessionCloseFailed(error.toString())),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _delete(Session session) async {
+    if (_busySessionId != null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteSessionConfirmationDialog(
+        sessionTitle: session.title,
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busySessionId = session.sessionId);
+    try {
+      await widget.deleteSession(session);
+      if (!mounted) return;
+      setState(() {
+        _busySessionId = null;
+        _sessions = widget.loadSessions();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.historySessionDeleted)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(context.l10n.historySessionDeleteFailed(error.toString())),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -262,8 +298,94 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                           color: Theme.of(context).colorScheme.error,
                         ),
                       ),
+                    if (!isActive)
+                      IconButton(
+                        key: Key(
+                          'delete-history-session-${session.sessionId}',
+                        ),
+                        tooltip: context.l10n.historySessionDeleteAction,
+                        onPressed: _busySessionId == null
+                            ? () => _delete(session)
+                            : null,
+                        icon: Icon(
+                          Icons.delete_forever,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
                   ],
                 ),
     );
   }
+}
+
+class _DeleteSessionConfirmationDialog extends StatefulWidget {
+  const _DeleteSessionConfirmationDialog({required this.sessionTitle});
+
+  final String sessionTitle;
+
+  @override
+  State<_DeleteSessionConfirmationDialog> createState() =>
+      _DeleteSessionConfirmationDialogState();
+}
+
+class _DeleteSessionConfirmationDialogState
+    extends State<_DeleteSessionConfirmationDialog> {
+  final _nameController = TextEditingController();
+  bool _nameMatches = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        key: const Key('delete-history-session-dialog'),
+        title: Text(context.l10n.historySessionDeleteTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.historySessionDeleteWarning(widget.sessionTitle),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('delete-history-session-name'),
+                controller: _nameController,
+                autofocus: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: InputDecoration(
+                  labelText: context.l10n.historySessionDeleteNameLabel,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  final matches = value == widget.sessionTitle;
+                  if (matches != _nameMatches) {
+                    setState(() => _nameMatches = matches);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('confirm-delete-history-session'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: _nameMatches ? () => Navigator.pop(context, true) : null,
+            child: Text(context.l10n.historySessionDeleteAction),
+          ),
+        ],
+      );
 }

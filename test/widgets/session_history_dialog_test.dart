@@ -37,6 +37,7 @@ void main() {
                     openedSessionId = session.sessionId;
                   },
                   closeSession: (_) async {},
+                  deleteSession: (_) async {},
                 ),
               ),
               child: const Text('show'),
@@ -83,6 +84,7 @@ void main() {
             ],
             openSession: (_) async => openCount += 1,
             closeSession: (_) async {},
+            deleteSession: (_) async {},
           ),
         ),
       ),
@@ -97,6 +99,150 @@ void main() {
     );
     await tester.pump();
     expect(openCount, 0);
+  });
+
+  testWidgets(
+      'only a closed non-current session can be permanently deleted by name',
+      (tester) async {
+    final sessions = <Session>[
+      _session(
+        id: 'current-closed-session',
+        title: '正在查看的旧场次',
+        status: 'closed',
+      ),
+      _session(
+        id: 'closed-session',
+        title: '上周点名',
+        status: 'closed',
+      ),
+      _session(
+        id: 'active-session',
+        title: '仍在进行的点名',
+        status: 'active',
+      ),
+    ];
+    String? deletedSessionId;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SessionHistoryDialog(
+            currentSessionId: 'current-closed-session',
+            loadSessions: () async => [...sessions],
+            openSession: (_) async {},
+            closeSession: (_) async {},
+            deleteSession: (session) async {
+              deletedSessionId = session.sessionId;
+              sessions.removeWhere(
+                (candidate) => candidate.sessionId == session.sessionId,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const Key('delete-history-session-current-closed-session'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('delete-history-session-active-session')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('delete-history-session-closed-session')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('delete-history-session-closed-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('不会删除或关闭服务器上的共享会话'),
+      findsOneWidget,
+    );
+    FilledButton confirmButton() => tester.widget<FilledButton>(
+          find.byKey(const Key('confirm-delete-history-session')),
+        );
+    expect(confirmButton().onPressed, isNull);
+
+    await tester.enterText(
+      find.byKey(const Key('delete-history-session-name')),
+      '上周',
+    );
+    await tester.pump();
+    expect(confirmButton().onPressed, isNull);
+
+    await tester.enterText(
+      find.byKey(const Key('delete-history-session-name')),
+      '上周点名',
+    );
+    await tester.pump();
+    expect(confirmButton().onPressed, isNotNull);
+
+    await tester.tap(
+      find.byKey(const Key('confirm-delete-history-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(deletedSessionId, 'closed-session');
+    expect(find.text('上周点名'), findsNothing);
+    expect(find.text('已永久删除本机会话'), findsOneWidget);
+  });
+
+  testWidgets('a permanent-delete failure keeps the closed session visible',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SessionHistoryDialog(
+            currentSessionId: 'current-session',
+            loadSessions: () async => [
+              _session(
+                id: 'closed-session',
+                title: 'Sunday net',
+                status: 'closed',
+              ),
+            ],
+            openSession: (_) async {},
+            closeSession: (_) async {},
+            deleteSession: (_) async => throw StateError('disk busy'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('delete-history-session-closed-session')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('delete-history-session-name')),
+      'Sunday net',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const Key('confirm-delete-history-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sunday net'), findsOneWidget);
+    expect(
+      find.textContaining('Could not permanently delete local session'),
+      findsOneWidget,
+    );
   });
 }
 

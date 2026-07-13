@@ -16,6 +16,20 @@ async fn get_log_by_sync_id_in_tx(
 pub async fn insert_log(entry: &LogEntry) -> anyhow::Result<LogEntry> {
     let pool = get_db()?;
     let mut tx = pool.begin().await?;
+    let session: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT status, deleted_at FROM sessions WHERE session_id = ?")
+            .bind(&entry.session_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some((status, deleted_at)) = session else {
+        anyhow::bail!("SESSION_NOT_FOUND");
+    };
+    if deleted_at.is_some() {
+        anyhow::bail!("SESSION_NOT_FOUND");
+    }
+    if status != "active" {
+        anyhow::bail!("SESSION_CLOSED");
+    }
     sqlx::query(
         "INSERT INTO logs (sync_id, session_id, time, controller, callsign,
          rst_sent, rst_rcvd, qth, device, power, antenna, height, remarks,

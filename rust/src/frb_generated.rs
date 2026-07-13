@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -509776456;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -626423656;
 
 // Section: executor
 
@@ -1187,6 +1187,43 @@ fn wire__crate__api__settings__get_setting_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
                         let output_ok = crate::api::settings::get_setting(api_key).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__sessions__hard_delete_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "hard_delete_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::sessions::hard_delete_session(api_session_id).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -2923,137 +2960,140 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         29 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__database__import_database_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__init_database_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__collaboration__install_collaboration_snapshot_impl(
+        30 => {
+            wire__crate__api__sessions__hard_delete_session_impl(port, ptr, rust_vec_len, data_len)
+        }
+        31 => wire__crate__api__database__import_database_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__init_database_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__collaboration__install_collaboration_snapshot_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        33 => wire__crate__api__sessions__join_session_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__collaboration__list_collaboration_offline_records_impl(
+        34 => wire__crate__api__sessions__join_session_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__collaboration__list_collaboration_offline_records_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        35 => wire__crate__api__collaboration__list_open_collaboration_conflicts_impl(
+        36 => wire__crate__api__collaboration__list_open_collaboration_conflicts_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        36 => wire__crate__api__collaboration__list_pending_collaboration_mutations_impl(
+        37 => wire__crate__api__collaboration__list_pending_collaboration_mutations_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__sessions__list_sessions_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__collaboration__mark_collaboration_mutation_accepted_impl(
+        38 => wire__crate__api__sessions__list_sessions_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__collaboration__mark_collaboration_mutation_accepted_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__collaboration__mark_collaboration_mutation_rejected_impl(
+        40 => wire__crate__api__collaboration__mark_collaboration_mutation_rejected_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__collaboration__mark_collaboration_mutation_retry_impl(
+        41 => wire__crate__api__collaboration__mark_collaboration_mutation_retry_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__collaboration__mark_collaboration_mutations_sending_impl(
+        42 => wire__crate__api__collaboration__mark_collaboration_mutations_sending_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__collaboration__mark_collaboration_revoked_impl(
+        43 => wire__crate__api__collaboration__mark_collaboration_revoked_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        43 => wire__crate__api__collaboration__queue_collaboration_offline_record_impl(
+        44 => wire__crate__api__collaboration__queue_collaboration_offline_record_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__collaboration__record_collaboration_mutation_conflict_impl(
+        45 => wire__crate__api__collaboration__record_collaboration_mutation_conflict_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        45 => wire__crate__api__sessions__reopen_collaboration_session_impl(
+        46 => wire__crate__api__sessions__reopen_collaboration_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        46 => wire__crate__api__dictionaries__reset_dictionaries_impl(
+        47 => wire__crate__api__dictionaries__reset_dictionaries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        47 => wire__crate__api__collaboration__resolve_collaboration_conflict_impl(
+        48 => wire__crate__api__collaboration__resolve_collaboration_conflict_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        48 => wire__crate__api__logs__restore_log_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__collaboration__save_collaboration_live_draft_cache_impl(
+        49 => wire__crate__api__logs__restore_log_impl(port, ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__collaboration__save_collaboration_live_draft_cache_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        50 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__collaboration__set_collaboration_head_seq_impl(
+        51 => wire__crate__api__dictionaries__search_dict_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__dictionaries__seed_dict_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__collaboration__set_collaboration_head_seq_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        53 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
+        54 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__dictionaries__soft_delete_dict_items_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        55 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__collaboration__update_collaboration_membership_impl(
+        56 => wire__crate__api__logs__undo_last_log_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__collaboration__update_collaboration_membership_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        57 => wire__crate__api__collaboration__update_collaboration_offline_record_impl(
+        58 => wire__crate__api__collaboration__update_collaboration_offline_record_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        58 => wire__crate__api__sessions__update_collaboration_session_title_impl(
+        59 => wire__crate__api__sessions__update_collaboration_session_title_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        59 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
-        60 => {
+        60 => wire__crate__api__logs__update_log_impl(port, ptr, rust_vec_len, data_len),
+        61 => {
             wire__crate__api__dictionaries__upsert_dict_item_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),

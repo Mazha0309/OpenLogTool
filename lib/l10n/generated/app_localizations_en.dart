@@ -179,6 +179,28 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get historySessionDeleteTitle => 'Permanently delete local session';
+
+  @override
+  String historySessionDeleteWarning(String title) {
+    return 'This permanently deletes all local logs and the local collaboration replica for “$title”. This cannot be undone, but it will not delete or close the shared session on the server. Enter the full session name to confirm:';
+  }
+
+  @override
+  String get historySessionDeleteNameLabel => 'Full session name';
+
+  @override
+  String get historySessionDeleteAction => 'Delete local data permanently';
+
+  @override
+  String get historySessionDeleted => 'Local session permanently deleted';
+
+  @override
+  String historySessionDeleteFailed(String error) {
+    return 'Could not permanently delete local session: $error';
+  }
+
+  @override
   String get historySessionReadOnly =>
       'This is a closed historical session. Existing records are read-only.';
 
@@ -1393,6 +1415,28 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String historySessionCloseFailed(String error) {
     return 'Could not close session: $error';
+  }
+
+  @override
+  String get historySessionDeleteTitle => 'Permanently delete local session';
+
+  @override
+  String historySessionDeleteWarning(String title) {
+    return 'This permanently deletes all local logs and the local collaboration replica for “$title”. This cannot be undone, but it will not delete or close the shared session on the server. Enter the full session name to confirm:';
+  }
+
+  @override
+  String get historySessionDeleteNameLabel => 'Full session name';
+
+  @override
+  String get historySessionDeleteAction => 'Delete local data permanently';
+
+  @override
+  String get historySessionDeleted => 'Local session permanently deleted';
+
+  @override
+  String historySessionDeleteFailed(String error) {
+    return 'Could not permanently delete local session: $error';
   }
 
   @override
