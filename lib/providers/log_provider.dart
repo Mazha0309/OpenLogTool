@@ -4,6 +4,7 @@ import 'package:openlogtool/models/log_entry.dart' as old;
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/src/bridge/models/session.dart' as session_bridge;
+import 'package:openlogtool/utils/log_time.dart';
 
 typedef LogMutationGuard = String? Function(old.LogEntry log);
 typedef SessionListLoader = Future<List<session_bridge.Session>> Function();
@@ -177,7 +178,7 @@ class LogProvider with ChangeNotifier {
     for (final value in candidates) {
       if (value.isEmpty) continue;
       final dt = DateTime.tryParse(value);
-      if (dt != null) return dt;
+      if (dt != null) return dt.toLocal();
     }
     return null;
   }
@@ -241,6 +242,10 @@ class LogProvider with ChangeNotifier {
         sessionId: effectiveSessionId,
         controller: log.controller,
         callsign: log.callsign,
+        time: normalizeLogTimeForStorage(
+          log.time,
+          reference: DateTime.tryParse(log.createdAt),
+        ),
         rstSent: log.report,
         rstRcvd: log.rstRcvd,
         qth: log.qth,
@@ -273,7 +278,11 @@ class LogProvider with ChangeNotifier {
         syncId: syncId,
         controller: log.controller,
         callsign: log.callsign,
-        time: log.time,
+        time: normalizeLogTimeForStorage(
+          log.time,
+          reference: DateTime.tryParse(original.time) ??
+              DateTime.tryParse(original.createdAt),
+        ),
         rstSent: log.report,
         rstRcvd: log.rstRcvd,
         qth: log.qth,
@@ -403,6 +412,10 @@ class LogProvider with ChangeNotifier {
           sessionId: effectiveSessionId,
           controller: log.controller,
           callsign: log.callsign,
+          time: normalizeLogTimeForStorage(
+            log.time,
+            reference: DateTime.tryParse(log.createdAt),
+          ),
           rstSent: log.report,
           rstRcvd: log.rstRcvd,
           qth: log.qth,

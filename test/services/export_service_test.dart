@@ -46,6 +46,29 @@ void main() {
       expect(_cellText(rows[7], 3), 'A2');
     });
 
+    test('exports canonical UTC timestamps in the device timezone', () {
+      final localTime = DateTime(2026, 7, 13, 20, 30);
+      final bytes = ExportService.generateExcelBytes(
+        [
+          _log(
+            time: localTime.toUtc().toIso8601String(),
+            controller: 'BG5AAA',
+            callsign: 'A1',
+          ),
+        ],
+        ExportSettings(showFooter: false),
+        localTime,
+      );
+
+      final rows = excel_lib.Excel.decodeBytes(bytes!).tables['点名记录']!.rows;
+      final logRow = rows.singleWhere((row) => _cellText(row, 3) == 'A1');
+      final controllerRow =
+          rows.singleWhere((row) => _cellText(row, 0) == '点名主控:');
+
+      expect(_cellText(logRow, 1), '20:30');
+      expect(_cellText(controllerRow, 1), '20:30');
+    });
+
     test('uses the current session title when the option is enabled', () {
       final bytes = ExportService.generateExcelBytes(
         [_log(time: '19:00', controller: 'BG5AAA', callsign: 'A1')],

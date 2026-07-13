@@ -300,6 +300,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fieldTime => '时间';
 
   @override
+  String get logTimeInvalid => '请输入有效时间（HH:mm）';
+
+  @override
   String get fieldRstSent => 'RST 发';
 
   @override
@@ -1457,6 +1460,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get fieldTime => '时间';
+
+  @override
+  String get logTimeInvalid => '请输入有效时间（HH:mm）';
 
   @override
   String get fieldRstSent => 'RST 发';

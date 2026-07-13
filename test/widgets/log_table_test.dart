@@ -23,7 +23,7 @@ void main() {
       ),
       _log(
         id: 'new',
-        time: 'NEW_TIME',
+        time: '20:31',
         report: 'SENT_CELL',
         rstRcvd: 'RCVD_CELL',
       ),
@@ -75,7 +75,7 @@ void main() {
           .toList(),
       <String>[
         '2',
-        'NEW_TIME',
+        '20:31',
         'CTRL_CELL',
         'CALL_CELL',
         'SENT_CELL',
@@ -128,6 +128,42 @@ void main() {
       (logProvider.updatedLog?.report, logProvider.updatedLog?.rstRcvd),
       ('SENT_EDITED', 'RCVD_EDITED'),
     );
+  });
+
+  testWidgets('shows a canonical UTC log time in the device timezone',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'paginationEnabled': false},
+    );
+    final localTime = DateTime(2026, 7, 13, 20, 30);
+    final logProvider = _StaticLogProvider([
+      _log(
+        id: 'timezone-log',
+        time: localTime.toUtc().toIso8601String(),
+        report: '59',
+        rstRcvd: '59',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: SettingsProvider(),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LogTable(readOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(_textOf(tester, table.rows.single.cells[1].child), '20:30');
   });
 
   testWidgets('pagination keeps the newest RST records on the first page',

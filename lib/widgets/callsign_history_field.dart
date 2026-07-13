@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
+import 'package:openlogtool/utils/log_time.dart';
 
 typedef CallsignHistoryLoader = Future<List<bridge.LogEntry>> Function(
   String callsign,
@@ -213,8 +213,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     if (_canFill('time') &&
         widget.timeController != null &&
         log.time.isNotEmpty) {
-      widget.timeController!.text =
-          log.time.length >= 16 ? log.time.substring(11, 16) : log.time;
+      widget.timeController!.text = formatLogTimeForDisplay(log.time);
     }
     if (_canFill('controller') &&
         widget.controllerController != null &&
@@ -409,12 +408,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
 }
 
 String _formatTime(String time) {
-  if (time.isEmpty) return '';
-  final parsed = DateTime.tryParse(time);
-  if (parsed != null) {
-    return DateFormat('yyyy-MM-dd HH:mm').format(parsed);
-  }
-  return time;
+  return formatLogTimeForDisplay(time, includeDate: true);
 }
 
 class UpperCaseTextFormatter extends TextInputFormatter {

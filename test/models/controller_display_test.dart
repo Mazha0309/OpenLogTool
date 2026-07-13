@@ -77,4 +77,13 @@ void main() {
       ControllerDisplayField.values.length,
     );
   });
+
+  test('controller display renders canonical timestamps locally', () {
+    final localTime = DateTime(2026, 7, 13, 20, 15);
+    final record = ControllerRecordDisplay.fromJson({
+      'time': localTime.toUtc().toIso8601String(),
+    });
+
+    expect(record.time, '20:15');
+  });
 }

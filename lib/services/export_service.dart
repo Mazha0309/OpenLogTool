@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 class ExportSaveResult {
   final String? path;
@@ -279,9 +280,7 @@ class ExportService {
           : whiteColor;
       blockRowColorIndex++;
 
-      final displayTime = log.time.length >= 16
-          ? log.time.substring(11, 16)
-          : (log.time.length >= 5 ? log.time.substring(0, 5) : log.time);
+      final displayTime = formatLogTimeForDisplay(log.time);
       final rowData = [
         excel_lib.TextCellValue(globalIndex.toString()),
         excel_lib.TextCellValue(displayTime),
@@ -377,12 +376,7 @@ class ExportService {
   /// 计算控制器时间显示值（比第一条记录早一分钟并取整）。
   static String calculateControllerTime(String timeStr) {
     if (timeStr.isEmpty) return '';
-    // Handle ISO timestamp: "2026-07-09T14:30:00" → "14:30"
-    if (timeStr.length >= 16) {
-      timeStr = timeStr.substring(11, 16);
-    } else if (timeStr.length >= 5) {
-      timeStr = timeStr.substring(0, 5);
-    }
+    timeStr = formatLogTimeForDisplay(timeStr);
     final parts = timeStr.split(':');
     if (parts.length < 2) return timeStr;
 

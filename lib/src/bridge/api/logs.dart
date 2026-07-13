@@ -7,10 +7,13 @@ import '../frb_generated.dart';
 import '../models/log_entry.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `canonical_log_time`
+
 Future<LogEntry> addLog(
         {required String sessionId,
         required String controller,
         required String callsign,
+        required String time,
         String? rstSent,
         String? rstRcvd,
         String? qth,
@@ -23,6 +26,7 @@ Future<LogEntry> addLog(
         sessionId: sessionId,
         controller: controller,
         callsign: callsign,
+        time: time,
         rstSent: rstSent,
         rstRcvd: rstRcvd,
         qth: qth,

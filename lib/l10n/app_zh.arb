@@ -102,6 +102,7 @@
   "fieldController": "主控",
   "fieldCallsign": "来台呼号",
   "fieldTime": "时间",
+  "logTimeInvalid": "请输入有效时间（HH:mm）",
   "fieldRstSent": "RST 发",
   "fieldRstRcvd": "RST 收",
   "fieldQth": "QTH",

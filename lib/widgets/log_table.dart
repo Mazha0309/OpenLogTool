@@ -5,6 +5,7 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 class LogTable extends StatefulWidget {
   const LogTable({
@@ -54,7 +55,9 @@ class _LogTableState extends State<LogTable> {
     setState(() {
       _editingIndex = index;
       _controllers = {
-        'time': TextEditingController(text: log.time),
+        'time': TextEditingController(
+          text: formatLogTimeForDisplay(log.time),
+        ),
         'controller': TextEditingController(text: log.controller),
         'callsign': TextEditingController(text: log.callsign),
         'report': TextEditingController(text: log.report),
@@ -97,12 +100,19 @@ class _LogTableState extends State<LogTable> {
       return;
     }
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final time = _controllers['time']?.text ?? '';
+    if (!isValidLogTimeInput(time)) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(context.l10n.logTimeInvalid)),
+      );
+      return;
+    }
     // updateLog preserves sync_id / localId / sessionId / createdAt — only the
     // text fields below are taken from the form.
     final patch = LogEntry(
       id: _controllers['_id']?.text ?? '',
       sessionId: _controllers['_sessionId']?.text,
-      time: _controllers['time']?.text ?? '',
+      time: time,
       controller: _controllers['controller']?.text ?? '',
       callsign: _controllers['callsign']?.text ?? '',
       report: _controllers['report']?.text ?? '',
@@ -348,10 +358,7 @@ class _LogTableState extends State<LogTable> {
                     ),
                   )
                 : _buildCenteredCell(
-                    Text(log.time.length >= 16
-                        ? log.time.substring(11, 16)
-                        : log.time),
-                    100),
+                    Text(formatLogTimeForDisplay(log.time)), 100),
           ),
           DataCell(
             isEditing

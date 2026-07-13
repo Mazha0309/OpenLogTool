@@ -11,6 +11,7 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/utils/log_time.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 
 /// 日志表单组件
@@ -223,11 +224,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   String _displayLiveDraftTime(String value) {
-    final parsed = DateTime.tryParse(value);
-    if (parsed == null || !value.contains('T')) return value;
-    final local = parsed.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
+    return formatLogTimeForDisplay(value);
   }
 
   Future<void> _submitForm() async {
@@ -564,6 +561,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       label: fieldLabel('time', '时间'),
                       hintText: 'HH:mm',
                       upperCase: false,
+                      validator: (value) => isValidLogTimeInput(
+                        value ?? '',
+                        allowEmpty: true,
+                      )
+                          ? null
+                          : context.l10n.logTimeInvalid,
                       isCompact: isNarrow,
                       textInputAction: TextInputAction.next,
                       focusNode: _draftFocusNodes['time'],

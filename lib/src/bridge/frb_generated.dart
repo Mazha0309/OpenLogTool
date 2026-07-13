@@ -106,6 +106,7 @@ abstract class RustLibApi extends BaseApi {
       {required String sessionId,
       required String controller,
       required String callsign,
+      required String time,
       String? rstSent,
       String? rstRcvd,
       String? qth,
@@ -421,6 +422,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       {required String sessionId,
       required String controller,
       required String callsign,
+      required String time,
       String? rstSent,
       String? rstRcvd,
       String? qth,
@@ -435,6 +437,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(sessionId, serializer);
         sse_encode_String(controller, serializer);
         sse_encode_String(callsign, serializer);
+        sse_encode_String(time, serializer);
         sse_encode_opt_String(rstSent, serializer);
         sse_encode_opt_String(rstRcvd, serializer);
         sse_encode_opt_String(qth, serializer);
@@ -455,6 +458,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sessionId,
         controller,
         callsign,
+        time,
         rstSent,
         rstRcvd,
         qth,
@@ -474,6 +478,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "sessionId",
           "controller",
           "callsign",
+          "time",
           "rstSent",
           "rstRcvd",
           "qth",

@@ -309,6 +309,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldTime => 'Time';
 
   @override
+  String get logTimeInvalid => 'Enter a valid time (HH:mm)';
+
+  @override
   String get fieldRstSent => 'RST sent';
 
   @override
@@ -1521,6 +1524,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get fieldTime => 'Time';
+
+  @override
+  String get logTimeInvalid => 'Enter a valid time (HH:mm)';
 
   @override
   String get fieldRstSent => 'RST sent';

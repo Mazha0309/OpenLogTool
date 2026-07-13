@@ -86,6 +86,7 @@
   "fieldController": "Controller",
   "fieldCallsign": "Callsign",
   "fieldTime": "Time",
+  "logTimeInvalid": "Enter a valid time (HH:mm)",
   "fieldRstSent": "RST sent",
   "fieldRstRcvd": "RST received",
   "fieldQth": "QTH",

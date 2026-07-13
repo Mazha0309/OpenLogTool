@@ -1,4 +1,5 @@
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/utils/log_time.dart';
 
 const String controllerDisplayPreferencesStorageKey =
     'controllerDisplayPreferences';
@@ -59,7 +60,7 @@ class ControllerRecordDisplay {
     return ControllerRecordDisplay(
       controller: text('controller', 'controllerCallsign'),
       callsign: text('callsign'),
-      time: text('time'),
+      time: formatLogTimeForDisplay(text('time')),
       rstSent: text('rstSent', 'report'),
       rstRcvd: text('rstRcvd'),
       qth: text('qth'),
@@ -75,7 +76,7 @@ class ControllerRecordDisplay {
       ControllerRecordDisplay(
         controller: log.controller,
         callsign: log.callsign,
-        time: log.time,
+        time: formatLogTimeForDisplay(log.time),
         rstSent: log.report,
         rstRcvd: log.rstRcvd,
         qth: log.qth,

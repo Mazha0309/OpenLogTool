@@ -616,6 +616,12 @@ abstract class AppLocalizations {
   /// **'时间'**
   String get fieldTime;
 
+  /// No description provided for @logTimeInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效时间（HH:mm）'**
+  String get logTimeInvalid;
+
   /// No description provided for @fieldRstSent.
   ///
   /// In zh, this message translates to:

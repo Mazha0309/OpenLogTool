@@ -39,6 +39,8 @@ void main() {
     expect(zh.historySessions, '历史会话');
     expect(zh.historySessionsHint, isNot(contains('历史记录')));
     expect(en.historySessionOpen, 'Open session');
+    expect(zh.logTimeInvalid, '请输入有效时间（HH:mm）');
+    expect(en.logTimeInvalid, 'Enter a valid time (HH:mm)');
     expect(zh.offlineReviewTitle, '离线记录待复核');
     expect(en.offlineReviewTitle, 'Offline records need review');
     expect(zh.collapseSidebar, '收起侧边栏');
