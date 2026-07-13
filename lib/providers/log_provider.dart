@@ -13,6 +13,62 @@ typedef SessionLogPageLoader = Future<List<bridge.LogEntry>> Function(
   int page,
   int pageSize,
 );
+typedef LogCreator = Future<bridge.LogEntry> Function(
+  String sessionId,
+  old.LogEntry log,
+);
+typedef LogUpdater = Future<bridge.LogEntry> Function(
+  String syncId,
+  old.LogEntry original,
+  old.LogEntry replacement,
+);
+typedef LogDeleter = Future<void> Function(String syncId);
+
+Future<bridge.LogEntry> _createLogWithRust(
+  String sessionId,
+  old.LogEntry log,
+) =>
+    RustApi.addLog(
+      sessionId: sessionId,
+      controller: log.controller,
+      callsign: log.callsign,
+      time: normalizeLogTimeForStorage(
+        log.time,
+        reference: DateTime.tryParse(log.createdAt),
+      ),
+      rstSent: log.report,
+      rstRcvd: log.rstRcvd,
+      qth: log.qth,
+      device: log.device,
+      power: log.power,
+      antenna: log.antenna,
+      height: log.height,
+      remarks: log.remarks.isNotEmpty ? log.remarks : null,
+    );
+
+Future<bridge.LogEntry> _updateLogWithRust(
+  String syncId,
+  old.LogEntry original,
+  old.LogEntry replacement,
+) =>
+    RustApi.updateLog(
+      syncId: syncId,
+      controller: replacement.controller,
+      callsign: replacement.callsign,
+      time: normalizeLogTimeForStorage(
+        replacement.time,
+        reference: DateTime.tryParse(original.time) ??
+            DateTime.tryParse(original.createdAt),
+      ),
+      rstSent: replacement.report,
+      rstRcvd: replacement.rstRcvd,
+      qth: replacement.qth,
+      device: replacement.device,
+      power: replacement.power,
+      antenna: replacement.antenna,
+      height: replacement.height,
+      remarks: replacement.remarks.isNotEmpty ? replacement.remarks : null,
+    );
 
 class LogProvider with ChangeNotifier {
   static const int _maxUndoStack = 50;
@@ -24,11 +80,15 @@ class LogProvider with ChangeNotifier {
   // completed record.
   List<old.LogEntry> _logs = [];
   final List<old.LogEntry> _undoStack = [];
+  final Map<String, old.LogEntry> _pendingCanonicalLogs = {};
   Future<void> Function()? _onDataChanged;
   Future<void> Function(old.LogEntry log, bool isDelete)? _onLogChanged;
   LogMutationGuard? _logMutationGuard;
   final SessionListLoader _sessionListLoader;
   final SessionLogPageLoader _sessionLogPageLoader;
+  final LogCreator _logCreator;
+  final LogUpdater _logUpdater;
+  final LogDeleter _logDeleter;
   String? _currentSessionId;
   bool _currentSessionWritable = false;
   int _sessionStateGeneration = 0;
@@ -65,11 +125,46 @@ class LogProvider with ChangeNotifier {
 
   void refreshMutationPermissions() => _safeNotify();
 
+  /// Shows a canonical server row while its durable collaboration event is
+  /// still catching up through Rust. The overlay survives intervening reloads
+  /// and is retired once SQLite returns the same sync id.
+  void stageCanonicalLog(old.LogEntry log) {
+    final sessionId = log.sessionId;
+    if (sessionId == null || sessionId != _currentSessionId) return;
+    _loadGeneration += 1;
+    _pendingCanonicalLogs[log.id] = log;
+    _logs = [
+      for (final candidate in _logs)
+        if (candidate.id != log.id) candidate,
+      log,
+    ]..sort(_compareChronologically);
+    _safeNotify();
+  }
+
+  /// Replaces an optimistic server row with the latest durable SQLite state.
+  /// A later update/delete may already follow the original create event, so
+  /// merely removing the pending marker would leave a stale or ghost row.
+  Future<void> reconcileStagedCanonicalLog(String syncId) async {
+    final staged = _pendingCanonicalLogs.remove(syncId);
+    try {
+      await _loadLogs(propagateErrors: true);
+    } catch (_) {
+      if (staged != null) {
+        _pendingCanonicalLogs[syncId] = staged;
+        _safeNotify();
+      }
+      rethrow;
+    }
+  }
+
   String? mutationBlockReason(old.LogEntry log) {
     final sessionId = log.sessionId ?? _currentSessionId;
     if (sessionId != null &&
         _collaborationReadOnlySessions.contains(sessionId)) {
       return 'COLLABORATION_SESSION_READ_ONLY';
+    }
+    if (_pendingCanonicalLogs.containsKey(log.id)) {
+      return 'COLLABORATION_LOG_SYNC_PENDING';
     }
     return _logMutationGuard?.call(log);
   }
@@ -92,7 +187,7 @@ class LogProvider with ChangeNotifier {
 
   void _ensureLogWritable(old.LogEntry log) {
     _ensureWritable(log.sessionId ?? _currentSessionId);
-    final reason = _logMutationGuard?.call(log);
+    final reason = mutationBlockReason(log);
     if (reason != null) throw StateError(reason);
   }
 
@@ -109,12 +204,15 @@ class LogProvider with ChangeNotifier {
     String? sessionId, {
     bool propagateErrors = false,
   }) async {
-    if (_currentSessionId != sessionId) {
+    final sessionChanged = _currentSessionId != sessionId;
+    if (sessionChanged) {
       _undoStack.clear();
+      _logs = [];
     }
     final stateGeneration = ++_sessionStateGeneration;
     _currentSessionId = sessionId;
     _currentSessionWritable = false;
+    if (sessionChanged) _safeNotify();
     if (sessionId != null) {
       try {
         final sessions = await _sessionListLoader();
@@ -190,13 +288,20 @@ class LogProvider with ChangeNotifier {
   LogProvider({
     SessionListLoader? sessionListLoader,
     SessionLogPageLoader? sessionLogPageLoader,
+    LogCreator? logCreator,
+    LogUpdater? logUpdater,
+    LogDeleter? logDeleter,
   })  : _sessionListLoader = sessionListLoader ?? RustApi.listSessions,
         _sessionLogPageLoader = sessionLogPageLoader ??
             ((sessionId, page, pageSize) => RustApi.getLogs(
                   sessionId: sessionId,
                   page: page,
                   pageSize: pageSize,
-                )) {
+                )),
+        _logCreator = logCreator ?? _createLogWithRust,
+        _logUpdater = logUpdater ?? _updateLogWithRust,
+        _logDeleter =
+            logDeleter ?? ((syncId) => RustApi.deleteLog(syncId: syncId)) {
     scheduleMicrotask(_loadLogs);
   }
 
@@ -225,11 +330,21 @@ class LogProvider with ChangeNotifier {
         if (batch.length < pageSize) break;
       }
       if (generation != _loadGeneration || _currentSessionId != sid) return;
-      _logs = normalizeLoadedLogs(bridgeLogs);
+      final loaded = normalizeLoadedLogs(bridgeLogs);
+      final loadedIds = loaded.map((log) => log.id).toSet();
+      _pendingCanonicalLogs.removeWhere(
+        (id, log) => log.sessionId == sid && loadedIds.contains(id),
+      );
+      loaded.addAll(
+        _pendingCanonicalLogs.values.where(
+          (log) => log.sessionId == sid && !loadedIds.contains(log.id),
+        ),
+      );
+      loaded.sort(_compareChronologically);
+      _logs = loaded;
     } catch (e, st) {
       debugPrint('[LogProvider] _loadLogs failed: $e\n$st');
       if (generation != _loadGeneration || _currentSessionId != sid) return;
-      _logs = [];
       if (propagateErrors) {
         // A session whose records could not be loaded must never remain
         // writable. Keep it selected so providers stay aligned, but fail
@@ -246,28 +361,13 @@ class LogProvider with ChangeNotifier {
     final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
     _ensureWritable(effectiveSessionId);
     try {
-      await RustApi.addLog(
-        sessionId: effectiveSessionId,
-        controller: log.controller,
-        callsign: log.callsign,
-        time: normalizeLogTimeForStorage(
-          log.time,
-          reference: DateTime.tryParse(log.createdAt),
-        ),
-        rstSent: log.report,
-        rstRcvd: log.rstRcvd,
-        qth: log.qth,
-        device: log.device,
-        power: log.power,
-        antenna: log.antenna,
-        height: log.height,
-        remarks: log.remarks.isNotEmpty ? log.remarks : null,
-      );
-      await _loadLogs();
-      _safeNotify();
+      final canonical = await _logCreator(effectiveSessionId, log);
+      if (_currentSessionId == effectiveSessionId) {
+        _mergeCanonicalLog(canonical);
+      }
       await _notifyDataChanged();
       if (_onLogChanged != null) {
-        await _onLogChanged!(log, false);
+        await _onLogChanged!(_toOldLog(canonical), false);
       }
     } catch (e, st) {
       debugPrint('[LogProvider] addLog failed: $e\n$st');
@@ -280,28 +380,13 @@ class LogProvider with ChangeNotifier {
     final original = _logs[index];
     _ensureLogWritable(original);
     final syncId = original.id;
+    final sessionId = original.sessionId ?? _currentSessionId;
     if (syncId.isEmpty) return;
     try {
-      await RustApi.updateLog(
-        syncId: syncId,
-        controller: log.controller,
-        callsign: log.callsign,
-        time: normalizeLogTimeForStorage(
-          log.time,
-          reference: DateTime.tryParse(original.time) ??
-              DateTime.tryParse(original.createdAt),
-        ),
-        rstSent: log.report,
-        rstRcvd: log.rstRcvd,
-        qth: log.qth,
-        device: log.device,
-        power: log.power,
-        antenna: log.antenna,
-        height: log.height,
-        remarks: log.remarks.isNotEmpty ? log.remarks : null,
-      );
-      await _loadLogs();
-      _safeNotify();
+      final canonical = await _logUpdater(syncId, original, log);
+      if (_currentSessionId == sessionId) {
+        _mergeCanonicalLog(canonical);
+      }
       await _notifyDataChanged();
     } catch (e, st) {
       debugPrint('[LogProvider] updateLog failed: $e\n$st');
@@ -309,17 +394,31 @@ class LogProvider with ChangeNotifier {
     }
   }
 
+  Future<void> updateLogById(String syncId, old.LogEntry log) async {
+    final index = logs.indexWhere((candidate) => candidate.id == syncId);
+    if (index < 0) return;
+    await updateLog(index, log);
+  }
+
   Future<void> deleteLog(int index) async {
     if (index < 0 || index >= _logs.length) return;
     final log = _logs[index];
     _ensureLogWritable(log);
     final syncId = log.id;
+    final sessionId = log.sessionId ?? _currentSessionId;
     if (syncId.isEmpty) return;
     try {
-      await RustApi.deleteLog(syncId: syncId);
-      _pushUndo(log);
-      _logs.removeAt(index);
-      _safeNotify();
+      await _logDeleter(syncId);
+      if (_currentSessionId == sessionId) {
+        _pushUndo(log);
+        _loadGeneration += 1;
+        _pendingCanonicalLogs.remove(syncId);
+        _logs = [
+          for (final candidate in _logs)
+            if (candidate.id != syncId) candidate
+        ];
+        _safeNotify();
+      }
       await _notifyDataChanged();
       if (_onLogChanged != null) {
         await _onLogChanged!(log, true);
@@ -328,6 +427,12 @@ class LogProvider with ChangeNotifier {
       debugPrint('[LogProvider] deleteLog failed: $e\n$st');
       rethrow;
     }
+  }
+
+  Future<void> deleteLogById(String syncId) async {
+    final index = logs.indexWhere((candidate) => candidate.id == syncId);
+    if (index < 0) return;
+    await deleteLog(index);
   }
 
   Future<void> undoLastLog() async {
@@ -414,6 +519,7 @@ class LogProvider with ChangeNotifier {
       await RustApi.hardDeleteSession(sessionId: sessionId);
       _collaborationReadOnlySessions.remove(sessionId);
       _undoStack.removeWhere((log) => log.sessionId == sessionId);
+      _pendingCanonicalLogs.removeWhere((_, log) => log.sessionId == sessionId);
       _safeNotify();
     } catch (e, st) {
       debugPrint('[LogProvider] hardDeleteSession failed: $e\n$st');
@@ -464,8 +570,35 @@ class LogProvider with ChangeNotifier {
   @visibleForTesting
   static List<old.LogEntry> normalizeLoadedLogs(
     List<bridge.LogEntry> newestFirst,
-  ) =>
-      newestFirst.reversed.map(_toOldLog).toList();
+  ) {
+    final normalized = newestFirst.map(_toOldLog).toList();
+    normalized.sort(_compareChronologically);
+    return normalized;
+  }
+
+  void _mergeCanonicalLog(bridge.LogEntry canonical) {
+    _loadGeneration += 1;
+    final converted = _toOldLog(canonical);
+    _pendingCanonicalLogs.remove(converted.id);
+    _logs = [
+      for (final candidate in _logs)
+        if (candidate.id != converted.id) candidate,
+      converted,
+    ]..sort(_compareChronologically);
+    _safeNotify();
+  }
+
+  static int _compareChronologically(old.LogEntry left, old.LogEntry right) {
+    final leftTime = DateTime.tryParse(left.time)?.toUtc();
+    final rightTime = DateTime.tryParse(right.time)?.toUtc();
+    var compared = leftTime != null && rightTime != null
+        ? leftTime.compareTo(rightTime)
+        : left.time.compareTo(right.time);
+    if (compared != 0) return compared;
+    compared = left.createdAt.compareTo(right.createdAt);
+    if (compared != 0) return compared;
+    return left.id.compareTo(right.id);
+  }
 
   static old.LogEntry _toOldLog(bridge.LogEntry b) {
     return old.LogEntry(

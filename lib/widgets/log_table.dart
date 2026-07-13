@@ -86,12 +86,12 @@ class _LogTableState extends State<LogTable> {
     });
   }
 
-  Future<void> _saveEditing(int index) async {
+  Future<void> _saveEditing() async {
     final logId = _controllers['_id']?.text ?? '';
     final logProvider = Provider.of<LogProvider>(context, listen: false);
-    final original = index >= 0 && index < logProvider.logs.length
-        ? logProvider.logs[index]
-        : null;
+    final currentIndex =
+        logProvider.logs.indexWhere((candidate) => candidate.id == logId);
+    final original = currentIndex < 0 ? null : logProvider.logs[currentIndex];
     if (widget.readOnly ||
         widget.conflictedLogIds.contains(logId) ||
         original == null ||
@@ -126,7 +126,7 @@ class _LogTableState extends State<LogTable> {
     );
     patch.remarks = _controllers['remarks']?.text ?? '';
     try {
-      await logProvider.updateLog(index, patch);
+      await logProvider.updateLogById(logId, patch);
     } catch (e) {
       messenger?.showSnackBar(
         SnackBar(content: Text('保存失败: $e')),
@@ -539,9 +539,7 @@ class _LogTableState extends State<LogTable> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.check, size: 20),
-                          onPressed: !canMutate
-                              ? null
-                              : () => _saveEditing(originalIndex),
+                          onPressed: !canMutate ? null : _saveEditing,
                           tooltip: !canMutate ? mutationHint : '保存',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
@@ -593,7 +591,6 @@ class _LogTableState extends State<LogTable> {
                               icon: const Icon(Icons.delete, size: 20),
                               onPressed: () => _showDeleteConfirmation(
                                 context,
-                                originalIndex,
                                 log,
                               ),
                               tooltip: '删除记录',
@@ -653,7 +650,6 @@ class _LogTableState extends State<LogTable> {
 
   void _showDeleteConfirmation(
     BuildContext context,
-    int index,
     LogEntry log,
   ) {
     final logProvider = context.read<LogProvider>();
@@ -680,7 +676,7 @@ class _LogTableState extends State<LogTable> {
                 Navigator.pop(context);
                 return;
               }
-              logProvider.deleteLog(index);
+              logProvider.deleteLogById(log.id);
               Navigator.pop(context);
               context.showLoggedSnackBar(
                 const SnackBar(

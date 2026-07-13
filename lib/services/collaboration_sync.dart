@@ -441,6 +441,7 @@ typedef CollaborationEventApplied = FutureOr<void> Function(
 typedef CollaborationSnapshotInstalled = FutureOr<void> Function(
   SessionSnapshotDto snapshot,
 );
+typedef CollaborationReplicaChanged = FutureOr<void> Function();
 typedef CollaborationControlMessage = FutureOr<void> Function(
   JsonObject message,
 );
@@ -485,6 +486,7 @@ final class CollaborationSyncCoordinator {
     this.onStateChanged,
     this.onEventApplied,
     this.onSnapshotInstalled,
+    this.onReplicaChanged,
     this.onControlMessage,
     this.onLocalCloseRejected,
     CollaborationDelay? delay,
@@ -501,6 +503,11 @@ final class CollaborationSyncCoordinator {
   final CollaborationSyncStateListener? onStateChanged;
   final CollaborationEventApplied? onEventApplied;
   final CollaborationSnapshotInstalled? onSnapshotInstalled;
+
+  /// Invalidates UI projections when the durable cursor moved outside this
+  /// coordinator, for example when another app process sharing the SQLite
+  /// database applied an event first.
+  final CollaborationReplicaChanged? onReplicaChanged;
   final CollaborationControlMessage? onControlMessage;
   final CollaborationLocalCloseRejected? onLocalCloseRejected;
   final CollaborationDelay _delay;
@@ -514,6 +521,7 @@ final class CollaborationSyncCoordinator {
   Future<void>? _loop;
   bool _wakePending = false;
   int _localStatusGeneration = 0;
+  final List<_SynchronizationRequest> _pendingSynchronizations = [];
 
   CollaborationSyncIdentity? _identity;
   SessionRole? _role;
@@ -521,6 +529,7 @@ final class CollaborationSyncCoordinator {
       CollaborationTransportPhase.stopped;
   CollaborationReplicaPhase _replicaPhase = CollaborationReplicaPhase.localOnly;
   int _lastAppliedSeq = 0;
+  int _lastProjectionNotifiedSeq = 0;
   int _serverHeadSeq = 0;
   int _pendingCount = 0;
   int _conflictCount = 0;
@@ -569,6 +578,7 @@ final class CollaborationSyncCoordinator {
     bool sessionClosed = false,
   }) {
     if (_disposed) throw StateError('coordinator has been disposed');
+    _failPendingSynchronizations(const _SyncContextChanged());
     final generation = ++_generation;
     unawaited(_closeActiveTransport());
     _identity = identity;
@@ -577,6 +587,7 @@ final class CollaborationSyncCoordinator {
     _transportPhase = CollaborationTransportPhase.connecting;
     _replicaPhase = CollaborationReplicaPhase.catchingUp;
     _lastAppliedSeq = 0;
+    _lastProjectionNotifiedSeq = 0;
     _serverHeadSeq = 0;
     _pendingCount = 0;
     _conflictCount = 0;
@@ -620,6 +631,31 @@ final class CollaborationSyncCoordinator {
     }
   }
 
+  /// Waits for the serial REST synchronization loop to materialize a specific
+  /// canonical event. The request remains durable across socket reconnects;
+  /// callers that time out can keep an optimistic UI projection while [wake]
+  /// continues the normal catch-up path.
+  Future<bool> synchronizeNow({
+    required int targetSeq,
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    if (targetSeq < 1) {
+      throw ArgumentError.value(targetSeq, 'targetSeq', 'must be positive');
+    }
+    if (_identity == null || _disposed) return false;
+    final request = _SynchronizationRequest(targetSeq, Completer<void>());
+    _pendingSynchronizations.add(request);
+    wake();
+    try {
+      await request.completer.future.timeout(timeout);
+      return true;
+    } on TimeoutException {
+      _pendingSynchronizations.remove(request);
+      wake();
+      return false;
+    }
+  }
+
   /// Locks local writes immediately while preserving the canonical active
   /// state. Older Log outbox entries must flush before the close mutation.
   void markSessionLocallyClosed() {
@@ -641,6 +677,7 @@ final class CollaborationSyncCoordinator {
     _generation += 1;
     _identity = null;
     _wakePending = false;
+    _failPendingSynchronizations(const _SyncContextChanged());
     await _closeActiveTransport();
     _transportPhase = CollaborationTransportPhase.stopped;
     _replicaPhase = CollaborationReplicaPhase.localOnly;
@@ -835,6 +872,8 @@ final class CollaborationSyncCoordinator {
     _lastSuccessfulSyncAt = _clock();
     _remoteCommitPendingLocalApply = false;
     _clearError();
+    await _completeSatisfiedSynchronizations(generation, identity);
+    _ensureCurrent(generation, identity);
     _emit();
   }
 
@@ -903,7 +942,9 @@ final class CollaborationSyncCoordinator {
             retryable: true,
           );
         }
-        if (result.cursor < cursor || result.cursor > event.seq) {
+        if (result.cursor < cursor ||
+            (result.outcome == CollaborationApplyOutcome.applied &&
+                result.cursor > event.seq)) {
           throw const CollaborationSyncException(
             code: 'INVALID_APPLY_RESULT',
             message: 'The replica returned an invalid event cursor',
@@ -916,6 +957,24 @@ final class CollaborationSyncCoordinator {
           _updateSessionState(event);
           await onEventApplied?.call(event);
           _ensureCurrent(generation, identity);
+          _lastProjectionNotifiedSeq = max(
+            _lastProjectionNotifiedSeq,
+            event.seq,
+          );
+        } else if (event.seq > _lastProjectionNotifiedSeq) {
+          // Another process sharing the durable replica won the apply race.
+          // The event is canonical and already materialized, so deliver its
+          // metadata exactly as for a local apply. Do not jump the projection
+          // watermark to result.cursor: later events in this page still carry
+          // authorship and conflict metadata that the provider must observe.
+          appliedAny = true;
+          _updateSessionState(event);
+          await onEventApplied?.call(event);
+          _ensureCurrent(generation, identity);
+          _lastProjectionNotifiedSeq = max(
+            _lastProjectionNotifiedSeq,
+            event.seq,
+          );
         }
       }
       if (page.toSeq > cursor) {
@@ -982,7 +1041,11 @@ final class CollaborationSyncCoordinator {
 
     await replica.reinstallSnapshot(identity, membership, snapshot);
     _ensureCurrent(generation, identity);
-    await _refreshStatus(generation, identity);
+    await _refreshStatus(
+      generation,
+      identity,
+      notifyProjection: false,
+    );
     _ensureCurrent(generation, identity);
     if (_lastAppliedSeq != snapshot.highWatermarkSeq ||
         _serverHeadSeq < snapshot.highWatermarkSeq) {
@@ -994,6 +1057,10 @@ final class CollaborationSyncCoordinator {
     }
     await onSnapshotInstalled?.call(snapshot);
     _ensureCurrent(generation, identity);
+    _lastProjectionNotifiedSeq = max(
+      _lastProjectionNotifiedSeq,
+      snapshot.highWatermarkSeq,
+    );
     _snapshotBaselineInstalled = true;
   }
 
@@ -1142,6 +1209,21 @@ final class CollaborationSyncCoordinator {
                 _updateSessionState(event);
                 await onEventApplied?.call(event);
                 _ensureCurrent(generation, identity);
+                _lastProjectionNotifiedSeq = max(
+                  _lastProjectionNotifiedSeq,
+                  event.seq,
+                );
+              } else if (applied.outcome ==
+                      CollaborationApplyOutcome.duplicate &&
+                  applied.cursor > _lastAppliedSeq) {
+                _lastAppliedSeq = applied.cursor;
+                _updateSessionState(event);
+                await onEventApplied?.call(event);
+                _ensureCurrent(generation, identity);
+                _lastProjectionNotifiedSeq = max(
+                  _lastProjectionNotifiedSeq,
+                  applied.cursor,
+                );
               }
               // A gap is expected when another actor committed immediately
               // before this mutation. The following REST catch-up supplies it.
@@ -1337,8 +1419,9 @@ final class CollaborationSyncCoordinator {
 
   Future<void> _refreshStatus(
     int generation,
-    CollaborationSyncIdentity identity,
-  ) async {
+    CollaborationSyncIdentity identity, {
+    bool notifyProjection = true,
+  }) async {
     final status = await replica.getStatus(identity);
     _ensureCurrent(generation, identity);
     if (status.lastAppliedSeq < 0 ||
@@ -1369,6 +1452,11 @@ final class CollaborationSyncCoordinator {
       }
       _sessionClosed = canonicalStatus != 'active';
       _recomputeWriteSuspended();
+    }
+    if (notifyProjection && _lastAppliedSeq > _lastProjectionNotifiedSeq) {
+      await onReplicaChanged?.call();
+      _ensureCurrent(generation, identity);
+      _lastProjectionNotifiedSeq = _lastAppliedSeq;
     }
     _emit();
   }
@@ -1562,9 +1650,50 @@ final class CollaborationSyncCoordinator {
   void _emit() {
     if (!_disposed) onStateChanged?.call(state);
   }
+
+  Future<void> _completeSatisfiedSynchronizations(
+    int generation,
+    CollaborationSyncIdentity identity,
+  ) async {
+    final satisfied = _pendingSynchronizations
+        .where((request) => request.targetSeq <= _lastAppliedSeq)
+        .toList(growable: false);
+    if (satisfied.isEmpty) return;
+    if (_lastProjectionNotifiedSeq < _lastAppliedSeq) {
+      // The cursor may already have been advanced by another process.
+      // Reloading projections is therefore part of the completion contract
+      // even when no event was applied by this coordinator instance.
+      await onReplicaChanged?.call();
+      _ensureCurrent(generation, identity);
+      _lastProjectionNotifiedSeq = _lastAppliedSeq;
+    }
+    for (final request in satisfied) {
+      _pendingSynchronizations.remove(request);
+      if (!request.completer.isCompleted) request.completer.complete();
+    }
+  }
+
+  void _failPendingSynchronizations(Object error) {
+    final pending = List<_SynchronizationRequest>.from(
+      _pendingSynchronizations,
+    );
+    _pendingSynchronizations.clear();
+    for (final request in pending) {
+      if (!request.completer.isCompleted) {
+        request.completer.completeError(error);
+      }
+    }
+  }
 }
 
 enum _SocketSignalKind { message, wake, error, closed }
+
+final class _SynchronizationRequest {
+  const _SynchronizationRequest(this.targetSeq, this.completer);
+
+  final int targetSeq;
+  final Completer<void> completer;
+}
 
 final class _SocketSignal {
   const _SocketSignal._(this.kind, this.value);

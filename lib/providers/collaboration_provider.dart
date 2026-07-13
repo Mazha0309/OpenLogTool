@@ -1397,7 +1397,11 @@ class CollaborationProvider with ChangeNotifier {
           _clearOwnedLiveDraftLocks();
           _clearLiveDraftError();
           await _persistLiveDraftState();
-          _syncCoordinator?.wake();
+          await _refreshLogsAfterLiveDraftCommit(
+            binding: context.binding,
+            deviceId: context.deviceId,
+            event: committed.event,
+          );
           _safeNotify();
           return LiveDraftCommitDisposition.committed;
         } on ServerApiException catch (error) {
@@ -1520,7 +1524,11 @@ class CollaborationProvider with ChangeNotifier {
           _dirtyLiveDraftFields = const {};
           _liveDraftBaseRevisions = const {};
           _clearOwnedLiveDraftLocks();
-          _syncCoordinator?.wake();
+          await _refreshLogsAfterLiveDraftCommit(
+            binding: context.binding,
+            deviceId: context.deviceId,
+            event: committed.event,
+          );
         }
         await _updateOfflineRecord(
           record,
@@ -2449,6 +2457,67 @@ class CollaborationProvider with ChangeNotifier {
     return (api: server.api, binding: binding, deviceId: deviceId);
   }
 
+  Future<void> _refreshLogsAfterLiveDraftCommit({
+    required LocalCollaborationBinding binding,
+    required String deviceId,
+    required CollaborationEventDto event,
+  }) async {
+    bool contextIsCurrent() =>
+        !_disposed &&
+        _binding?.serverInstanceId == binding.serverInstanceId &&
+        _binding?.serverOrigin == binding.serverOrigin &&
+        _binding?.accountId == binding.accountId &&
+        _binding?.sessionId == binding.sessionId &&
+        _deviceId == deviceId &&
+        _server?.accountId == binding.accountId &&
+        _sessions?.currentSessionId == binding.sessionId;
+
+    if (!contextIsCurrent()) return;
+    final canonical = CollaborationLogDto.fromJson(event.payload);
+    _recordLogAuthorshipFromEvent(event);
+    _logs?.stageCanonicalLog(
+      LogEntry(
+        id: canonical.syncId,
+        sessionId: canonical.sessionId,
+        time: canonical.time.toUtc().toIso8601String(),
+        controller: canonical.controller,
+        callsign: canonical.callsign,
+        report: canonical.rstSent ?? '',
+        rstRcvd: canonical.rstRcvd ?? '',
+        qth: canonical.qth ?? '',
+        device: canonical.device ?? '',
+        power: canonical.power ?? '',
+        antenna: canonical.antenna ?? '',
+        height: canonical.height ?? '',
+        remarks: canonical.remarks ?? '',
+        createdAt: canonical.createdAt.toUtc().toIso8601String(),
+        updatedAt: canonical.updatedAt.toUtc().toIso8601String(),
+        deletedAt: canonical.deletedAt?.toUtc().toIso8601String(),
+      ),
+    );
+
+    final coordinator = _syncCoordinator;
+    if (coordinator != null) {
+      try {
+        final synchronized = await coordinator.synchronizeNow(
+          targetSeq: event.seq,
+          timeout: const Duration(seconds: 1),
+        );
+        if (synchronized && contextIsCurrent()) {
+          await _logs?.reconcileStagedCanonicalLog(canonical.syncId);
+          return;
+        }
+        if (!contextIsCurrent()) return;
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[Collaboration] awaited live-draft refresh failed: '
+          '$error\n$stackTrace',
+        );
+      }
+    }
+    coordinator?.wake();
+  }
+
   Future<void> _refreshLiveDraftForBinding(
     LocalCollaborationBinding binding, {
     required int requestGeneration,
@@ -3014,7 +3083,11 @@ class CollaborationProvider with ChangeNotifier {
           state: OfflineRecordState.resolved,
           resolution: OfflineRecordResolution.submitAsDuplicate,
         );
-        _syncCoordinator?.wake();
+        await _refreshLogsAfterLiveDraftCommit(
+          binding: binding,
+          deviceId: deviceId,
+          event: committed.event,
+        );
       } on ServerApiException catch (error) {
         if (error.retryable) {
           await _updateOfflineRecord(
@@ -3242,6 +3315,25 @@ class CollaborationProvider with ChangeNotifier {
       deviceId: deviceId,
     );
     late final CollaborationSyncCoordinator coordinator;
+    Future<void> reloadReplicaProjection() async {
+      if (!_isSyncCurrent(generation, identity, coordinator)) return;
+      await sessions.reloadCurrentSession();
+      if (!_isSyncCurrent(generation, identity, coordinator)) return;
+      await logs.reloadForSession(
+        binding.sessionId,
+        propagateErrors: true,
+      );
+    }
+
+    Future<void> reloadExternallyAdvancedProjection() async {
+      await reloadReplicaProjection();
+      if (!_isSyncCurrent(generation, identity, coordinator)) return;
+      final snapshot = await server.api.getSessionSnapshot(binding.sessionId);
+      if (!_isSyncCurrent(generation, identity, coordinator)) return;
+      _adoptLogAuthorship(snapshot.logs);
+      _invalidateOpenConflicts(identity);
+    }
+
     coordinator = CollaborationSyncCoordinator(
       transport: ServerApiCollaborationSyncTransport(server.api),
       replica: _replica,
@@ -3309,24 +3401,15 @@ class CollaborationProvider with ChangeNotifier {
         )) {
           _invalidateOpenConflicts(identity);
         }
-        await sessions.reloadCurrentSession();
-        if (!_isSyncCurrent(generation, identity, coordinator)) return;
-        await logs.reloadForSession(
-          sessions.currentSessionId,
-          propagateErrors: true,
-        );
+        await reloadReplicaProjection();
       },
       onSnapshotInstalled: (snapshot) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
         _adoptLogAuthorship(snapshot.logs);
         _invalidateOpenConflicts(identity);
-        await sessions.reloadCurrentSession();
-        if (!_isSyncCurrent(generation, identity, coordinator)) return;
-        await logs.reloadForSession(
-          sessions.currentSessionId,
-          propagateErrors: true,
-        );
+        await reloadReplicaProjection();
       },
+      onReplicaChanged: reloadExternallyAdvancedProjection,
       onControlMessage: (_) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
         await refreshLiveDraft();

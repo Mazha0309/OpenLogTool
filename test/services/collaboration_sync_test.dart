@@ -99,10 +99,12 @@ void main() {
         ),
       );
       final sockets = _FakeSocketConnector(autoReady: true);
+      var replicaChangeCount = 0;
       final coordinator = CollaborationSyncCoordinator(
         transport: transport,
         replica: replica,
         sockets: sockets,
+        onReplicaChanged: () => replicaChangeCount += 1,
       );
 
       coordinator.start(
@@ -115,7 +117,120 @@ void main() {
 
       expect(replica.cursor, 1);
       expect(replica.duplicateCount, greaterThanOrEqualTo(1));
+      expect(replicaChangeCount, 1);
       await coordinator.stop();
+    });
+
+    test('invalidates projections when another process wins the apply race',
+        () async {
+      final event = _event(seq: 1, eventId: 'external-event-1');
+      final replica = _FakeReplica(cursor: 0);
+      var raced = false;
+      final transport = _FakeTransport(
+        events: (sessionId, afterSeq) {
+          if (!raced && afterSeq == 0) {
+            raced = true;
+            replica.applyExternally(event);
+          }
+          return SessionEventsPageDto(
+            afterSeq: afterSeq,
+            toSeq: 1,
+            headSeq: 1,
+            minAvailableSeq: 0,
+            hasMore: false,
+            events: afterSeq == 0 ? [event] : const [],
+          );
+        },
+      );
+      final appliedCallbacks = <String>[];
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(autoReady: true),
+        onEventApplied: (event) => appliedCallbacks.add(event.eventId),
+      );
+
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () =>
+            coordinator.state.transportPhase ==
+            CollaborationTransportPhase.online,
+      );
+
+      expect(replica.duplicateCount, 1);
+      expect(appliedCallbacks, ['external-event-1']);
+      await coordinator.stop();
+    });
+
+    test('synchronizeNow waits for its target cursor and projection callback',
+        () async {
+      var remoteHead = 0;
+      final event = _event(seq: 1, eventId: 'awaited-event-1');
+      final replica = _FakeReplica(cursor: 0);
+      final transport = _FakeTransport(
+        events: (sessionId, afterSeq) => SessionEventsPageDto(
+          afterSeq: afterSeq,
+          toSeq: remoteHead,
+          headSeq: remoteHead,
+          minAvailableSeq: 0,
+          hasMore: false,
+          events: afterSeq < remoteHead ? [event] : const [],
+        ),
+      );
+      var projectionReloaded = false;
+      final coordinator = CollaborationSyncCoordinator(
+        transport: transport,
+        replica: replica,
+        sockets: _FakeSocketConnector(autoReady: true),
+        onEventApplied: (_) async => projectionReloaded = true,
+      );
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () =>
+            coordinator.state.transportPhase ==
+            CollaborationTransportPhase.online,
+      );
+      remoteHead = 1;
+
+      final synchronized = await coordinator.synchronizeNow(targetSeq: 1);
+
+      expect(synchronized, isTrue);
+      expect(projectionReloaded, isTrue);
+      expect(coordinator.state.lastAppliedSeq, 1);
+      await coordinator.stop();
+    });
+
+    test('stop completes a pending synchronizeNow without waiting for timeout',
+        () async {
+      final coordinator = CollaborationSyncCoordinator(
+        transport: _FakeTransport(),
+        replica: _FakeReplica(cursor: 0),
+        sockets: _FakeSocketConnector(autoReady: true),
+      );
+      coordinator.start(
+        identity: _identity('session-a'),
+        role: SessionRole.editor,
+      );
+      await _waitUntil(
+        () =>
+            coordinator.state.transportPhase ==
+            CollaborationTransportPhase.online,
+      );
+      final pending = coordinator.synchronizeNow(
+        targetSeq: 1,
+        timeout: const Duration(minutes: 1),
+      );
+      final expectation = expectLater(pending, throwsA(anything));
+
+      await coordinator.stop();
+
+      await expectation;
     });
 
     test('reconnects through catch-up after a socket closes', () async {
@@ -1671,6 +1786,12 @@ final class _FakeReplica implements CollaborationReplicaPort {
   void enqueue(CollaborationMutationDto mutation) {
     _mutations[mutation.mutationId] = mutation;
     _states[mutation.mutationId] = 'pending';
+  }
+
+  void applyExternally(CollaborationEventDto event) {
+    cursor = event.seq;
+    head = max(head, event.seq);
+    _applied[event.eventId] = event.seq;
   }
 
   void clearRejected() {
