@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -39,6 +40,8 @@ void main() {
           ),
         ],
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(height: 400, child: LogTable()),
           ),
@@ -155,6 +158,8 @@ void main() {
           ),
         ],
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(child: LogTable(readOnly: true)),
           ),
@@ -170,6 +175,79 @@ void main() {
     expect(_textOf(tester, table.rows.last.cells[4].child), 'SENT_2');
     expect(find.text('SENT_1'), findsNothing);
     expect(find.text('1 / 2'), findsOneWidget);
+  });
+
+  testWidgets('non-owned collaboration log exposes only a read-only hint',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'paginationEnabled': false},
+    );
+    final logProvider = _StaticLogProvider([
+      _log(
+        id: 'own-log',
+        time: 'OWN_TIME',
+        report: '59',
+        rstRcvd: '59',
+      ),
+      _log(
+        id: 'other-log',
+        time: 'OTHER_TIME',
+        report: '59',
+        rstRcvd: '59',
+      ),
+    ]);
+    logProvider.setLogMutationGuard(
+      (log) => log.id == 'other-log' ? 'COLLABORATION_LOG_NOT_OWNED' : null,
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: SettingsProvider(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(height: 400, child: LogTable()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    final otherActions = table.rows.first.cells[12].child;
+    expect(
+      find.descendant(
+        of: find.byWidget(otherActions),
+        matching: find.byType(IconButton),
+      ),
+      findsNothing,
+    );
+    final tooltip = tester.widget<Tooltip>(
+      find.descendant(
+        of: find.byWidget(otherActions),
+        matching: find.byType(Tooltip),
+      ),
+    );
+    expect(
+      tooltip.message,
+      'You can change or delete only records that you created.',
+    );
+
+    final ownActions = table.rows.last.cells[12].child;
+    expect(
+      find.descendant(
+        of: find.byWidget(ownActions),
+        matching: find.byType(IconButton),
+      ),
+      findsNWidgets(2),
+    );
   });
 }
 

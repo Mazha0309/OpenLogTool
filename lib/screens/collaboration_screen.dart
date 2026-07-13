@@ -44,72 +44,141 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('协作会话')),
+      appBar: AppBar(title: Text(context.l10n.collaborationScreenTitle)),
       body: Consumer3<CollaborationProvider, ServerProvider, SessionProvider>(
         builder: (context, collaboration, server, sessions, _) {
+          final showSyncSection = collaboration.offlineRecords.isNotEmpty ||
+              (collaboration.binding != null &&
+                  (collaboration.conflictCount > 0 ||
+                      collaboration.conflictsLoading ||
+                      collaboration.openConflicts.isNotEmpty));
+          final showAccessSection =
+              collaboration.supportsPublicShareManagement ||
+                  (server.isLoggedIn &&
+                      collaboration.state == CollaborationState.ready &&
+                      collaboration.isOwner);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _serverCard(server),
-              if (collaboration.progressLabel.isNotEmpty ||
-                  collaboration.errorMessage != null ||
-                  collaboration.syncErrorMessage != null)
-                _statusCard(collaboration),
-              if (server.isLoggedIn) _joinCard(collaboration),
-              if (sessions.currentSession != null)
-                _sessionCard(collaboration, sessions),
-              if (collaboration.offlineRecords.isNotEmpty)
-                _offlineReviewCard(collaboration),
-              if (collaboration.supportsPublicShareManagement)
-                _publicShareCard(collaboration),
-              if (collaboration.binding != null &&
-                  (collaboration.conflictCount > 0 ||
-                      collaboration.conflictsLoading ||
-                      collaboration.openConflicts.isNotEmpty))
-                CollaborationConflictCenter(
-                  conflicts: collaboration.openConflicts,
-                  loading: collaboration.conflictsLoading,
-                  resolvingConflictId: collaboration.resolvingConflictId,
-                  enabled: !collaboration.isBusy &&
-                      collaboration.canResolveConflicts,
-                  onRefresh:
-                      collaboration.isBusy || !collaboration.canResolveConflicts
-                          ? null
-                          : () => unawaited(
-                                _run(collaboration.refreshOpenConflicts),
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 960),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _sectionHeader(
+                        Icons.cloud_outlined,
+                        context.l10n.collaborationConnectionSection,
+                        context.l10n.collaborationConnectionSectionHint,
+                      ),
+                      _serverCard(server),
+                      if (collaboration.progressLabel.isNotEmpty ||
+                          collaboration.errorMessage != null ||
+                          collaboration.syncErrorMessage != null)
+                        _statusCard(collaboration),
+                      if (sessions.currentSession != null)
+                        _sessionCard(collaboration, sessions),
+                      if (server.isLoggedIn && collaboration.binding == null)
+                        _joinCard(collaboration),
+                      if (showSyncSection) ...[
+                        const SizedBox(height: 20),
+                        _sectionHeader(
+                          Icons.sync_problem_outlined,
+                          context.l10n.collaborationSyncSection,
+                          context.l10n.collaborationSyncSectionHint,
+                        ),
+                        if (collaboration.offlineRecords.isNotEmpty)
+                          _offlineReviewCard(collaboration),
+                        if (collaboration.binding != null &&
+                            (collaboration.conflictCount > 0 ||
+                                collaboration.conflictsLoading ||
+                                collaboration.openConflicts.isNotEmpty))
+                          CollaborationConflictCenter(
+                            conflicts: collaboration.openConflicts,
+                            loading: collaboration.conflictsLoading,
+                            resolvingConflictId:
+                                collaboration.resolvingConflictId,
+                            enabled: !collaboration.isBusy &&
+                                collaboration.canResolveConflicts,
+                            onRefresh: collaboration.isBusy ||
+                                    !collaboration.canResolveConflicts
+                                ? null
+                                : () => unawaited(
+                                      _run(
+                                        collaboration.refreshOpenConflicts,
+                                      ),
+                                    ),
+                            onAcceptRemote: (conflictId) => unawaited(
+                              _confirmConflictResolution(
+                                collaboration,
+                                conflictId,
+                                CollaborationConflictResolution.useRemote,
                               ),
-                  onAcceptRemote: (conflictId) => unawaited(
-                    _confirmConflictResolution(
-                      collaboration,
-                      conflictId,
-                      CollaborationConflictResolution.useRemote,
-                    ),
-                  ),
-                  onKeepLocal: (conflictId) => unawaited(
-                    _confirmConflictResolution(
-                      collaboration,
-                      conflictId,
-                      CollaborationConflictResolution.keepLocal,
-                    ),
-                  ),
-                  onCopyLocalAsNew: (conflictId) => unawaited(
-                    _confirmConflictResolution(
-                      collaboration,
-                      conflictId,
-                      CollaborationConflictResolution.copyLocalAsNew,
-                    ),
+                            ),
+                            onKeepLocal: (conflictId) => unawaited(
+                              _confirmConflictResolution(
+                                collaboration,
+                                conflictId,
+                                CollaborationConflictResolution.keepLocal,
+                              ),
+                            ),
+                            onCopyLocalAsNew: (conflictId) => unawaited(
+                              _confirmConflictResolution(
+                                collaboration,
+                                conflictId,
+                                CollaborationConflictResolution.copyLocalAsNew,
+                              ),
+                            ),
+                          ),
+                      ],
+                      if (showAccessSection) ...[
+                        const SizedBox(height: 20),
+                        _sectionHeader(
+                          Icons.group_outlined,
+                          context.l10n.collaborationAccessSection,
+                          context.l10n.collaborationAccessSectionHint,
+                        ),
+                        if (collaboration.supportsPublicShareManagement)
+                          _publicShareCard(collaboration),
+                        if (server.isLoggedIn &&
+                            collaboration.state == CollaborationState.ready &&
+                            collaboration.isOwner) ...[
+                          if (collaboration.supportsInvites)
+                            _inviteManagementCard(collaboration),
+                          _memberManagementCard(collaboration, server),
+                        ],
+                      ],
+                    ],
                   ),
                 ),
-              if (server.isLoggedIn &&
-                  collaboration.state == CollaborationState.ready &&
-                  collaboration.isOwner) ...[
-                if (collaboration.supportsInvites)
-                  _inviteManagementCard(collaboration),
-                _memberManagementCard(collaboration, server),
-              ],
+              ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _sectionHeader(IconData icon, String title, String hint) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 22, color: colors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text(hint, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -348,11 +417,18 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
         leading: Icon(
           server.isLoggedIn ? Icons.cloud_done : Icons.cloud_off,
         ),
-        title: Text(server.isLoggedIn ? server.username ?? '已登录' : '尚未登录服务器'),
+        title: Text(
+          server.isLoggedIn
+              ? server.username ?? context.l10n.serverLoggedIn
+              : context.l10n.serverNotLoggedIn,
+        ),
         subtitle: Text(
           server.isLoggedIn
-              ? '${server.serverUrl}\n账号 ${server.accountId}'
-              : '请先在“设置 → 服务器设置”中检测服务器并登录',
+              ? context.l10n.collaborationServerAccount(
+                  server.serverUrl,
+                  server.accountId ?? '',
+                )
+              : context.l10n.collaborationServerLoginHint,
         ),
         isThreeLine: server.isLoggedIn,
       ),
@@ -386,7 +462,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
               ),
               if (collaboration.remoteCommitPendingLocalApply) ...[
                 const SizedBox(height: 8),
-                const Text('远端已经提交；客户端只会恢复本地确认，不会重复创建新 mutation。'),
+                Text(context.l10n.remoteCommitPendingLocalApplyHint),
               ],
             ],
           ],
@@ -402,18 +478,21 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('加入协作', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              context.l10n.joinCollaborationTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
-            const Text('输入成员邀请码。成功后会以远端相同 Session ID 原子安装本地副本。'),
+            Text(context.l10n.joinCollaborationHint),
             const SizedBox(height: 12),
             TextField(
               controller: _inviteCodeController,
               enabled: !collaboration.isBusy,
               textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: '邀请码',
+              decoration: InputDecoration(
+                labelText: context.l10n.inviteCodeLabel,
                 hintText: 'ABCDE-12345',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -424,10 +503,10 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                         () => collaboration.joinWithCode(
                           _inviteCodeController.text,
                         ),
-                        success: '已加入协作会话',
+                        success: context.l10n.joinCollaborationSucceeded,
                       ),
               icon: const Icon(Icons.group_add),
-              label: const Text('加入'),
+              label: Text(context.l10n.join),
             ),
           ],
         ),
@@ -457,40 +536,54 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             SelectableText(session.sessionId),
             const SizedBox(height: 8),
             if (isLocal)
-              const Text('本地会话，尚未发布。发布会锁定一致快照并分批上传全部记录。')
+              Text(context.l10n.localCollaborationSessionHint)
             else ...[
               Text(
-                '状态 ${collaboration.state.name} · '
-                '角色 ${_roleLabel(collaboration.effectiveRole ?? binding?.role)}',
+                context.l10n.collaborationSessionSummary(
+                  collaborationStateLabel(
+                    context.l10n,
+                    collaboration.state.name,
+                  ),
+                  _roleLabel(
+                    collaboration.effectiveRole ?? binding?.role,
+                  ),
+                ),
               ),
               const SizedBox(height: 4),
               Text(
-                '同步 ${_transportLabel(collaboration.transportPhase)} · '
-                '游标 ${collaboration.lastAppliedSeq}/${collaboration.serverHeadSeq}',
+                context.l10n.collaborationSyncSummary(
+                  _transportLabel(collaboration.transportPhase),
+                  collaboration.lastAppliedSeq,
+                  collaboration.serverHeadSeq,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
-                '待同步 ${collaboration.pendingCount} · '
-                '冲突 ${collaboration.conflictCount} · '
-                '拒绝 ${collaboration.rejectedCount}',
+                context.l10n.collaborationQueueSummary(
+                  collaboration.pendingCount,
+                  collaboration.conflictCount,
+                  collaboration.rejectedCount,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 collaboration.canEditCurrentSession
-                    ? '本地保存后会进入可靠队列，并由规范事件确认同步。'
+                    ? context.l10n.collaborationReliableQueueHint
                     : _readOnlyReason(collaboration, sessions),
               ),
               if (collaboration.lastSuccessfulSyncAt != null) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '最近同步 ${collaboration.lastSuccessfulSyncAt!.toLocal()}',
+                  context.l10n.collaborationLastSync(
+                    collaboration.lastSuccessfulSyncAt!.toLocal().toString(),
+                  ),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
               if (collaboration.hasOpenSessionConflict) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '会话本身存在未解决冲突；请先在冲突中心处理，重命名、关闭和重新打开暂时禁用。',
+                  context.l10n.collaborationSessionConflictHint,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.error,
                   ),
@@ -506,10 +599,14 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                     ? null
                     : () => _run(
                           collaboration.publishCurrentSession,
-                          success: '协作会话发布完成',
+                          success: context.l10n.publishSessionSucceeded,
                         ),
                 icon: const Icon(Icons.cloud_upload),
-                label: Text(isLocal ? '发布为协作会话' : '重试发布'),
+                label: Text(
+                  isLocal
+                      ? context.l10n.publishCollaborationSession
+                      : context.l10n.retryPublishSession,
+                ),
               )
             else
               Wrap(
@@ -525,7 +622,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             );
                           },
                     icon: const Icon(Icons.refresh),
-                    label: const Text('立即同步并刷新权限'),
+                    label: Text(context.l10n.syncNowAndRefreshAccess),
                   ),
                   if (collaboration.isOwner) ...[
                     if (session.status == 'active' &&
@@ -537,7 +634,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             : () =>
                                 _renameSession(collaboration, session.title),
                         icon: const Icon(Icons.edit_outlined),
-                        label: const Text('重命名'),
+                        label: Text(context.l10n.renameSession),
                       ),
                       OutlinedButton.icon(
                         onPressed: collaboration.isBusy ||
@@ -545,7 +642,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             ? null
                             : () => _closeSession(collaboration),
                         icon: const Icon(Icons.stop_circle_outlined),
-                        label: const Text('关闭会话'),
+                        label: Text(context.l10n.closeSession),
                       ),
                     ] else if (session.status == 'closed' &&
                         collaboration.canonicalSessionClosed)
@@ -555,7 +652,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             ? null
                             : () => _reopenSession(collaboration),
                         icon: const Icon(Icons.play_circle_outline),
-                        label: const Text('重新打开'),
+                        label: Text(context.l10n.reopenSession),
                       ),
                   ],
                   if (collaboration.effectiveRole != null &&
@@ -576,12 +673,16 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
   }
 
   String _transportLabel(CollaborationTransportPhase phase) => switch (phase) {
-        CollaborationTransportPhase.stopped => '已停止',
-        CollaborationTransportPhase.connecting => '连接中',
-        CollaborationTransportPhase.online => '在线',
-        CollaborationTransportPhase.backingOff => '等待重连',
-        CollaborationTransportPhase.authRequired => '需要登录',
-        CollaborationTransportPhase.incompatible => '协议异常',
+        CollaborationTransportPhase.stopped => context.l10n.transportStopped,
+        CollaborationTransportPhase.connecting =>
+          context.l10n.transportConnecting,
+        CollaborationTransportPhase.online => context.l10n.transportOnline,
+        CollaborationTransportPhase.backingOff =>
+          context.l10n.transportBackingOff,
+        CollaborationTransportPhase.authRequired =>
+          context.l10n.transportAuthRequired,
+        CollaborationTransportPhase.incompatible =>
+          context.l10n.transportIncompatible,
       };
 
   String _readOnlyReason(
@@ -589,26 +690,26 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     SessionProvider sessions,
   ) {
     if (collaboration.state == CollaborationState.revoked) {
-      return '成员权限已撤销，本地缓存保持只读。';
+      return context.l10n.readOnlyRevoked;
     }
     if (sessions.currentSession?.status == 'closed' &&
         !collaboration.canonicalSessionClosed) {
-      return '关闭请求已保存到本地，等待同步确认；冲突时将保持锁定。';
+      return context.l10n.readOnlyClosePending;
     }
     if (sessions.currentSession?.status == 'active' &&
         collaboration.canonicalSessionClosed) {
-      return '重新打开请求已保存到本地，服务器确认前保持只读。';
+      return context.l10n.readOnlyReopenPending;
     }
     if (sessions.currentSession?.status != 'active') {
-      return '协作会话已关闭，本地缓存保持只读。';
+      return context.l10n.readOnlySessionClosed;
     }
     if (collaboration.effectiveRole == SessionRole.viewer) {
-      return '当前账号是只读成员。';
+      return context.l10n.readOnlyViewer;
     }
     if (collaboration.state == CollaborationState.resyncing) {
-      return '事件游标需要重装规范快照；待同步修改仍保留。';
+      return context.l10n.readOnlyResyncing;
     }
-    return '正在确认权限与事件游标，暂时保持只读。';
+    return context.l10n.readOnlyCheckingAccess;
   }
 
   Future<void> _renameSession(
@@ -616,28 +717,31 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     String currentTitle,
   ) async {
     final controller = TextEditingController(text: currentTitle);
+    final successMessage = context.l10n.sessionTitleQueued;
     try {
       final title = await showDialog<String>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('重命名协作会话'),
+          title: Text(context.l10n.renameCollaborationSession),
           content: TextField(
             controller: controller,
             autofocus: true,
             maxLength: 200,
-            decoration: const InputDecoration(labelText: '会话标题'),
+            decoration: InputDecoration(
+              labelText: context.l10n.sessionTitleLabel,
+            ),
             onSubmitted: (value) =>
                 Navigator.of(dialogContext).pop(value.trim()),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: () =>
                   Navigator.of(dialogContext).pop(controller.text.trim()),
-              child: const Text('保存到本地'),
+              child: Text(context.l10n.saveLocally),
             ),
           ],
         ),
@@ -645,7 +749,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       if (title == null || title == currentTitle) return;
       await _run(
         () => collaboration.renameCurrentSession(title),
-        success: '标题已保存到本地，等待同步确认',
+        success: successMessage,
       );
     } finally {
       controller.dispose();
@@ -676,26 +780,28 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
   }
 
   Future<void> _closeSession(CollaborationProvider collaboration) async {
+    final successMessage = context.l10n.closeSessionQueued;
     final accepted = await _confirm(
-      '关闭协作会话',
-      '关闭后所有成员都不能继续添加或修改记录；Owner 可以稍后重新打开。',
+      context.l10n.closeCollaborationSessionTitle,
+      context.l10n.closeCollaborationSessionMessage,
     );
     if (!accepted) return;
     await _run(
       collaboration.closeCurrentSession,
-      success: '会话已在本地关闭，等待同步确认',
+      success: successMessage,
     );
   }
 
   Future<void> _reopenSession(CollaborationProvider collaboration) async {
+    final successMessage = context.l10n.reopenSessionQueued;
     final accepted = await _confirm(
-      '重新打开协作会话',
-      '重新打开会作为一项同步修改提交；服务器确认前仍保持只读。',
+      context.l10n.reopenCollaborationSessionTitle,
+      context.l10n.reopenCollaborationSessionMessage,
     );
     if (!accepted) return;
     await _run(
       collaboration.reopenCurrentSession,
-      success: '重新打开请求已保存到本地，等待同步确认',
+      success: successMessage,
     );
   }
 
@@ -705,17 +811,20 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     CollaborationConflictResolution resolution,
   ) async {
     final title = switch (resolution) {
-      CollaborationConflictResolution.useRemote => '采用远端版本',
-      CollaborationConflictResolution.keepLocal => '保留本地版本',
-      CollaborationConflictResolution.copyLocalAsNew => '复制为新日志',
+      CollaborationConflictResolution.useRemote =>
+        context.l10n.conflictUseRemoteTitle,
+      CollaborationConflictResolution.keepLocal =>
+        context.l10n.conflictKeepLocalTitle,
+      CollaborationConflictResolution.copyLocalAsNew =>
+        context.l10n.conflictCopyLocalTitle,
     };
     final message = switch (resolution) {
       CollaborationConflictResolution.useRemote =>
-        '本地未同步修改会被远端规范版本替换，此操作不会再次提交 mutation。',
+        context.l10n.conflictUseRemoteMessage,
       CollaborationConflictResolution.keepLocal =>
-        '将基于最新远端版本创建一个新的 mutation。若远端再次变化，仍可能产生新冲突。',
+        context.l10n.conflictKeepLocalMessage,
       CollaborationConflictResolution.copyLocalAsNew =>
-        '远端原日志会保留，本地内容将使用新的日志 ID 创建副本并重新同步。',
+        context.l10n.conflictCopyLocalMessage,
     };
     final accepted = await _confirm(
       title,
@@ -731,9 +840,12 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
           collaboration.copyLocalAsNewForConflict(conflictId),
     };
     final success = switch (resolution) {
-      CollaborationConflictResolution.useRemote => '已采用远端版本',
-      CollaborationConflictResolution.keepLocal => '已保留本地版本并进入重试队列',
-      CollaborationConflictResolution.copyLocalAsNew => '已复制为新日志并进入同步队列',
+      CollaborationConflictResolution.useRemote =>
+        context.l10n.conflictUseRemoteSucceeded,
+      CollaborationConflictResolution.keepLocal =>
+        context.l10n.conflictKeepLocalSucceeded,
+      CollaborationConflictResolution.copyLocalAsNew =>
+        context.l10n.conflictCopyLocalSucceeded,
     };
     await _run(
       action,
@@ -753,20 +865,20 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '成员邀请',
+                    context.l10n.memberInvitesTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
                 DropdownButton<InviteRole>(
                   value: _inviteRole,
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: InviteRole.editor,
-                      child: Text('编辑者'),
+                      child: Text(context.l10n.roleEditor),
                     ),
                     DropdownMenuItem(
                       value: InviteRole.viewer,
-                      child: Text('只读成员'),
+                      child: Text(context.l10n.roleViewer),
                     ),
                   ],
                   onChanged: collaboration.isBusy
@@ -779,15 +891,15 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                       ? null
                       : () => _run(
                             () => collaboration.createInvite(role: _inviteRole),
-                            success: '邀请码已生成',
+                            success: context.l10n.inviteCreated,
                           ),
-                  child: const Text('生成'),
+                  child: Text(context.l10n.generate),
                 ),
               ],
             ),
             if (secret?.code != null) ...[
               const SizedBox(height: 12),
-              Text('邀请码只在本次创建响应中显示：',
+              Text(context.l10n.inviteCodeOneTimeHint,
                   style: Theme.of(context).textTheme.bodySmall),
               SelectableText(
                 secret!.code!,
@@ -796,22 +908,29 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             ],
             const Divider(height: 24),
             if (collaboration.invites.isEmpty)
-              const Text('暂无邀请')
+              Text(context.l10n.noInvites)
             else
               ...collaboration.invites.map(
                 (invite) => ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    '${invite.role == InviteRole.editor ? '编辑者' : '只读成员'} '
+                    '${invite.role == InviteRole.editor ? context.l10n.roleEditor : context.l10n.roleViewer} '
                     '••${invite.codeHint}',
                   ),
                   subtitle: Text(
-                    '${invite.usedCount}/${invite.maxUses} 次 · '
-                    '${invite.revokedAt == null ? '有效至 ${invite.expiresAt.toLocal()}' : '已撤销'}',
+                    context.l10n.inviteSummary(
+                      invite.usedCount,
+                      invite.maxUses,
+                      invite.revokedAt == null
+                          ? context.l10n.inviteExpiresAt(
+                              invite.expiresAt.toLocal().toString(),
+                            )
+                          : context.l10n.inviteRevoked,
+                    ),
                   ),
                   trailing: invite.revokedAt == null
                       ? IconButton(
-                          tooltip: '撤销',
+                          tooltip: context.l10n.revokePublicShare,
                           onPressed: collaboration.isBusy
                               ? null
                               : () => _run(
@@ -840,7 +959,10 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('成员', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              context.l10n.membersTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             ...collaboration.members.map(
               (member) => ListTile(
@@ -853,7 +975,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                 title: Text(member.username ?? member.userId),
                 subtitle: Text(_roleLabel(member.role)),
                 trailing: member.userId == server.accountId
-                    ? const Text('当前账号')
+                    ? Text(context.l10n.currentAccount)
                     : PopupMenuButton<String>(
                         enabled: !collaboration.isBusy,
                         onSelected: (action) {
@@ -867,7 +989,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                                 member.userId,
                                 InviteRole.editor,
                               ),
-                              success: '成员已设为编辑者',
+                              success: context.l10n.memberSetEditor,
                             );
                           } else if (action == 'viewer') {
                             _run(
@@ -875,26 +997,26 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                                 member.userId,
                                 InviteRole.viewer,
                               ),
-                              success: '成员已设为只读',
+                              success: context.l10n.memberSetViewer,
                             );
                           }
                         },
-                        itemBuilder: (_) => const [
+                        itemBuilder: (_) => [
                           PopupMenuItem(
                             value: 'editor',
-                            child: Text('设为编辑者'),
+                            child: Text(context.l10n.setAsEditor),
                           ),
                           PopupMenuItem(
                             value: 'viewer',
-                            child: Text('设为只读成员'),
+                            child: Text(context.l10n.setAsViewer),
                           ),
                           PopupMenuItem(
                             value: 'owner',
-                            child: Text('转移所有权'),
+                            child: Text(context.l10n.transferOwnership),
                           ),
                           PopupMenuItem(
                             value: 'remove',
-                            child: Text('移除成员'),
+                            child: Text(context.l10n.removeMember),
                           ),
                         ],
                       ),
@@ -910,14 +1032,17 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     CollaborationProvider collaboration,
     MembershipDto member,
   ) async {
+    final successMessage = context.l10n.ownershipTransferred;
     final accepted = await _confirm(
-      '转移所有权',
-      '转移给 ${member.username ?? member.userId} 后，你将变为编辑者。',
+      context.l10n.transferOwnership,
+      context.l10n.transferOwnershipConfirmation(
+        member.username ?? member.userId,
+      ),
     );
     if (accepted) {
       await _run(
         () => collaboration.transferOwnership(member.userId),
-        success: '所有权已转移',
+        success: successMessage,
       );
     }
   }
@@ -926,14 +1051,17 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     CollaborationProvider collaboration,
     MembershipDto member,
   ) async {
+    final successMessage = context.l10n.memberRemoved;
     final accepted = await _confirm(
-      '移除成员',
-      '确定移除 ${member.username ?? member.userId}？权限会立即失效。',
+      context.l10n.removeMember,
+      context.l10n.removeMemberConfirmation(
+        member.username ?? member.userId,
+      ),
     );
     if (accepted) {
       await _run(
         () => collaboration.removeMember(member.userId),
-        success: '成员已移除',
+        success: successMessage,
       );
     }
   }
@@ -947,11 +1075,11 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('取消'),
+                child: Text(context.l10n.cancel),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('确认'),
+                child: Text(context.l10n.confirm),
               ),
             ],
           ),
@@ -971,15 +1099,17 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       }
     } catch (error) {
       if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('操作失败: $error')));
+        messenger.showSnackBar(
+          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+        );
       }
     }
   }
 
   String _roleLabel(SessionRole? role) => switch (role) {
-        SessionRole.owner => '所有者',
-        SessionRole.editor => '编辑者',
-        SessionRole.viewer => '只读成员',
-        null => '未知',
+        SessionRole.owner => context.l10n.roleOwner,
+        SessionRole.editor => context.l10n.roleEditor,
+        SessionRole.viewer => context.l10n.roleViewer,
+        null => context.l10n.unknown,
       };
 }

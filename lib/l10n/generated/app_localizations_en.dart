@@ -328,6 +328,372 @@ class AppLocalizationsEn extends AppLocalizations {
       'After leaving, the local replica remains read-only. A new invitation is required to participate again.';
 
   @override
+  String get collaborationScreenTitle => 'Collaboration and members';
+
+  @override
+  String get collaborationConnectionSection => 'Connection and session';
+
+  @override
+  String get collaborationConnectionSectionHint =>
+      'Review the server account, current session, and synchronization entry points.';
+
+  @override
+  String get collaborationSyncSection => 'Synchronization review';
+
+  @override
+  String get collaborationSyncSectionHint =>
+      'Review offline records and resolve conflicts that require a decision.';
+
+  @override
+  String get collaborationAccessSection => 'Members and sharing';
+
+  @override
+  String get collaborationAccessSectionHint =>
+      'Manage scribe access, invitation codes, and read-only public pages.';
+
+  @override
+  String get serverLoggedIn => 'Signed in';
+
+  @override
+  String get serverNotLoggedIn => 'Not signed in to a server';
+
+  @override
+  String collaborationServerAccount(String url, String id) {
+    return '$url\nAccount $id';
+  }
+
+  @override
+  String get collaborationServerLoginHint =>
+      'Check the server and sign in from Settings → Server and account.';
+
+  @override
+  String get remoteCommitPendingLocalApplyHint =>
+      'The remote commit succeeded. The client will restore only the local acknowledgement and will not create another mutation.';
+
+  @override
+  String get joinCollaborationTitle => 'Join collaboration';
+
+  @override
+  String get joinCollaborationHint =>
+      'Enter a member invitation code. A complete local replica is installed with the same remote Session ID.';
+
+  @override
+  String get inviteCodeLabel => 'Invitation code';
+
+  @override
+  String get join => 'Join';
+
+  @override
+  String get joinCollaborationSucceeded => 'Joined the collaboration session';
+
+  @override
+  String get localCollaborationSessionHint =>
+      'This local session is not published. Publishing locks a consistent snapshot and uploads all records in batches.';
+
+  @override
+  String collaborationSessionSummary(String state, String role) {
+    return 'Status $state · Role $role';
+  }
+
+  @override
+  String collaborationSyncSummary(String transport, int applied, int head) {
+    return 'Sync $transport · Cursor $applied/$head';
+  }
+
+  @override
+  String collaborationQueueSummary(int pending, int conflicts, int rejected) {
+    return 'Pending $pending · Conflicts $conflicts · Rejected $rejected';
+  }
+
+  @override
+  String get collaborationReliableQueueHint =>
+      'Local saves enter the reliable queue and are confirmed by canonical events.';
+
+  @override
+  String collaborationLastSync(String time) {
+    return 'Last synchronized $time';
+  }
+
+  @override
+  String get collaborationSessionConflictHint =>
+      'The session has an unresolved conflict. Resolve it first; rename, close, and reopen actions are temporarily unavailable.';
+
+  @override
+  String get publishSessionSucceeded => 'Collaboration session published';
+
+  @override
+  String get publishCollaborationSession => 'Publish for collaboration';
+
+  @override
+  String get retryPublishSession => 'Retry publishing';
+
+  @override
+  String get syncNowAndRefreshAccess => 'Sync now and refresh access';
+
+  @override
+  String get closeSession => 'Close session';
+
+  @override
+  String get reopenSession => 'Reopen';
+
+  @override
+  String get transportStopped => 'Stopped';
+
+  @override
+  String get transportConnecting => 'Connecting';
+
+  @override
+  String get transportOnline => 'Online';
+
+  @override
+  String get transportBackingOff => 'Waiting to reconnect';
+
+  @override
+  String get transportAuthRequired => 'Sign-in required';
+
+  @override
+  String get transportIncompatible => 'Protocol error';
+
+  @override
+  String get readOnlyRevoked =>
+      'Membership has been revoked. The local cache is read-only.';
+
+  @override
+  String get readOnlyClosePending =>
+      'The close request is saved locally and awaits confirmation; the session remains locked if it conflicts.';
+
+  @override
+  String get readOnlyReopenPending =>
+      'The reopen request is saved locally. The session remains read-only until the server confirms it.';
+
+  @override
+  String get readOnlySessionClosed =>
+      'The collaboration session is closed. The local cache is read-only.';
+
+  @override
+  String get readOnlyViewer => 'This account is a read-only member.';
+
+  @override
+  String get readOnlyResyncing =>
+      'The event cursor requires a canonical snapshot reinstall; pending changes are preserved.';
+
+  @override
+  String get readOnlyCheckingAccess =>
+      'Access and the event cursor are being checked. The session is temporarily read-only.';
+
+  @override
+  String get logNotOwnedReadOnlyHint =>
+      'You can change or delete only records that you created.';
+
+  @override
+  String get logAuthorUnknownReadOnlyHint =>
+      'This historical record has no author information and is read-only for members.';
+
+  @override
+  String get logSessionReadOnlyHint =>
+      'The current member role, session state, or synchronization state does not allow record changes.';
+
+  @override
+  String get logConflictReadOnlyHint =>
+      'Resolve this record in the conflict center first.';
+
+  @override
+  String get renameCollaborationSession => 'Rename collaboration session';
+
+  @override
+  String get saveLocally => 'Save locally';
+
+  @override
+  String get sessionTitleQueued =>
+      'Title saved locally and awaiting synchronization';
+
+  @override
+  String get closeCollaborationSessionTitle => 'Close collaboration session';
+
+  @override
+  String get closeCollaborationSessionMessage =>
+      'After closing, no member can add or change records. The owner can reopen the session later.';
+
+  @override
+  String get closeSessionQueued =>
+      'Session closed locally and awaiting synchronization';
+
+  @override
+  String get reopenCollaborationSessionTitle => 'Reopen collaboration session';
+
+  @override
+  String get reopenCollaborationSessionMessage =>
+      'Reopening is submitted as a synchronized change. The session remains read-only until confirmed.';
+
+  @override
+  String get reopenSessionQueued =>
+      'Reopen request saved locally and awaiting synchronization';
+
+  @override
+  String get conflictUseRemoteTitle => 'Use remote version';
+
+  @override
+  String get conflictKeepLocalTitle => 'Keep local version';
+
+  @override
+  String get conflictCopyLocalTitle => 'Copy as a new log';
+
+  @override
+  String get conflictUseRemoteMessage =>
+      'Unsynchronized local changes are replaced by the canonical remote version. No new mutation is submitted.';
+
+  @override
+  String get conflictKeepLocalMessage =>
+      'A new mutation is based on the latest remote version. Another remote change can still produce a new conflict.';
+
+  @override
+  String get conflictCopyLocalMessage =>
+      'The remote log is preserved, while the local content is copied under a new log ID and synchronized again.';
+
+  @override
+  String get conflictUseRemoteSucceeded => 'Remote version applied';
+
+  @override
+  String get conflictKeepLocalSucceeded =>
+      'Local version kept and queued for retry';
+
+  @override
+  String get conflictCopyLocalSucceeded =>
+      'Copied as a new log and queued for synchronization';
+
+  @override
+  String get conflictCenterTitle => 'Conflict center';
+
+  @override
+  String get refreshConflicts => 'Refresh conflicts';
+
+  @override
+  String get conflictCenterHint =>
+      'Available actions reflect the latest access and entity state in the local replica. Keeping or copying creates a new synchronized mutation.';
+
+  @override
+  String get noConflicts => 'No conflicts need attention.';
+
+  @override
+  String get conflictSession => 'Session';
+
+  @override
+  String get conflictLog => 'Log';
+
+  @override
+  String get conflictNoOverlappingFields =>
+      'No overlapping fields (the version changed)';
+
+  @override
+  String conflictVersionSummary(String fields, int base, int remote) {
+    return 'Fields $fields · Base v$base → remote v$remote';
+  }
+
+  @override
+  String get conflictBase => 'Base';
+
+  @override
+  String get conflictLocal => 'Local';
+
+  @override
+  String get conflictRemote => 'Remote';
+
+  @override
+  String get conflictUseRemoteAction => 'Use remote';
+
+  @override
+  String get conflictKeepLocalAction => 'Keep local and retry';
+
+  @override
+  String get conflictCopyLocalAction => 'Copy as a new log';
+
+  @override
+  String get memberInvitesTitle => 'Member invitations';
+
+  @override
+  String get roleOwner => 'Owner';
+
+  @override
+  String get roleEditor => 'Editor';
+
+  @override
+  String get roleViewer => 'Read-only member';
+
+  @override
+  String get inviteCreated => 'Invitation code created';
+
+  @override
+  String get generate => 'Generate';
+
+  @override
+  String get inviteCodeOneTimeHint =>
+      'The invitation code is shown only in this creation response:';
+
+  @override
+  String get noInvites => 'No invitations';
+
+  @override
+  String inviteSummary(int used, int max, String status) {
+    return '$used/$max uses · $status';
+  }
+
+  @override
+  String inviteExpiresAt(String time) {
+    return 'Expires $time';
+  }
+
+  @override
+  String get inviteRevoked => 'Revoked';
+
+  @override
+  String get membersTitle => 'Members';
+
+  @override
+  String get currentAccount => 'Current account';
+
+  @override
+  String get memberSetEditor => 'Member changed to editor';
+
+  @override
+  String get memberSetViewer => 'Member changed to read-only';
+
+  @override
+  String get setAsEditor => 'Make editor';
+
+  @override
+  String get setAsViewer => 'Make read-only';
+
+  @override
+  String get transferOwnership => 'Transfer ownership';
+
+  @override
+  String get removeMember => 'Remove member';
+
+  @override
+  String transferOwnershipConfirmation(String name) {
+    return 'After transferring to $name, you become an editor.';
+  }
+
+  @override
+  String get ownershipTransferred => 'Ownership transferred';
+
+  @override
+  String removeMemberConfirmation(String name) {
+    return 'Remove $name? Their access is revoked immediately.';
+  }
+
+  @override
+  String get memberRemoved => 'Member removed';
+
+  @override
+  String operationFailed(String error) {
+    return 'Action failed: $error';
+  }
+
+  @override
+  String get unknown => 'Unknown';
+
+  @override
   String get confirm => 'Confirm';
 
   @override
@@ -417,6 +783,196 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get serverAddressInvalid =>
       'The server address must be a complete http(s) URL.';
+
+  @override
+  String get serverSettingsTitle => 'Server and account';
+
+  @override
+  String get serverAddressLabel => 'Server address';
+
+  @override
+  String get serverAddressHint => 'http://your-server:3000';
+
+  @override
+  String get serverSaveAndCheck => 'Save and check server';
+
+  @override
+  String serverCheckSucceeded(int min, int max) {
+    return 'Connected · protocol v$min-$max';
+  }
+
+  @override
+  String serverInstanceDetails(String instance, String features) {
+    return 'Instance $instance\nCapabilities $features';
+  }
+
+  @override
+  String get serverConnected => 'Connected';
+
+  @override
+  String get serverNotConnected => 'Not checked';
+
+  @override
+  String get serverSignedOutHint =>
+      'Sign in to collaborate and manage only your own account and sign-in devices.';
+
+  @override
+  String get serverLogin => 'Sign in';
+
+  @override
+  String get serverRegister => 'Register';
+
+  @override
+  String get serverLogout => 'Sign out';
+
+  @override
+  String serverAccountId(String id) {
+    return 'Account ID: $id';
+  }
+
+  @override
+  String get serverLoginSucceeded => 'Signed in to the server';
+
+  @override
+  String get serverRegistrationSucceeded => 'Registered and signed in';
+
+  @override
+  String serverLoginFailed(String error) {
+    return 'Sign-in failed: $error';
+  }
+
+  @override
+  String serverRegistrationFailed(String error) {
+    return 'Registration failed: $error';
+  }
+
+  @override
+  String serverLogoutFailed(String error) {
+    return 'Sign-out failed: $error';
+  }
+
+  @override
+  String get accountChangeUsername => 'Change username';
+
+  @override
+  String get accountChangePassword => 'Change password';
+
+  @override
+  String get accountDeviceSessions => 'Sign-in devices';
+
+  @override
+  String get accountUsernameUpdated => 'Username updated';
+
+  @override
+  String accountPasswordUpdated(int count) {
+    return 'Password updated. $count sign-in sessions were revoked; sign in again.';
+  }
+
+  @override
+  String accountUpdateFailed(String error) {
+    return 'Account action failed: $error';
+  }
+
+  @override
+  String get usernameLabel => 'Username';
+
+  @override
+  String get usernameLengthHint => 'Username must be 3–64 characters';
+
+  @override
+  String get passwordLabel => 'Password';
+
+  @override
+  String get fieldRequired => 'This field is required';
+
+  @override
+  String get currentPasswordLabel => 'Current password';
+
+  @override
+  String get newPasswordLabel => 'New password';
+
+  @override
+  String get confirmNewPasswordLabel => 'Confirm new password';
+
+  @override
+  String get passwordLengthHint => 'Password must be at least 10 characters';
+
+  @override
+  String get passwordMismatch => 'The new passwords do not match';
+
+  @override
+  String get passwordChangeRequiredTitle =>
+      'Temporary password must be changed';
+
+  @override
+  String passwordChangeRequiredHint(String username) {
+    return 'Account $username signed in with a temporary password. Set a new password to continue.';
+  }
+
+  @override
+  String passwordChangeCredentialExpires(int seconds) {
+    return 'This password-change credential expires in $seconds seconds.';
+  }
+
+  @override
+  String get completePasswordChange => 'Set password and sign in';
+
+  @override
+  String get cancelLogin => 'Cancel sign-in';
+
+  @override
+  String get passwordChangeCompleted =>
+      'Password updated and sign-in completed';
+
+  @override
+  String get deviceSessionsTitle => 'Sign-in devices';
+
+  @override
+  String get deviceSessionsEmpty => 'There are no active sign-in devices';
+
+  @override
+  String get deviceUnknown => 'Unnamed device';
+
+  @override
+  String get deviceCurrent => 'Current device';
+
+  @override
+  String deviceIp(String ip) {
+    return 'IP: $ip';
+  }
+
+  @override
+  String deviceLastUsed(String time) {
+    return 'Last used: $time';
+  }
+
+  @override
+  String deviceExpires(String time) {
+    return 'Expires: $time';
+  }
+
+  @override
+  String get revokeDevice => 'Revoke device';
+
+  @override
+  String get revokeCurrentDevice => 'Sign out this device';
+
+  @override
+  String get revokeDeviceConfirmation =>
+      'After revocation, this device can no longer refresh its sign-in session.';
+
+  @override
+  String get revokeCurrentDeviceConfirmation =>
+      'After signing out this device, enter your username and password again to reconnect.';
+
+  @override
+  String get deviceRevoked => 'Sign-in device revoked';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get retry => 'Retry';
 
   @override
   String get excelUseSessionTitleAsHeader =>
@@ -1031,6 +1587,196 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get serverAddressInvalid =>
       'The server address must be a complete http(s) URL.';
+
+  @override
+  String get serverSettingsTitle => 'Server and account';
+
+  @override
+  String get serverAddressLabel => 'Server address';
+
+  @override
+  String get serverAddressHint => 'http://your-server:3000';
+
+  @override
+  String get serverSaveAndCheck => 'Save and check server';
+
+  @override
+  String serverCheckSucceeded(int min, int max) {
+    return 'Connected · protocol v$min-$max';
+  }
+
+  @override
+  String serverInstanceDetails(String instance, String features) {
+    return 'Instance $instance\nCapabilities $features';
+  }
+
+  @override
+  String get serverConnected => 'Connected';
+
+  @override
+  String get serverNotConnected => 'Not checked';
+
+  @override
+  String get serverSignedOutHint =>
+      'Sign in to collaborate and manage only your own account and sign-in devices.';
+
+  @override
+  String get serverLogin => 'Sign in';
+
+  @override
+  String get serverRegister => 'Register';
+
+  @override
+  String get serverLogout => 'Sign out';
+
+  @override
+  String serverAccountId(String id) {
+    return 'Account ID: $id';
+  }
+
+  @override
+  String get serverLoginSucceeded => 'Signed in to the server';
+
+  @override
+  String get serverRegistrationSucceeded => 'Registered and signed in';
+
+  @override
+  String serverLoginFailed(String error) {
+    return 'Sign-in failed: $error';
+  }
+
+  @override
+  String serverRegistrationFailed(String error) {
+    return 'Registration failed: $error';
+  }
+
+  @override
+  String serverLogoutFailed(String error) {
+    return 'Sign-out failed: $error';
+  }
+
+  @override
+  String get accountChangeUsername => 'Change username';
+
+  @override
+  String get accountChangePassword => 'Change password';
+
+  @override
+  String get accountDeviceSessions => 'Sign-in devices';
+
+  @override
+  String get accountUsernameUpdated => 'Username updated';
+
+  @override
+  String accountPasswordUpdated(int count) {
+    return 'Password updated. $count sign-in sessions were revoked; sign in again.';
+  }
+
+  @override
+  String accountUpdateFailed(String error) {
+    return 'Account action failed: $error';
+  }
+
+  @override
+  String get usernameLabel => 'Username';
+
+  @override
+  String get usernameLengthHint => 'Username must be 3–64 characters';
+
+  @override
+  String get passwordLabel => 'Password';
+
+  @override
+  String get fieldRequired => 'This field is required';
+
+  @override
+  String get currentPasswordLabel => 'Current password';
+
+  @override
+  String get newPasswordLabel => 'New password';
+
+  @override
+  String get confirmNewPasswordLabel => 'Confirm new password';
+
+  @override
+  String get passwordLengthHint => 'Password must be at least 10 characters';
+
+  @override
+  String get passwordMismatch => 'The new passwords do not match';
+
+  @override
+  String get passwordChangeRequiredTitle =>
+      'Temporary password must be changed';
+
+  @override
+  String passwordChangeRequiredHint(String username) {
+    return 'Account $username signed in with a temporary password. Set a new password to continue.';
+  }
+
+  @override
+  String passwordChangeCredentialExpires(int seconds) {
+    return 'This password-change credential expires in $seconds seconds.';
+  }
+
+  @override
+  String get completePasswordChange => 'Set password and sign in';
+
+  @override
+  String get cancelLogin => 'Cancel sign-in';
+
+  @override
+  String get passwordChangeCompleted =>
+      'Password updated and sign-in completed';
+
+  @override
+  String get deviceSessionsTitle => 'Sign-in devices';
+
+  @override
+  String get deviceSessionsEmpty => 'There are no active sign-in devices';
+
+  @override
+  String get deviceUnknown => 'Unnamed device';
+
+  @override
+  String get deviceCurrent => 'Current device';
+
+  @override
+  String deviceIp(String ip) {
+    return 'IP: $ip';
+  }
+
+  @override
+  String deviceLastUsed(String time) {
+    return 'Last used: $time';
+  }
+
+  @override
+  String deviceExpires(String time) {
+    return 'Expires: $time';
+  }
+
+  @override
+  String get revokeDevice => 'Revoke device';
+
+  @override
+  String get revokeCurrentDevice => 'Sign out this device';
+
+  @override
+  String get revokeDeviceConfirmation =>
+      'After revocation, this device can no longer refresh its sign-in session.';
+
+  @override
+  String get revokeCurrentDeviceConfirmation =>
+      'After signing out this device, enter your username and password again to reconnect.';
+
+  @override
+  String get deviceRevoked => 'Sign-in device revoked';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get retry => 'Retry';
 
   @override
   String get excelUseSessionTitleAsHeader =>

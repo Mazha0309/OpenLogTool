@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
+import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
@@ -139,6 +140,25 @@ bool collaborationEventMayAffectOpenConflicts({
   );
 }
 
+@visibleForTesting
+String? collaborationLogMutationBlockReason({
+  required bool collaborationBound,
+  required bool canEditSession,
+  required String? accountId,
+  required bool authorshipKnown,
+  required String? createdBy,
+}) {
+  if (!collaborationBound) return null;
+  if (!canEditSession || accountId == null) {
+    return 'COLLABORATION_SESSION_READ_ONLY';
+  }
+  if (!authorshipKnown || createdBy == null) {
+    return 'COLLABORATION_LOG_AUTHOR_UNKNOWN';
+  }
+  if (createdBy != accountId) return 'COLLABORATION_LOG_NOT_OWNED';
+  return null;
+}
+
 class CollaborationProvider with ChangeNotifier {
   CollaborationProvider({
     CollaborationReplicaPort? replica,
@@ -218,6 +238,7 @@ class CollaborationProvider with ChangeNotifier {
   MembershipDto? _membership;
   List<MembershipDto> _members = const [];
   List<CollaborationInviteDto> _invites = const [];
+  final Map<String, String?> _logCreatedBy = <String, String?>{};
   CollaborationInviteDto? _lastCreatedInvite;
   String? _deviceId;
   String? _errorCode;
@@ -401,6 +422,18 @@ class CollaborationProvider with ChangeNotifier {
     return _logs?.currentSessionReadOnly ?? false;
   }
 
+  String? _logMutationBlockReason(LogEntry log) {
+    final binding = _binding;
+    final boundLog = binding != null && log.sessionId == binding.sessionId;
+    return collaborationLogMutationBlockReason(
+      collaborationBound: boundLog,
+      canEditSession: canEditCurrentSession,
+      accountId: _server?.accountId,
+      authorshipKnown: _logCreatedBy.containsKey(log.id),
+      createdBy: _logCreatedBy[log.id],
+    );
+  }
+
   void updateDependencies(
     ServerProvider server,
     SessionProvider sessions,
@@ -408,7 +441,11 @@ class CollaborationProvider with ChangeNotifier {
   ) {
     _server = server;
     _sessions = sessions;
-    _logs = logs;
+    if (!identical(_logs, logs)) {
+      _logs?.setLogMutationGuard(null);
+      _logs = logs;
+      logs.setLogMutationGuard(_logMutationBlockReason);
+    }
     final key = '${server.contextRevision}|${server.serverUrl}|'
         '${server.accountId ?? ''}|'
         '${sessions.currentSessionId ?? ''}';
@@ -518,6 +555,7 @@ class CollaborationProvider with ChangeNotifier {
       }
       final remoteMembership = await api.getMembership(sessionId);
       if (!isCurrent()) return;
+      SessionSnapshotDto authorshipSnapshot;
       if (remoteMembership.version > currentBinding.membershipVersion ||
           remoteMembership.role != currentBinding.role) {
         final snapshot = await api.getSessionSnapshot(
@@ -527,6 +565,7 @@ class CollaborationProvider with ChangeNotifier {
           ),
         );
         if (!isCurrent()) return;
+        authorshipSnapshot = snapshot;
         final refreshedBinding = await RustApi.installCollaborationSnapshot(
           requestJson: jsonEncode({
             'mode': 'join',
@@ -543,7 +582,17 @@ class CollaborationProvider with ChangeNotifier {
         );
         await logs.reloadForSession(sessionId, propagateErrors: true);
         if (!isCurrent()) return;
+      } else {
+        authorshipSnapshot = await api.getSessionSnapshot(
+          sessionId,
+          includeDeleted: includeDeletedLogsForSnapshotInstall(
+            CollaborationSnapshotInstallTarget.existingReplica,
+          ),
+        );
+        if (!isCurrent()) return;
       }
+      _adoptLogAuthorship(authorshipSnapshot.logs);
+      _markUnpublishedLocalLogsOwned(logs, accountId);
 
       var members = const <MembershipDto>[];
       var invites = const <CollaborationInviteDto>[];
@@ -2843,6 +2892,7 @@ class CollaborationProvider with ChangeNotifier {
       },
       onEventApplied: (event) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        _recordLogAuthorshipFromEvent(event);
         if (collaborationEventMayAffectOpenConflicts(
           event: event,
           openConflicts: _openConflicts,
@@ -2859,6 +2909,7 @@ class CollaborationProvider with ChangeNotifier {
       },
       onSnapshotInstalled: (snapshot) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        _adoptLogAuthorship(snapshot.logs);
         _invalidateOpenConflicts(identity);
         await sessions.reloadCurrentSession();
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
@@ -2904,6 +2955,7 @@ class CollaborationProvider with ChangeNotifier {
     _syncCoordinator = coordinator;
     logs.setOnDataChanged(() async {
       if (_isSyncCurrent(generation, identity, coordinator)) {
+        _markUnpublishedLocalLogsOwned(logs, identity.accountId);
         coordinator.wake();
       }
     });
@@ -2993,6 +3045,35 @@ class CollaborationProvider with ChangeNotifier {
     if (coordinator != null) unawaited(coordinator.dispose());
   }
 
+  void _adoptLogAuthorship(Iterable<CollaborationLogDto> logs) {
+    _logCreatedBy
+      ..clear()
+      ..addEntries(
+        logs.map((log) => MapEntry(log.syncId, log.createdBy)),
+      );
+    _logs?.refreshMutationPermissions();
+  }
+
+  void _recordLogAuthorshipFromEvent(CollaborationEventDto event) {
+    if (event.entityType != 'log') return;
+    final payload = event.payload;
+    final createdBy = payload['createdBy'];
+    _logCreatedBy[event.entityId] =
+        createdBy is String && createdBy.isNotEmpty ? createdBy : null;
+  }
+
+  void _markUnpublishedLocalLogsOwned(LogProvider logs, String? accountId) {
+    if (accountId == null) return;
+    var changed = false;
+    for (final log in logs.logs) {
+      if (!_logCreatedBy.containsKey(log.id)) {
+        _logCreatedBy[log.id] = accountId;
+        changed = true;
+      }
+    }
+    if (changed) logs.refreshMutationPermissions();
+  }
+
   void _clearScopedState() {
     _stopSynchronization();
     _liveDraftGeneration += 1;
@@ -3007,6 +3088,8 @@ class CollaborationProvider with ChangeNotifier {
     _clearLiveDraftError();
     _publicShares = const [];
     _lastCreatedPublicShare = null;
+    _logCreatedBy.clear();
+    _logs?.refreshMutationPermissions();
     _binding = null;
     _membership = null;
     _members = const [];
@@ -3119,6 +3202,7 @@ class CollaborationProvider with ChangeNotifier {
   @override
   void dispose() {
     _stopSynchronization();
+    _logs?.setLogMutationGuard(null);
     _disposed = true;
     super.dispose();
   }

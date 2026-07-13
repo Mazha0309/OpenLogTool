@@ -461,10 +461,9 @@ class AddRecordPage extends StatelessWidget {
                 style: FilledButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.error,
                     foregroundColor: Colors.white),
-                onPressed:
-                    !logProvider.currentSessionReadOnly && lp.logCount > 0
-                        ? () => _showClearConfirmation(context)
-                        : null,
+                onPressed: lp.canClearAllLogs
+                    ? () => _showClearConfirmation(context)
+                    : null,
                 child: const Text('清空'),
               ),
             ),

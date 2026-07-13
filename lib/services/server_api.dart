@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:openlogtool/models/account_dto.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
 
@@ -114,6 +115,26 @@ final class ServerApi {
     return session;
   }
 
+  Future<AuthSessionDto> completeRequiredPasswordChange({
+    required String passwordChangeToken,
+    required String newPassword,
+    String? deviceId,
+  }) async {
+    final resolvedDeviceId = deviceId ?? this.deviceId;
+    final response = await _publicRequest(
+      'POST',
+      '/auth/complete-password-change',
+      body: {
+        'passwordChangeToken': passwordChangeToken,
+        'newPassword': newPassword,
+        if (resolvedDeviceId != null) 'deviceId': resolvedDeviceId,
+      },
+    );
+    final session = _parseResponse(response, AuthSessionDto.fromJson);
+    await tokenStore.write(session);
+    return session;
+  }
+
   Future<AuthSessionDto> refresh({String? deviceId}) async {
     final current = await _requireSession();
     return _refreshOnce(current.refreshToken, deviceId: deviceId);
@@ -132,6 +153,60 @@ final class ServerApi {
   Future<ApiUserDto> getMe() async {
     final response = await _authorizedRequest('GET', '/auth/me');
     return _parseResponse(response, ApiUserDto.fromJson);
+  }
+
+  Future<AccountDto> getAccount() async {
+    final response = await _authorizedRequest('GET', '/account');
+    return _parseResponse(response, AccountDto.fromJson);
+  }
+
+  Future<AccountDto> changeUsername({
+    required String username,
+    required String currentPassword,
+  }) async {
+    final response = await _authorizedRequest(
+      'PATCH',
+      '/account/username',
+      body: {
+        'username': username,
+        'currentPassword': currentPassword,
+      },
+    );
+    return _parseResponse(response, AccountDto.fromJson);
+  }
+
+  Future<PasswordChangeResultDto> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await _authorizedRequest(
+      'PATCH',
+      '/account/password',
+      body: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
+    );
+    return _parseResponse(response, PasswordChangeResultDto.fromJson);
+  }
+
+  Future<List<DeviceSessionDto>> listDeviceSessions() async {
+    final response = await _authorizedRequest('GET', '/account/sessions');
+    return _parseResponse(response, (json) {
+      final values = _jsonArray(
+        _jsonObject(json, 'deviceSessionsResult')['items'],
+        'items',
+      );
+      return List.unmodifiable(values.map(DeviceSessionDto.fromJson));
+    });
+  }
+
+  Future<void> revokeDeviceSession(String sessionId) async {
+    final response = await _authorizedRequest(
+      'DELETE',
+      '/account/sessions/${_segment(sessionId)}',
+    );
+    _expectEmpty(response);
   }
 
   Future<List<CollaborationSessionDto>> listSessions() async {

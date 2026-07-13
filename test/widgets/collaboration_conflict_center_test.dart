@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openlogtool/l10n/generated/app_localizations.dart';
 import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/widgets/collaboration_conflict_center.dart';
 
@@ -9,6 +10,9 @@ void main() {
     final decisions = <String>[];
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ListView(
             children: [
@@ -50,6 +54,9 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CollaborationConflictCenter(
             conflicts: [
@@ -86,6 +93,9 @@ void main() {
     final decisions = <String>[];
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CollaborationConflictCenter(
             conflicts: [

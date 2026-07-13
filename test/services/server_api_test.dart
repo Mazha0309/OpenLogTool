@@ -238,6 +238,106 @@ void main() {
     });
   });
 
+  group('ServerApi account management', () {
+    test('completes required password change and persists the issued session',
+        () async {
+      final store = MemoryTokenStore();
+      final client = MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(
+          request.url.path,
+          '/api/v1/auth/complete-password-change',
+        );
+        expect(jsonDecode(request.body), {
+          'passwordChangeToken': 'temporary-change-token',
+          'newPassword': 'new-secure-password',
+          'deviceId': 'device-1',
+        });
+        return _jsonResponse(_authJson('new-access', 'new-refresh'));
+      });
+      final api = _api(store: store, client: client);
+
+      final session = await api.completeRequiredPasswordChange(
+        passwordChangeToken: 'temporary-change-token',
+        newPassword: 'new-secure-password',
+      );
+
+      expect(session.user.username, 'alice');
+      expect((await store.read())?.refreshToken, 'new-refresh');
+    });
+
+    test('uses only current-account routes for profile, password, and devices',
+        () async {
+      final store = MemoryTokenStore(
+        AuthSessionDto.fromJson(_authJson('access', 'refresh')),
+      );
+      final seen = <String>[];
+      final client = MockClient((request) async {
+        final key = '${request.method} ${request.url.path}';
+        seen.add(key);
+        expect(request.headers['authorization'], 'Bearer access');
+        switch (key) {
+          case 'GET /api/v1/account':
+            return _jsonResponse(_accountJson());
+          case 'PATCH /api/v1/account/username':
+            expect(jsonDecode(request.body), {
+              'username': 'alice-new',
+              'currentPassword': 'old-secure-password',
+            });
+            return _jsonResponse(_accountJson(username: 'alice-new'));
+          case 'PATCH /api/v1/account/password':
+            expect(jsonDecode(request.body), {
+              'currentPassword': 'old-secure-password',
+              'newPassword': 'new-secure-password',
+            });
+            return _jsonResponse({
+              'passwordChangedAt': _now,
+              'revokedDeviceSessionCount': 2,
+              'reauthenticationRequired': true,
+            });
+          case 'GET /api/v1/account/sessions':
+            return _jsonResponse({
+              'items': [_deviceSessionJson],
+            });
+          case 'DELETE /api/v1/account/sessions/refresh-session-1':
+            return http.Response('', 204);
+          default:
+            fail('Unexpected request: $key');
+        }
+      });
+      final api = _api(store: store, client: client);
+
+      expect((await api.getAccount()).username, 'alice');
+      expect(
+        (await api.changeUsername(
+          username: 'alice-new',
+          currentPassword: 'old-secure-password',
+        ))
+            .username,
+        'alice-new',
+      );
+      expect(
+        (await api.changePassword(
+          currentPassword: 'old-secure-password',
+          newPassword: 'new-secure-password',
+        ))
+            .reauthenticationRequired,
+        isTrue,
+      );
+      final devices = await api.listDeviceSessions();
+      expect(devices.single.current, isTrue);
+      await api.revokeDeviceSession(devices.single.sessionId);
+
+      expect(seen, [
+        'GET /api/v1/account',
+        'PATCH /api/v1/account/username',
+        'PATCH /api/v1/account/password',
+        'GET /api/v1/account/sessions',
+        'DELETE /api/v1/account/sessions/refresh-session-1',
+      ]);
+    });
+  });
+
   group('ServerApi collaboration v1 routes', () {
     test('uses typed responses and idempotency keys for Stage 1 routes',
         () async {
@@ -908,6 +1008,28 @@ const _userJson = {
   'id': 'user-1',
   'username': 'alice',
   'role': 'user',
+};
+
+Map<String, Object?> _accountJson({String username = 'alice'}) => {
+      'id': 'user-1',
+      'username': username,
+      'role': 'user',
+      'mustChangePassword': false,
+      'createdAt': _now,
+      'updatedAt': _now,
+      'passwordChangedAt': null,
+      'usernameChangedAt': null,
+    };
+
+const _deviceSessionJson = {
+  'sessionId': 'refresh-session-1',
+  'deviceId': 'device-1',
+  'createdAt': _now,
+  'expiresAt': '2026-08-11T08:00:00.000Z',
+  'lastUsedAt': _now,
+  'userAgent': 'OpenLogTool test',
+  'ipAddress': '127.0.0.1',
+  'current': true,
 };
 
 Map<String, Object?> _authJson(

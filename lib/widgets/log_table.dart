@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -44,7 +45,12 @@ class _LogTableState extends State<LogTable> {
   }
 
   void _startEditing(int index, LogEntry log) {
-    if (widget.readOnly || widget.conflictedLogIds.contains(log.id)) return;
+    final logProvider = context.read<LogProvider>();
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(log.id) ||
+        !logProvider.canMutateLog(log)) {
+      return;
+    }
     setState(() {
       _editingIndex = index;
       _controllers = {
@@ -79,11 +85,17 @@ class _LogTableState extends State<LogTable> {
 
   Future<void> _saveEditing(int index) async {
     final logId = _controllers['_id']?.text ?? '';
-    if (widget.readOnly || widget.conflictedLogIds.contains(logId)) {
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final original = index >= 0 && index < logProvider.logs.length
+        ? logProvider.logs[index]
+        : null;
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(logId) ||
+        original == null ||
+        !logProvider.canMutateLog(original)) {
       _cancelEditing();
       return;
     }
-    final logProvider = Provider.of<LogProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.maybeOf(context);
     // updateLog preserves sync_id / localId / sessionId / createdAt — only the
     // text fields below are taken from the form.
@@ -303,6 +315,15 @@ class _LogTableState extends State<LogTable> {
       final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
       final isConflicted = widget.conflictedLogIds.contains(log.id);
+      final mutationBlockReason = widget.readOnly
+          ? 'COLLABORATION_SESSION_READ_ONLY'
+          : logProvider.mutationBlockReason(log);
+      final canMutate = mutationBlockReason == null && !isConflicted;
+      final mutationHint = isConflicted
+          ? context.l10n.logConflictReadOnlyHint
+          : mutationBlockReason == null
+              ? ''
+              : _mutationBlockLabel(context, mutationBlockReason);
       // 倒序序号：最新的记录显示最大序号
       final reverseIndex = originalIndex + 1;
 
@@ -511,10 +532,10 @@ class _LogTableState extends State<LogTable> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.check, size: 20),
-                          onPressed: widget.readOnly || isConflicted
+                          onPressed: !canMutate
                               ? null
                               : () => _saveEditing(originalIndex),
-                          tooltip: isConflicted ? '先在冲突中心解决此记录' : '保存',
+                          tooltip: !canMutate ? mutationHint : '保存',
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -536,42 +557,48 @@ class _LogTableState extends State<LogTable> {
                         ),
                       ],
                     )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 20),
-                          onPressed: widget.readOnly || isConflicted
-                              ? null
-                              : () => _startEditing(originalIndex, log),
-                          tooltip: isConflicted ? '先在冲突中心解决此记录' : '编辑记录',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withValues(alpha: 0.1),
+                  : !canMutate
+                      ? Tooltip(
+                          message: mutationHint,
+                          child: Icon(
+                            Icons.lock_outline,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: () =>
+                                  _startEditing(originalIndex, log),
+                              tooltip: '编辑记录',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.1),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 20),
+                              onPressed: () => _showDeleteConfirmation(
+                                context,
+                                originalIndex,
+                                log,
+                              ),
+                              tooltip: '删除记录',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .error
+                                    .withValues(alpha: 0.1),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.delete, size: 20),
-                          onPressed: widget.readOnly || isConflicted
-                              ? null
-                              : () => _showDeleteConfirmation(
-                                    context,
-                                    originalIndex,
-                                    log.id,
-                                  ),
-                          tooltip: isConflicted ? '先在冲突中心解决此记录' : '删除记录',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withValues(alpha: 0.1),
-                          ),
-                        ),
-                      ],
-                    ),
               120,
             ),
           ),
@@ -620,9 +647,14 @@ class _LogTableState extends State<LogTable> {
   void _showDeleteConfirmation(
     BuildContext context,
     int index,
-    String logId,
+    LogEntry log,
   ) {
-    if (widget.readOnly || widget.conflictedLogIds.contains(logId)) return;
+    final logProvider = context.read<LogProvider>();
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(log.id) ||
+        !logProvider.canMutateLog(log)) {
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -635,11 +667,13 @@ class _LogTableState extends State<LogTable> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (widget.readOnly || widget.conflictedLogIds.contains(logId)) {
+              if (widget.readOnly ||
+                  widget.conflictedLogIds.contains(log.id) ||
+                  !logProvider.canMutateLog(log)) {
                 Navigator.pop(context);
                 return;
               }
-              Provider.of<LogProvider>(context, listen: false).deleteLog(index);
+              logProvider.deleteLog(index);
               Navigator.pop(context);
               context.showLoggedSnackBar(
                 const SnackBar(
@@ -657,4 +691,12 @@ class _LogTableState extends State<LogTable> {
       ),
     );
   }
+
+  String _mutationBlockLabel(BuildContext context, String? reason) =>
+      switch (reason) {
+        'COLLABORATION_LOG_NOT_OWNED' => context.l10n.logNotOwnedReadOnlyHint,
+        'COLLABORATION_LOG_AUTHOR_UNKNOWN' =>
+          context.l10n.logAuthorUnknownReadOnlyHint,
+        _ => context.l10n.logSessionReadOnlyHint,
+      };
 }

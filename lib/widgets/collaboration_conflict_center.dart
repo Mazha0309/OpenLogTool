@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/collaboration_conflict.dart';
 
 final class CollaborationConflictCenter extends StatelessWidget {
@@ -36,7 +37,7 @@ final class CollaborationConflictCenter extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '冲突中心',
+                    context.l10n.conflictCenterTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -51,16 +52,16 @@ final class CollaborationConflictCenter extends StatelessWidget {
                 else
                   IconButton(
                     key: const Key('refresh-conflicts'),
-                    tooltip: '刷新冲突',
+                    tooltip: context.l10n.refreshConflicts,
                     onPressed: onRefresh,
                     icon: const Icon(Icons.refresh),
                   ),
               ],
             ),
-            const Text('可用操作由本地副本按最新权限与实体状态给出；保留或复制会生成新的 mutation。'),
+            Text(context.l10n.conflictCenterHint),
             const SizedBox(height: 8),
             if (conflicts.isEmpty && !loading)
-              const Text('没有待处理冲突。')
+              Text(context.l10n.noConflicts)
             else
               ...conflicts.map((conflict) => _ConflictTile(
                     conflict: conflict,
@@ -97,12 +98,12 @@ final class _ConflictTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final typeLabel = switch (conflict.entityType) {
-      CollaborationConflictEntityType.session => '会话',
-      CollaborationConflictEntityType.log => '日志',
+      CollaborationConflictEntityType.session => context.l10n.conflictSession,
+      CollaborationConflictEntityType.log => context.l10n.conflictLog,
     };
     final fields = conflict.conflictingFields.isEmpty
-        ? '无重叠字段（版本已变化）'
-        : conflict.conflictingFields.join('、');
+        ? context.l10n.conflictNoOverlappingFields
+        : conflict.conflictingFields.join(context.l10n.listSeparator);
     final allowsRemote = conflict.allowedResolutions.contains(
       CollaborationConflictResolution.useRemote,
     );
@@ -118,7 +119,11 @@ final class _ConflictTile extends StatelessWidget {
       childrenPadding: const EdgeInsets.only(bottom: 12),
       title: Text('$typeLabel · ${conflict.entityId}'),
       subtitle: Text(
-        '字段 $fields · 基线 v${conflict.baseVersion} → 远端 v${conflict.remoteVersion}',
+        context.l10n.conflictVersionSummary(
+          fields,
+          conflict.baseVersion,
+          conflict.remoteVersion,
+        ),
       ),
       leading: resolving
           ? const SizedBox.square(
@@ -127,9 +132,9 @@ final class _ConflictTile extends StatelessWidget {
             )
           : const Icon(Icons.merge_type),
       children: [
-        _summary(context, '基线', conflict.baseEntity),
-        _summary(context, '本地', conflict.localEntity),
-        _summary(context, '远端', conflict.remoteEntity),
+        _summary(context, context.l10n.conflictBase, conflict.baseEntity),
+        _summary(context, context.l10n.conflictLocal, conflict.localEntity),
+        _summary(context, context.l10n.conflictRemote, conflict.remoteEntity),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -142,7 +147,7 @@ final class _ConflictTile extends StatelessWidget {
                     ? null
                     : () => onAcceptRemote(conflict.conflictId),
                 icon: const Icon(Icons.cloud_download_outlined),
-                label: const Text('采用远端'),
+                label: Text(context.l10n.conflictUseRemoteAction),
               ),
             if (allowsKeepLocal)
               FilledButton.tonalIcon(
@@ -151,7 +156,7 @@ final class _ConflictTile extends StatelessWidget {
                     ? null
                     : () => onKeepLocal(conflict.conflictId),
                 icon: const Icon(Icons.cloud_upload_outlined),
-                label: const Text('保留本地重试'),
+                label: Text(context.l10n.conflictKeepLocalAction),
               ),
             if (allowsCopy)
               FilledButton.tonalIcon(
@@ -160,7 +165,7 @@ final class _ConflictTile extends StatelessWidget {
                     ? null
                     : () => onCopyLocalAsNew(conflict.conflictId),
                 icon: const Icon(Icons.content_copy),
-                label: const Text('复制为新日志'),
+                label: Text(context.l10n.conflictCopyLocalAction),
               ),
           ],
         ),

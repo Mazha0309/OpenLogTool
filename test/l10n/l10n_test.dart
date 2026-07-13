@@ -42,5 +42,14 @@ void main() {
     expect(zh.expandSidebar, '展开侧边栏');
     expect(en.collapseSidebar, 'Collapse sidebar');
     expect(en.expandSidebar, 'Expand sidebar');
+    expect(zh.serverSettingsTitle, '服务器与账户');
+    expect(en.serverSettingsTitle, 'Server and account');
+    expect(zh.collaborationConnectionSection, '连接与会话');
+    expect(en.collaborationConnectionSection, 'Connection and session');
+    expect(zh.logNotOwnedReadOnlyHint, '只能修改或删除自己创建的记录。');
+    expect(
+      en.logNotOwnedReadOnlyHint,
+      'You can change or delete only records that you created.',
+    );
   });
 }

@@ -670,6 +670,630 @@ abstract class AppLocalizations {
   /// **'退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。'**
   String get leaveSessionConfirmation;
 
+  /// No description provided for @collaborationScreenTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作与成员'**
+  String get collaborationScreenTitle;
+
+  /// No description provided for @collaborationConnectionSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接与会话'**
+  String get collaborationConnectionSection;
+
+  /// No description provided for @collaborationConnectionSectionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看服务器账号、当前会话和同步入口。'**
+  String get collaborationConnectionSectionHint;
+
+  /// No description provided for @collaborationSyncSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'待处理同步'**
+  String get collaborationSyncSection;
+
+  /// No description provided for @collaborationSyncSectionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'复核离线记录，并解决需要人工选择的冲突。'**
+  String get collaborationSyncSectionHint;
+
+  /// No description provided for @collaborationAccessSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员与共享'**
+  String get collaborationAccessSection;
+
+  /// No description provided for @collaborationAccessSectionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理书记员权限、邀请码和只读公开页面。'**
+  String get collaborationAccessSectionHint;
+
+  /// No description provided for @serverLoggedIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已登录'**
+  String get serverLoggedIn;
+
+  /// No description provided for @serverNotLoggedIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未登录服务器'**
+  String get serverNotLoggedIn;
+
+  /// No description provided for @collaborationServerAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{url}\n账号 {id}'**
+  String collaborationServerAccount(String url, String id);
+
+  /// No description provided for @collaborationServerLoginHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在“设置 → 服务器与账户”中检测服务器并登录。'**
+  String get collaborationServerLoginHint;
+
+  /// No description provided for @remoteCommitPendingLocalApplyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'远端已经提交；客户端只会恢复本地确认，不会重复创建新修改。'**
+  String get remoteCommitPendingLocalApplyHint;
+
+  /// No description provided for @joinCollaborationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'加入协作'**
+  String get joinCollaborationTitle;
+
+  /// No description provided for @joinCollaborationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入成员邀请码。成功后会以远端相同的 Session ID 安装完整本地副本。'**
+  String get joinCollaborationHint;
+
+  /// No description provided for @inviteCodeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'邀请码'**
+  String get inviteCodeLabel;
+
+  /// No description provided for @join.
+  ///
+  /// In zh, this message translates to:
+  /// **'加入'**
+  String get join;
+
+  /// No description provided for @joinCollaborationSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已加入协作会话'**
+  String get joinCollaborationSucceeded;
+
+  /// No description provided for @localCollaborationSessionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地会话尚未发布。发布时会锁定一致快照并分批上传全部记录。'**
+  String get localCollaborationSessionHint;
+
+  /// No description provided for @collaborationSessionSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态 {state} · 角色 {role}'**
+  String collaborationSessionSummary(String state, String role);
+
+  /// No description provided for @collaborationSyncSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步 {transport} · 游标 {applied}/{head}'**
+  String collaborationSyncSummary(String transport, int applied, int head);
+
+  /// No description provided for @collaborationQueueSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'待同步 {pending} · 冲突 {conflicts} · 拒绝 {rejected}'**
+  String collaborationQueueSummary(int pending, int conflicts, int rejected);
+
+  /// No description provided for @collaborationReliableQueueHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地保存后会进入可靠队列，并由规范事件确认同步。'**
+  String get collaborationReliableQueueHint;
+
+  /// No description provided for @collaborationLastSync.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近同步 {time}'**
+  String collaborationLastSync(String time);
+
+  /// No description provided for @collaborationSessionConflictHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话存在未解决冲突。请先在冲突中心处理；重命名、关闭和重新打开暂时不可用。'**
+  String get collaborationSessionConflictHint;
+
+  /// No description provided for @publishSessionSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作会话发布完成'**
+  String get publishSessionSucceeded;
+
+  /// No description provided for @publishCollaborationSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'发布为协作会话'**
+  String get publishCollaborationSession;
+
+  /// No description provided for @retryPublishSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试发布'**
+  String get retryPublishSession;
+
+  /// No description provided for @syncNowAndRefreshAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即同步并刷新权限'**
+  String get syncNowAndRefreshAccess;
+
+  /// No description provided for @closeSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭会话'**
+  String get closeSession;
+
+  /// No description provided for @reopenSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新打开'**
+  String get reopenSession;
+
+  /// No description provided for @transportStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止'**
+  String get transportStopped;
+
+  /// No description provided for @transportConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接中'**
+  String get transportConnecting;
+
+  /// No description provided for @transportOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线'**
+  String get transportOnline;
+
+  /// No description provided for @transportBackingOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待重连'**
+  String get transportBackingOff;
+
+  /// No description provided for @transportAuthRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要登录'**
+  String get transportAuthRequired;
+
+  /// No description provided for @transportIncompatible.
+  ///
+  /// In zh, this message translates to:
+  /// **'协议异常'**
+  String get transportIncompatible;
+
+  /// No description provided for @readOnlyRevoked.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员权限已撤销，本地缓存保持只读。'**
+  String get readOnlyRevoked;
+
+  /// No description provided for @readOnlyClosePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭请求已保存到本地，等待同步确认；冲突时将保持锁定。'**
+  String get readOnlyClosePending;
+
+  /// No description provided for @readOnlyReopenPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新打开请求已保存到本地，服务器确认前保持只读。'**
+  String get readOnlyReopenPending;
+
+  /// No description provided for @readOnlySessionClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作会话已关闭，本地缓存保持只读。'**
+  String get readOnlySessionClosed;
+
+  /// No description provided for @readOnlyViewer.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号是只读成员。'**
+  String get readOnlyViewer;
+
+  /// No description provided for @readOnlyResyncing.
+  ///
+  /// In zh, this message translates to:
+  /// **'事件游标需要重装规范快照；待同步修改仍保留。'**
+  String get readOnlyResyncing;
+
+  /// No description provided for @readOnlyCheckingAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在确认权限与事件游标，暂时保持只读。'**
+  String get readOnlyCheckingAccess;
+
+  /// No description provided for @logNotOwnedReadOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只能修改或删除自己创建的记录。'**
+  String get logNotOwnedReadOnlyHint;
+
+  /// No description provided for @logAuthorUnknownReadOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条历史记录没有作者信息，普通成员只能查看。'**
+  String get logAuthorUnknownReadOnlyHint;
+
+  /// No description provided for @logSessionReadOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前成员角色、会话状态或同步状态不允许修改记录。'**
+  String get logSessionReadOnlyHint;
+
+  /// No description provided for @logConflictReadOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在冲突中心解决这条记录。'**
+  String get logConflictReadOnlyHint;
+
+  /// No description provided for @renameCollaborationSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'重命名协作会话'**
+  String get renameCollaborationSession;
+
+  /// No description provided for @saveLocally.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存到本地'**
+  String get saveLocally;
+
+  /// No description provided for @sessionTitleQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题已保存到本地，等待同步确认'**
+  String get sessionTitleQueued;
+
+  /// No description provided for @closeCollaborationSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭协作会话'**
+  String get closeCollaborationSessionTitle;
+
+  /// No description provided for @closeCollaborationSessionMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭后所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。'**
+  String get closeCollaborationSessionMessage;
+
+  /// No description provided for @closeSessionQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话已在本地关闭，等待同步确认'**
+  String get closeSessionQueued;
+
+  /// No description provided for @reopenCollaborationSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新打开协作会话'**
+  String get reopenCollaborationSessionTitle;
+
+  /// No description provided for @reopenCollaborationSessionMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新打开会作为一项同步修改提交；服务器确认前仍保持只读。'**
+  String get reopenCollaborationSessionMessage;
+
+  /// No description provided for @reopenSessionQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新打开请求已保存到本地，等待同步确认'**
+  String get reopenSessionQueued;
+
+  /// No description provided for @conflictUseRemoteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'采用远端版本'**
+  String get conflictUseRemoteTitle;
+
+  /// No description provided for @conflictKeepLocalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留本地版本'**
+  String get conflictKeepLocalTitle;
+
+  /// No description provided for @conflictCopyLocalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制为新日志'**
+  String get conflictCopyLocalTitle;
+
+  /// No description provided for @conflictUseRemoteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地未同步修改会被远端规范版本替换，此操作不会再次提交修改。'**
+  String get conflictUseRemoteMessage;
+
+  /// No description provided for @conflictKeepLocalMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'将基于最新远端版本创建一项新修改。若远端再次变化，仍可能产生新冲突。'**
+  String get conflictKeepLocalMessage;
+
+  /// No description provided for @conflictCopyLocalMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'远端原日志会保留，本地内容将使用新的日志 ID 创建副本并重新同步。'**
+  String get conflictCopyLocalMessage;
+
+  /// No description provided for @conflictUseRemoteSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已采用远端版本'**
+  String get conflictUseRemoteSucceeded;
+
+  /// No description provided for @conflictKeepLocalSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保留本地版本并进入重试队列'**
+  String get conflictKeepLocalSucceeded;
+
+  /// No description provided for @conflictCopyLocalSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制为新日志并进入同步队列'**
+  String get conflictCopyLocalSucceeded;
+
+  /// No description provided for @conflictCenterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'冲突中心'**
+  String get conflictCenterTitle;
+
+  /// No description provided for @refreshConflicts.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新冲突'**
+  String get refreshConflicts;
+
+  /// No description provided for @conflictCenterHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用操作由本地副本按最新权限和实体状态给出；保留或复制会生成新的同步修改。'**
+  String get conflictCenterHint;
+
+  /// No description provided for @noConflicts.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有待处理冲突。'**
+  String get noConflicts;
+
+  /// No description provided for @conflictSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话'**
+  String get conflictSession;
+
+  /// No description provided for @conflictLog.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志'**
+  String get conflictLog;
+
+  /// No description provided for @conflictNoOverlappingFields.
+  ///
+  /// In zh, this message translates to:
+  /// **'无重叠字段（版本已变化）'**
+  String get conflictNoOverlappingFields;
+
+  /// No description provided for @conflictVersionSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'字段 {fields} · 基线 v{base} → 远端 v{remote}'**
+  String conflictVersionSummary(String fields, int base, int remote);
+
+  /// No description provided for @conflictBase.
+  ///
+  /// In zh, this message translates to:
+  /// **'基线'**
+  String get conflictBase;
+
+  /// No description provided for @conflictLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地'**
+  String get conflictLocal;
+
+  /// No description provided for @conflictRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'远端'**
+  String get conflictRemote;
+
+  /// No description provided for @conflictUseRemoteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'采用远端'**
+  String get conflictUseRemoteAction;
+
+  /// No description provided for @conflictKeepLocalAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留本地重试'**
+  String get conflictKeepLocalAction;
+
+  /// No description provided for @conflictCopyLocalAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制为新日志'**
+  String get conflictCopyLocalAction;
+
+  /// No description provided for @memberInvitesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员邀请'**
+  String get memberInvitesTitle;
+
+  /// No description provided for @roleOwner.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有者'**
+  String get roleOwner;
+
+  /// No description provided for @roleEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑者'**
+  String get roleEditor;
+
+  /// No description provided for @roleViewer.
+  ///
+  /// In zh, this message translates to:
+  /// **'只读成员'**
+  String get roleViewer;
+
+  /// No description provided for @inviteCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'邀请码已生成'**
+  String get inviteCreated;
+
+  /// No description provided for @generate.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成'**
+  String get generate;
+
+  /// No description provided for @inviteCodeOneTimeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'邀请码只在本次创建响应中显示：'**
+  String get inviteCodeOneTimeHint;
+
+  /// No description provided for @noInvites.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无邀请'**
+  String get noInvites;
+
+  /// No description provided for @inviteSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{used}/{max} 次 · {status}'**
+  String inviteSummary(int used, int max, String status);
+
+  /// No description provided for @inviteExpiresAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'有效至 {time}'**
+  String inviteExpiresAt(String time);
+
+  /// No description provided for @inviteRevoked.
+  ///
+  /// In zh, this message translates to:
+  /// **'已撤销'**
+  String get inviteRevoked;
+
+  /// No description provided for @membersTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员'**
+  String get membersTitle;
+
+  /// No description provided for @currentAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账号'**
+  String get currentAccount;
+
+  /// No description provided for @memberSetEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员已设为编辑者'**
+  String get memberSetEditor;
+
+  /// No description provided for @memberSetViewer.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员已设为只读'**
+  String get memberSetViewer;
+
+  /// No description provided for @setAsEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'设为编辑者'**
+  String get setAsEditor;
+
+  /// No description provided for @setAsViewer.
+  ///
+  /// In zh, this message translates to:
+  /// **'设为只读成员'**
+  String get setAsViewer;
+
+  /// No description provided for @transferOwnership.
+  ///
+  /// In zh, this message translates to:
+  /// **'转移所有权'**
+  String get transferOwnership;
+
+  /// No description provided for @removeMember.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除成员'**
+  String get removeMember;
+
+  /// No description provided for @transferOwnershipConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'转移给 {name} 后，你将变为编辑者。'**
+  String transferOwnershipConfirmation(String name);
+
+  /// No description provided for @ownershipTransferred.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有权已转移'**
+  String get ownershipTransferred;
+
+  /// No description provided for @removeMemberConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定移除 {name}？权限会立即失效。'**
+  String removeMemberConfirmation(String name);
+
+  /// No description provided for @memberRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'成员已移除'**
+  String get memberRemoved;
+
+  /// No description provided for @operationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作失败：{error}'**
+  String operationFailed(String error);
+
+  /// No description provided for @unknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知'**
+  String get unknown;
+
   /// No description provided for @confirm.
   ///
   /// In zh, this message translates to:
@@ -819,6 +1443,324 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'服务器地址必须是完整的 http(s) URL。'**
   String get serverAddressInvalid;
+
+  /// No description provided for @serverSettingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器与账户'**
+  String get serverSettingsTitle;
+
+  /// No description provided for @serverAddressLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器地址'**
+  String get serverAddressLabel;
+
+  /// No description provided for @serverAddressHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'http://your-server:3000'**
+  String get serverAddressHint;
+
+  /// No description provided for @serverSaveAndCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存并检测服务器'**
+  String get serverSaveAndCheck;
+
+  /// No description provided for @serverCheckSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接成功 · 协议 v{min}-{max}'**
+  String serverCheckSucceeded(int min, int max);
+
+  /// No description provided for @serverInstanceDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'实例 {instance}\n能力 {features}'**
+  String serverInstanceDetails(String instance, String features);
+
+  /// No description provided for @serverConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接'**
+  String get serverConnected;
+
+  /// No description provided for @serverNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测'**
+  String get serverNotConnected;
+
+  /// No description provided for @serverSignedOutHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后可以参与协作，并管理当前账号自己的资料和登录设备。'**
+  String get serverSignedOutHint;
+
+  /// No description provided for @serverLogin.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录'**
+  String get serverLogin;
+
+  /// No description provided for @serverRegister.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册'**
+  String get serverRegister;
+
+  /// No description provided for @serverLogout.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出'**
+  String get serverLogout;
+
+  /// No description provided for @serverAccountId.
+  ///
+  /// In zh, this message translates to:
+  /// **'账号 ID：{id}'**
+  String serverAccountId(String id);
+
+  /// No description provided for @serverLoginSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已登录服务器'**
+  String get serverLoginSucceeded;
+
+  /// No description provided for @serverRegistrationSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册并登录成功'**
+  String get serverRegistrationSucceeded;
+
+  /// No description provided for @serverLoginFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录失败：{error}'**
+  String serverLoginFailed(String error);
+
+  /// No description provided for @serverRegistrationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册失败：{error}'**
+  String serverRegistrationFailed(String error);
+
+  /// No description provided for @serverLogoutFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出失败：{error}'**
+  String serverLogoutFailed(String error);
+
+  /// No description provided for @accountChangeUsername.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改用户名'**
+  String get accountChangeUsername;
+
+  /// No description provided for @accountChangePassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改密码'**
+  String get accountChangePassword;
+
+  /// No description provided for @accountDeviceSessions.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录设备'**
+  String get accountDeviceSessions;
+
+  /// No description provided for @accountUsernameUpdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户名已更新'**
+  String get accountUsernameUpdated;
+
+  /// No description provided for @accountPasswordUpdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码已更新，已撤销 {count} 个登录会话，请重新登录。'**
+  String accountPasswordUpdated(int count);
+
+  /// No description provided for @accountUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户操作失败：{error}'**
+  String accountUpdateFailed(String error);
+
+  /// No description provided for @usernameLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户名'**
+  String get usernameLabel;
+
+  /// No description provided for @usernameLengthHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户名应为 3–64 个字符'**
+  String get usernameLengthHint;
+
+  /// No description provided for @passwordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码'**
+  String get passwordLabel;
+
+  /// No description provided for @fieldRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'此项不能为空'**
+  String get fieldRequired;
+
+  /// No description provided for @currentPasswordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前密码'**
+  String get currentPasswordLabel;
+
+  /// No description provided for @newPasswordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'新密码'**
+  String get newPasswordLabel;
+
+  /// No description provided for @confirmNewPasswordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认新密码'**
+  String get confirmNewPasswordLabel;
+
+  /// No description provided for @passwordLengthHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码至少需要 10 个字符'**
+  String get passwordLengthHint;
+
+  /// No description provided for @passwordMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'两次输入的新密码不一致'**
+  String get passwordMismatch;
+
+  /// No description provided for @passwordChangeRequiredTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'必须修改临时密码'**
+  String get passwordChangeRequiredTitle;
+
+  /// No description provided for @passwordChangeRequiredHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'账号 {username} 使用了临时密码。设置新密码后才能继续。'**
+  String passwordChangeRequiredHint(String username);
+
+  /// No description provided for @passwordChangeCredentialExpires.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次改密凭据将在 {seconds} 秒内过期。'**
+  String passwordChangeCredentialExpires(int seconds);
+
+  /// No description provided for @completePasswordChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置新密码并登录'**
+  String get completePasswordChange;
+
+  /// No description provided for @cancelLogin.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消登录'**
+  String get cancelLogin;
+
+  /// No description provided for @passwordChangeCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码已更新并完成登录'**
+  String get passwordChangeCompleted;
+
+  /// No description provided for @deviceSessionsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录设备'**
+  String get deviceSessionsTitle;
+
+  /// No description provided for @deviceSessionsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有有效的登录设备'**
+  String get deviceSessionsEmpty;
+
+  /// No description provided for @deviceUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未命名设备'**
+  String get deviceUnknown;
+
+  /// No description provided for @deviceCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前设备'**
+  String get deviceCurrent;
+
+  /// No description provided for @deviceIp.
+  ///
+  /// In zh, this message translates to:
+  /// **'IP：{ip}'**
+  String deviceIp(String ip);
+
+  /// No description provided for @deviceLastUsed.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近使用：{time}'**
+  String deviceLastUsed(String time);
+
+  /// No description provided for @deviceExpires.
+  ///
+  /// In zh, this message translates to:
+  /// **'到期：{time}'**
+  String deviceExpires(String time);
+
+  /// No description provided for @revokeDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销设备'**
+  String get revokeDevice;
+
+  /// No description provided for @revokeCurrentDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出当前设备'**
+  String get revokeCurrentDevice;
+
+  /// No description provided for @revokeDeviceConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销后，该设备将不能继续刷新登录状态。'**
+  String get revokeDeviceConfirmation;
+
+  /// No description provided for @revokeCurrentDeviceConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出当前设备后，需要重新输入用户名和密码才能连接服务器。'**
+  String get revokeCurrentDeviceConfirmation;
+
+  /// No description provided for @deviceRevoked.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录设备已撤销'**
+  String get deviceRevoked;
+
+  /// No description provided for @close.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get close;
+
+  /// No description provided for @retry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get retry;
 
   /// No description provided for @excelUseSessionTitleAsHeader.
   ///

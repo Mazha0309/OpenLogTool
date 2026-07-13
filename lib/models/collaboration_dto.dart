@@ -285,6 +285,8 @@ final class CollaborationLogDto {
     required this.antenna,
     required this.height,
     required this.remarks,
+    this.createdBy,
+    this.updatedBy,
     required this.createdAt,
     required this.updatedAt,
     required this.deletedAt,
@@ -307,6 +309,12 @@ final class CollaborationLogDto {
       antenna: _nullableString(object, 'antenna'),
       height: _nullableString(object, 'height'),
       remarks: _nullableString(object, 'remarks'),
+      createdBy: object.containsKey('createdBy')
+          ? _nullableString(object, 'createdBy')
+          : null,
+      updatedBy: object.containsKey('updatedBy')
+          ? _nullableString(object, 'updatedBy')
+          : null,
       createdAt: _dateTime(object, 'createdAt'),
       updatedAt: _dateTime(object, 'updatedAt'),
       deletedAt: _nullableDateTime(object, 'deletedAt'),
@@ -327,6 +335,8 @@ final class CollaborationLogDto {
   final String? antenna;
   final String? height;
   final String? remarks;
+  final String? createdBy;
+  final String? updatedBy;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -346,6 +356,8 @@ final class CollaborationLogDto {
         'antenna': antenna,
         'height': height,
         'remarks': remarks,
+        'createdBy': createdBy,
+        'updatedBy': updatedBy,
         'createdAt': createdAt.toUtc().toIso8601String(),
         'updatedAt': updatedAt.toUtc().toIso8601String(),
         'deletedAt': deletedAt?.toUtc().toIso8601String(),
