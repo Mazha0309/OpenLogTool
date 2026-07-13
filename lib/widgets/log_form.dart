@@ -335,13 +335,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       controller: _controllerController.text.toUpperCase(),
       callsign: _callsignController.text.toUpperCase(),
       report: _reportController.text,
+      rstRcvd: _rstRcvdController.text,
       qth: _qthController.text,
       device: _deviceController.text,
       power: _powerController.text,
       antenna: _antennaController.text,
       height: _heightController.text,
     );
-    log.rstRcvd = _rstRcvdController.text;
     log.remarks = _remarksController.text;
 
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);

@@ -102,6 +102,23 @@ void main() {
     expect(decoded.useSessionTitleAsHeader, isTrue);
     expect(ExportSettings.fromJson(const {}).useSessionTitleAsHeader, isFalse);
   });
+
+  test('native JSON import preserves separate RST sent and received values',
+      () {
+    const source = '''
+      [{
+        "time": "19:00",
+        "controller": "BG5AAA",
+        "callsign": "BG5BBB",
+        "rstSent": "58",
+        "rstRcvd": "47"
+      }]
+    ''';
+
+    final log = parseJsonImport(source).logs.single;
+
+    expect((log.report, log.rstRcvd), ('58', '47'));
+  });
 }
 
 String _cellText(List<excel_lib.Data?> row, int column) {

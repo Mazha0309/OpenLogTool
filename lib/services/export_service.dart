@@ -487,7 +487,10 @@ ImportResult parseJsonImport(String jsonString) {
         time: item['time']?.toString() ?? '',
         controller: item['controller']?.toString() ?? '',
         callsign: callsign,
-        report: item['report']?.toString() ?? '59',
+        report: (item['rstSent'] ?? item['rst_sent'] ?? item['report'])
+                ?.toString() ??
+            '59',
+        rstRcvd: (item['rstRcvd'] ?? item['rst_rcvd'])?.toString() ?? '',
         qth: qth,
         device: item['device']?.toString() ?? '',
         power: item['power']?.toString() ?? '',

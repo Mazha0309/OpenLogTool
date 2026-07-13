@@ -94,6 +94,7 @@ class _LogTableState extends State<LogTable> {
       controller: _controllers['controller']?.text ?? '',
       callsign: _controllers['callsign']?.text ?? '',
       report: _controllers['report']?.text ?? '',
+      rstRcvd: _controllers['rstRcvd']?.text ?? '',
       qth: _controllers['qth']?.text ?? '',
       device: _controllers['device']?.text ?? '',
       power: _controllers['power']?.text ?? '',
@@ -101,7 +102,6 @@ class _LogTableState extends State<LogTable> {
       height: _controllers['height']?.text ?? '',
       createdAt: _controllers['_createdAt']?.text,
     );
-    patch.rstRcvd = _controllers['rstRcvd']?.text ?? '';
     patch.remarks = _controllers['remarks']?.text ?? '';
     try {
       await logProvider.updateLog(index, patch);

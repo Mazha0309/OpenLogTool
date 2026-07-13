@@ -8,7 +8,7 @@ class LogEntry {
   final String controller;
   final String callsign;
   final String report;
-  String rstRcvd = '';
+  String rstRcvd;
   final String qth;
   final String device;
   final String power;
@@ -28,6 +28,7 @@ class LogEntry {
     required String controller,
     required String callsign,
     required String report,
+    String rstRcvd = '',
     required String qth,
     required String device,
     required String power,
@@ -50,6 +51,7 @@ class LogEntry {
       controller: controller,
       callsign: callsign,
       report: report,
+      rstRcvd: rstRcvd,
       qth: qth,
       device: device,
       power: power,
@@ -72,6 +74,7 @@ class LogEntry {
     required this.controller,
     required this.callsign,
     required this.report,
+    required this.rstRcvd,
     required this.qth,
     required this.device,
     required this.power,
@@ -138,6 +141,8 @@ class LogEntry {
       'controller': controller,
       'callsign': callsign,
       'report': report,
+      'rstSent': report,
+      'rstRcvd': rstRcvd,
       'qth': qth,
       'device': device,
       'power': power,
@@ -181,7 +186,10 @@ class LogEntry {
       time: json['time']?.toString() ?? '',
       controller: json['controller']?.toString() ?? '',
       callsign: json['callsign']?.toString() ?? '',
-      report: json['report']?.toString() ?? '',
+      report:
+          (json['rstSent'] ?? json['rst_sent'] ?? json['report'])?.toString() ??
+              '',
+      rstRcvd: (json['rstRcvd'] ?? json['rst_rcvd'])?.toString() ?? '',
       qth: json['qth']?.toString() ?? '',
       device: json['device']?.toString() ?? '',
       power: json['power']?.toString() ?? '',
@@ -203,7 +211,10 @@ class LogEntry {
       time: map['time']?.toString() ?? '',
       controller: map['controller']?.toString() ?? '',
       callsign: map['callsign']?.toString() ?? '',
-      report: map['report']?.toString() ?? '',
+      report:
+          (map['rst_sent'] ?? map['rstSent'] ?? map['report'])?.toString() ??
+              '',
+      rstRcvd: (map['rst_rcvd'] ?? map['rstRcvd'])?.toString() ?? '',
       qth: map['qth']?.toString() ?? '',
       device: map['device']?.toString() ?? '',
       power: map['power']?.toString() ?? '',
@@ -240,6 +251,7 @@ class LogEntry {
     String? controller,
     String? callsign,
     String? report,
+    String? rstRcvd,
     String? qth,
     String? device,
     String? power,
@@ -259,6 +271,7 @@ class LogEntry {
       controller: controller ?? this.controller,
       callsign: callsign ?? this.callsign,
       report: report ?? this.report,
+      rstRcvd: rstRcvd ?? this.rstRcvd,
       qth: qth ?? this.qth,
       device: device ?? this.device,
       power: power ?? this.power,

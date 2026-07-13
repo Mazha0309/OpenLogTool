@@ -8,6 +8,10 @@ class LogProvider with ChangeNotifier {
   static const int _maxUndoStack = 50;
 
   bool _disposed = false;
+  // Keep the client-side contract chronological (oldest -> newest). The Rust
+  // query returns newest first for efficient paging, while the table reverses
+  // this list for display and other consumers use `logs.last` as the latest
+  // completed record.
   List<old.LogEntry> _logs = [];
   final List<old.LogEntry> _undoStack = [];
   Future<void> Function()? _onDataChanged;
@@ -133,7 +137,7 @@ class LogProvider with ChangeNotifier {
         if (batch.length < pageSize) break;
       }
       if (generation != _loadGeneration || _currentSessionId != sid) return;
-      _logs = bridgeLogs.map(_toOldLog).toList();
+      _logs = normalizeLoadedLogs(bridgeLogs);
     } catch (e, st) {
       debugPrint('[LogProvider] _loadLogs failed: $e\n$st');
       if (generation != _loadGeneration || _currentSessionId != sid) return;
@@ -353,14 +357,21 @@ class LogProvider with ChangeNotifier {
     return _logs.map((log) => log.toList()).toList();
   }
 
-  old.LogEntry _toOldLog(bridge.LogEntry b) {
-    final entry = old.LogEntry(
+  @visibleForTesting
+  static List<old.LogEntry> normalizeLoadedLogs(
+    List<bridge.LogEntry> newestFirst,
+  ) =>
+      newestFirst.reversed.map(_toOldLog).toList();
+
+  static old.LogEntry _toOldLog(bridge.LogEntry b) {
+    return old.LogEntry(
       id: b.syncId,
       sessionId: b.sessionId,
       time: b.time,
       controller: b.controller,
       callsign: b.callsign,
       report: b.rstSent ?? '',
+      rstRcvd: b.rstRcvd ?? '',
       qth: b.qth ?? '',
       device: b.device ?? '',
       power: b.power ?? '',
@@ -372,7 +383,5 @@ class LogProvider with ChangeNotifier {
       deletedAt: b.deletedAt,
       sourceDeviceId: b.sourceDeviceId,
     );
-    entry.rstRcvd = b.rstRcvd ?? '';
-    return entry;
   }
 }
