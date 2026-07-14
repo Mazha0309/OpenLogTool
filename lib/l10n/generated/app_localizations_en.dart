@@ -204,6 +204,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get historySessionCollaborationCloseRequiresOpen =>
+      'This is a collaboration session. Open it first, then close it from Collaboration & members.';
+
+  @override
+  String get historySessionCollaborationCloseOwnerRequired =>
+      'Only a fully synchronized session owner can close a collaboration session. Refresh access in Collaboration & members and try again.';
+
+  @override
   String get historySessionReopenAction => 'Reactivate';
 
   @override
@@ -243,6 +251,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historySessionDeleteNameLabel => 'Full session name';
+
+  @override
+  String historySessionDeleteExpectedName(String title) {
+    return 'Expected: $title';
+  }
+
+  @override
+  String get historySessionDeleteNameMismatch =>
+      'The session name does not match. Check every character.';
 
   @override
   String get historySessionDeleteAction => 'Delete local data permanently';
@@ -640,6 +657,29 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get closeCollaborationSessionMessage =>
       'After closing, no member can add or change records. The owner can reopen the session later.';
+
+  @override
+  String get closeCollaborationDraftNotEmpty =>
+      'The current live draft still contains data. Submit the complete record, or explicitly discard the draft before closing.';
+
+  @override
+  String get closeCollaborationDraftIncomplete =>
+      'The draft is missing its time, controller callsign, or logged callsign, so it cannot be submitted. You can still discard it and close.';
+
+  @override
+  String closeCollaborationDraftLocked(int count) {
+    return 'Another member or device is editing $count draft fields. Wait for those edits to finish, then refresh before closing.';
+  }
+
+  @override
+  String get closeCollaborationDiscardAndClose => 'Discard draft and close';
+
+  @override
+  String get closeCollaborationSubmitAndClose => 'Submit and close';
+
+  @override
+  String get closeCollaborationQueuedOffline =>
+      'The record was saved only to the offline queue and has not reached the server. The session was not closed. Reconnect and resolve the record before retrying.';
 
   @override
   String get closeSessionQueued =>

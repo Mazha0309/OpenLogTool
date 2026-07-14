@@ -51,6 +51,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   bool _historyReuseInProgress = false;
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
+  final Set<String> _deferredSharedDraftFields = <String>{};
 
   @override
   bool get wantKeepAlive => true;
@@ -127,21 +128,34 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (snapshot == null || fields == null) {
       _lastSharedDraftId = null;
       _lastSharedDraftSignature = null;
+      _deferredSharedDraftFields.clear();
       return;
     }
     final signature = '${snapshot.draft.draftId}:${snapshot.draft.version}:'
         '${fields.toJson()}';
-    if (_lastSharedDraftSignature == signature) return;
+    if (_lastSharedDraftSignature == signature &&
+        _deferredSharedDraftFields.isEmpty) {
+      return;
+    }
     final draftChanged = _lastSharedDraftId != snapshot.draft.draftId;
+    if (draftChanged) _deferredSharedDraftFields.clear();
     _lastSharedDraftId = snapshot.draft.draftId;
     _lastSharedDraftSignature = signature;
     _applyingSharedDraft = true;
     try {
       for (final entry in _draftControllers.entries) {
-        if (!draftChanged && _focusedDraftFields.contains(entry.key)) continue;
         final rawValue = fields[entry.key];
         final value =
             entry.key == 'time' ? _displayLiveDraftTime(rawValue) : rawValue;
+        if (!draftChanged && _focusedDraftFields.contains(entry.key)) {
+          if (entry.value.text != value) {
+            _deferredSharedDraftFields.add(entry.key);
+          } else {
+            _deferredSharedDraftFields.remove(entry.key);
+          }
+          continue;
+        }
+        _deferredSharedDraftFields.remove(entry.key);
         if (entry.value.text == value) continue;
         entry.value.value = TextEditingValue(
           text: value,
@@ -218,6 +232,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       }
     }
     await collaboration.releaseLiveDraftField(field);
+    if (mounted && _deferredSharedDraftFields.contains(field)) {
+      _syncSharedDraft(collaboration);
+    }
   }
 
   String _getCurrentTime() {

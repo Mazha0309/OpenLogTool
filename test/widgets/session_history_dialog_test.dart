@@ -5,6 +5,82 @@ import 'package:openlogtool/src/bridge/models/session.dart';
 import 'package:openlogtool/widgets/session_history_dialog.dart';
 
 void main() {
+  test('history close routes a local session to the local close action',
+      () async {
+    final session = _session(
+      id: 'local-session',
+      title: 'Local net',
+      status: 'active',
+    );
+    var localCloseCount = 0;
+    var collaborationCloseCount = 0;
+
+    await closeSessionFromHistory(
+      session: session,
+      currentSessionId: session.sessionId,
+      hasCollaborationBinding: (_) async => false,
+      closeLocalSession: (_) async => localCloseCount += 1,
+      refreshCurrentCollaboration: () async {},
+      canCloseCurrentCollaboration: () => true,
+      closeCurrentCollaboration: () async => collaborationCloseCount += 1,
+    );
+
+    expect(localCloseCount, 1);
+    expect(collaborationCloseCount, 0);
+  });
+
+  test('history close requires a collaboration session to be opened first',
+      () async {
+    final session = _session(
+      id: 'remote-session',
+      title: 'Remote net',
+      status: 'active',
+    );
+
+    await expectLater(
+      closeSessionFromHistory(
+        session: session,
+        currentSessionId: 'other-session',
+        hasCollaborationBinding: (_) async => true,
+        closeLocalSession: (_) async {},
+        refreshCurrentCollaboration: () async {},
+        canCloseCurrentCollaboration: () => true,
+        closeCurrentCollaboration: () async {},
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN'),
+        ),
+      ),
+    );
+  });
+
+  test('history close refreshes and uses the current owner collaboration path',
+      () async {
+    final session = _session(
+      id: 'remote-session',
+      title: 'Remote net',
+      status: 'active',
+    );
+    var refreshed = false;
+    var collaborationCloseCount = 0;
+
+    await closeSessionFromHistory(
+      session: session,
+      currentSessionId: session.sessionId,
+      hasCollaborationBinding: (_) async => true,
+      closeLocalSession: (_) async {},
+      refreshCurrentCollaboration: () async => refreshed = true,
+      canCloseCurrentCollaboration: () => refreshed,
+      closeCurrentCollaboration: () async => collaborationCloseCount += 1,
+    );
+
+    expect(refreshed, isTrue);
+    expect(collaborationCloseCount, 1);
+  });
+
   testWidgets('a closed session opens from the whole history row in zh_CN',
       (tester) async {
     String? openedSessionId;
@@ -76,6 +152,7 @@ void main() {
         home: Scaffold(
           body: SessionHistoryDialog(
             currentSessionId: 'current-session',
+            canCloseCurrentSession: true,
             loadSessions: () async => [
               _session(
                 id: 'current-session',
@@ -95,6 +172,10 @@ void main() {
 
     expect(find.text('Session history'), findsOneWidget);
     expect(find.text('Current session'), findsOneWidget);
+    expect(
+      find.byKey(const Key('close-history-session-current-session')),
+      findsOneWidget,
+    );
     await tester.tap(
       find.byKey(const Key('session-history-tile-current-session')),
       warnIfMissed: false,
@@ -271,6 +352,7 @@ void main() {
       find.textContaining('不会删除或关闭服务器上的共享会话'),
       findsOneWidget,
     );
+    expect(find.text('期望输入：上周点名'), findsOneWidget);
     FilledButton confirmButton() => tester.widget<FilledButton>(
           find.byKey(const Key('confirm-delete-history-session')),
         );
@@ -278,17 +360,19 @@ void main() {
 
     await tester.enterText(
       find.byKey(const Key('delete-history-session-name')),
-      '上周',
+      '上周点铭',
     );
     await tester.pump();
     expect(confirmButton().onPressed, isNull);
+    expect(find.text('输入的会话名不匹配，请逐字核对。'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('delete-history-session-name')),
-      '上周点名',
+      '  上周点名  ',
     );
     await tester.pump();
     expect(confirmButton().onPressed, isNotNull);
+    expect(find.text('输入的会话名不匹配，请逐字核对。'), findsNothing);
 
     await tester.tap(
       find.byKey(const Key('confirm-delete-history-session')),
@@ -455,6 +539,52 @@ void main() {
       find.textContaining('LOCAL_REOPEN_COLLABORATION_FORBIDDEN'),
       findsNothing,
     );
+  });
+
+  testWidgets('collaboration close rejection shows the open-first guidance',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SessionHistoryDialog(
+            currentSessionId: 'current-session',
+            loadSessions: () async => [
+              _session(
+                id: 'collaboration-session',
+                title: '远程点名',
+                status: 'active',
+              ),
+            ],
+            openSession: (_) async {},
+            reopenSession: (_) async {},
+            closeSession: (_) async => throw StateError(
+              'HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN',
+            ),
+            deleteSession: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(
+        const Key('close-history-session-collaboration-session'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('关闭会话').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('这是协作会话。请先打开该会话，再进入“协作与成员”关闭它。'),
+      findsOneWidget,
+    );
+    expect(
+        find.textContaining('COLLABORATION_SESSION_READ_ONLY'), findsNothing);
   });
 }
 

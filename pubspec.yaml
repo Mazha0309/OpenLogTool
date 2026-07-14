@@ -1,7 +1,7 @@
 name: openlogtool
 description: OpenLogTool
 publish_to: 'none'
-version: 2.0.1-R+3
+version: 2.0.2-R+4
 license: AGPL-3.0
 homepage: https://github.com/Mazha0309/OpenLogTool
 repository: https://github.com/Mazha0309/OpenLogTool.git

@@ -430,6 +430,18 @@ abstract class AppLocalizations {
   /// **'关闭会话失败：{error}'**
   String historySessionCloseFailed(String error);
 
+  /// No description provided for @historySessionCollaborationCloseRequiresOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是协作会话。请先打开该会话，再进入“协作与成员”关闭它。'**
+  String get historySessionCollaborationCloseRequiresOpen;
+
+  /// No description provided for @historySessionCollaborationCloseOwnerRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'只有已完成同步的会话所有者才能关闭协作会话。请进入“协作与成员”刷新权限后重试。'**
+  String get historySessionCollaborationCloseOwnerRequired;
+
   /// No description provided for @historySessionReopenAction.
   ///
   /// In zh, this message translates to:
@@ -489,6 +501,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'完整会话名'**
   String get historySessionDeleteNameLabel;
+
+  /// No description provided for @historySessionDeleteExpectedName.
+  ///
+  /// In zh, this message translates to:
+  /// **'期望输入：{title}'**
+  String historySessionDeleteExpectedName(String title);
+
+  /// No description provided for @historySessionDeleteNameMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入的会话名不匹配，请逐字核对。'**
+  String get historySessionDeleteNameMismatch;
 
   /// No description provided for @historySessionDeleteAction.
   ///
@@ -1179,6 +1203,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'关闭后所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。'**
   String get closeCollaborationSessionMessage;
+
+  /// No description provided for @closeCollaborationDraftNotEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前点名草稿还有内容。你可以提交这条完整记录，或明确丢弃草稿后再关闭会话。'**
+  String get closeCollaborationDraftNotEmpty;
+
+  /// No description provided for @closeCollaborationDraftIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前草稿缺少时间、主控呼号或点名呼号，不能提交；仍可明确丢弃后关闭。'**
+  String get closeCollaborationDraftIncomplete;
+
+  /// No description provided for @closeCollaborationDraftLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他成员或设备仍在编辑 {count} 个草稿字段。请等待对方结束编辑并刷新后再关闭。'**
+  String closeCollaborationDraftLocked(int count);
+
+  /// No description provided for @closeCollaborationDiscardAndClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'丢弃草稿并关闭'**
+  String get closeCollaborationDiscardAndClose;
+
+  /// No description provided for @closeCollaborationSubmitAndClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交并关闭'**
+  String get closeCollaborationSubmitAndClose;
+
+  /// No description provided for @closeCollaborationQueuedOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录仅保存到离线队列，尚未提交到服务器；会话没有关闭。请恢复网络并处理该记录后重试。'**
+  String get closeCollaborationQueuedOffline;
 
   /// No description provided for @closeSessionQueued.
   ///

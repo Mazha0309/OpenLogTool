@@ -200,6 +200,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get historySessionCollaborationCloseRequiresOpen =>
+      '这是协作会话。请先打开该会话，再进入“协作与成员”关闭它。';
+
+  @override
+  String get historySessionCollaborationCloseOwnerRequired =>
+      '只有已完成同步的会话所有者才能关闭协作会话。请进入“协作与成员”刷新权限后重试。';
+
+  @override
   String get historySessionReopenAction => '重新激活';
 
   @override
@@ -239,6 +247,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historySessionDeleteNameLabel => '完整会话名';
+
+  @override
+  String historySessionDeleteExpectedName(String title) {
+    return '期望输入：$title';
+  }
+
+  @override
+  String get historySessionDeleteNameMismatch => '输入的会话名不匹配，请逐字核对。';
 
   @override
   String get historySessionDeleteAction => '永久删除本机数据';
@@ -612,6 +628,29 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get closeCollaborationSessionMessage =>
       '关闭后所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。';
+
+  @override
+  String get closeCollaborationDraftNotEmpty =>
+      '当前点名草稿还有内容。你可以提交这条完整记录，或明确丢弃草稿后再关闭会话。';
+
+  @override
+  String get closeCollaborationDraftIncomplete =>
+      '当前草稿缺少时间、主控呼号或点名呼号，不能提交；仍可明确丢弃后关闭。';
+
+  @override
+  String closeCollaborationDraftLocked(int count) {
+    return '其他成员或设备仍在编辑 $count 个草稿字段。请等待对方结束编辑并刷新后再关闭。';
+  }
+
+  @override
+  String get closeCollaborationDiscardAndClose => '丢弃草稿并关闭';
+
+  @override
+  String get closeCollaborationSubmitAndClose => '提交并关闭';
+
+  @override
+  String get closeCollaborationQueuedOffline =>
+      '记录仅保存到离线队列，尚未提交到服务器；会话没有关闭。请恢复网络并处理该记录后重试。';
 
   @override
   String get closeSessionQueued => '会话已在本地关闭，等待同步确认';
