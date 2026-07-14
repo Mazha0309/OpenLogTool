@@ -38,12 +38,68 @@ void main() {
 
       // A → B → A preserves natural order and starts a fresh timed A block.
       expect(_cellText(rows[2], 2), 'BG5AAA');
-      expect(_cellText(rows[3], 3), 'A1');
+      expect(_cellText(rows[3], 2), 'A1');
       expect(_cellText(rows[4], 2), 'BG5BBB');
-      expect(_cellText(rows[5], 3), 'B1');
+      expect(_cellText(rows[5], 2), 'B1');
       expect(_cellText(rows[6], 2), 'BG5AAA');
       expect(_cellText(rows[6], 1), '19:30');
-      expect(_cellText(rows[7], 3), 'A2');
+      expect(_cellText(rows[7], 2), 'A2');
+    });
+
+    test('uses controller section rows instead of a repeated controller column',
+        () {
+      final bytes = ExportService.generateExcelBytes(
+        [
+          _log(
+            time: '19:00',
+            controller: 'BG5AAA',
+            callsign: 'BG5BBB',
+            rstSent: '58',
+            rstRcvd: '47',
+            qth: '杭州滨江浦沿',
+            device: 'ICOM IC-9700',
+            power: '25W',
+            antenna: '华鸿 1.2米玻璃钢',
+            height: '30米',
+            remarks: '测试备注',
+          ),
+        ],
+        ExportSettings(showFooter: false),
+        DateTime(2026, 7, 13, 19),
+      );
+
+      final sheet = excel_lib.Excel.decodeBytes(bytes!).tables['点名记录']!;
+      expect(
+        List.generate(11, (index) => _cellText(sheet.rows[1], index)),
+        ['#', '时间', '呼号', 'RST发', 'RST收', 'QTH', '设备', '功率', '天线', '高度', '备注'],
+      );
+      expect(_cellText(sheet.rows[2], 0), '点名主控:');
+      expect(_cellText(sheet.rows[2], 2), 'BG5AAA');
+      expect(
+        List.generate(11, (index) => _cellText(sheet.rows[3], index)),
+        [
+          '1',
+          '19:00',
+          'BG5BBB',
+          '58',
+          '47',
+          '杭州滨江浦沿',
+          'ICOM IC-9700',
+          '25W',
+          '华鸿 1.2米玻璃钢',
+          '30米',
+          '测试备注',
+        ],
+      );
+
+      const expectedWidths = <double>[10, 8, 10, 8, 8, 22, 20, 7, 22, 7, 10];
+      for (var column = 0; column < expectedWidths.length; column++) {
+        expect(
+          sheet.getColumnWidth(column),
+          closeTo(expectedWidths[column], 0.01),
+          reason: 'column $column',
+        );
+      }
     });
 
     test('exports canonical UTC timestamps in the device timezone', () {
@@ -61,7 +117,7 @@ void main() {
       );
 
       final rows = excel_lib.Excel.decodeBytes(bytes!).tables['点名记录']!.rows;
-      final logRow = rows.singleWhere((row) => _cellText(row, 3) == 'A1');
+      final logRow = rows.singleWhere((row) => _cellText(row, 2) == 'A1');
       final controllerRow =
           rows.singleWhere((row) => _cellText(row, 0) == '点名主控:');
 
@@ -153,16 +209,26 @@ LogEntry _log({
   required String time,
   required String controller,
   required String callsign,
+  String rstSent = '59',
+  String rstRcvd = '',
+  String qth = '',
+  String device = '',
+  String power = '',
+  String antenna = '',
+  String height = '',
+  String remarks = '',
 }) {
   return LogEntry(
     time: time,
     controller: controller,
     callsign: callsign,
-    report: '59',
-    qth: '',
-    device: '',
-    power: '',
-    antenna: '',
-    height: '',
+    report: rstSent,
+    rstRcvd: rstRcvd,
+    qth: qth,
+    device: device,
+    power: power,
+    antenna: antenna,
+    height: height,
+    remarks: remarks,
   );
 }

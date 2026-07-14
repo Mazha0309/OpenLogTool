@@ -129,6 +129,33 @@ class ExportService {
     DateTime now, {
     String? sessionTitle,
   }) {
+    const headers = <String>[
+      '#',
+      '时间',
+      '呼号',
+      'RST发',
+      'RST收',
+      'QTH',
+      '设备',
+      '功率',
+      '天线',
+      '高度',
+      '备注',
+    ];
+    const colWidths = <double>[
+      10, // 序号 / 主控标记
+      8, // 时间
+      10, // 呼号
+      8, // RST 发
+      8, // RST 收
+      22, // QTH
+      20, // 设备
+      7, // 功率
+      22, // 天线
+      7, // 高度
+      10, // 备注
+    ];
+    final lastColumnIndex = headers.length - 1;
     final excel = excel_lib.Excel.createExcel();
     final sheet = excel['点名记录'];
 
@@ -164,7 +191,10 @@ class ExportService {
     sheet.insertRowIterables([excel_lib.TextCellValue(headerText)], 0);
     sheet.merge(
       excel_lib.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
-      excel_lib.CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: 0),
+      excel_lib.CellIndex.indexByColumnRow(
+        columnIndex: lastColumnIndex,
+        rowIndex: 0,
+      ),
       customValue: excel_lib.TextCellValue(headerText),
     );
     sheet.row(0).forEach((cell) {
@@ -187,20 +217,6 @@ class ExportService {
     sheet.setRowHeight(0, 30);
 
     // Column headers
-    final headers = [
-      '#',
-      '时间',
-      '主控',
-      '呼号',
-      'RST发',
-      'RST收',
-      'QTH',
-      '设备',
-      '功率',
-      '天线',
-      '高度',
-      '备注'
-    ];
     sheet.insertRowIterables(
       headers.map((e) => excel_lib.TextCellValue(e)).toList(),
       1,
@@ -249,7 +265,6 @@ class ExportService {
           '',
           '',
           '',
-          '',
         ];
         sheet.insertRowIterables(
           controllerRow.map((e) => excel_lib.TextCellValue(e)).toList(),
@@ -284,7 +299,6 @@ class ExportService {
       final rowData = [
         excel_lib.TextCellValue(globalIndex.toString()),
         excel_lib.TextCellValue(displayTime),
-        excel_lib.TextCellValue(log.controller),
         excel_lib.TextCellValue(log.callsign),
         excel_lib.TextCellValue(log.report),
         excel_lib.TextCellValue(log.rstRcvd),
@@ -341,7 +355,7 @@ class ExportService {
           excel_lib.CellIndex.indexByColumnRow(
               columnIndex: 0, rowIndex: currentRow),
           excel_lib.CellIndex.indexByColumnRow(
-              columnIndex: 11, rowIndex: currentRow),
+              columnIndex: lastColumnIndex, rowIndex: currentRow),
           customValue: excel_lib.TextCellValue(text),
         );
         sheet.row(currentRow).forEach((cell) {
@@ -364,7 +378,6 @@ class ExportService {
     }
 
     // Column widths
-    const colWidths = <double>[10, 10, 15, 12, 18, 15, 10, 18, 10, 10];
     for (var i = 0; i < colWidths.length; i++) {
       sheet.setColumnWidth(i, colWidths[i]);
     }

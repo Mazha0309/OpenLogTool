@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -123,7 +124,6 @@ class _ExportPanelState extends State<ExportPanel> {
                   color: theme.colorScheme.primary,
                   onPressed: () => _exportJSON(context),
                 ),
-                const SizedBox(width: 12),
                 _buildActionButton(
                   context,
                   label: '导出 Excel',
@@ -149,7 +149,6 @@ class _ExportPanelState extends State<ExportPanel> {
                   color: theme.colorScheme.tertiary,
                   onPressed: () => _importJSON(context),
                 ),
-                const SizedBox(width: 12),
                 _buildActionButton(
                   context,
                   label: '导入 Excel',
@@ -197,7 +196,9 @@ class _ExportPanelState extends State<ExportPanel> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
           children: children,
         ),
       ],
@@ -247,26 +248,37 @@ class _ExportPanelState extends State<ExportPanel> {
           children: [
             Row(
               children: [
-                Icon(Icons.settings,
-                    color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Excel 导出设置',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.preview_outlined,
+                        color: theme.colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Excel 配置概览',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                TextButton.icon(
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
                   onPressed: () => _showExportSettingsDialog(context),
-                  icon: const Icon(Icons.open_in_full, size: 16),
-                  label: const Text('高级设置'),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('编辑设置'),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             Text(
-              '预览并快速调整最常用的导出选项，完整选项请进入高级设置。',
+              '这里展示当前配置；交替行可直接切换，其他选项请点击“编辑设置”。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -294,31 +306,38 @@ class _ExportPanelState extends State<ExportPanel> {
               context,
               label: '导出路径',
               value:
-                  settings.exportPath.isEmpty ? '默认下载文件夹' : settings.exportPath,
+                  settings.exportPath.isEmpty ? '系统下载目录' : settings.exportPath,
               icon: Icons.folder,
             ),
             const Divider(height: 24),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 _buildColorChip(
-                    context, '抬头背景', settings.headerBackgroundColor),
-                const SizedBox(width: 12),
+                  context,
+                  '抬头背景',
+                  settings.headerBackgroundColor,
+                ),
                 _buildColorChip(
-                    context, '表头背景', settings.headerRowBackgroundColor),
-                const SizedBox(width: 12),
+                  context,
+                  '表头背景',
+                  settings.headerRowBackgroundColor,
+                ),
                 _buildColorChip(
-                    context, '主控栏', settings.controllerBackgroundColor),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildToggleChip(
-                    context,
-                    label: '交替行',
-                    value: settings.useAlternateColors,
-                    onChanged: (v) {
-                      final updated = settings.copyWith(useAlternateColors: v);
-                      settingsProvider.updateExportSettings(updated);
-                    },
-                  ),
+                  context,
+                  '主控行',
+                  settings.controllerBackgroundColor,
+                ),
+                _buildToggleChip(
+                  context,
+                  label: '交替行',
+                  value: settings.useAlternateColors,
+                  onChanged: (v) {
+                    final updated = settings.copyWith(useAlternateColors: v);
+                    settingsProvider.updateExportSettings(updated);
+                  },
                 ),
               ],
             ),
@@ -454,7 +473,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 8),
           Text(
             '• JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。\n'
-            '• Excel：使用 .xlsx 格式，包含分组主控栏、颜色样式和底部信息，适合分享与打印。',
+            '• Excel：使用 .xlsx 格式，包含分组主控行、颜色样式和底部信息，适合分享与打印。',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
               height: 1.5,
@@ -482,14 +501,28 @@ class _ExportPanelState extends State<ExportPanel> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          const dialogFont = TextStyle(fontSize: 14);
+          final mediaSize = MediaQuery.sizeOf(context);
+          final compact = mediaSize.width < 600;
+          final horizontalInset = compact ? 16.0 : 40.0;
+          final dialogWidth = math.min(
+            520.0,
+            math.max(240.0, mediaSize.width - horizontalInset * 2),
+          );
+          final dialogHeight = math.min(
+            620.0,
+            math.max(260.0, mediaSize.height - 200.0),
+          );
 
           return AlertDialog(
-            title: const Text('Excel 导出设置', style: dialogFont),
+            insetPadding: EdgeInsets.symmetric(
+              horizontal: horizontalInset,
+              vertical: 24,
+            ),
+            title: const Text('编辑 Excel 导出设置'),
             contentPadding: EdgeInsets.zero,
             content: SizedBox(
-              width: 520,
-              height: 620,
+              width: dialogWidth,
+              height: dialogHeight,
               child: DefaultTabController(
                 length: 3,
                 child: Column(
@@ -497,8 +530,8 @@ class _ExportPanelState extends State<ExportPanel> {
                     const TabBar(
                       tabs: [
                         Tab(icon: Icon(Icons.folder_outlined), text: '文件'),
-                        Tab(icon: Icon(Icons.palette_outlined), text: '样式'),
-                        Tab(icon: Icon(Icons.help_outline), text: '模板'),
+                        Tab(icon: Icon(Icons.palette_outlined), text: '表格样式'),
+                        Tab(icon: Icon(Icons.help_outline), text: '模板变量'),
                       ],
                     ),
                     Expanded(
@@ -571,9 +604,9 @@ class _ExportPanelState extends State<ExportPanel> {
             context,
             label: '导出路径',
             controller: exportPathController,
-            hintText: '默认使用下载文件夹',
+            hintText: '系统下载目录',
             readOnly: true,
-            helperText: '留空则自动使用系统下载目录',
+            helperText: '留空时使用系统下载目录',
             trailing: FilledButton(
               onPressed: () async {
                 final result = await FilePicker.platform.getDirectoryPath();
@@ -607,10 +640,10 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 20),
           _buildTextFieldGroup(
             context,
-            label: 'Excel 抬头文字',
+            label: '抬头模板',
             controller: headerTextController,
             hintText: '如：{yyyy}-{MM}-{dd}日点名记录',
-            helperText: '支持模板变量',
+            helperText: '未使用会话名或会话名为空时生效；支持模板变量',
           ),
         ],
       ),
@@ -700,7 +733,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 16),
           _buildColorSetting(
             context,
-            '普通背景色',
+            '表格背景色',
             settings.tableBackgroundColor,
             (color) => setState(() => settings.tableBackgroundColor = color),
             settings.fontFamily,
@@ -718,16 +751,16 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 20),
           _buildSwitchTile(
             context,
-            title: '双色交替',
-            subtitle: '启用交替行颜色',
+            title: '交替行颜色',
+            subtitle: '使用交替行背景色',
             value: settings.useAlternateColors,
             onChanged: (value) =>
                 setState(() => settings.useAlternateColors = value),
           ),
           _buildSwitchTile(
             context,
-            title: '底部信息',
-            subtitle: '在表格底部显示导出信息',
+            title: '底部说明',
+            subtitle: '显示 OpenLogTool 项目与许可信息',
             value: settings.showFooter,
             onChanged: (value) => setState(() => settings.showFooter = value),
           ),
@@ -783,6 +816,11 @@ class _ExportPanelState extends State<ExportPanel> {
     final normalizedFamily = AppConfig.normalizeFontFamily(settings.fontFamily);
     final initialValue =
         normalizedFamily.isEmpty ? 'SarasaGothicSC' : normalizedFamily;
+    final fontOptions = <String>{
+      'SarasaGothicSC',
+      ...availableFonts,
+      initialValue,
+    }.toList(growable: false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -800,7 +838,7 @@ class _ExportPanelState extends State<ExportPanel> {
             const DropdownMenuItem(
                 value: '',
                 child: Text('系统默认', overflow: TextOverflow.ellipsis)),
-            ...availableFonts.map((font) => DropdownMenuItem(
+            ...fontOptions.map((font) => DropdownMenuItem(
                   value: font,
                   child: Text(
                     font == 'SarasaGothicSC' ? '$font (内置)' : font,
