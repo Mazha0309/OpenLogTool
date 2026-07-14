@@ -33,6 +33,17 @@ enum CollaborationState {
 
 enum LiveDraftCommitDisposition { committed, queuedOffline }
 
+@visibleForTesting
+LiveDraftFieldsDto resetLiveDraftFieldsAfterCommit(
+  LiveDraftFieldsDto previous,
+) =>
+    LiveDraftFieldsDto({
+      'time': '',
+      'controller': previous['controller'],
+      'rstSent': '59',
+      'rstRcvd': '59',
+    });
+
 final class LocalCollaborationBinding {
   const LocalCollaborationBinding({
     required this.serverInstanceId,
@@ -1738,7 +1749,8 @@ class CollaborationProvider with ChangeNotifier {
             fields: initialFields,
           );
           _offlineRecords = [..._offlineRecords, queued];
-          _localLiveDraftFields = _resetFieldsAfterCommit(initialFields);
+          _localLiveDraftFields =
+              resetLiveDraftFieldsAfterCommit(initialFields);
           _dirtyLiveDraftFields = {
             for (final field in liveDraftFieldNames)
               if (_localLiveDraftFields![field] !=
@@ -1816,7 +1828,7 @@ class CollaborationProvider with ChangeNotifier {
             fields: fields,
           );
           _offlineRecords = [..._offlineRecords, queued];
-          _localLiveDraftFields = _resetFieldsAfterCommit(fields);
+          _localLiveDraftFields = resetLiveDraftFieldsAfterCommit(fields);
           _dirtyLiveDraftFields = {
             for (final field in liveDraftFieldNames)
               if (_localLiveDraftFields![field] !=
@@ -3620,16 +3632,6 @@ class CollaborationProvider with ChangeNotifier {
         );
       }
     }
-  }
-
-  LiveDraftFieldsDto _resetFieldsAfterCommit(LiveDraftFieldsDto previous) {
-    final time = DateTime.now().toUtc().toIso8601String();
-    return LiveDraftFieldsDto({
-      'time': time,
-      'controller': previous['controller'],
-      'rstSent': '59',
-      'rstRcvd': '59',
-    });
   }
 
   String _normalizeLiveDraftTime(String value) {

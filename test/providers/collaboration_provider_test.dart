@@ -511,6 +511,26 @@ void main() {
     });
   });
 
+  test('offline commit starts the next record with an empty time', () {
+    final next = resetLiveDraftFieldsAfterCommit(
+      _fields({
+        'time': '2026-07-14T12:34:00Z',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+        'rstSent': '58',
+        'rstRcvd': '47',
+        'qth': 'Shanghai',
+      }),
+    );
+
+    expect(next['time'], isEmpty);
+    expect(next['controller'], 'BG5CRL');
+    expect(next['callsign'], isEmpty);
+    expect(next['rstSent'], '59');
+    expect(next['rstRcvd'], '59');
+    expect(next['qth'], isEmpty);
+  });
+
   group('live-draft realtime controls', () {
     test('updated payload projects every supported field without a GET', () {
       final current = _snapshot(draft: _draft(version: 1));

@@ -49,6 +49,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   Timer? _lockExpiryTimer;
   bool _applyingSharedDraft = false;
   bool _historyReuseInProgress = false;
+  bool _submissionInProgress = false;
+  String? _autoSubmittedDraftId;
+  String? _autoSubmittedTime;
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
   final Set<String> _deferredSharedDraftFields = <String>{};
@@ -128,6 +131,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (snapshot == null || fields == null) {
       _lastSharedDraftId = null;
       _lastSharedDraftSignature = null;
+      _autoSubmittedDraftId = null;
+      _autoSubmittedTime = null;
       _deferredSharedDraftFields.clear();
       return;
     }
@@ -138,7 +143,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       return;
     }
     final draftChanged = _lastSharedDraftId != snapshot.draft.draftId;
-    if (draftChanged) _deferredSharedDraftFields.clear();
+    if (draftChanged) {
+      _deferredSharedDraftFields.clear();
+      if (_autoSubmittedDraftId != snapshot.draft.draftId) {
+        _autoSubmittedDraftId = null;
+        _autoSubmittedTime = null;
+      }
+    }
     _lastSharedDraftId = snapshot.draft.draftId;
     _lastSharedDraftSignature = signature;
     _applyingSharedDraft = true;
@@ -147,6 +158,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         final rawValue = fields[entry.key];
         final value =
             entry.key == 'time' ? _displayLiveDraftTime(rawValue) : rawValue;
+        if (entry.key == 'time' &&
+            _autoSubmittedDraftId == snapshot.draft.draftId) {
+          if (entry.value.text.isEmpty && value == _autoSubmittedTime) {
+            _deferredSharedDraftFields.remove(entry.key);
+            continue;
+          }
+          if (value != _autoSubmittedTime) {
+            _autoSubmittedDraftId = null;
+            _autoSubmittedTime = null;
+          }
+        }
         if (!draftChanged && _focusedDraftFields.contains(entry.key)) {
           if (entry.value.text != value) {
             _deferredSharedDraftFields.add(entry.key);
@@ -169,6 +191,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _onDraftFieldChanged(String field) {
     if (_applyingSharedDraft || !mounted) return;
+    if (field == 'time') {
+      _autoSubmittedDraftId = null;
+      _autoSubmittedTime = null;
+    }
     final collaboration = context.read<CollaborationProvider>();
     if (collaboration.liveDraftSnapshot == null ||
         !collaboration.canEditLiveDraft) {
@@ -322,6 +348,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   Future<void> _submitForm() async {
+    if (_submissionInProgress) return;
     final collaboration = context.read<CollaborationProvider>();
     if (widget.readOnly ||
         (collaboration.liveDraftSnapshot != null &&
@@ -330,6 +357,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    setState(() => _submissionInProgress = true);
+    try {
+      await _submitValidatedForm(collaboration);
+    } finally {
+      if (mounted) setState(() => _submissionInProgress = false);
+    }
+  }
+
+  Future<void> _submitValidatedForm(
+    CollaborationProvider collaboration,
+  ) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final sessionProvider =
         Provider.of<SessionProvider>(context, listen: false);
@@ -384,8 +422,16 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
 
     if (collaboration.liveDraftSnapshot != null) {
-      if (_timeController.text.isEmpty) {
-        _timeController.text = _getCurrentTime();
+      final currentDraftId = collaboration.liveDraftSnapshot!.draft.draftId;
+      final enteredTime = _timeController.text.trim();
+      final submittedTime =
+          enteredTime.isNotEmpty ? enteredTime : _getCurrentTime();
+      if (enteredTime.isEmpty) {
+        _autoSubmittedDraftId = currentDraftId;
+        _autoSubmittedTime = submittedTime;
+      } else {
+        _autoSubmittedDraftId = null;
+        _autoSubmittedTime = null;
       }
       for (final timer in _draftDebounce.values) {
         timer.cancel();
@@ -395,7 +441,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         try {
           await collaboration.updateLiveDraftField(
             entry.key,
-            entry.value.text,
+            entry.key == 'time' ? submittedTime : entry.value.text,
           );
         } catch (_) {
           // commitCurrentLiveDraft retries retained dirty values and decides
@@ -493,8 +539,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     _scheduleLockExpiryRefresh(activeForeignLocks);
     final firstForeignLock =
         activeForeignLocks.isEmpty ? null : activeForeignLocks.first;
-    final canSubmit =
-        !readOnly && firstForeignLock == null && !_historyReuseInProgress;
+    final canSubmit = !readOnly &&
+        firstForeignLock == null &&
+        !_historyReuseInProgress &&
+        !_submissionInProgress;
 
     bool fieldEnabled(String field) => !readOnly && !isActiveForeignLock(field);
 
@@ -654,6 +702,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     SizedBox(
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
+                        key: const Key('log-time-field'),
                         controller: _timeController,
                         label: fieldLabel('time', '时间'),
                         hintText: 'HH:mm',
@@ -731,6 +780,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 SizedBox(
                   height: isNarrow ? 44 : 48,
                   child: FilledButton.icon(
+                    key: const Key('save-log-record'),
                     onPressed: canSubmit ? _submitForm : null,
                     icon: Icon(
                       _historyReuseInProgress
@@ -765,6 +815,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildMaterialTextField({
+    Key? key,
     required TextEditingController controller,
     required String label,
     required String hintText,
@@ -780,6 +831,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     bool enabled = true,
   }) {
     return TextFormField(
+      key: key,
       controller: controller,
       focusNode: focusNode,
       enabled: enabled,
