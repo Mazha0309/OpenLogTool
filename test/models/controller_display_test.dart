@@ -44,8 +44,19 @@ void main() {
     expect(dto.sessionTitle, '周日晚间点名');
     expect(dto.currentOrdinal, 8);
     expect(dto.totalRecords, 7);
-    expect(dto.current.callsign, 'BA4AAA');
-    expect(dto.current.rstRcvd, '57');
+    expect(dto.current.toJson(), {
+      'controller': 'BG5CRL',
+      'callsign': 'BA4AAA',
+      'time': '20:15',
+      'rstSent': '59',
+      'rstRcvd': '57',
+      'qth': '上海',
+      'device': 'IC-7300',
+      'power': '100W',
+      'antenna': 'DP',
+      'height': '12m',
+      'remarks': '移动设台',
+    });
     expect(dto.previous?.callsign, 'BH4BBB');
     expect(dto.fieldRevisions['callsign'], 4);
     expect(dto.locks.single.holderName, '书记员甲');

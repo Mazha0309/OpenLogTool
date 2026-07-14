@@ -99,6 +99,87 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'a focused shared field defers a remote replacement until editing ends',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider();
+      collaboration.fieldUpdateError = StateError('field conflict');
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final callsignEditableFinder = find.descendant(
+        of: find.byType(CallsignHistoryField),
+        matching: find.byType(EditableText),
+      );
+      await tester.tap(callsignEditableFinder);
+      await tester.enterText(callsignEditableFinder, 'LOCAL');
+      await tester.pump(const Duration(milliseconds: 50));
+
+      collaboration.replaceDraftField('callsign', 'REMOTE');
+      await tester.pump();
+      expect(
+        tester.widget<EditableText>(callsignEditableFinder).controller.text,
+        'LOCAL',
+      );
+
+      await tester.tap(find.byKey(const Key('outside-log-form')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester.widget<EditableText>(callsignEditableFinder).controller.text,
+        'REMOTE',
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
+
+  testWidgets(
+    'a focused non-callsign field defers a remote replacement until editing ends',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider();
+      collaboration.fieldUpdateError = StateError('field conflict');
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final remarksField = find.ancestor(
+        of: find.text('备注'),
+        matching: find.byType(TextFormField),
+      );
+      expect(remarksField, findsOneWidget);
+      final remarksEditable = find.descendant(
+        of: remarksField,
+        matching: find.byType(EditableText),
+      );
+      expect(remarksEditable, findsOneWidget);
+
+      await tester.tap(remarksEditable);
+      await tester.enterText(remarksEditable, 'LOCAL REMARKS');
+      await tester.pump(const Duration(milliseconds: 50));
+
+      collaboration.replaceDraftField('remarks', 'REMOTE REMARKS');
+      await tester.pump();
+      expect(
+        tester.widget<EditableText>(remarksEditable).controller.text,
+        'LOCAL REMARKS',
+      );
+
+      await tester.tap(find.byKey(const Key('outside-log-form')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester.widget<EditableText>(remarksEditable).controller.text,
+        'REMOTE REMARKS',
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
 }
 
 const _historyRecord = bridge.LogEntry(
@@ -182,12 +263,36 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
           previousRecord: null,
         );
 
-  final LiveDraftSnapshotDto _snapshot;
+  LiveDraftSnapshotDto _snapshot;
   final List<Map<String, String>> atomicUpdates = [];
   final List<String> acquiredFields = [];
   final List<String> releasedFields = [];
   final Map<String, LiveDraftLockDto> _ownedLocks = {};
   Completer<void>? atomicGate;
+  Object? fieldUpdateError;
+
+  void replaceDraftField(String field, String value) {
+    final previous = _snapshot.draft;
+    final revisions = Map<String, int>.from(previous.fieldRevisions);
+    revisions[field] = (revisions[field] ?? 0) + 1;
+    _snapshot = LiveDraftSnapshotDto(
+      draft: LiveDraftDto(
+        draftId: previous.draftId,
+        sessionId: previous.sessionId,
+        version: previous.version + 1,
+        fields: previous.fields.withField(field, value),
+        fieldRevisions: revisions,
+        lastUpdatedBy: previous.lastUpdatedBy,
+        createdAt: previous.createdAt,
+        lastUpdatedAt: DateTime.now().toUtc(),
+      ),
+      locks: _snapshot.locks,
+      currentOrdinal: _snapshot.currentOrdinal,
+      totalRecords: _snapshot.totalRecords,
+      previousRecord: _snapshot.previousRecord,
+    );
+    notifyListeners();
+  }
 
   @override
   LiveDraftSnapshotDto get liveDraftSnapshot => _snapshot;
@@ -234,7 +339,11 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   }
 
   @override
-  Future<void> updateLiveDraftField(String field, String value) async {}
+  Future<void> updateLiveDraftField(String field, String value) async {
+    final error = fieldUpdateError;
+    if (error != null) throw error;
+    replaceDraftField(field, value);
+  }
 
   @override
   Future<void> updateLiveDraftFieldsAtomically(

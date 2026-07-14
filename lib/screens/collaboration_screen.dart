@@ -16,6 +16,34 @@ import 'package:url_launcher/url_launcher.dart';
 
 typedef PublicShareUriOpener = Future<bool> Function(Uri uri);
 
+enum _CloseCollaborationAction { close, discardAndClose, submitAndClose }
+
+bool _liveDraftHasCloseBlockingContent(LiveDraftFieldsDto fields) {
+  bool hasText(String field) => fields[field].trim().isNotEmpty;
+  bool hasNonDefaultReport(String field) {
+    final value = fields[field].trim();
+    return value.isNotEmpty && value != '59';
+  }
+
+  return const [
+        'callsign',
+        'qth',
+        'device',
+        'power',
+        'antenna',
+        'height',
+        'remarks',
+      ].any(hasText) ||
+      hasNonDefaultReport('rstSent') ||
+      hasNonDefaultReport('rstRcvd');
+}
+
+bool _liveDraftIsComplete(LiveDraftFieldsDto fields) => const [
+      'time',
+      'controller',
+      'callsign'
+    ].every((field) => fields[field].trim().isNotEmpty);
+
 class CollaborationScreen extends StatefulWidget {
   const CollaborationScreen({
     super.key,
@@ -864,6 +892,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                         label: Text(context.l10n.renameSession),
                       ),
                       OutlinedButton.icon(
+                        key: const Key('close-collaboration-session'),
                         onPressed: collaboration.isBusy ||
                                 collaboration.hasOpenSessionConflict
                             ? null
@@ -1007,16 +1036,144 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
   }
 
   Future<void> _closeSession(CollaborationProvider collaboration) async {
-    final successMessage = context.l10n.closeSessionQueued;
-    final accepted = await _confirm(
-      context.l10n.closeCollaborationSessionTitle,
-      context.l10n.closeCollaborationSessionMessage,
+    try {
+      if (collaboration.supportsLiveDraft) {
+        await collaboration.refreshLiveDraft();
+        if (!mounted) return;
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+        );
+      }
+      return;
+    }
+    final fields = collaboration.liveDraftFields;
+    final hasDraft =
+        fields != null && _liveDraftHasCloseBlockingContent(fields);
+    final draftComplete = fields != null && _liveDraftIsComplete(fields);
+    final foreignLocks = collaboration.liveDraftLocks
+        .where(
+          (lock) =>
+              lock.expiresAt.isAfter(DateTime.now()) &&
+              collaboration.fieldLockedByAnotherUser(lock.field),
+        )
+        .toList(growable: false);
+    final draftLocked = foreignLocks.isNotEmpty;
+    final canResolveDraft = collaboration.canEditLiveDraft && !draftLocked;
+    final action = await showDialog<_CloseCollaborationAction>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('close-collaboration-session-dialog'),
+        title: Text(context.l10n.closeCollaborationSessionTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(context.l10n.closeCollaborationSessionMessage),
+            if (draftLocked) ...[
+              const SizedBox(height: 12),
+              Text(
+                context.l10n.closeCollaborationDraftLocked(foreignLocks.length),
+                key: const Key('close-collaboration-draft-locked'),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ] else if (hasDraft) ...[
+              const SizedBox(height: 12),
+              Text(
+                context.l10n.closeCollaborationDraftNotEmpty,
+                key: const Key('close-collaboration-draft-not-empty'),
+              ),
+              if (!draftComplete) ...[
+                const SizedBox(height: 8),
+                Text(
+                  context.l10n.closeCollaborationDraftIncomplete,
+                  key: const Key('close-collaboration-draft-incomplete'),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.cancel),
+          ),
+          if (!hasDraft && !draftLocked)
+            FilledButton(
+              key: const Key('confirm-close-collaboration-session'),
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _CloseCollaborationAction.close,
+              ),
+              child: Text(context.l10n.closeSession),
+            ),
+          if (hasDraft && canResolveDraft)
+            OutlinedButton(
+              key: const Key('discard-live-draft-and-close'),
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _CloseCollaborationAction.discardAndClose,
+              ),
+              child: Text(context.l10n.closeCollaborationDiscardAndClose),
+            ),
+          if (hasDraft && draftComplete && canResolveDraft)
+            FilledButton(
+              key: const Key('submit-live-draft-and-close'),
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _CloseCollaborationAction.submitAndClose,
+              ),
+              child: Text(context.l10n.closeCollaborationSubmitAndClose),
+            ),
+        ],
+      ),
     );
-    if (!accepted) return;
-    await _run(
-      collaboration.closeCurrentSession,
-      success: successMessage,
-    );
+    if (action == null || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      switch (action) {
+        case _CloseCollaborationAction.close:
+          break;
+        case _CloseCollaborationAction.discardAndClose:
+          await collaboration.discardCurrentLiveDraft();
+          break;
+        case _CloseCollaborationAction.submitAndClose:
+          final disposition = await collaboration.commitCurrentLiveDraft();
+          if (disposition == LiveDraftCommitDisposition.queuedOffline) {
+            if (mounted) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    context.l10n.closeCollaborationQueuedOffline,
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+          break;
+      }
+      await collaboration.closeCurrentSession();
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(context.l10n.closeSessionQueued)),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+        );
+      }
+    }
   }
 
   Future<void> _reopenSession(CollaborationProvider collaboration) async {

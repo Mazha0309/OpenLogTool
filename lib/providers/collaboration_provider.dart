@@ -261,6 +261,341 @@ LiveDraftDto selectLiveDraftCanonicalAfterAtomicPatch({
   return accepted;
 }
 
+/// Accepts authoritative refreshes without allowing an older response from the
+/// same draft generation to replace a newer in-memory draft.
+///
+/// Locks are independent leases, so the incoming lock list remains useful even
+/// when its draft body is stale.
+@visibleForTesting
+LiveDraftSnapshotDto selectLiveDraftSnapshotAfterRefresh({
+  required LiveDraftSnapshotDto current,
+  required LiveDraftSnapshotDto incoming,
+}) {
+  if (current.draft.draftId != incoming.draft.draftId ||
+      current.draft.version <= incoming.draft.version) {
+    return incoming;
+  }
+  return LiveDraftSnapshotDto(
+    draft: current.draft,
+    locks: incoming.locks,
+    currentOrdinal: current.currentOrdinal,
+    totalRecords: current.totalRecords,
+    previousRecord: current.previousRecord,
+  );
+}
+
+/// Complete in-memory projection produced by one member-only live-draft
+/// WebSocket control message.
+///
+/// The server includes the complete canonical draft in update/reset controls,
+/// so consumers do not need to turn every keystroke notification into another
+/// GET request. Local dirty values remain optimistic until their serialized
+/// PATCH is acknowledged.
+@visibleForTesting
+final class LiveDraftControlProjection {
+  const LiveDraftControlProjection({
+    required this.snapshot,
+    required this.localFields,
+    required this.dirtyFields,
+    required this.baseRevisions,
+    required this.changed,
+  });
+
+  final LiveDraftSnapshotDto snapshot;
+  final LiveDraftFieldsDto localFields;
+  final Set<String> dirtyFields;
+  final Map<String, int> baseRevisions;
+  final bool changed;
+}
+
+/// Applies a complete live-draft control payload with draft-generation and
+/// version gating. Older controls from the same generation are ignored.
+@visibleForTesting
+LiveDraftControlProjection applyLiveDraftControlMessage({
+  required LiveDraftSnapshotDto currentSnapshot,
+  required LiveDraftFieldsDto currentLocalFields,
+  required Set<String> currentDirtyFields,
+  required Map<String, int> currentBaseRevisions,
+  required JsonObject message,
+}) {
+  final sessionId = message['sessionId'];
+  if (sessionId != currentSnapshot.draft.sessionId) {
+    throw const FormatException(
+      'Live-draft control belongs to another Session',
+    );
+  }
+  final type = message['type'];
+  if (type is! String) {
+    throw const FormatException('Live-draft control type is missing');
+  }
+
+  LiveDraftControlProjection adoptDraft(
+    LiveDraftDto incoming, {
+    List<LiveDraftLockDto>? locks,
+    int? currentOrdinal,
+    int? totalRecords,
+    CollaborationLogDto? previousRecord,
+    bool replacePreviousRecord = false,
+    bool allowGenerationChange = false,
+  }) {
+    if (incoming.sessionId != currentSnapshot.draft.sessionId) {
+      throw const FormatException(
+        'Live-draft control contains a draft from another Session',
+      );
+    }
+    final currentDraft = currentSnapshot.draft;
+    final sameGeneration = currentDraft.draftId == incoming.draftId;
+    if (!sameGeneration && !allowGenerationChange) {
+      throw const FormatException(
+        'Live-draft control cannot prove a draft generation change',
+      );
+    }
+    if (sameGeneration && incoming.version <= currentDraft.version) {
+      return LiveDraftControlProjection(
+        snapshot: currentSnapshot,
+        localFields: currentLocalFields,
+        dirtyFields: currentDirtyFields,
+        baseRevisions: currentBaseRevisions,
+        changed: false,
+      );
+    }
+
+    final dirtyFields = sameGeneration
+        ? Set<String>.unmodifiable(currentDirtyFields)
+        : const <String>{};
+    final baseRevisions = sameGeneration
+        ? Map<String, int>.unmodifiable({
+            for (final field in dirtyFields)
+              field: currentBaseRevisions[field] ??
+                  currentDraft.fieldRevisions[field] ??
+                  0,
+          })
+        : const <String, int>{};
+    final localFields = LiveDraftFieldsDto({
+      for (final field in liveDraftFieldNames)
+        field: sameGeneration && dirtyFields.contains(field)
+            ? currentLocalFields[field]
+            : incoming.fields[field],
+    });
+    return LiveDraftControlProjection(
+      snapshot: LiveDraftSnapshotDto(
+        draft: incoming,
+        locks: locks ??
+            (sameGeneration
+                ? currentSnapshot.locks
+                : const <LiveDraftLockDto>[]),
+        currentOrdinal: currentOrdinal ?? currentSnapshot.currentOrdinal,
+        totalRecords: totalRecords ?? currentSnapshot.totalRecords,
+        previousRecord: replacePreviousRecord
+            ? previousRecord
+            : currentSnapshot.previousRecord,
+      ),
+      localFields: localFields,
+      dirtyFields: dirtyFields,
+      baseRevisions: baseRevisions,
+      changed: true,
+    );
+  }
+
+  switch (type) {
+    case 'liveDraft.updated':
+      return adoptDraft(LiveDraftDto.fromJson(message['draft']));
+    case 'liveDraft.cleared':
+      final nextDraft = LiveDraftDto.fromJson(message['nextDraft']);
+      final discardedDraftId = _liveDraftControlId(
+        message,
+        'discardedDraftId',
+      );
+      final currentDraftId = currentSnapshot.draft.draftId;
+      if (currentDraftId != discardedDraftId &&
+          currentDraftId != nextDraft.draftId) {
+        throw const FormatException(
+          'Live-draft clear control has an unknown predecessor',
+        );
+      }
+      return adoptDraft(
+        nextDraft,
+        locks: const [],
+        allowGenerationChange: currentDraftId == discardedDraftId,
+      );
+    case 'liveDraft.committed':
+      final nextDraft = LiveDraftDto.fromJson(message['nextDraft']);
+      final committedDraftId = _liveDraftControlId(
+        message,
+        'committedDraftId',
+      );
+      final currentDraftId = currentSnapshot.draft.draftId;
+      if (currentDraftId != committedDraftId &&
+          currentDraftId != nextDraft.draftId) {
+        throw const FormatException(
+          'Live-draft commit control has an unknown predecessor',
+        );
+      }
+      final currentOrdinal = message['currentOrdinal'];
+      final totalRecords = message['totalRecords'];
+      if (currentOrdinal is! int ||
+          currentOrdinal < 1 ||
+          totalRecords is! int ||
+          totalRecords < 0) {
+        throw const FormatException(
+          'Live-draft commit counters are invalid',
+        );
+      }
+      return adoptDraft(
+        nextDraft,
+        locks: const [],
+        currentOrdinal: currentOrdinal,
+        totalRecords: totalRecords,
+        previousRecord: CollaborationLogDto.fromJson(message['record']),
+        replacePreviousRecord: true,
+        allowGenerationChange: currentDraftId == committedDraftId,
+      );
+    case 'liveDraft.lockChanged':
+      final occurredAtValue = message['occurredAt'];
+      final occurredAt =
+          occurredAtValue is String ? DateTime.tryParse(occurredAtValue) : null;
+      if (occurredAt == null) {
+        throw const FormatException(
+          'Live-draft lock control occurredAt is invalid',
+        );
+      }
+      final generationStartedAt = currentSnapshot.draft.createdAt;
+      if (occurredAt.isBefore(generationStartedAt)) {
+        return LiveDraftControlProjection(
+          snapshot: currentSnapshot,
+          localFields: currentLocalFields,
+          dirtyFields: currentDirtyFields,
+          baseRevisions: currentBaseRevisions,
+          changed: false,
+        );
+      }
+      if (occurredAt.isAtSameMomentAs(generationStartedAt)) {
+        throw const FormatException(
+          'Live-draft lock control generation is ambiguous',
+        );
+      }
+      final locks = _locksAfterLiveDraftControl(
+        currentSnapshot.locks,
+        message,
+      );
+      return LiveDraftControlProjection(
+        snapshot: LiveDraftSnapshotDto(
+          draft: currentSnapshot.draft,
+          locks: locks,
+          currentOrdinal: currentSnapshot.currentOrdinal,
+          totalRecords: currentSnapshot.totalRecords,
+          previousRecord: currentSnapshot.previousRecord,
+        ),
+        localFields: currentLocalFields,
+        dirtyFields: currentDirtyFields,
+        baseRevisions: currentBaseRevisions,
+        changed: true,
+      );
+    default:
+      throw FormatException('Unknown live-draft control type: $type');
+  }
+}
+
+String _liveDraftControlId(JsonObject message, String field) {
+  final value = message[field];
+  if (value is! String || value.isEmpty) {
+    throw FormatException('Live-draft control $field is invalid');
+  }
+  return value;
+}
+
+List<LiveDraftLockDto> _locksAfterLiveDraftControl(
+  List<LiveDraftLockDto> current,
+  JsonObject message,
+) {
+  final rawLocks = message['locks'];
+  if (rawLocks is List) {
+    return List.unmodifiable(rawLocks.map(LiveDraftLockDto.fromJson));
+  }
+
+  final rawLock = message['lock'];
+  if (rawLock != null) {
+    final lock = LiveDraftLockDto.fromJson(rawLock);
+    return List.unmodifiable([
+      for (final candidate in current)
+        if (candidate.field != lock.field && candidate.leaseId != lock.leaseId)
+          candidate,
+      lock,
+    ]);
+  }
+
+  final rawFields = message['fields'];
+  if (rawFields is List) {
+    final fields = rawFields.map((value) => value.toString()).toSet();
+    return List.unmodifiable(
+      current.where((lock) => !fields.contains(lock.field)),
+    );
+  }
+
+  final leaseId = message['leaseId'];
+  if (leaseId is String && leaseId.isNotEmpty) {
+    return List.unmodifiable(
+      current.where((lock) => lock.leaseId != leaseId),
+    );
+  }
+
+  throw const FormatException('Live-draft lock control is incomplete');
+}
+
+@visibleForTesting
+Map<String, LiveDraftLockDto> reconcileOwnedLiveDraftLocks({
+  required Map<String, LiveDraftLockDto> owned,
+  required List<LiveDraftLockDto> canonical,
+}) {
+  final reconciled = <String, LiveDraftLockDto>{};
+  for (final entry in owned.entries) {
+    LiveDraftLockDto? matching;
+    for (final lock in canonical) {
+      if (lock.field == entry.key &&
+          lock.leaseId == entry.value.leaseId &&
+          lock.userId == entry.value.userId &&
+          lock.deviceId == entry.value.deviceId) {
+        matching = lock;
+        break;
+      }
+    }
+    if (matching != null) reconciled[entry.key] = matching;
+  }
+  return Map.unmodifiable(reconciled);
+}
+
+@visibleForTesting
+bool shouldRefreshLiveDraftAfterTransportTransition(
+  CollaborationTransportPhase? previous,
+  CollaborationTransportPhase current,
+) =>
+    current == CollaborationTransportPhase.online &&
+    previous != CollaborationTransportPhase.online;
+
+typedef LiveDraftAtomicAttempt<T> = Future<T> Function();
+typedef LiveDraftAtomicConflictRebaser = Future<void> Function();
+
+/// Retries an explicit atomic fill once after rebasing the stale field/version
+/// baseline. Lock and sequence conflicts retain their existing handling.
+@visibleForTesting
+Future<T> executeLiveDraftAtomicPatchWithRebaseRetry<T>({
+  required LiveDraftAtomicAttempt<T> attempt,
+  required LiveDraftAtomicConflictRebaser rebase,
+}) async {
+  try {
+    return await attempt();
+  } on ServerApiException catch (error) {
+    if (!{
+      'LIVE_DRAFT_FIELD_CONFLICT',
+      'LIVE_DRAFT_VERSION_CONFLICT',
+    }.contains(error.code)) {
+      rethrow;
+    }
+    await rebase();
+    return attempt();
+  }
+}
+
 /// Acquires every required field lease before issuing exactly one PATCH.
 ///
 /// Locks already owned by the caller are retained. Locks acquired by this
@@ -860,9 +1195,12 @@ class CollaborationProvider with ChangeNotifier {
         );
       }
       if (info.features.contains(_liveDraftFeature)) {
-        await _refreshLiveDraftForBinding(
-          currentBinding,
-          requestGeneration: ++_liveDraftGeneration,
+        await _serializeLiveDraft(
+          () => _refreshLiveDraftForBinding(
+            currentBinding,
+            requestGeneration: ++_liveDraftGeneration,
+            hydrateCache: true,
+          ),
         );
         if (!isCurrent()) return;
       }
@@ -1221,17 +1559,72 @@ class CollaborationProvider with ChangeNotifier {
     });
   }
 
-  Future<void> refreshLiveDraft() async {
-    final binding = _binding;
-    if (binding == null || !canViewLiveDraft) return;
-    final generation = ++_liveDraftGeneration;
-    _liveDraftLoading = true;
-    _safeNotify();
-    await _refreshLiveDraftForBinding(
-      binding,
-      requestGeneration: generation,
-    );
-  }
+  Future<void> refreshLiveDraft() => _serializeLiveDraft(() async {
+        final binding = _binding;
+        if (binding == null || !canViewLiveDraft) return;
+        final generation = ++_liveDraftGeneration;
+        _liveDraftLoading = true;
+        _safeNotify();
+        await _refreshLiveDraftForBinding(
+          binding,
+          requestGeneration: generation,
+          hydrateCache: false,
+        );
+      });
+
+  Future<void> _applyLiveDraftControl(JsonObject message) =>
+      _serializeLiveDraft(() async {
+        final binding = _binding;
+        if (binding == null ||
+            !canViewLiveDraft ||
+            message['sessionId'] != binding.sessionId) {
+          return;
+        }
+
+        Future<void> recoverFromCanonicalSnapshot() =>
+            _refreshLiveDraftForBinding(
+              binding,
+              requestGeneration: ++_liveDraftGeneration,
+              hydrateCache: false,
+            );
+
+        final snapshot = _liveDraftSnapshot;
+        final localFields = _localLiveDraftFields;
+        if (snapshot == null || localFields == null) {
+          await recoverFromCanonicalSnapshot();
+          return;
+        }
+
+        late final LiveDraftControlProjection projection;
+        try {
+          projection = applyLiveDraftControlMessage(
+            currentSnapshot: snapshot,
+            currentLocalFields: localFields,
+            currentDirtyFields: _dirtyLiveDraftFields,
+            currentBaseRevisions: _liveDraftBaseRevisions,
+            message: message,
+          );
+        } on FormatException {
+          // A future or malformed control shape must not strand the display.
+          // Recover once from the canonical endpoint instead of GETting after
+          // every ordinary control message.
+          await recoverFromCanonicalSnapshot();
+          return;
+        }
+        if (!projection.changed) return;
+
+        final draftChanged =
+            projection.snapshot.draft.draftId != snapshot.draft.draftId ||
+                projection.snapshot.draft.version != snapshot.draft.version;
+        _liveDraftSnapshot = projection.snapshot;
+        _localLiveDraftFields = projection.localFields;
+        _dirtyLiveDraftFields = projection.dirtyFields;
+        _liveDraftBaseRevisions = projection.baseRevisions;
+        _reconcileOwnedLiveDraftLocks(projection.snapshot.locks);
+        _clearLiveDraftError();
+        _safeNotify();
+        if (draftChanged) await _persistLiveDraftState();
+      });
 
   Future<LiveDraftLockDto> acquireLiveDraftField(String field) =>
       _serializeLiveDraft(() async {
@@ -2521,6 +2914,7 @@ class CollaborationProvider with ChangeNotifier {
   Future<void> _refreshLiveDraftForBinding(
     LocalCollaborationBinding binding, {
     required int requestGeneration,
+    required bool hydrateCache,
   }) async {
     bool isCurrent() =>
         !_disposed &&
@@ -2533,62 +2927,75 @@ class CollaborationProvider with ChangeNotifier {
     _liveDraftLoading = true;
     _safeNotify();
     try {
-      try {
-        final cachedJson = await RustApi.getCollaborationLiveDraftCache(
-          serverInstanceId: binding.serverInstanceId,
-          accountId: binding.accountId,
-          sessionId: binding.sessionId,
-        );
-        if (!isCurrent()) return;
-        if (cachedJson != null) {
-          final cached = Map<String, Object?>.from(
-            jsonDecode(cachedJson) as Map,
+      if (hydrateCache &&
+          _liveDraftSnapshot == null &&
+          _localLiveDraftFields == null) {
+        try {
+          final cachedJson = await RustApi.getCollaborationLiveDraftCache(
+            serverInstanceId: binding.serverInstanceId,
+            accountId: binding.accountId,
+            sessionId: binding.sessionId,
           );
-          final remote = cached['remote'];
-          if (remote != null) {
-            _liveDraftSnapshot = LiveDraftSnapshotDto.fromJson(remote);
-          }
-          _localLiveDraftFields = LiveDraftFieldsDto.fromJson(
-            cached['localFields'],
-          );
-          _dirtyLiveDraftFields = {
-            for (final value in List<Object?>.from(
-              cached['dirtyFields'] as List? ?? const [],
-            ))
-              if (liveDraftFieldNames.contains(value.toString()))
-                value.toString(),
-          };
-          final cachedRevisions = cached['fieldRevisions'];
-          if (cachedRevisions is Map) {
-            final values = Map<String, Object?>.from(cachedRevisions);
-            _liveDraftBaseRevisions = {
-              for (final field in _dirtyLiveDraftFields)
-                if (values[field] is int) field: values[field]! as int,
+          if (!isCurrent()) return;
+          if (cachedJson != null) {
+            final cached = Map<String, Object?>.from(
+              jsonDecode(cachedJson) as Map,
+            );
+            final remote = cached['remote'];
+            if (remote != null) {
+              _liveDraftSnapshot = LiveDraftSnapshotDto.fromJson(remote);
+            }
+            _localLiveDraftFields = LiveDraftFieldsDto.fromJson(
+              cached['localFields'],
+            );
+            _dirtyLiveDraftFields = {
+              for (final value in List<Object?>.from(
+                cached['dirtyFields'] as List? ?? const [],
+              ))
+                if (liveDraftFieldNames.contains(value.toString()))
+                  value.toString(),
             };
-          } else {
-            _liveDraftBaseRevisions = const {};
+            final cachedRevisions = cached['fieldRevisions'];
+            if (cachedRevisions is Map) {
+              final values = Map<String, Object?>.from(cachedRevisions);
+              _liveDraftBaseRevisions = {
+                for (final field in _dirtyLiveDraftFields)
+                  if (values[field] is int) field: values[field]! as int,
+              };
+            } else {
+              _liveDraftBaseRevisions = const {};
+            }
+            final cachedClientSeq = cached['clientSeq'] as int? ?? 0;
+            _liveDraftClientSeq = max(_liveDraftClientSeq, cachedClientSeq);
+            _safeNotify();
           }
-          _liveDraftClientSeq = cached['clientSeq'] as int? ?? 0;
-          _safeNotify();
+        } catch (_) {
+          // A corrupt or old cache is non-authoritative; the server snapshot
+          // below remains the source of truth.
         }
-      } catch (_) {
-        // A corrupt or old cache is non-authoritative; the server snapshot
-        // below remains the source of truth.
       }
 
       final server = _server;
       if (server == null || !isCurrent()) return;
       final previousSnapshot = _liveDraftSnapshot;
-      final snapshot = await server.api.getLiveDraft(binding.sessionId);
+      final incomingSnapshot = await server.api.getLiveDraft(binding.sessionId);
       if (!isCurrent()) return;
-      final cachedDraftId = previousSnapshot?.draft.draftId;
-      final preserveLocal = cachedDraftId == snapshot.draft.draftId &&
+      final snapshot = previousSnapshot == null
+          ? incomingSnapshot
+          : selectLiveDraftSnapshotAfterRefresh(
+              current: previousSnapshot,
+              incoming: incomingSnapshot,
+            );
+      final previousDraftId = previousSnapshot?.draft.draftId;
+      final preserveLocal = previousDraftId == snapshot.draft.draftId &&
           _localLiveDraftFields != null &&
           _dirtyLiveDraftFields.isNotEmpty;
-      if (cachedDraftId != null && cachedDraftId != snapshot.draft.draftId) {
+      if (previousDraftId != null &&
+          previousDraftId != snapshot.draft.draftId) {
         _clearOwnedLiveDraftLocks();
       }
       _liveDraftSnapshot = snapshot;
+      _reconcileOwnedLiveDraftLocks(snapshot.locks);
       if (!preserveLocal) {
         _localLiveDraftFields = snapshot.draft.fields;
         _dirtyLiveDraftFields = const {};
@@ -2700,6 +3107,48 @@ class CollaborationProvider with ChangeNotifier {
     Map<String, String> updates,
   ) async {
     final context = _requireLiveDraftContext(requireEdit: true);
+    try {
+      await executeLiveDraftAtomicPatchWithRebaseRetry<void>(
+        attempt: () => _updateLiveDraftFieldsAtomicAttempt(updates, context),
+        rebase: () => _rebaseLiveDraftForAtomicRetry(
+          updates.keys.toSet(),
+          context,
+        ),
+      );
+    } on ServerApiException catch (error) {
+      _setLiveDraftError(error.code, error.message);
+      if (error.code == 'LIVE_DRAFT_LOCK_REQUIRED') {
+        final details = error.details;
+        final field = details is Map ? details['field'] : null;
+        if (field is String) {
+          final stale = _ownedLiveDraftLocks[field];
+          _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(field);
+          if (stale != null) _removeLiveDraftLock(stale.leaseId);
+        }
+      }
+      if ({
+        'LIVE_DRAFT_FIELD_CONFLICT',
+        'LIVE_DRAFT_VERSION_CONFLICT',
+        'LIVE_DRAFT_FIELD_LOCKED',
+        'LIVE_DRAFT_LOCK_REQUIRED',
+        'LIVE_DRAFT_CLIENT_SEQ_GAP',
+        'LIVE_DRAFT_CLIENT_SEQ_REUSED',
+      }.contains(error.code)) {
+        unawaited(refreshLiveDraft());
+      }
+      await _persistLiveDraftState();
+      rethrow;
+    }
+  }
+
+  Future<void> _updateLiveDraftFieldsAtomicAttempt(
+    Map<String, String> updates,
+    ({
+      ServerApi api,
+      LocalCollaborationBinding binding,
+      String deviceId,
+    }) context,
+  ) async {
     final snapshot = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
     if (snapshot == null || local == null) {
@@ -2740,89 +3189,114 @@ class CollaborationProvider with ChangeNotifier {
                 0)
             : (snapshot.draft.fieldRevisions[field] ?? 0),
     };
-    try {
-      LiveDraftDto acceptedDraft = snapshot.draft;
-      if (sentValues.isNotEmpty) {
-        final execution = await executeLiveDraftAtomicPatch(
-          values: sentValues,
-          expectedRevisions: sentRevisions,
-          ownedLocks: Map<String, LiveDraftLockDto>.of(_ownedLiveDraftLocks),
-          nextClientSeq: _liveDraftClientSeq + 1,
-          acquireLock: (field) =>
-              _acquireLiveDraftFieldInternal(field, context),
-          sendPatch: (clientSeq, updates) => context.api.updateLiveDraft(
-            sessionId: context.binding.sessionId,
-            deviceId: context.deviceId,
-            clientSeq: clientSeq,
-            updates: updates,
-          ),
-          releaseLock: (field, lock) =>
-              _releaseTemporaryLiveDraftField(field, lock, context),
-          onClientSeqChanged: (value) => _liveDraftClientSeq = value,
-        );
-        acceptedDraft = execution.result.draft;
-      }
-
-      final currentSnapshot = _liveDraftSnapshot;
-      final currentLocal = _localLiveDraftFields;
-      if (currentSnapshot == null || currentLocal == null) return;
-      final currentDraft = currentSnapshot.draft;
-      final canonicalDraft = selectLiveDraftCanonicalAfterAtomicPatch(
-        current: currentDraft,
-        accepted: acceptedDraft,
+    LiveDraftDto acceptedDraft = snapshot.draft;
+    if (sentValues.isNotEmpty) {
+      final execution = await executeLiveDraftAtomicPatch(
+        values: sentValues,
+        expectedRevisions: sentRevisions,
+        ownedLocks: Map<String, LiveDraftLockDto>.of(_ownedLiveDraftLocks),
+        nextClientSeq: _liveDraftClientSeq + 1,
+        acquireLock: (field) => _acquireLiveDraftFieldInternal(field, context),
+        sendPatch: (clientSeq, updates) => context.api.updateLiveDraft(
+          sessionId: context.binding.sessionId,
+          deviceId: context.deviceId,
+          clientSeq: clientSeq,
+          updates: updates,
+        ),
+        releaseLock: (field, lock) =>
+            _releaseTemporaryLiveDraftField(field, lock, context),
+        onClientSeqChanged: (value) => _liveDraftClientSeq = value,
       );
-      final merged = mergeAcceptedLiveDraftAtomicPatch(
-        targetFields: targetFields,
-        beforeLocalFields: local,
-        beforeDirtyFields: beforeDirtyFields,
-        beforeBaseRevisions: beforeBaseRevisions,
-        currentLocalFields: currentLocal,
-        currentDirtyFields: _dirtyLiveDraftFields,
-        currentBaseRevisions: _liveDraftBaseRevisions,
-        canonicalDraft: canonicalDraft,
-      );
-      _dirtyLiveDraftFields = merged.dirtyFields;
-      _liveDraftBaseRevisions = merged.baseRevisions;
-      _localLiveDraftFields = merged.localFields;
-      if (!identical(canonicalDraft, currentDraft)) {
-        _liveDraftSnapshot = LiveDraftSnapshotDto(
-          draft: canonicalDraft,
-          locks: currentSnapshot.locks,
-          currentOrdinal: currentSnapshot.currentOrdinal,
-          totalRecords: currentSnapshot.totalRecords,
-          previousRecord: currentSnapshot.previousRecord,
-        );
-      }
-      _clearLiveDraftError();
-      await _persistLiveDraftState();
-      _safeNotify();
-    } on ServerApiException catch (error) {
-      _setLiveDraftError(error.code, error.message);
-      if (error.code == 'LIVE_DRAFT_LOCK_REQUIRED') {
-        final details = error.details;
-        final field = details is Map ? details['field'] : null;
-        if (field is String) {
-          final stale = _ownedLiveDraftLocks[field];
-          _ownedLiveDraftLocks = Map.of(_ownedLiveDraftLocks)..remove(field);
-          if (stale != null) _removeLiveDraftLock(stale.leaseId);
-        }
-      }
-      if ({
-        'LIVE_DRAFT_FIELD_CONFLICT',
-        'LIVE_DRAFT_VERSION_CONFLICT',
-        'LIVE_DRAFT_FIELD_LOCKED',
-        'LIVE_DRAFT_LOCK_REQUIRED',
-        'LIVE_DRAFT_CLIENT_SEQ_GAP',
-        'LIVE_DRAFT_CLIENT_SEQ_REUSED',
-      }.contains(error.code)) {
-        unawaited(refreshLiveDraft());
-      }
-      await _persistLiveDraftState();
-      rethrow;
+      acceptedDraft = execution.result.draft;
     }
+
+    final currentSnapshot = _liveDraftSnapshot;
+    final currentLocal = _localLiveDraftFields;
+    if (currentSnapshot == null || currentLocal == null) return;
+    final currentDraft = currentSnapshot.draft;
+    final canonicalDraft = selectLiveDraftCanonicalAfterAtomicPatch(
+      current: currentDraft,
+      accepted: acceptedDraft,
+    );
+    final merged = mergeAcceptedLiveDraftAtomicPatch(
+      targetFields: targetFields,
+      beforeLocalFields: local,
+      beforeDirtyFields: beforeDirtyFields,
+      beforeBaseRevisions: beforeBaseRevisions,
+      currentLocalFields: currentLocal,
+      currentDirtyFields: _dirtyLiveDraftFields,
+      currentBaseRevisions: _liveDraftBaseRevisions,
+      canonicalDraft: canonicalDraft,
+    );
+    _dirtyLiveDraftFields = merged.dirtyFields;
+    _liveDraftBaseRevisions = merged.baseRevisions;
+    _localLiveDraftFields = merged.localFields;
+    if (!identical(canonicalDraft, currentDraft)) {
+      _liveDraftSnapshot = LiveDraftSnapshotDto(
+        draft: canonicalDraft,
+        locks: currentSnapshot.locks,
+        currentOrdinal: currentSnapshot.currentOrdinal,
+        totalRecords: currentSnapshot.totalRecords,
+        previousRecord: currentSnapshot.previousRecord,
+      );
+    }
+    _clearLiveDraftError();
+    await _persistLiveDraftState();
+    _safeNotify();
   }
 
-  Future<void> _flushLiveDraftField(String field) async {
+  Future<void> _rebaseLiveDraftForAtomicRetry(
+    Set<String> targetFields,
+    ({
+      ServerApi api,
+      LocalCollaborationBinding binding,
+      String deviceId,
+    }) context,
+  ) async {
+    final incoming = await context.api.getLiveDraft(context.binding.sessionId);
+    final current = _liveDraftSnapshot;
+    final local = _localLiveDraftFields;
+    if (current == null || local == null) {
+      throw StateError('LIVE_DRAFT_NOT_LOADED');
+    }
+    final rebased = selectLiveDraftSnapshotAfterRefresh(
+      current: current,
+      incoming: incoming,
+    );
+    if (current.draft.draftId != rebased.draft.draftId) {
+      _clearOwnedLiveDraftLocks();
+      _liveDraftSnapshot = rebased;
+      _localLiveDraftFields = rebased.draft.fields;
+      _dirtyLiveDraftFields = const {};
+      _liveDraftBaseRevisions = const {};
+      return;
+    }
+
+    final dirtyFields = Set<String>.of(_dirtyLiveDraftFields);
+    final baseRevisions = Map<String, int>.of(_liveDraftBaseRevisions);
+    for (final field in List<String>.from(dirtyFields)) {
+      if (local[field] == rebased.draft.fields[field]) {
+        dirtyFields.remove(field);
+        baseRevisions.remove(field);
+      } else if (targetFields.contains(field)) {
+        baseRevisions[field] = rebased.draft.fieldRevisions[field] ?? 0;
+      }
+    }
+    _liveDraftSnapshot = rebased;
+    _dirtyLiveDraftFields = Set<String>.unmodifiable(dirtyFields);
+    _liveDraftBaseRevisions = Map<String, int>.unmodifiable(baseRevisions);
+    _localLiveDraftFields = LiveDraftFieldsDto({
+      for (final field in liveDraftFieldNames)
+        field: dirtyFields.contains(field)
+            ? local[field]
+            : rebased.draft.fields[field],
+    });
+  }
+
+  Future<void> _flushLiveDraftField(
+    String field, {
+    bool retryRevisionConflict = true,
+  }) async {
     final context = _requireLiveDraftContext(requireEdit: true);
     final snapshot = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
@@ -2836,6 +3310,11 @@ class CollaborationProvider with ChangeNotifier {
       await _persistLiveDraftState();
       return;
     }
+    final beforeDirtyFields = Set<String>.of(_dirtyLiveDraftFields);
+    final beforeBaseRevisions = Map<String, int>.of(_liveDraftBaseRevisions);
+    final sentValue = local[field];
+    final sentRevision =
+        beforeBaseRevisions[field] ?? snapshot.draft.fieldRevisions[field] ?? 0;
     final lock = await _acquireLiveDraftFieldInternal(field, context);
     Future<LiveDraftPatchResultDto> send(int clientSeq) =>
         context.api.updateLiveDraft(
@@ -2845,10 +3324,8 @@ class CollaborationProvider with ChangeNotifier {
           updates: [
             LiveDraftPatchUpdateDto(
               field: field,
-              value: local[field],
-              expectedRevision: _liveDraftBaseRevisions[field] ??
-                  snapshot.draft.fieldRevisions[field] ??
-                  0,
+              value: sentValue,
+              expectedRevision: sentRevision,
               leaseId: lock.leaseId,
             ),
           ],
@@ -2884,20 +3361,57 @@ class CollaborationProvider with ChangeNotifier {
       }
       _liveDraftClientSeq = result.appliedClientSeq;
       final currentSnapshot = _liveDraftSnapshot;
-      if (currentSnapshot == null) return;
-      _liveDraftSnapshot = LiveDraftSnapshotDto(
-        draft: result.draft,
-        locks: currentSnapshot.locks,
-        currentOrdinal: currentSnapshot.currentOrdinal,
-        totalRecords: currentSnapshot.totalRecords,
-        previousRecord: currentSnapshot.previousRecord,
+      final currentLocal = _localLiveDraftFields;
+      if (currentSnapshot == null || currentLocal == null) return;
+      final currentDraft = currentSnapshot.draft;
+      final canonicalDraft = selectLiveDraftCanonicalAfterAtomicPatch(
+        current: currentDraft,
+        accepted: result.draft,
       );
-      _dirtyLiveDraftFields = Set.of(_dirtyLiveDraftFields)..remove(field);
-      _liveDraftBaseRevisions = Map.of(_liveDraftBaseRevisions)..remove(field);
+      final merged = mergeAcceptedLiveDraftAtomicPatch(
+        targetFields: {field},
+        beforeLocalFields: local,
+        beforeDirtyFields: beforeDirtyFields,
+        beforeBaseRevisions: beforeBaseRevisions,
+        currentLocalFields: currentLocal,
+        currentDirtyFields: _dirtyLiveDraftFields,
+        currentBaseRevisions: _liveDraftBaseRevisions,
+        canonicalDraft: canonicalDraft,
+      );
+      _dirtyLiveDraftFields = merged.dirtyFields;
+      _liveDraftBaseRevisions = merged.baseRevisions;
+      _localLiveDraftFields = merged.localFields;
+      if (!identical(canonicalDraft, currentDraft)) {
+        _liveDraftSnapshot = LiveDraftSnapshotDto(
+          draft: canonicalDraft,
+          locks: currentSnapshot.locks,
+          currentOrdinal: currentSnapshot.currentOrdinal,
+          totalRecords: currentSnapshot.totalRecords,
+          previousRecord: currentSnapshot.previousRecord,
+        );
+      }
       _clearLiveDraftError();
       await _persistLiveDraftState();
       _safeNotify();
     } on ServerApiException catch (error) {
+      if (retryRevisionConflict &&
+          {
+            'LIVE_DRAFT_FIELD_CONFLICT',
+            'LIVE_DRAFT_VERSION_CONFLICT',
+          }.contains(error.code)) {
+        try {
+          await _rebaseLiveDraftForAtomicRetry({field}, context);
+        } on ServerApiException catch (rebaseError) {
+          _setLiveDraftError(rebaseError.code, rebaseError.message);
+          await _persistLiveDraftState();
+          rethrow;
+        }
+        await _flushLiveDraftField(
+          field,
+          retryRevisionConflict: false,
+        );
+        return;
+      }
       _setLiveDraftError(error.code, error.message);
       if (error.code == 'LIVE_DRAFT_LOCK_REQUIRED') {
         final stale = _ownedLiveDraftLocks[field];
@@ -3224,6 +3738,17 @@ class CollaborationProvider with ChangeNotifier {
     );
   }
 
+  void _reconcileOwnedLiveDraftLocks(List<LiveDraftLockDto> canonicalLocks) {
+    _ownedLiveDraftLocks = reconcileOwnedLiveDraftLocks(
+      owned: _ownedLiveDraftLocks,
+      canonical: canonicalLocks,
+    );
+    if (_ownedLiveDraftLocks.isEmpty) {
+      _liveDraftRenewalTimer?.cancel();
+      _liveDraftRenewalTimer = null;
+    }
+  }
+
   void _ensureLiveDraftRenewalTimer() {
     _liveDraftRenewalTimer ??= Timer.periodic(
       const Duration(seconds: 10),
@@ -3342,6 +3867,7 @@ class CollaborationProvider with ChangeNotifier {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
         final previousRole = _syncState?.role ?? _membership?.role;
         final previousConflictCount = _syncState?.conflictCount;
+        final previousTransport = _syncState?.transportPhase;
         _syncState = state;
         switch (state.replicaPhase) {
           case CollaborationReplicaPhase.catchingUp:
@@ -3390,6 +3916,15 @@ class CollaborationProvider with ChangeNotifier {
           _invalidateOpenConflicts(identity);
           _scheduleRefresh();
         }
+        if (shouldRefreshLiveDraftAfterTransportTransition(
+          previousTransport,
+          state.transportPhase,
+        )) {
+          // Member controls are intentionally not replayed. One canonical GET
+          // after each initial connection/reconnection closes that gap without
+          // multiplying reads for every keystroke and lock notification.
+          unawaited(refreshLiveDraft());
+        }
       },
       onEventApplied: (event) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
@@ -3410,9 +3945,9 @@ class CollaborationProvider with ChangeNotifier {
         await reloadReplicaProjection();
       },
       onReplicaChanged: reloadExternallyAdvancedProjection,
-      onControlMessage: (_) async {
+      onControlMessage: (message) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
-        await refreshLiveDraft();
+        await _applyLiveDraftControl(message);
       },
       onLocalCloseRejected: (mutation, result) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return false;

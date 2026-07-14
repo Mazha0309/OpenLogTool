@@ -17,7 +17,7 @@ void main() {
     expect(restored.mode, ControllerWindowMode.secondDisplay);
     expect(restored.data.sessionTitle, '周日晚间点名');
     expect(restored.data.currentOrdinal, 12);
-    expect(restored.data.current.callsign, 'BA4AAA');
+    expect(restored.data.current.toJson(), _launch.data.current.toJson());
     expect(
       restored.preferences.detail,
       ControllerDisplayDetail.standard,
@@ -43,7 +43,10 @@ void main() {
     final message = ControllerWindowProtocol.decode(second.single);
     expect(message.type, ControllerWindowMessageType.initialize);
     expect(message.revision, 1);
-    expect(message.launch?.data.current.callsign, 'BA4AAA');
+    expect(
+      message.launch?.data.current.toJson(),
+      _launch.data.current.toJson(),
+    );
 
     final invalid = jsonEncode({
       ..._launch.toJson(),
@@ -168,6 +171,15 @@ const _launch = ControllerWindowLaunch(
     current: ControllerRecordDisplay(
       controller: 'BG5CRL',
       callsign: 'BA4AAA',
+      time: '20:15',
+      rstSent: '59',
+      rstRcvd: '57',
+      qth: '上海',
+      device: 'IC-7300',
+      power: '100W',
+      antenna: 'DP',
+      height: '12m',
+      remarks: '移动设台',
     ),
   ),
   preferences: ControllerDisplayPreferences(

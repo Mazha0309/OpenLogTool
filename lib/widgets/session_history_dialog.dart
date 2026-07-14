@@ -2,13 +2,57 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
 import 'package:provider/provider.dart';
 
 typedef SessionHistoryLoader = Future<List<Session>> Function();
 typedef SessionHistoryAction = Future<void> Function(Session session);
+typedef SessionCollaborationBindingChecker = Future<bool> Function(
+  String sessionId,
+);
+
+const _historyCollaborationCloseRequiresOpen =
+    'HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN';
+const _historyCollaborationCloseOwnerRequired =
+    'HISTORY_COLLABORATION_CLOSE_OWNER_REQUIRED';
+
+String historySessionCloseErrorText(BuildContext context, Object error) {
+  final raw = error.toString();
+  if (raw.contains(_historyCollaborationCloseRequiresOpen)) {
+    return context.l10n.historySessionCollaborationCloseRequiresOpen;
+  }
+  if (raw.contains(_historyCollaborationCloseOwnerRequired)) {
+    return context.l10n.historySessionCollaborationCloseOwnerRequired;
+  }
+  return context.l10n.historySessionCloseFailed(raw);
+}
+
+Future<void> closeSessionFromHistory({
+  required Session session,
+  required String? currentSessionId,
+  required SessionCollaborationBindingChecker hasCollaborationBinding,
+  required SessionHistoryAction closeLocalSession,
+  required Future<void> Function() refreshCurrentCollaboration,
+  required bool Function() canCloseCurrentCollaboration,
+  required Future<void> Function() closeCurrentCollaboration,
+}) async {
+  if (!await hasCollaborationBinding(session.sessionId)) {
+    await closeLocalSession(session);
+    return;
+  }
+  if (session.sessionId != currentSessionId) {
+    throw StateError(_historyCollaborationCloseRequiresOpen);
+  }
+  await refreshCurrentCollaboration();
+  if (!canCloseCurrentCollaboration()) {
+    throw StateError(_historyCollaborationCloseOwnerRequired);
+  }
+  await closeCurrentCollaboration();
+}
 
 String localSessionReopenErrorText(BuildContext context, Object error) {
   final raw = error.toString();
@@ -107,6 +151,7 @@ Future<void> showSessionHistoryDialog(
 }) async {
   final sessionProvider = context.read<SessionProvider>();
   final logProvider = context.read<LogProvider>();
+  final collaborationProvider = context.read<CollaborationProvider>();
   String? reopenedWithoutLogsSessionId;
   Future<void> loadAndSwitch(Session session) async {
     final previousSessionId = sessionProvider.currentSessionId;
@@ -163,7 +208,26 @@ Future<void> showSessionHistoryDialog(
           );
         }
       },
-      closeSession: (session) => logProvider.closeSession(session.sessionId),
+      closeSession: (session) => closeSessionFromHistory(
+        session: session,
+        currentSessionId: sessionProvider.currentSessionId,
+        hasCollaborationBinding: (sessionId) async =>
+            await RustApi.getSessionCollaborationBinding(
+              sessionId: sessionId,
+            ) !=
+            null,
+        closeLocalSession: (target) =>
+            logProvider.closeSession(target.sessionId),
+        refreshCurrentCollaboration:
+            collaborationProvider.refreshCurrentSession,
+        canCloseCurrentCollaboration: () =>
+            collaborationProvider.binding?.sessionId == session.sessionId &&
+            collaborationProvider.isOwner,
+        closeCurrentCollaboration: collaborationProvider.closeCurrentSession,
+      ),
+      canCloseCurrentSession: collaborationProvider.binding?.sessionId ==
+              sessionProvider.currentSessionId &&
+          collaborationProvider.isOwner,
       deleteSession: (session) =>
           logProvider.hardDeleteSession(session.sessionId),
     ),
@@ -197,6 +261,7 @@ class SessionHistoryDialog extends StatefulWidget {
     required this.reopenSession,
     required this.closeSession,
     required this.deleteSession,
+    this.canCloseCurrentSession = false,
   });
 
   final String? currentSessionId;
@@ -205,6 +270,7 @@ class SessionHistoryDialog extends StatefulWidget {
   final SessionHistoryAction reopenSession;
   final SessionHistoryAction closeSession;
   final SessionHistoryAction deleteSession;
+  final bool canCloseCurrentSession;
 
   @override
   State<SessionHistoryDialog> createState() => _SessionHistoryDialogState();
@@ -283,8 +349,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
       setState(() => _busySessionId = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(context.l10n.historySessionCloseFailed(error.toString())),
+          content: Text(historySessionCloseErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -441,6 +506,18 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Chip(label: Text(context.l10n.historySessionCurrent)),
+                    if (isActive && widget.canCloseCurrentSession)
+                      IconButton(
+                        key: Key('close-history-session-${session.sessionId}'),
+                        tooltip: context.l10n.closeSession,
+                        onPressed: _busySessionId == null
+                            ? () => _close(session)
+                            : null,
+                        icon: Icon(
+                          Icons.stop_circle_outlined,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
                     if (isClosed)
                       IconButton(
                         key: Key(
@@ -527,6 +604,7 @@ class _DeleteSessionConfirmationDialogState
     extends State<_DeleteSessionConfirmationDialog> {
   final _nameController = TextEditingController();
   bool _nameMatches = false;
+  bool _nameChanged = false;
 
   @override
   void dispose() {
@@ -546,6 +624,13 @@ class _DeleteSessionConfirmationDialogState
               Text(
                 context.l10n.historySessionDeleteWarning(widget.sessionTitle),
               ),
+              const SizedBox(height: 12),
+              SelectableText(
+                context.l10n
+                    .historySessionDeleteExpectedName(widget.sessionTitle),
+                key: const Key('delete-history-session-expected-name'),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const SizedBox(height: 16),
               TextField(
                 key: const Key('delete-history-session-name'),
@@ -556,11 +641,17 @@ class _DeleteSessionConfirmationDialogState
                 decoration: InputDecoration(
                   labelText: context.l10n.historySessionDeleteNameLabel,
                   border: const OutlineInputBorder(),
+                  errorText: _nameChanged && !_nameMatches
+                      ? context.l10n.historySessionDeleteNameMismatch
+                      : null,
                 ),
                 onChanged: (value) {
-                  final matches = value == widget.sessionTitle;
-                  if (matches != _nameMatches) {
-                    setState(() => _nameMatches = matches);
+                  final matches = value.trim() == widget.sessionTitle;
+                  if (matches != _nameMatches || !_nameChanged) {
+                    setState(() {
+                      _nameChanged = true;
+                      _nameMatches = matches;
+                    });
                   }
                 },
               ),
