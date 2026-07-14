@@ -95,16 +95,135 @@ void main() {
 
     expect(collaboration.joinedCodes, ['ABCDE12345']);
   });
+
+  testWidgets(
+      'a bound session can create an editable local copy without server access',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final collaboration = _TestCollaborationProvider(
+      binding: _binding(role: SessionRole.owner),
+      state: CollaborationState.failed,
+    );
+    final server = _OfflineServerProvider();
+    final sessions = _TestSessionProvider();
+    addTearDown(collaboration.dispose);
+    addTearDown(server.dispose);
+    addTearDown(sessions.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CollaborationProvider>.value(
+            value: collaboration,
+          ),
+          ChangeNotifierProvider<ServerProvider>.value(value: server),
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: CollaborationScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final copyButton = find.byKey(const Key('create-editable-local-copy'));
+    expect(copyButton, findsOneWidget);
+    await tester.ensureVisible(copyButton);
+    await tester.tap(copyButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('create-editable-local-copy-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('服务器上的共享会话'), findsOneWidget);
+    expect(find.textContaining('协作待同步队列、冲突'), findsOneWidget);
+    expect(find.textContaining('不会复制到新副本'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('confirm-create-editable-local-copy')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(collaboration.localCopyTitles, ['Revoked session（本地副本）']);
+    expect(find.text('已切换到可编辑本地副本'), findsOneWidget);
+  });
+
+  testWidgets('a synchronized session can be converted directly on this device',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final collaboration = _TestCollaborationProvider(
+      binding: _binding(role: SessionRole.owner),
+      state: CollaborationState.ready,
+      directConversionReady: true,
+    );
+    final server = _LoggedInServerProvider();
+    final sessions = _TestSessionProvider();
+    addTearDown(collaboration.dispose);
+    addTearDown(server.dispose);
+    addTearDown(sessions.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CollaborationProvider>.value(
+            value: collaboration,
+          ),
+          ChangeNotifierProvider<ServerProvider>.value(value: server),
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: CollaborationScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final convertButton =
+        find.byKey(const Key('convert-collaboration-to-local'));
+    expect(convertButton, findsOneWidget);
+    expect(find.byKey(const Key('create-editable-local-copy')), findsNothing);
+    await tester.ensureVisible(convertButton);
+    await tester.tap(convertButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('convert-collaboration-to-local-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('服务器上的共享会话、成员和其他设备不受影响'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('confirm-convert-collaboration-to-local')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(collaboration.directConversionCalls, 1);
+    expect(find.text('已停止本机协作并转为本地会话'), findsOneWidget);
+  });
 }
 
-LocalCollaborationBinding _binding() => const LocalCollaborationBinding(
+LocalCollaborationBinding _binding({
+  SessionRole role = SessionRole.viewer,
+}) =>
+    LocalCollaborationBinding(
       serverInstanceId: 'server-1',
       serverOrigin: 'http://127.0.0.1:3000',
       accountId: 'user-1',
       sessionId: 'session-1',
       membershipId: 'membership-1',
       membershipVersion: 2,
-      role: SessionRole.viewer,
+      role: role,
       // The in-memory binding can still say ready when the sync coordinator
       // has just persisted revocation and changed the provider state.
       replicaState: 'ready',
@@ -118,6 +237,7 @@ class _TestCollaborationProvider extends CollaborationProvider {
     required LocalCollaborationBinding? binding,
     required CollaborationState state,
     String? failedOperation,
+    this.directConversionReady = false,
   })  : testBinding = binding,
         testState = state,
         testFailedOperation = failedOperation;
@@ -125,7 +245,10 @@ class _TestCollaborationProvider extends CollaborationProvider {
   final LocalCollaborationBinding? testBinding;
   final CollaborationState testState;
   final String? testFailedOperation;
+  final bool directConversionReady;
   final List<String> joinedCodes = [];
+  final List<String> localCopyTitles = [];
+  int directConversionCalls = 0;
 
   @override
   LocalCollaborationBinding? get binding => testBinding;
@@ -137,11 +260,24 @@ class _TestCollaborationProvider extends CollaborationProvider {
   String? get failedOperation => testFailedOperation;
 
   @override
+  bool get canConvertCurrentSessionDirectly => directConversionReady;
+
+  @override
   Future<void> refreshCurrentSession() async {}
 
   @override
   Future<void> joinWithCode(String code) async {
     joinedCodes.add(code);
+  }
+
+  @override
+  Future<void> createEditableLocalCopy({required String title}) async {
+    localCopyTitles.add(title);
+  }
+
+  @override
+  Future<void> convertCurrentSessionToLocal() async {
+    directConversionCalls += 1;
   }
 }
 
@@ -159,6 +295,19 @@ class _LoggedInServerProvider extends ServerProvider {
 
   @override
   String? get username => 'member';
+}
+
+class _OfflineServerProvider extends ServerProvider {
+  _OfflineServerProvider() : super(autoLoadSettings: false);
+
+  @override
+  bool get isLoggedIn => false;
+
+  @override
+  String get serverUrl => 'https://offline.example.test';
+
+  @override
+  String? get accountId => null;
 }
 
 class _TestSessionProvider extends SessionProvider {

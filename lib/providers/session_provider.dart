@@ -5,12 +5,21 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
 
 typedef LocalSessionReopener = Future<Session> Function(String sessionId);
+typedef CollaborationSessionLocalCopier = Future<Session> Function(
+  String sessionId,
+  String title,
+);
+typedef CollaborationSessionLocalConverter = Future<Session> Function(
+  String sessionId,
+);
 typedef CurrentSessionIdWriter = Future<bool> Function(String sessionId);
 
 class SessionProvider with ChangeNotifier {
   static const _key = 'current_session_id';
 
   final LocalSessionReopener _localSessionReopener;
+  final CollaborationSessionLocalCopier _collaborationSessionLocalCopier;
+  final CollaborationSessionLocalConverter _collaborationSessionLocalConverter;
   final CurrentSessionIdWriter? _currentSessionIdWriter;
   bool _disposed = false;
   String? _currentSessionId;
@@ -24,9 +33,21 @@ class SessionProvider with ChangeNotifier {
 
   SessionProvider({
     LocalSessionReopener? localSessionReopener,
+    CollaborationSessionLocalCopier? collaborationSessionLocalCopier,
+    CollaborationSessionLocalConverter? collaborationSessionLocalConverter,
     CurrentSessionIdWriter? currentSessionIdWriter,
   })  : _localSessionReopener = localSessionReopener ??
             ((sessionId) => RustApi.reopenLocalSession(sessionId: sessionId)),
+        _collaborationSessionLocalCopier = collaborationSessionLocalCopier ??
+            ((sessionId, title) => RustApi.copyCollaborationSessionToLocal(
+                  sessionId: sessionId,
+                  title: title,
+                )),
+        _collaborationSessionLocalConverter =
+            collaborationSessionLocalConverter ??
+                ((sessionId) => RustApi.convertCollaborationSessionToLocal(
+                      sessionId: sessionId,
+                    )),
         _currentSessionIdWriter = currentSessionIdWriter {
     final completer = Completer<void>();
     _initCompleter = completer;
@@ -186,6 +207,78 @@ class SessionProvider with ChangeNotifier {
         '$error\n$stackTrace',
       );
     }
+  }
+
+  /// Creates and selects an independent local copy of the current
+  /// collaboration session without contacting its server.
+  Future<Session> copyCurrentCollaborationSessionToLocal({
+    required String title,
+  }) async {
+    await ready;
+    final sourceSessionId = _currentSessionId;
+    if (sourceSessionId == null || _currentSession == null) {
+      throw StateError('NO_CURRENT_SESSION');
+    }
+    final normalized = title.trim();
+    if (normalized.isEmpty || normalized.runes.length > 200) {
+      throw ArgumentError('会话标题长度应为 1–200 个字符');
+    }
+
+    final local = await _collaborationSessionLocalCopier(
+      sourceSessionId,
+      normalized,
+    );
+    if (_currentSessionId != sourceSessionId) {
+      throw StateError('SESSION_CONTEXT_CHANGED');
+    }
+    if (local.sessionId == sourceSessionId || local.status != 'active') {
+      throw StateError('LOCAL_SESSION_COPY_INVALID');
+    }
+
+    _currentSession = local;
+    _currentSessionId = local.sessionId;
+    _safeNotify();
+    try {
+      await _persistCurrentSessionId(local.sessionId);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Session] failed to persist local collaboration copy selection: '
+        '$error\n$stackTrace',
+      );
+    }
+    return local;
+  }
+
+  /// Replaces the current synchronized replica with one independent local
+  /// Session. Rust changes the Session and Log IDs atomically so rejoining the
+  /// server Session later cannot collide with the converted local record.
+  Future<Session> convertCurrentCollaborationSessionToLocal() async {
+    await ready;
+    final sourceSessionId = _currentSessionId;
+    if (sourceSessionId == null || _currentSession == null) {
+      throw StateError('NO_CURRENT_SESSION');
+    }
+
+    final local = await _collaborationSessionLocalConverter(sourceSessionId);
+    if (_currentSessionId != sourceSessionId) {
+      throw StateError('SESSION_CONTEXT_CHANGED');
+    }
+    if (local.sessionId == sourceSessionId || local.status != 'active') {
+      throw StateError('LOCAL_SESSION_CONVERSION_INVALID');
+    }
+
+    _currentSession = local;
+    _currentSessionId = local.sessionId;
+    _safeNotify();
+    try {
+      await _persistCurrentSessionId(local.sessionId);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Session] failed to persist converted local Session selection: '
+        '$error\n$stackTrace',
+      );
+    }
+    return local;
   }
 
   Future<void> reloadCurrentSession() async {

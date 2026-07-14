@@ -9,6 +9,7 @@ import 'package:openlogtool/screens/collaboration_screen.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
+import 'package:openlogtool/widgets/collaboration_local_session_action.dart';
 import 'package:openlogtool/widgets/session_history_dialog.dart';
 import 'package:openlogtool/widgets/session_title_editor.dart';
 import 'package:provider/provider.dart';
@@ -221,6 +222,7 @@ class SessionHubPage extends StatelessWidget {
                             icon: const Icon(Icons.public),
                             label: Text(context.l10n.openLiveShare),
                           ),
+                          const CollaborationLocalSessionAction(),
                           if (settings.controllerDeviceModeEnabled)
                             OutlinedButton.icon(
                               key: const Key('enter-controller-device-mode'),
@@ -311,7 +313,7 @@ class SessionHubPage extends StatelessWidget {
     CollaborationProvider collaboration,
   ) {
     final snapshot = collaboration.liveDraftSnapshot;
-    final draftFields = collaboration.liveDraftFields;
+    final draftFields = collaboration.liveDraftDisplayFields;
     final previous = logs.logs.isEmpty ? null : logs.logs.last;
     final connectionState = collaboration.binding == null
         ? ControllerConnectionState.connected

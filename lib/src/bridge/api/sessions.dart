@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 import '../models/session.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `hard_delete_session_from_pool`, `into_session`, `reopen_local_session_from_pool`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SessionRow`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from_row`
+// These functions are ignored because they are not marked as `pub`: `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `reopen_local_session_from_pool`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LocalCopyLogRow`, `SessionRow`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from_row`, `from_row`
 
 Future<Session> createSession({required String title}) =>
     RustLib.instance.api.crateApiSessionsCreateSession(title: title);
@@ -28,6 +28,28 @@ Future<void> closeSession({required String sessionId}) =>
 Future<Session> reopenLocalSession({required String sessionId}) =>
     RustLib.instance.api
         .crateApiSessionsReopenLocalSession(sessionId: sessionId);
+
+/// Creates an independent, writable local copy of a collaboration session.
+///
+/// The source Session, collaboration binding, synchronization queue, conflicts,
+/// cached live draft, and offline records are intentionally left untouched.
+/// Only materialized, non-deleted logs are copied, each with a new sync id so a
+/// later rejoin cannot confuse the local fork with canonical server entities.
+Future<Session> copyCollaborationSessionToLocal(
+        {required String sessionId, required String title}) =>
+    RustLib.instance.api.crateApiSessionsCopyCollaborationSessionToLocal(
+        sessionId: sessionId, title: title);
+
+/// Replaces a synchronized collaboration session with an independent,
+/// writable local session without contacting the collaboration server.
+///
+/// The replacement receives new session and log identifiers. Once the local
+/// replacement is durable, the source session and all of its local replica
+/// metadata are removed in the same transaction.
+Future<Session> convertCollaborationSessionToLocal(
+        {required String sessionId}) =>
+    RustLib.instance.api.crateApiSessionsConvertCollaborationSessionToLocal(
+        sessionId: sessionId);
 
 /// Permanently removes a closed session from this device.
 ///

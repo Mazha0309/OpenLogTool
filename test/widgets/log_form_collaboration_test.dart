@@ -8,6 +8,8 @@ import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/widgets/callsign_history_field.dart';
@@ -97,6 +99,302 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    },
+  );
+
+  testWidgets(
+    'saving a blank time records it without prefilling the next record',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      TextEditingController timeController() => tester
+          .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+          .controller!;
+
+      expect(timeController().text, isEmpty);
+      final save = find.byKey(const Key('save-log-record'));
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      expect(collaboration.committedFields, isNotNull);
+      expect(collaboration.committedFields!['time'], matches(r'^\d{2}:\d{2}$'));
+      expect(collaboration.liveDraftFields['time'], isEmpty);
+      expect(timeController().text, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'generated time stays hidden after rebuilding the form while save is pending',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      final gate = Completer<void>();
+      collaboration.commitGate = gate;
+      addTearDown(collaboration.dispose);
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          logFormKey: const ValueKey('before-save'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final originalTimeController = tester
+          .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+          .controller!;
+      await tester.tap(find.byKey(const Key('save-log-record')));
+      await tester.pump();
+
+      expect(collaboration.commitCalls, 1);
+      expect(collaboration.liveDraftFields['time'], isNotEmpty);
+      expect(collaboration.liveDraftDisplayFields!['time'], isEmpty);
+      expect(originalTimeController.text, isEmpty);
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          logFormKey: const ValueKey('while-save-pending'),
+        ),
+      );
+      await tester.pump();
+
+      final rebuiltTimeController = tester
+          .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+          .controller!;
+      expect(rebuiltTimeController, isNot(same(originalTimeController)));
+      expect(rebuiltTimeController.text, isEmpty);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(rebuiltTimeController.text, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'legacy next-draft default time stays hidden after commit',
+    (tester) async {
+      const legacyDefaultTime = '2026-07-14T08:00:00.000Z';
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+        nextDraftTime: legacyDefaultTime,
+        nextDraftTimeRevision: 0,
+      );
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          logFormKey: const ValueKey('before-legacy-commit'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('save-log-record')));
+      await tester.pumpAndSettle();
+
+      expect(collaboration.liveDraftFields['time'], legacyDefaultTime);
+      expect(
+        collaboration.liveDraftSnapshot.draft.fieldRevisions['time'],
+        0,
+      );
+      expect(collaboration.liveDraftDisplayFields!['time'], isEmpty);
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+            .controller!
+            .text,
+        isEmpty,
+      );
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          logFormKey: const ValueKey('after-legacy-commit'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+            .controller!
+            .text,
+        isEmpty,
+      );
+    },
+  );
+
+  testWidgets(
+    'a failed save does not copy its generated time into the input',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      )..commitError = StateError('commit failed');
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final time = tester
+          .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+          .controller!;
+      final errors = <Object>[];
+      runZonedGuarded(
+        () => tester
+            .widget<FilledButton>(find.byKey(const Key('save-log-record')))
+            .onPressed!(),
+        (error, _) => errors.add(error),
+      );
+      await tester.pump();
+
+      expect(errors, hasLength(1));
+      expect(errors.single, isA<StateError>());
+      expect(collaboration.liveDraftFields['time'], isNotEmpty);
+      expect(time.text, isEmpty);
+
+      collaboration.replaceDraftField('time', '18:45');
+      await tester.pump();
+      expect(time.text, '18:45');
+    },
+  );
+
+  testWidgets(
+    'an offline queued save leaves the same draft time input empty',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      )..commitDisposition = LiveDraftCommitDisposition.queuedOffline;
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final time = tester
+          .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+          .controller!;
+      await tester.tap(find.byKey(const Key('save-log-record')));
+      await tester.pumpAndSettle();
+
+      expect(collaboration.committedFields!['time'], matches(r'^\d{2}:\d{2}$'));
+      expect(collaboration.liveDraftSnapshot.draft.draftId, 'draft-1');
+      expect(collaboration.liveDraftFields['time'], isEmpty);
+      expect(time.text, isEmpty);
+    },
+  );
+
+  testWidgets('rapid save taps only start one submission', (tester) async {
+    final collaboration = _RecordingCollaborationProvider(
+      initialFields: const {
+        'time': '',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+        'rstSent': '59',
+        'rstRcvd': '59',
+      },
+    );
+    final gate = Completer<void>();
+    collaboration.commitGate = gate;
+    addTearDown(collaboration.dispose);
+
+    await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+    await tester.pumpAndSettle();
+
+    final save = find.byKey(const Key('save-log-record'));
+    await tester.tap(save);
+    await tester.tap(save);
+    await tester.pump();
+
+    expect(collaboration.commitCalls, 1);
+    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(collaboration.commitCalls, 1);
+  });
+
+  testWidgets(
+    'a new remote draft replaces generated time while save is pending',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      final gate = Completer<void>();
+      collaboration.commitGate = gate;
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final time = tester
+          .widget<TextFormField>(find.byKey(const Key('log-time-field')))
+          .controller!;
+      await tester.tap(find.byKey(const Key('save-log-record')));
+      await tester.pump();
+      expect(collaboration.commitCalls, 1);
+
+      collaboration.replaceDraft(
+        draftId: 'remote-draft',
+        fields: const {
+          'time': '18:45',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4BBB',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      await tester.pump();
+      expect(time.text, '18:45');
+
+      gate.complete();
+      await tester.pumpAndSettle();
     },
   );
 
@@ -200,9 +498,10 @@ const _historyRecord = bridge.LogEntry(
 );
 
 class _LogFormTestApp extends StatelessWidget {
-  const _LogFormTestApp({required this.collaboration});
+  const _LogFormTestApp({required this.collaboration, this.logFormKey});
 
   final CollaborationProvider collaboration;
+  final Key? logFormKey;
 
   @override
   Widget build(BuildContext context) => MultiProvider(
@@ -210,9 +509,16 @@ class _LogFormTestApp extends StatelessWidget {
           ChangeNotifierProvider<CollaborationProvider>.value(
             value: collaboration,
           ),
-          ChangeNotifierProvider(
-            create: (_) => DictionaryProvider(autoload: false),
+          ChangeNotifierProvider<DictionaryProvider>(
+            create: (_) => _NoopDictionaryProvider(),
           ),
+          ChangeNotifierProvider(
+            create: (_) => LogProvider(
+              sessionListLoader: () async => [],
+              sessionLogPageLoader: (_, __, ___) async => [],
+            ),
+          ),
+          ChangeNotifierProvider(create: (_) => SessionProvider()),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ],
         child: MaterialApp(
@@ -222,8 +528,10 @@ class _LogFormTestApp extends StatelessWidget {
           home: Scaffold(
             body: Column(
               children: [
-                const Expanded(
-                  child: SingleChildScrollView(child: LogForm()),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: LogForm(key: logFormKey),
+                  ),
                 ),
                 Container(
                   key: const Key('outside-log-form'),
@@ -239,17 +547,20 @@ class _LogFormTestApp extends StatelessWidget {
 }
 
 class _RecordingCollaborationProvider extends CollaborationProvider {
-  _RecordingCollaborationProvider()
-      : _snapshot = LiveDraftSnapshotDto(
+  _RecordingCollaborationProvider({
+    Map<String, String> initialFields = const {
+      'time': '12:34',
+      'rstSent': '59',
+      'rstRcvd': '59',
+    },
+    this.nextDraftTime = '',
+    this.nextDraftTimeRevision = 0,
+  }) : _snapshot = LiveDraftSnapshotDto(
           draft: LiveDraftDto(
             draftId: 'draft-1',
             sessionId: 'session-1',
             version: 1,
-            fields: LiveDraftFieldsDto({
-              'time': '12:34',
-              'rstSent': '59',
-              'rstRcvd': '59',
-            }),
+            fields: LiveDraftFieldsDto(initialFields),
             fieldRevisions: {
               for (final field in liveDraftFieldNames) field: 0,
             },
@@ -268,8 +579,46 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   final List<String> acquiredFields = [];
   final List<String> releasedFields = [];
   final Map<String, LiveDraftLockDto> _ownedLocks = {};
+  Map<String, String>? committedFields;
   Completer<void>? atomicGate;
+  Completer<void>? commitGate;
   Object? fieldUpdateError;
+  Object? commitError;
+  final String nextDraftTime;
+  final int nextDraftTimeRevision;
+  LiveDraftCommitDisposition commitDisposition =
+      LiveDraftCommitDisposition.committed;
+  int commitCalls = 0;
+
+  void replaceDraft({
+    required String draftId,
+    required Map<String, String> fields,
+    int? timeRevision,
+  }) {
+    final previous = _snapshot.draft;
+    _snapshot = LiveDraftSnapshotDto(
+      draft: LiveDraftDto(
+        draftId: draftId,
+        sessionId: previous.sessionId,
+        version: previous.version + 1,
+        fields: LiveDraftFieldsDto(fields),
+        fieldRevisions: {
+          for (final field in liveDraftFieldNames)
+            field: field == 'time'
+                ? timeRevision ?? (fields['time']?.isNotEmpty == true ? 1 : 0)
+                : 0,
+        },
+        lastUpdatedBy: null,
+        createdAt: DateTime.now().toUtc(),
+        lastUpdatedAt: DateTime.now().toUtc(),
+      ),
+      locks: const [],
+      currentOrdinal: _snapshot.currentOrdinal,
+      totalRecords: _snapshot.totalRecords,
+      previousRecord: null,
+    );
+    notifyListeners();
+  }
 
   void replaceDraftField(String field, String value) {
     final previous = _snapshot.draft;
@@ -352,4 +701,59 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
     atomicUpdates.add(Map<String, String>.from(updates));
     await atomicGate?.future;
   }
+
+  @override
+  Future<LiveDraftCommitDisposition> commitCurrentLiveDraft() async {
+    commitCalls += 1;
+    committedFields = Map<String, String>.from(_snapshot.draft.fields.values);
+    await commitGate?.future;
+    final error = commitError;
+    if (error != null) throw error;
+    final previous = _snapshot.draft;
+    final disposition = commitDisposition;
+    _snapshot = LiveDraftSnapshotDto(
+      draft: LiveDraftDto(
+        draftId: disposition == LiveDraftCommitDisposition.committed
+            ? 'draft-after-commit'
+            : previous.draftId,
+        sessionId: previous.sessionId,
+        version: previous.version + 1,
+        fields: LiveDraftFieldsDto({
+          'time': nextDraftTime,
+          'controller': previous.fields['controller'],
+          'rstSent': '59',
+          'rstRcvd': '59',
+        }),
+        fieldRevisions: {
+          for (final field in liveDraftFieldNames)
+            field: field == 'time' ? nextDraftTimeRevision : 0,
+        },
+        lastUpdatedBy: null,
+        createdAt: DateTime.now().toUtc(),
+        lastUpdatedAt: DateTime.now().toUtc(),
+      ),
+      locks: const [],
+      currentOrdinal: _snapshot.currentOrdinal + 1,
+      totalRecords: _snapshot.totalRecords + 1,
+      previousRecord: null,
+    );
+    notifyListeners();
+    return disposition;
+  }
+}
+
+class _NoopDictionaryProvider extends DictionaryProvider {
+  _NoopDictionaryProvider() : super(autoload: false);
+
+  @override
+  Future<void> addDevice(String device) async {}
+
+  @override
+  Future<void> addAntenna(String antenna) async {}
+
+  @override
+  Future<void> addCallsign(String callsign) async {}
+
+  @override
+  Future<void> addQth(String qth) async {}
 }

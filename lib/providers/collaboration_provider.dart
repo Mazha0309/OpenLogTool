@@ -17,6 +17,7 @@ import 'package:openlogtool/services/collaboration_replica.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
+import 'package:openlogtool/utils/log_time.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum CollaborationState {
@@ -32,6 +33,54 @@ enum CollaborationState {
 }
 
 enum LiveDraftCommitDisposition { committed, queuedOffline }
+
+final class _AutomaticLiveDraftTimeMarker {
+  const _AutomaticLiveDraftTimeMarker({
+    required this.draftId,
+    required this.displayMinute,
+    required this.maxTimeRevision,
+  });
+
+  final String draftId;
+  final String displayMinute;
+  final int maxTimeRevision;
+}
+
+@visibleForTesting
+LiveDraftFieldsDto resetLiveDraftFieldsAfterCommit(
+  LiveDraftFieldsDto previous,
+) =>
+    LiveDraftFieldsDto({
+      'time': '',
+      'controller': previous['controller'],
+      'rstSent': '59',
+      'rstRcvd': '59',
+    });
+
+@visibleForTesting
+String projectLiveDraftTimeForDisplay({
+  required String value,
+  required int revision,
+  required bool locallyDirty,
+  required String draftId,
+  String? automaticDraftId,
+  String? automaticDisplayMinute,
+  int? automaticMaxRevision,
+}) {
+  if (value.trim().isEmpty) return value;
+  // Server releases before 2.0.3 initialized a fresh draft with the current
+  // time at revision zero. That value is a default, not input for the next
+  // record, and must not leak back into client editors.
+  if (revision == 0 && !locallyDirty) return '';
+  final suppressesThisDraft = automaticDraftId == draftId &&
+      automaticDisplayMinute != null &&
+      automaticDisplayMinute == formatLogTimeForDisplay(value);
+  if (suppressesThisDraft &&
+      (locallyDirty || revision <= (automaticMaxRevision ?? 0))) {
+    return '';
+  }
+  return value;
+}
 
 final class LocalCollaborationBinding {
   const LocalCollaborationBinding({
@@ -804,6 +853,7 @@ class CollaborationProvider with ChangeNotifier {
   String? _resolvingConflictId;
   LiveDraftSnapshotDto? _liveDraftSnapshot;
   LiveDraftFieldsDto? _localLiveDraftFields;
+  _AutomaticLiveDraftTimeMarker? _automaticLiveDraftTime;
   Set<String> _dirtyLiveDraftFields = const {};
   Map<String, int> _liveDraftBaseRevisions = const {};
   Map<String, LiveDraftLockDto> _ownedLiveDraftLocks = const {};
@@ -833,6 +883,29 @@ class CollaborationProvider with ChangeNotifier {
   LiveDraftSnapshotDto? get liveDraftSnapshot => _liveDraftSnapshot;
   LiveDraftFieldsDto? get liveDraftFields =>
       _localLiveDraftFields ?? _liveDraftSnapshot?.draft.fields;
+  LiveDraftFieldsDto? get liveDraftDisplayFields {
+    final snapshot = liveDraftSnapshot;
+    final fields = liveDraftFields;
+    if (snapshot == null || fields == null || fields['time'].isEmpty) {
+      return fields;
+    }
+    final timeRevision = snapshot.draft.fieldRevisions['time'] ?? 0;
+    final timeIsDirty = _dirtyLiveDraftFields.contains('time');
+    final marker = _automaticLiveDraftTime;
+    final displayTime = projectLiveDraftTimeForDisplay(
+      value: fields['time'],
+      revision: timeRevision,
+      locallyDirty: timeIsDirty,
+      draftId: snapshot.draft.draftId,
+      automaticDraftId: marker?.draftId,
+      automaticDisplayMinute: marker?.displayMinute,
+      automaticMaxRevision: marker?.maxTimeRevision,
+    );
+    return displayTime == fields['time']
+        ? fields
+        : fields.withField('time', displayTime);
+  }
+
   List<LiveDraftLockDto> get liveDraftLocks =>
       _liveDraftSnapshot?.locks ?? const [];
   Map<String, LiveDraftLockDto> get ownedLiveDraftLocks =>
@@ -851,6 +924,30 @@ class CollaborationProvider with ChangeNotifier {
         currentBinding.replicaState == 'revoked' ||
         currentBinding.revokedAt != null ||
         failedOperation == 'join';
+  }
+
+  bool get hasCurrentSessionBinding {
+    final currentBinding = binding;
+    return currentBinding != null &&
+        currentBinding.sessionId == _sessions?.currentSessionId;
+  }
+
+  /// A direct conversion deliberately removes this device's synchronized
+  /// replica. Only expose it after the serial synchronizer has caught up and
+  /// every recoverable local operation is durably represented by the server.
+  bool get canConvertCurrentSessionDirectly {
+    final sync = _syncState;
+    return hasCurrentSessionBinding &&
+        _state == CollaborationState.ready &&
+        sync != null &&
+        sync.replicaPhase == CollaborationReplicaPhase.ready &&
+        sync.transportPhase == CollaborationTransportPhase.online &&
+        sync.pendingCount == 0 &&
+        sync.conflictCount == 0 &&
+        sync.rejectedCount == 0 &&
+        _offlineRecords.isEmpty &&
+        !sync.remoteCommitPendingLocalApply &&
+        sync.lastAppliedSeq >= sync.serverHeadSeq;
   }
 
   CollaborationSyncState? get syncState => _syncState;
@@ -1718,6 +1815,71 @@ class CollaborationProvider with ChangeNotifier {
     );
   }
 
+  void beginAutomaticLiveDraftTime(String value) {
+    final snapshot = liveDraftSnapshot;
+    final displayMinute = formatLogTimeForDisplay(value);
+    if (snapshot == null || displayMinute.isEmpty) {
+      cancelAutomaticLiveDraftTime();
+      return;
+    }
+    _automaticLiveDraftTime = _AutomaticLiveDraftTimeMarker(
+      draftId: snapshot.draft.draftId,
+      displayMinute: displayMinute,
+      maxTimeRevision: snapshot.draft.fieldRevisions['time'] ?? 0,
+    );
+    _safeNotify();
+    _scheduleAutomaticLiveDraftTimePersistence();
+  }
+
+  void confirmAutomaticLiveDraftTime() {
+    final marker = _automaticLiveDraftTime;
+    final snapshot = liveDraftSnapshot;
+    final fields = liveDraftFields;
+    if (marker == null ||
+        snapshot == null ||
+        fields == null ||
+        marker.draftId != snapshot.draft.draftId ||
+        marker.displayMinute != formatLogTimeForDisplay(fields['time'])) {
+      return;
+    }
+    _automaticLiveDraftTime = _AutomaticLiveDraftTimeMarker(
+      draftId: marker.draftId,
+      displayMinute: marker.displayMinute,
+      maxTimeRevision: max(
+        marker.maxTimeRevision,
+        snapshot.draft.fieldRevisions['time'] ?? 0,
+      ),
+    );
+    _safeNotify();
+    _scheduleAutomaticLiveDraftTimePersistence();
+  }
+
+  void completeAutomaticLiveDraftTime(
+    LiveDraftCommitDisposition disposition,
+  ) {
+    if (_automaticLiveDraftTime == null ||
+        disposition == LiveDraftCommitDisposition.queuedOffline) {
+      return;
+    }
+    // A committed record creates a new generation. Its revision-zero time is
+    // already projected as empty for legacy servers; carrying the old
+    // generation marker forward could hide a legitimate same-minute edit.
+    _automaticLiveDraftTime = null;
+    _safeNotify();
+    _scheduleAutomaticLiveDraftTimePersistence();
+  }
+
+  void cancelAutomaticLiveDraftTime() {
+    if (_automaticLiveDraftTime == null) return;
+    _automaticLiveDraftTime = null;
+    _safeNotify();
+    _scheduleAutomaticLiveDraftTimePersistence();
+  }
+
+  void _scheduleAutomaticLiveDraftTimePersistence() {
+    unawaited(_serializeLiveDraft(_persistLiveDraftState));
+  }
+
   Future<LiveDraftCommitDisposition> commitCurrentLiveDraft() =>
       _serializeLiveDraft(() async {
         final context = _requireLiveDraftContext(requireEdit: true);
@@ -1738,7 +1900,8 @@ class CollaborationProvider with ChangeNotifier {
             fields: initialFields,
           );
           _offlineRecords = [..._offlineRecords, queued];
-          _localLiveDraftFields = _resetFieldsAfterCommit(initialFields);
+          _localLiveDraftFields =
+              resetLiveDraftFieldsAfterCommit(initialFields);
           _dirtyLiveDraftFields = {
             for (final field in liveDraftFieldNames)
               if (_localLiveDraftFields![field] !=
@@ -1816,7 +1979,7 @@ class CollaborationProvider with ChangeNotifier {
             fields: fields,
           );
           _offlineRecords = [..._offlineRecords, queued];
-          _localLiveDraftFields = _resetFieldsAfterCommit(fields);
+          _localLiveDraftFields = resetLiveDraftFieldsAfterCommit(fields);
           _dirtyLiveDraftFields = {
             for (final field in liveDraftFieldNames)
               if (_localLiveDraftFields![field] !=
@@ -2039,6 +2202,99 @@ class CollaborationProvider with ChangeNotifier {
       _state = CollaborationState.revoked;
       context.logs.setCollaborationReadOnly(binding.sessionId, true);
     });
+  }
+
+  /// Forks the materialized collaboration Session into a writable local-only
+  /// Session. This is a device-local disaster-recovery action and deliberately
+  /// does not require an account, server capabilities, or network access.
+  Future<void> createEditableLocalCopy({required String title}) async {
+    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('当前会话不是协作会话');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    _stopSynchronization();
+    _safeNotify();
+    var copied = false;
+    try {
+      final local = await sessions.copyCurrentCollaborationSessionToLocal(
+        title: title,
+      );
+      copied = true;
+      _publishingSessionId = null;
+      _clearScopedState();
+      // Keep the preserved server replica read-only, while the newly selected
+      // local fork must not inherit that session-scoped permission marker.
+      logs.setCollaborationReadOnly(sourceSessionId, true);
+      logs.setCollaborationReadOnly(local.sessionId, false);
+      await logs.reloadForSession(local.sessionId, propagateErrors: true);
+      _state = CollaborationState.localOnly;
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      if (!copied) _scheduleRefresh();
+    }
+  }
+
+  /// Stops synchronization on this device and atomically replaces the bound
+  /// replica with an independent local Session. The server Session,
+  /// membership, and other devices are deliberately left untouched.
+  Future<void> convertCurrentSessionToLocal() async {
+    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    if (!canConvertCurrentSessionDirectly) {
+      throw StateError('COLLABORATION_LOCAL_CONVERSION_NOT_READY');
+    }
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('当前会话不是协作会话');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    _safeNotify();
+    var converted = false;
+    try {
+      // Let already queued live-draft writes finish before tearing down their
+      // network context, then wait for the synchronizer itself to stop before
+      // Rust removes its binding and queue tables.
+      await _liveDraftSerial;
+      await _stopSynchronizationAndWait();
+      final local = await sessions.convertCurrentCollaborationSessionToLocal();
+      converted = true;
+      _publishingSessionId = null;
+      _clearScopedState();
+      logs.setCollaborationReadOnly(sourceSessionId, false);
+      logs.setCollaborationReadOnly(local.sessionId, false);
+      await logs.reloadForSession(local.sessionId, propagateErrors: true);
+      _state = CollaborationState.localOnly;
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      if (!converted) _scheduleRefresh();
+    }
   }
 
   Future<void> refreshPublicShares() async {
@@ -2944,6 +3200,27 @@ class CollaborationProvider with ChangeNotifier {
             final remote = cached['remote'];
             if (remote != null) {
               _liveDraftSnapshot = LiveDraftSnapshotDto.fromJson(remote);
+              if (remote is Map) {
+                final remoteValues = Map<String, Object?>.from(remote);
+                final cachedAutomaticTime =
+                    remoteValues['_clientAutomaticTimeSuppression'];
+                if (cachedAutomaticTime is Map) {
+                  final value = Map<String, Object?>.from(cachedAutomaticTime);
+                  final draftId = value['draftId'];
+                  final displayMinute = value['displayMinute'];
+                  final maxTimeRevision = value['maxTimeRevision'];
+                  if (draftId is String &&
+                      displayMinute is String &&
+                      maxTimeRevision is int &&
+                      draftId == _liveDraftSnapshot?.draft.draftId) {
+                    _automaticLiveDraftTime = _AutomaticLiveDraftTimeMarker(
+                      draftId: draftId,
+                      displayMinute: displayMinute,
+                      maxTimeRevision: maxTimeRevision,
+                    );
+                  }
+                }
+              }
             }
             _localLiveDraftFields = LiveDraftFieldsDto.fromJson(
               cached['localFields'],
@@ -3622,16 +3899,6 @@ class CollaborationProvider with ChangeNotifier {
     }
   }
 
-  LiveDraftFieldsDto _resetFieldsAfterCommit(LiveDraftFieldsDto previous) {
-    final time = DateTime.now().toUtc().toIso8601String();
-    return LiveDraftFieldsDto({
-      'time': time,
-      'controller': previous['controller'],
-      'rstSent': '59',
-      'rstRcvd': '59',
-    });
-  }
-
   String _normalizeLiveDraftTime(String value) {
     final normalized = value.trim();
     if (normalized.isEmpty) return '';
@@ -3677,6 +3944,15 @@ class CollaborationProvider with ChangeNotifier {
     final snapshot = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
     if (binding == null || snapshot == null || local == null) return;
+    final remoteCache = Map<String, Object?>.from(snapshot.toJson());
+    final automaticTime = _automaticLiveDraftTime;
+    if (automaticTime != null) {
+      remoteCache['_clientAutomaticTimeSuppression'] = {
+        'draftId': automaticTime.draftId,
+        'displayMinute': automaticTime.displayMinute,
+        'maxTimeRevision': automaticTime.maxTimeRevision,
+      };
+    }
     try {
       await RustApi.saveCollaborationLiveDraftCache(
         requestJson: jsonEncode({
@@ -3685,7 +3961,7 @@ class CollaborationProvider with ChangeNotifier {
           'sessionId': binding.sessionId,
           'draftId': snapshot.draft.draftId,
           'draftVersion': snapshot.draft.version,
-          'remote': snapshot.toJson(),
+          'remote': remoteCache,
           'localFields': local.toJson(),
           'fieldRevisions': {
             for (final field in liveDraftFieldNames)
@@ -4058,7 +4334,7 @@ class CollaborationProvider with ChangeNotifier {
     _resolvingConflictId = null;
   }
 
-  void _stopSynchronization() {
+  CollaborationSyncCoordinator? _detachSynchronization() {
     _syncGeneration += 1;
     _resetConflictState();
     final binding = _binding;
@@ -4069,7 +4345,17 @@ class CollaborationProvider with ChangeNotifier {
     final coordinator = _syncCoordinator;
     _syncCoordinator = null;
     _syncState = null;
+    return coordinator;
+  }
+
+  void _stopSynchronization() {
+    final coordinator = _detachSynchronization();
     if (coordinator != null) unawaited(coordinator.dispose());
+  }
+
+  Future<void> _stopSynchronizationAndWait() async {
+    final coordinator = _detachSynchronization();
+    if (coordinator != null) await coordinator.dispose();
   }
 
   void _adoptLogAuthorship(Iterable<CollaborationLogDto> logs) {
@@ -4107,6 +4393,7 @@ class CollaborationProvider with ChangeNotifier {
     _clearOwnedLiveDraftLocks();
     _liveDraftSnapshot = null;
     _localLiveDraftFields = null;
+    _automaticLiveDraftTime = null;
     _dirtyLiveDraftFields = const {};
     _liveDraftBaseRevisions = const {};
     _offlineRecords = const [];

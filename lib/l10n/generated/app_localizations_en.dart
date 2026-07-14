@@ -472,6 +472,43 @@ class AppLocalizationsEn extends AppLocalizations {
       'After leaving, the local replica remains read-only. A new invitation is required to participate again.';
 
   @override
+  String get convertCollaborationToLocal =>
+      'Stop collaboration on this device and convert to a local session';
+
+  @override
+  String get convertCollaborationToLocalTitle =>
+      'Stop collaboration on this device?';
+
+  @override
+  String convertCollaborationToLocalConfirmation(String title) {
+    return 'This stops collaboration synchronization for “$title” on this device and internally replaces the current session with an editable local copy. The shared server session, its members, and other devices are not affected. This cannot be undone.';
+  }
+
+  @override
+  String get convertCollaborationToLocalSucceeded =>
+      'Stopped collaboration on this device and converted to a local session';
+
+  @override
+  String get createEditableLocalCopy => 'Stop syncing and create local copy';
+
+  @override
+  String get createEditableLocalCopyTitle => 'Stop syncing on this device?';
+
+  @override
+  String createEditableLocalCopyConfirmation(String title) {
+    return 'This creates an independent copy of “$title” on this device, copies every saved record currently shown in the table, and switches to it immediately. The new copy can be edited offline and will no longer synchronize. The shared server session and its original local replica will not be closed or deleted. Collaboration queues, conflicts, and an unsubmitted live draft stay with the original replica and are not copied.';
+  }
+
+  @override
+  String editableLocalCopySessionTitle(String title) {
+    return '$title (local copy)';
+  }
+
+  @override
+  String get editableLocalCopySucceeded =>
+      'Switched to the editable local copy';
+
+  @override
   String get collaborationScreenTitle => 'Collaboration and members';
 
   @override
@@ -1390,6 +1427,82 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fontPreviewSample => 'OpenLogTool · CQ CQ · Net log 123';
+
+  @override
+  String get aboutAppAction => 'About';
+
+  @override
+  String get aboutAppTitle => 'About OpenLogTool';
+
+  @override
+  String get aboutAppTagline => 'Amateur-radio net logging and collaboration';
+
+  @override
+  String get aboutAppDescription =>
+      'Complete net logging, live-draft collaboration, and controller displays for on-site and remote scribes. OpenLogTool focuses on net-control workflows rather than replacing a personal contact log.';
+
+  @override
+  String aboutVersionChip(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get aboutVersionSection => 'Version information';
+
+  @override
+  String get aboutVersionLabel => 'App version';
+
+  @override
+  String get aboutBuildLabel => 'Build number';
+
+  @override
+  String get aboutCommitLabel => 'Commit';
+
+  @override
+  String get aboutCopyVersionInfo => 'Copy version information';
+
+  @override
+  String get aboutVersionInfoCopied => 'Version information copied';
+
+  @override
+  String get aboutProjectSection => 'Project & licenses';
+
+  @override
+  String get aboutRepository => 'Project repository';
+
+  @override
+  String get aboutRepositoryHint =>
+      'View source code and project documentation';
+
+  @override
+  String get aboutIssueTracker => 'Report an issue';
+
+  @override
+  String get aboutIssueTrackerHint => 'Report a bug or suggest an improvement';
+
+  @override
+  String get aboutOpenSourceLicenses => 'Open-source licenses';
+
+  @override
+  String get aboutOpenSourceLicensesHint =>
+      'Review licenses for third-party components';
+
+  @override
+  String get aboutLicenseName => 'GNU AGPL-3.0';
+
+  @override
+  String get aboutLicenseHint => 'OpenLogTool is free and open-source software';
+
+  @override
+  String get aboutCopyright => '© 2026 Mazha0309 · BG5CRL';
+
+  @override
+  String aboutLinkOpenFailed(String error) {
+    return 'Could not open the link: $error';
+  }
+
+  @override
+  String get restoreDefaultSettings => 'Restore default settings';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -1838,6 +1951,23 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get leaveSessionConfirmation =>
       'After leaving, the local replica remains read-only. A new invitation is required to participate again.';
+
+  @override
+  String get convertCollaborationToLocal =>
+      'Stop collaboration on this device and convert to a local session';
+
+  @override
+  String get convertCollaborationToLocalTitle =>
+      'Stop collaboration on this device?';
+
+  @override
+  String convertCollaborationToLocalConfirmation(String title) {
+    return 'This stops collaboration synchronization for “$title” on this device and internally replaces the current session with an editable local copy. The shared server session, its members, and other devices are not affected. This cannot be undone.';
+  }
+
+  @override
+  String get convertCollaborationToLocalSucceeded =>
+      'Stopped collaboration on this device and converted to a local session';
 
   @override
   String get confirm => 'Confirm';

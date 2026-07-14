@@ -49,6 +49,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   Timer? _lockExpiryTimer;
   bool _applyingSharedDraft = false;
   bool _historyReuseInProgress = false;
+  bool _submissionInProgress = false;
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
   final Set<String> _deferredSharedDraftFields = <String>{};
@@ -124,7 +125,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _syncSharedDraft(CollaborationProvider collaboration) {
     final snapshot = collaboration.liveDraftSnapshot;
-    final fields = collaboration.liveDraftFields;
+    final fields = collaboration.liveDraftDisplayFields;
     if (snapshot == null || fields == null) {
       _lastSharedDraftId = null;
       _lastSharedDraftSignature = null;
@@ -170,6 +171,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   void _onDraftFieldChanged(String field) {
     if (_applyingSharedDraft || !mounted) return;
     final collaboration = context.read<CollaborationProvider>();
+    if (field == 'time') collaboration.cancelAutomaticLiveDraftTime();
     if (collaboration.liveDraftSnapshot == null ||
         !collaboration.canEditLiveDraft) {
       return;
@@ -322,6 +324,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   Future<void> _submitForm() async {
+    if (_submissionInProgress) return;
     final collaboration = context.read<CollaborationProvider>();
     if (widget.readOnly ||
         (collaboration.liveDraftSnapshot != null &&
@@ -330,6 +333,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    setState(() => _submissionInProgress = true);
+    try {
+      await _submitValidatedForm(collaboration);
+    } finally {
+      if (mounted) setState(() => _submissionInProgress = false);
+    }
+  }
+
+  Future<void> _submitValidatedForm(
+    CollaborationProvider collaboration,
+  ) async {
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final sessionProvider =
         Provider.of<SessionProvider>(context, listen: false);
@@ -384,8 +398,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
 
     if (collaboration.liveDraftSnapshot != null) {
-      if (_timeController.text.isEmpty) {
-        _timeController.text = _getCurrentTime();
+      final enteredTime = _timeController.text.trim();
+      final submittedTime =
+          enteredTime.isNotEmpty ? enteredTime : _getCurrentTime();
+      final usesAutomaticTime = enteredTime.isEmpty;
+      if (usesAutomaticTime) {
+        collaboration.beginAutomaticLiveDraftTime(submittedTime);
+      } else {
+        collaboration.cancelAutomaticLiveDraftTime();
       }
       for (final timer in _draftDebounce.values) {
         timer.cancel();
@@ -395,14 +415,20 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         try {
           await collaboration.updateLiveDraftField(
             entry.key,
-            entry.value.text,
+            entry.key == 'time' ? submittedTime : entry.value.text,
           );
+          if (usesAutomaticTime && entry.key == 'time') {
+            collaboration.confirmAutomaticLiveDraftTime();
+          }
         } catch (_) {
           // commitCurrentLiveDraft retries retained dirty values and decides
           // whether a network failure should enter the offline review queue.
         }
       }
       final disposition = await collaboration.commitCurrentLiveDraft();
+      if (usesAutomaticTime) {
+        collaboration.completeAutomaticLiveDraftTime(disposition);
+      }
       if (!mounted) return;
       _syncSharedDraft(collaboration);
       messenger.showSnackBar(
@@ -493,8 +519,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     _scheduleLockExpiryRefresh(activeForeignLocks);
     final firstForeignLock =
         activeForeignLocks.isEmpty ? null : activeForeignLocks.first;
-    final canSubmit =
-        !readOnly && firstForeignLock == null && !_historyReuseInProgress;
+    final canSubmit = !readOnly &&
+        firstForeignLock == null &&
+        !_historyReuseInProgress &&
+        !_submissionInProgress;
 
     bool fieldEnabled(String field) => !readOnly && !isActiveForeignLock(field);
 
@@ -654,6 +682,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     SizedBox(
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
+                        key: const Key('log-time-field'),
                         controller: _timeController,
                         label: fieldLabel('time', '时间'),
                         hintText: 'HH:mm',
@@ -731,6 +760,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 SizedBox(
                   height: isNarrow ? 44 : 48,
                   child: FilledButton.icon(
+                    key: const Key('save-log-record'),
                     onPressed: canSubmit ? _submitForm : null,
                     icon: Icon(
                       _historyReuseInProgress
@@ -765,6 +795,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildMaterialTextField({
+    Key? key,
     required TextEditingController controller,
     required String label,
     required String hintText,
@@ -780,6 +811,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     bool enabled = true,
   }) {
     return TextFormField(
+      key: key,
       controller: controller,
       focusNode: focusNode,
       enabled: enabled,

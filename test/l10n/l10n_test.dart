@@ -64,5 +64,27 @@ void main() {
       en.logNotOwnedReadOnlyHint,
       'You can change or delete only records that you created.',
     );
+    expect(zh.aboutAppTitle, '关于 OpenLogTool');
+    expect(zh.aboutAppDescription, contains('点名现场工作流'));
+    expect(en.aboutAppTitle, 'About OpenLogTool');
+    expect(en.aboutAppDescription, contains('net-control workflows'));
+    expect(zh.createEditableLocalCopy, '停止协作并创建本地副本');
+    expect(
+      zh.createEditableLocalCopyConfirmation('周日晚间点名'),
+      contains('原本机协作副本不会被关闭或删除'),
+    );
+    expect(
+      en.createEditableLocalCopy,
+      'Stop syncing and create local copy',
+    );
+    expect(zh.convertCollaborationToLocal, '停止本机协作并转为本地会话');
+    expect(
+      zh.convertCollaborationToLocalConfirmation('周日晚间点名'),
+      contains('服务器上的共享会话、成员和其他设备不受影响'),
+    );
+    expect(
+      en.convertCollaborationToLocal,
+      'Stop collaboration on this device and convert to a local session',
+    );
   });
 }
