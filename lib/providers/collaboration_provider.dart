@@ -926,6 +926,30 @@ class CollaborationProvider with ChangeNotifier {
         failedOperation == 'join';
   }
 
+  bool get hasCurrentSessionBinding {
+    final currentBinding = binding;
+    return currentBinding != null &&
+        currentBinding.sessionId == _sessions?.currentSessionId;
+  }
+
+  /// A direct conversion deliberately removes this device's synchronized
+  /// replica. Only expose it after the serial synchronizer has caught up and
+  /// every recoverable local operation is durably represented by the server.
+  bool get canConvertCurrentSessionDirectly {
+    final sync = _syncState;
+    return hasCurrentSessionBinding &&
+        _state == CollaborationState.ready &&
+        sync != null &&
+        sync.replicaPhase == CollaborationReplicaPhase.ready &&
+        sync.transportPhase == CollaborationTransportPhase.online &&
+        sync.pendingCount == 0 &&
+        sync.conflictCount == 0 &&
+        sync.rejectedCount == 0 &&
+        _offlineRecords.isEmpty &&
+        !sync.remoteCommitPendingLocalApply &&
+        sync.lastAppliedSeq >= sync.serverHeadSeq;
+  }
+
   CollaborationSyncState? get syncState => _syncState;
   CollaborationTransportPhase get transportPhase =>
       _syncState?.transportPhase ?? CollaborationTransportPhase.stopped;
@@ -2178,6 +2202,99 @@ class CollaborationProvider with ChangeNotifier {
       _state = CollaborationState.revoked;
       context.logs.setCollaborationReadOnly(binding.sessionId, true);
     });
+  }
+
+  /// Forks the materialized collaboration Session into a writable local-only
+  /// Session. This is a device-local disaster-recovery action and deliberately
+  /// does not require an account, server capabilities, or network access.
+  Future<void> createEditableLocalCopy({required String title}) async {
+    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('当前会话不是协作会话');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    _stopSynchronization();
+    _safeNotify();
+    var copied = false;
+    try {
+      final local = await sessions.copyCurrentCollaborationSessionToLocal(
+        title: title,
+      );
+      copied = true;
+      _publishingSessionId = null;
+      _clearScopedState();
+      // Keep the preserved server replica read-only, while the newly selected
+      // local fork must not inherit that session-scoped permission marker.
+      logs.setCollaborationReadOnly(sourceSessionId, true);
+      logs.setCollaborationReadOnly(local.sessionId, false);
+      await logs.reloadForSession(local.sessionId, propagateErrors: true);
+      _state = CollaborationState.localOnly;
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      if (!copied) _scheduleRefresh();
+    }
+  }
+
+  /// Stops synchronization on this device and atomically replaces the bound
+  /// replica with an independent local Session. The server Session,
+  /// membership, and other devices are deliberately left untouched.
+  Future<void> convertCurrentSessionToLocal() async {
+    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    if (!canConvertCurrentSessionDirectly) {
+      throw StateError('COLLABORATION_LOCAL_CONVERSION_NOT_READY');
+    }
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('当前会话不是协作会话');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    _safeNotify();
+    var converted = false;
+    try {
+      // Let already queued live-draft writes finish before tearing down their
+      // network context, then wait for the synchronizer itself to stop before
+      // Rust removes its binding and queue tables.
+      await _liveDraftSerial;
+      await _stopSynchronizationAndWait();
+      final local = await sessions.convertCurrentCollaborationSessionToLocal();
+      converted = true;
+      _publishingSessionId = null;
+      _clearScopedState();
+      logs.setCollaborationReadOnly(sourceSessionId, false);
+      logs.setCollaborationReadOnly(local.sessionId, false);
+      await logs.reloadForSession(local.sessionId, propagateErrors: true);
+      _state = CollaborationState.localOnly;
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      if (!converted) _scheduleRefresh();
+    }
   }
 
   Future<void> refreshPublicShares() async {
@@ -4217,7 +4334,7 @@ class CollaborationProvider with ChangeNotifier {
     _resolvingConflictId = null;
   }
 
-  void _stopSynchronization() {
+  CollaborationSyncCoordinator? _detachSynchronization() {
     _syncGeneration += 1;
     _resetConflictState();
     final binding = _binding;
@@ -4228,7 +4345,17 @@ class CollaborationProvider with ChangeNotifier {
     final coordinator = _syncCoordinator;
     _syncCoordinator = null;
     _syncState = null;
+    return coordinator;
+  }
+
+  void _stopSynchronization() {
+    final coordinator = _detachSynchronization();
     if (coordinator != null) unawaited(coordinator.dispose());
+  }
+
+  Future<void> _stopSynchronizationAndWait() async {
+    final coordinator = _detachSynchronization();
+    if (coordinator != null) await coordinator.dispose();
   }
 
   void _adoptLogAuthorship(Iterable<CollaborationLogDto> logs) {

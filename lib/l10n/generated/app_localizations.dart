@@ -892,6 +892,60 @@ abstract class AppLocalizations {
   /// **'退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。'**
   String get leaveSessionConfirmation;
 
+  /// No description provided for @convertCollaborationToLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止本机协作并转为本地会话'**
+  String get convertCollaborationToLocal;
+
+  /// No description provided for @convertCollaborationToLocalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止本机协作并转为本地会话？'**
+  String get convertCollaborationToLocalTitle;
+
+  /// No description provided for @convertCollaborationToLocalConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将停止本机对“{title}”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。'**
+  String convertCollaborationToLocalConfirmation(String title);
+
+  /// No description provided for @convertCollaborationToLocalSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止本机协作并转为本地会话'**
+  String get convertCollaborationToLocalSucceeded;
+
+  /// No description provided for @createEditableLocalCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止协作并创建本地副本'**
+  String get createEditableLocalCopy;
+
+  /// No description provided for @createEditableLocalCopyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止本机协作并创建副本？'**
+  String get createEditableLocalCopyTitle;
+
+  /// No description provided for @createEditableLocalCopyConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将在本机创建“{title}”的独立副本，复制当前表格中所有已保存记录并立即切换过去。新副本可离线编辑，不再与服务器同步；服务器上的共享会话及原本机协作副本不会被关闭或删除。协作待同步队列、冲突及未提交实时草稿会保留在原协作副本，不会复制到新副本。'**
+  String createEditableLocalCopyConfirmation(String title);
+
+  /// No description provided for @editableLocalCopySessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{title}（本地副本）'**
+  String editableLocalCopySessionTitle(String title);
+
+  /// No description provided for @editableLocalCopySucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已切换到可编辑本地副本'**
+  String get editableLocalCopySucceeded;
+
   /// No description provided for @collaborationScreenTitle.
   ///
   /// In zh, this message translates to:
@@ -2439,6 +2493,144 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'OpenLogTool · CQ CQ · 点名记录 123'**
   String get fontPreviewSample;
+
+  /// No description provided for @aboutAppAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于应用'**
+  String get aboutAppAction;
+
+  /// No description provided for @aboutAppTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于 OpenLogTool'**
+  String get aboutAppTitle;
+
+  /// No description provided for @aboutAppTagline.
+  ///
+  /// In zh, this message translates to:
+  /// **'业余无线电点名记录与协作工具'**
+  String get aboutAppTagline;
+
+  /// No description provided for @aboutAppDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'为现场和远程书记员提供完整点名记录、实时草稿协作与主控显示。OpenLogTool 专注于点名现场工作流，不以替代个人通联日志为目标。'**
+  String get aboutAppDescription;
+
+  /// No description provided for @aboutVersionChip.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本 {version}'**
+  String aboutVersionChip(String version);
+
+  /// No description provided for @aboutVersionSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本信息'**
+  String get aboutVersionSection;
+
+  /// No description provided for @aboutVersionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用版本'**
+  String get aboutVersionLabel;
+
+  /// No description provided for @aboutBuildLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'构建编号'**
+  String get aboutBuildLabel;
+
+  /// No description provided for @aboutCommitLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Commit'**
+  String get aboutCommitLabel;
+
+  /// No description provided for @aboutCopyVersionInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制版本信息'**
+  String get aboutCopyVersionInfo;
+
+  /// No description provided for @aboutVersionInfoCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本信息已复制'**
+  String get aboutVersionInfoCopied;
+
+  /// No description provided for @aboutProjectSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目与许可'**
+  String get aboutProjectSection;
+
+  /// No description provided for @aboutRepository.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目仓库'**
+  String get aboutRepository;
+
+  /// No description provided for @aboutRepositoryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看源代码与项目说明'**
+  String get aboutRepositoryHint;
+
+  /// No description provided for @aboutIssueTracker.
+  ///
+  /// In zh, this message translates to:
+  /// **'问题反馈'**
+  String get aboutIssueTracker;
+
+  /// No description provided for @aboutIssueTrackerHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'报告错误或提出建议'**
+  String get aboutIssueTrackerHint;
+
+  /// No description provided for @aboutOpenSourceLicenses.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源组件许可'**
+  String get aboutOpenSourceLicenses;
+
+  /// No description provided for @aboutOpenSourceLicensesHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看应用使用的第三方组件许可'**
+  String get aboutOpenSourceLicensesHint;
+
+  /// No description provided for @aboutLicenseName.
+  ///
+  /// In zh, this message translates to:
+  /// **'GNU AGPL-3.0'**
+  String get aboutLicenseName;
+
+  /// No description provided for @aboutLicenseHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'OpenLogTool 是自由开源软件'**
+  String get aboutLicenseHint;
+
+  /// No description provided for @aboutCopyright.
+  ///
+  /// In zh, this message translates to:
+  /// **'© 2026 Mazha0309 · BG5CRL'**
+  String get aboutCopyright;
+
+  /// No description provided for @aboutLinkOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开链接：{error}'**
+  String aboutLinkOpenFailed(String error);
+
+  /// No description provided for @restoreDefaultSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认设置'**
+  String get restoreDefaultSettings;
 }
 
 class _AppLocalizationsDelegate

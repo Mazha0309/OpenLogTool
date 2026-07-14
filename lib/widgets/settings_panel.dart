@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
@@ -13,6 +14,7 @@ import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
 import 'package:openlogtool/widgets/settings/server_account_settings.dart';
+import 'package:openlogtool/widgets/about_app_dialog.dart';
 import 'package:openlogtool/widgets/font_picker_dialog.dart';
 import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
 
@@ -36,9 +38,7 @@ class SettingsPanel extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-
           SizedBox(height: isNarrow ? 16 : 24),
-
           if (isNarrow) ...[
             ThemeSettings(
               isNarrow: constraints.maxWidth < 600,
@@ -72,17 +72,11 @@ class SettingsPanel extends StatelessWidget {
                 ),
               ],
             ),
-
           const SizedBox(height: 16),
-
           ControllerDisplaySettings(cardPadding: cardPadding),
-
           const SizedBox(height: 16),
-
           ServerAccountSettings(cardPadding: cardPadding),
-
           const SizedBox(height: 16),
-
           DataOperations(
             isNarrow: isNarrow,
             cardPadding: cardPadding,
@@ -92,62 +86,50 @@ class SettingsPanel extends StatelessWidget {
             onViewSnackbarLog: () => _showSnackbarLogDialog(context),
             onClearAllData: () => _showClearDataConfirmation(context),
           ),
-
           const SizedBox(height: 16),
-
-          // 操作按钮
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => _showResetConfirmation(context),
-                  style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      foregroundColor: Colors.white),
-                  child: const Text('恢复默认设置'),
-                ),
+          Card(
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  child: const Text('关于应用'),
-                  onPressed: () => _showAboutDialog(context),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // 版本信息
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '应用信息',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'OpenLogTool v${appInfoProvider.fullVersion}\n'
-                  '© 2026 BG5CRL',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            child: ListTile(
+              key: const Key('about-app-entry'),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: cardPadding, vertical: 6),
+              leading: Icon(
+                Icons.info_outline,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              title: Text(
+                context.l10n.aboutAppTitle,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                '${context.l10n.aboutAppTagline}\n'
+                '${appInfoProvider.fullVersion} · '
+                '${context.l10n.aboutLicenseName}',
+              ),
+              isThreeLine: true,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showAboutDialog(context),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _showResetConfirmation(context),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+                side: BorderSide(color: Theme.of(context).colorScheme.error),
+              ),
+              icon: const Icon(Icons.restore_outlined),
+              label: Text(context.l10n.restoreDefaultSettings),
             ),
           ),
         ],
@@ -441,48 +423,11 @@ class SettingsPanel extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('关于 OpenLogTool'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '版本: ${appInfoProvider.fullVersion}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '一个专为业余无线电爱好者设计的点名记录工具。'
-                '支持快速记录通联信息，管理设备、天线、呼号词库，'
-                '以及数据导入导出功能。',
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '主要功能:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const Text('• 快速添加点名记录'),
-              const Text('• 设备、天线、呼号、QTH 词库管理'),
-              const Text('• 数据导入导出 (JSON, Excel)'),
-              const Text('• 暗色/亮色主题切换'),
-              const Text('• 自定义主题颜色'),
-              const Text('• 一键清除数据库'),
-              const SizedBox(height: 12),
-              const Text(
-                '© 2026 Mazha0309.',
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          FilledButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+      builder: (dialogContext) => AboutAppDialog(
+        appName: appInfoProvider.appName,
+        fullVersion: appInfoProvider.fullVersion,
+        buildNumber: appInfoProvider.buildNumber,
+        commitHash: appInfoProvider.commitHash,
       ),
     );
   }

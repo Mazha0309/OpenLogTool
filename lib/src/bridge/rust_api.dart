@@ -131,6 +131,24 @@ class RustApi {
     return sessions.reopenLocalSession(sessionId: sessionId);
   }
 
+  static Future<Session> copyCollaborationSessionToLocal({
+    required String sessionId,
+    required String title,
+  }) {
+    return sessions.copyCollaborationSessionToLocal(
+      sessionId: sessionId,
+      title: title,
+    );
+  }
+
+  static Future<Session> convertCollaborationSessionToLocal({
+    required String sessionId,
+  }) {
+    return sessions.convertCollaborationSessionToLocal(
+      sessionId: sessionId,
+    );
+  }
+
   static Future<void> hardDeleteSession({required String sessionId}) {
     return sessions.hardDeleteSession(sessionId: sessionId);
   }

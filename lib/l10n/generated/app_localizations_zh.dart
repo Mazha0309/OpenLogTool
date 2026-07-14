@@ -461,6 +461,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get leaveSessionConfirmation => '退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。';
 
   @override
+  String get convertCollaborationToLocal => '停止本机协作并转为本地会话';
+
+  @override
+  String get convertCollaborationToLocalTitle => '停止本机协作并转为本地会话？';
+
+  @override
+  String convertCollaborationToLocalConfirmation(String title) {
+    return '将停止本机对“$title”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。';
+  }
+
+  @override
+  String get convertCollaborationToLocalSucceeded => '已停止本机协作并转为本地会话';
+
+  @override
+  String get createEditableLocalCopy => '停止协作并创建本地副本';
+
+  @override
+  String get createEditableLocalCopyTitle => '停止本机协作并创建副本？';
+
+  @override
+  String createEditableLocalCopyConfirmation(String title) {
+    return '将在本机创建“$title”的独立副本，复制当前表格中所有已保存记录并立即切换过去。新副本可离线编辑，不再与服务器同步；服务器上的共享会话及原本机协作副本不会被关闭或删除。协作待同步队列、冲突及未提交实时草稿会保留在原协作副本，不会复制到新副本。';
+  }
+
+  @override
+  String editableLocalCopySessionTitle(String title) {
+    return '$title（本地副本）';
+  }
+
+  @override
+  String get editableLocalCopySucceeded => '已切换到可编辑本地副本';
+
+  @override
   String get collaborationScreenTitle => '协作与成员';
 
   @override
@@ -1331,6 +1364,80 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fontPreviewSample => 'OpenLogTool · CQ CQ · 点名记录 123';
+
+  @override
+  String get aboutAppAction => '关于应用';
+
+  @override
+  String get aboutAppTitle => '关于 OpenLogTool';
+
+  @override
+  String get aboutAppTagline => '业余无线电点名记录与协作工具';
+
+  @override
+  String get aboutAppDescription =>
+      '为现场和远程书记员提供完整点名记录、实时草稿协作与主控显示。OpenLogTool 专注于点名现场工作流，不以替代个人通联日志为目标。';
+
+  @override
+  String aboutVersionChip(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String get aboutVersionSection => '版本信息';
+
+  @override
+  String get aboutVersionLabel => '应用版本';
+
+  @override
+  String get aboutBuildLabel => '构建编号';
+
+  @override
+  String get aboutCommitLabel => 'Commit';
+
+  @override
+  String get aboutCopyVersionInfo => '复制版本信息';
+
+  @override
+  String get aboutVersionInfoCopied => '版本信息已复制';
+
+  @override
+  String get aboutProjectSection => '项目与许可';
+
+  @override
+  String get aboutRepository => '项目仓库';
+
+  @override
+  String get aboutRepositoryHint => '查看源代码与项目说明';
+
+  @override
+  String get aboutIssueTracker => '问题反馈';
+
+  @override
+  String get aboutIssueTrackerHint => '报告错误或提出建议';
+
+  @override
+  String get aboutOpenSourceLicenses => '开源组件许可';
+
+  @override
+  String get aboutOpenSourceLicensesHint => '查看应用使用的第三方组件许可';
+
+  @override
+  String get aboutLicenseName => 'GNU AGPL-3.0';
+
+  @override
+  String get aboutLicenseHint => 'OpenLogTool 是自由开源软件';
+
+  @override
+  String get aboutCopyright => '© 2026 Mazha0309 · BG5CRL';
+
+  @override
+  String aboutLinkOpenFailed(String error) {
+    return '无法打开链接：$error';
+  }
+
+  @override
+  String get restoreDefaultSettings => '恢复默认设置';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -1769,6 +1876,20 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get leaveSessionConfirmation => '退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。';
+
+  @override
+  String get convertCollaborationToLocal => '停止本机协作并转为本地会话';
+
+  @override
+  String get convertCollaborationToLocalTitle => '停止本机协作并转为本地会话？';
+
+  @override
+  String convertCollaborationToLocalConfirmation(String title) {
+    return '将停止本机对“$title”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。';
+  }
+
+  @override
+  String get convertCollaborationToLocalSucceeded => '已停止本机协作并转为本地会话';
 
   @override
   String get confirm => '确认';

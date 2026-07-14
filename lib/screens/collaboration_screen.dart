@@ -11,6 +11,7 @@ import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/widgets/collaboration_conflict_center.dart';
+import 'package:openlogtool/widgets/collaboration_local_session_action.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -922,6 +923,10 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                     ),
                 ],
               ),
+            const CollaborationLocalSessionAction(
+              padding: EdgeInsets.only(top: 8),
+              alignment: AlignmentDirectional.centerStart,
+            ),
           ],
         ),
       ),
