@@ -50,8 +50,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   bool _applyingSharedDraft = false;
   bool _historyReuseInProgress = false;
   bool _submissionInProgress = false;
-  String? _autoSubmittedDraftId;
-  String? _autoSubmittedTime;
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
   final Set<String> _deferredSharedDraftFields = <String>{};
@@ -127,12 +125,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _syncSharedDraft(CollaborationProvider collaboration) {
     final snapshot = collaboration.liveDraftSnapshot;
-    final fields = collaboration.liveDraftFields;
+    final fields = collaboration.liveDraftDisplayFields;
     if (snapshot == null || fields == null) {
       _lastSharedDraftId = null;
       _lastSharedDraftSignature = null;
-      _autoSubmittedDraftId = null;
-      _autoSubmittedTime = null;
       _deferredSharedDraftFields.clear();
       return;
     }
@@ -143,13 +139,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       return;
     }
     final draftChanged = _lastSharedDraftId != snapshot.draft.draftId;
-    if (draftChanged) {
-      _deferredSharedDraftFields.clear();
-      if (_autoSubmittedDraftId != snapshot.draft.draftId) {
-        _autoSubmittedDraftId = null;
-        _autoSubmittedTime = null;
-      }
-    }
+    if (draftChanged) _deferredSharedDraftFields.clear();
     _lastSharedDraftId = snapshot.draft.draftId;
     _lastSharedDraftSignature = signature;
     _applyingSharedDraft = true;
@@ -158,17 +148,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         final rawValue = fields[entry.key];
         final value =
             entry.key == 'time' ? _displayLiveDraftTime(rawValue) : rawValue;
-        if (entry.key == 'time' &&
-            _autoSubmittedDraftId == snapshot.draft.draftId) {
-          if (entry.value.text.isEmpty && value == _autoSubmittedTime) {
-            _deferredSharedDraftFields.remove(entry.key);
-            continue;
-          }
-          if (value != _autoSubmittedTime) {
-            _autoSubmittedDraftId = null;
-            _autoSubmittedTime = null;
-          }
-        }
         if (!draftChanged && _focusedDraftFields.contains(entry.key)) {
           if (entry.value.text != value) {
             _deferredSharedDraftFields.add(entry.key);
@@ -191,11 +170,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _onDraftFieldChanged(String field) {
     if (_applyingSharedDraft || !mounted) return;
-    if (field == 'time') {
-      _autoSubmittedDraftId = null;
-      _autoSubmittedTime = null;
-    }
     final collaboration = context.read<CollaborationProvider>();
+    if (field == 'time') collaboration.cancelAutomaticLiveDraftTime();
     if (collaboration.liveDraftSnapshot == null ||
         !collaboration.canEditLiveDraft) {
       return;
@@ -422,16 +398,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
 
     if (collaboration.liveDraftSnapshot != null) {
-      final currentDraftId = collaboration.liveDraftSnapshot!.draft.draftId;
       final enteredTime = _timeController.text.trim();
       final submittedTime =
           enteredTime.isNotEmpty ? enteredTime : _getCurrentTime();
-      if (enteredTime.isEmpty) {
-        _autoSubmittedDraftId = currentDraftId;
-        _autoSubmittedTime = submittedTime;
+      final usesAutomaticTime = enteredTime.isEmpty;
+      if (usesAutomaticTime) {
+        collaboration.beginAutomaticLiveDraftTime(submittedTime);
       } else {
-        _autoSubmittedDraftId = null;
-        _autoSubmittedTime = null;
+        collaboration.cancelAutomaticLiveDraftTime();
       }
       for (final timer in _draftDebounce.values) {
         timer.cancel();
@@ -443,12 +417,18 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             entry.key,
             entry.key == 'time' ? submittedTime : entry.value.text,
           );
+          if (usesAutomaticTime && entry.key == 'time') {
+            collaboration.confirmAutomaticLiveDraftTime();
+          }
         } catch (_) {
           // commitCurrentLiveDraft retries retained dirty values and decides
           // whether a network failure should enter the offline review queue.
         }
       }
       final disposition = await collaboration.commitCurrentLiveDraft();
+      if (usesAutomaticTime) {
+        collaboration.completeAutomaticLiveDraftTime(disposition);
+      }
       if (!mounted) return;
       _syncSharedDraft(collaboration);
       messenger.showSnackBar(

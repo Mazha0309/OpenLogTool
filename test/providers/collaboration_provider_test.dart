@@ -531,6 +531,74 @@ void main() {
     expect(next['qth'], isEmpty);
   });
 
+  group('live-draft time display projection', () {
+    test('hides a legacy revision-zero default time', () {
+      final displayTime = projectLiveDraftTimeForDisplay(
+        value: '08:15',
+        revision: 0,
+        locallyDirty: false,
+        draftId: 'legacy-draft',
+      );
+
+      expect(displayTime, isEmpty);
+    });
+
+    test('keeps an explicitly revised user time visible', () {
+      final displayTime = projectLiveDraftTimeForDisplay(
+        value: '08:15',
+        revision: 1,
+        locallyDirty: false,
+        draftId: 'draft-1',
+      );
+
+      expect(displayTime, '08:15');
+    });
+
+    test('hides an automatic acknowledgement but reveals a later edit', () {
+      const draftId = 'draft-1';
+      const automaticTime = '08:15';
+
+      expect(
+        projectLiveDraftTimeForDisplay(
+          value: automaticTime,
+          revision: 0,
+          locallyDirty: false,
+          draftId: draftId,
+          automaticDraftId: draftId,
+          automaticDisplayMinute: automaticTime,
+          automaticMaxRevision: 1,
+        ),
+        isEmpty,
+      );
+      expect(
+        projectLiveDraftTimeForDisplay(
+          value: automaticTime,
+          revision: 1,
+          locallyDirty: false,
+          draftId: draftId,
+          automaticDraftId: draftId,
+          automaticDisplayMinute: automaticTime,
+          automaticMaxRevision: 1,
+        ),
+        isEmpty,
+        reason: 'the acknowledgement of the automatic value stays hidden',
+      );
+      expect(
+        projectLiveDraftTimeForDisplay(
+          value: automaticTime,
+          revision: 2,
+          locallyDirty: false,
+          draftId: draftId,
+          automaticDraftId: draftId,
+          automaticDisplayMinute: automaticTime,
+          automaticMaxRevision: 1,
+        ),
+        automaticTime,
+        reason: 'a later explicit edit must remain visible',
+      );
+    });
+  });
+
   group('live-draft realtime controls', () {
     test('updated payload projects every supported field without a GET', () {
       final current = _snapshot(draft: _draft(version: 1));

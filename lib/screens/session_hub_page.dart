@@ -311,7 +311,7 @@ class SessionHubPage extends StatelessWidget {
     CollaborationProvider collaboration,
   ) {
     final snapshot = collaboration.liveDraftSnapshot;
-    final draftFields = collaboration.liveDraftFields;
+    final draftFields = collaboration.liveDraftDisplayFields;
     final previous = logs.logs.isEmpty ? null : logs.logs.last;
     final connectionState = collaboration.binding == null
         ? ControllerConnectionState.connected
