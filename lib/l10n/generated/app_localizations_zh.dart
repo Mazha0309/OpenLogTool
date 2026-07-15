@@ -1402,6 +1402,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutVersionInfoCopied => '版本信息已复制';
 
   @override
+  String get aboutCheckUpdates => '检查更新';
+
+  @override
+  String get aboutCheckingUpdates => '正在检查…';
+
+  @override
+  String aboutUpToDate(String version) {
+    return '当前已是最新版本（$version）';
+  }
+
+  @override
+  String get aboutUpdateAvailableTitle => '发现新版本';
+
+  @override
+  String aboutUpdateAvailableMessage(
+      String currentVersion, String latestVersion) {
+    return '当前版本：$currentVersion\n最新版本：$latestVersion';
+  }
+
+  @override
+  String get aboutOpenRelease => '查看并下载';
+
+  @override
+  String get aboutUpdateLater => '稍后';
+
+  @override
+  String get aboutUpdateCheckFailed => '检查更新失败，请检查网络后重试';
+
+  @override
   String get aboutProjectSection => '项目与许可';
 
   @override

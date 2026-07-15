@@ -1465,6 +1465,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutVersionInfoCopied => 'Version information copied';
 
   @override
+  String get aboutCheckUpdates => 'Check for updates';
+
+  @override
+  String get aboutCheckingUpdates => 'Checking…';
+
+  @override
+  String aboutUpToDate(String version) {
+    return 'You’re up to date ($version)';
+  }
+
+  @override
+  String get aboutUpdateAvailableTitle => 'Update available';
+
+  @override
+  String aboutUpdateAvailableMessage(
+      String currentVersion, String latestVersion) {
+    return 'Current version: $currentVersion\nLatest version: $latestVersion';
+  }
+
+  @override
+  String get aboutOpenRelease => 'View release';
+
+  @override
+  String get aboutUpdateLater => 'Not now';
+
+  @override
+  String get aboutUpdateCheckFailed =>
+      'Couldn’t check for updates. Check your connection and try again.';
+
+  @override
   String get aboutProjectSection => 'Project & licenses';
 
   @override

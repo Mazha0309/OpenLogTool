@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/private_file_secure_values.dart';
 import 'package:openlogtool/services/server_api.dart';
+import 'package:openlogtool/utils/server_url.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum TokenStorageBackend {
@@ -517,7 +518,8 @@ final class SecureTokenStore implements TokenStore, TokenStorageStatusSource {
     required String serverUrl,
     SecureValueStore? secureValues,
   })  : _secureValues = secureValues ?? _defaultSecureValues,
-        _key = _keyForServer(serverUrl);
+        _key = _keyForServer(serverUrl),
+        _legacyKey = _legacyKeyForServer(serverUrl);
 
   static final ValueNotifier<TokenStorageStatus> _secureStatus = ValueNotifier(
     const TokenStorageStatus(backend: TokenStorageBackend.platformSecure),
@@ -526,6 +528,7 @@ final class SecureTokenStore implements TokenStore, TokenStorageStatusSource {
 
   final SecureValueStore _secureValues;
   final String _key;
+  final String _legacyKey;
 
   @override
   ValueListenable<TokenStorageStatus> get storageStatus =>
@@ -535,12 +538,28 @@ final class SecureTokenStore implements TokenStore, TokenStorageStatusSource {
 
   @override
   Future<AuthSessionDto?> read() async {
-    final encoded = await _secureValues.read(_key);
+    var sourceKey = _key;
+    var encoded = await _secureValues.read(_key);
+    if (encoded == null && _legacyKey != _key) {
+      sourceKey = _legacyKey;
+      encoded = await _secureValues.read(_legacyKey);
+    }
     if (encoded == null) return null;
     try {
-      return AuthSessionDto.fromJson(jsonDecode(encoded));
+      final session = AuthSessionDto.fromJson(jsonDecode(encoded));
+      if (sourceKey != _key) {
+        try {
+          await _secureValues.write(_key, encoded);
+          await _secureValues.delete(sourceKey);
+        } catch (error) {
+          // Migration is best-effort. A valid legacy credential remains usable
+          // even when the platform store is temporarily read-only.
+          debugPrint('[SecureTokenStore] legacy key migration error: $error');
+        }
+      }
+      return session;
     } on FormatException {
-      await _secureValues.delete(_key);
+      await _secureValues.delete(sourceKey);
       return null;
     }
   }
@@ -550,9 +569,18 @@ final class SecureTokenStore implements TokenStore, TokenStorageStatusSource {
       _secureValues.write(_key, jsonEncode(session.toJson()));
 
   @override
-  Future<void> clear() => _secureValues.delete(_key);
+  Future<void> clear() async {
+    await _secureValues.delete(_key);
+    if (_legacyKey != _key) await _secureValues.delete(_legacyKey);
+  }
 
   static String _keyForServer(String serverUrl) {
+    final normalized = normalizeServerUrl(serverUrl);
+    final digest = sha256.convert(utf8.encode(normalized)).toString();
+    return 'openlogtool.auth.v1.$digest';
+  }
+
+  static String _legacyKeyForServer(String serverUrl) {
     final normalized = serverUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final digest = sha256.convert(utf8.encode(normalized)).toString();
     return 'openlogtool.auth.v1.$digest';

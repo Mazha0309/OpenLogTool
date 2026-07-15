@@ -92,6 +92,106 @@ void main() {
     store.status.dispose();
   });
 
+  testWidgets(
+      'restored server URL updates the field and recheck keeps the session',
+      (tester) async {
+    const serverUrl = 'https://example.test';
+    SharedPreferences.setMockInitialValues({'server_url': serverUrl});
+    final restoredSession = AuthSessionDto(
+      accessToken: 'restored-access',
+      accessTokenExpiresIn: 900,
+      refreshToken: 'restored-refresh',
+      refreshTokenExpiresAt: DateTime.now().add(const Duration(days: 30)),
+      user: const ApiUserDto(
+        id: 'user-1',
+        username: 'alice',
+        role: 'user',
+      ),
+    );
+    Uri? checkedUri;
+    final client = MockClient((request) async {
+      checkedUri = request.url;
+      expect(request.method, 'GET');
+      expect(request.url.path, '/api/v1/server-info');
+      return _jsonResponse({
+        'serverInstanceId': 'server-1',
+        'protocolMin': 1,
+        'protocolMax': 1,
+        'features': <String>[],
+        'serverTime': '2026-07-13T00:00:00Z',
+        'environment': 'test',
+      });
+    });
+    final provider = ServerProvider(
+      autoLoadSettings: false,
+      tokenStoreFactory: (_) => MemoryTokenStore(restoredSession),
+      apiFactory: ({
+        required baseUri,
+        required tokenStore,
+        required deviceId,
+        required onAuthInvalidated,
+      }) =>
+          ServerApi(
+        baseUri: baseUri,
+        tokenStore: tokenStore,
+        deviceId: deviceId,
+        onAuthInvalidated: onAuthInvalidated,
+        httpClient: client,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerProvider>.value(value: provider),
+          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ServerAccountSettings(cardPadding: 16),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    TextField serverUrlField() => tester.widget<TextField>(
+          find.byKey(const Key('server-url-field')),
+        );
+
+    expect(serverUrlField().controller!.text, isEmpty);
+
+    await provider.loadSettings();
+    await tester.pump();
+
+    expect(serverUrlField().controller!.text, serverUrl);
+    expect(provider.isLoggedIn, isTrue);
+    expect(find.text('alice'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('server-check-button')));
+    await _pumpUntil(tester, () => provider.serverInfo != null);
+
+    expect(checkedUri, Uri.parse('$serverUrl/api/v1/server-info'));
+    expect(provider.serverUrl, serverUrl);
+    expect(provider.isLoggedIn, isTrue);
+    expect(find.text('alice'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('server-url-field')),
+      'https://pending-edit.test',
+    );
+    await provider.setDeviceId('device-1');
+    await tester.pump();
+
+    expect(serverUrlField().controller!.text, 'https://pending-edit.test');
+
+    provider.dispose();
+  });
+
   testWidgets('temporary-password sign-in requires setting a new password',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -321,6 +421,14 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
     if (finder.evaluate().isNotEmpty) return;
   }
   fail('Timed out waiting for $finder');
+}
+
+Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
+  for (var attempt = 0; attempt < 40; attempt += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (condition()) return;
+  }
+  fail('Timed out waiting for condition');
 }
 
 http.Response _jsonResponse(Object? body, [int statusCode = 200]) =>

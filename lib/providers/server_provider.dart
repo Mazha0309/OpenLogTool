@@ -4,6 +4,7 @@ import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/scoped_token_store.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
+import 'package:openlogtool/utils/server_url.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 typedef ServerApiFactory = ServerApi Function({
@@ -23,11 +24,20 @@ class ServerProvider with ChangeNotifier {
         _tokenStoreFactory = tokenStoreFactory ?? _defaultTokenStoreFactory {
     _tokenStore = _tokenStoreScopes.scope(MemoryTokenStore());
     if (autoLoadSettings) {
-      Future.microtask(() async {
+      _startup = Future.microtask(() async {
         try {
           await loadSettings();
         } catch (e) {
           debugPrint('[ServerProvider] loadSettings error: $e');
+          return;
+        }
+        if (_disposed || _serverUrl.isEmpty) return;
+        try {
+          await checkServer();
+        } catch (e) {
+          // Server discovery is best-effort. Authentication was restored before
+          // this public request and must remain usable while the server is down.
+          debugPrint('[ServerProvider] startup server check error: $e');
         }
       });
     }
@@ -41,18 +51,25 @@ class ServerProvider with ChangeNotifier {
   late TokenStore _tokenStore;
   ServerApi? _api;
   ServerInfoDto? _serverInfo;
+  bool _isServerReachable = false;
   ApiUserDto? _user;
   AccountDto? _account;
   PasswordChangeChallengeDto? _passwordChangeChallenge;
   List<DeviceSessionDto> _deviceSessions = const [];
   String? _deviceId;
   bool _isBusy = false;
+  bool _disposed = false;
+  Future<ServerInfoDto>? _serverCheckInFlight;
+  int? _serverCheckRevision;
+  String? _serverCheckUrl;
+  int _serverChecksInProgress = 0;
   String? _lastErrorCode;
   TokenStorageStatus _tokenStorageStatus = const TokenStorageStatus(
     backend: TokenStorageBackend.platformSecure,
   );
   ValueListenable<TokenStorageStatus>? _tokenStorageStatusSource;
   Future<void> _lastUrlSave = Future<void>.value();
+  Future<void> _startup = Future<void>.value();
   int _contextRevision = 0;
 
   String get serverUrl => _serverUrl;
@@ -69,7 +86,9 @@ class ServerProvider with ChangeNotifier {
   String? get lastErrorCode => _lastErrorCode;
   TokenStorageStatus get tokenStorageStatus => _tokenStorageStatus;
   ServerInfoDto? get serverInfo => _serverInfo;
+  bool get isServerReachable => _isServerReachable;
   int get contextRevision => _contextRevision;
+  Future<void> get ready => _startup;
 
   ServerApi get api {
     if (_serverUrl.isEmpty) {
@@ -81,23 +100,29 @@ class ServerProvider with ChangeNotifier {
   Future<void> loadSettings() async {
     final startedAtRevision = _contextRevision;
     final prefs = await SharedPreferences.getInstance();
-    final savedServerUrl = prefs.getString('server_url') ?? '';
+    final storedServerUrl = prefs.getString('server_url') ?? '';
     // v0 stored credentials in SharedPreferences. Authentication now lives only
     // in the platform credential store.
     await prefs.remove('server_token');
     await prefs.remove('server_username');
     if (_contextRevision != startedAtRevision) return;
-    if (_serverUrl != savedServerUrl) {
-      _serverUrl = savedServerUrl;
-      final oldTokenStore = _replaceAuthContext();
+    if (_serverUrl != storedServerUrl) {
+      // Preserve the exact persisted origin because collaboration bindings use
+      // it as an identity value. Canonicalization is only for comparisons and
+      // credential keys, never an implicit migration of an active binding.
+      _serverUrl = storedServerUrl;
+      final oldTokenStore = _replaceAuthContext(
+        tokenStoreServerUrl: storedServerUrl,
+      );
       final installedTokenStore = _tokenStore;
       await _tokenStoreScopes.clearRetired(oldTokenStore);
       if (_contextRevision != startedAtRevision ||
-          _serverUrl != savedServerUrl ||
+          _serverUrl != storedServerUrl ||
           !identical(_tokenStore, installedTokenStore)) {
         return;
       }
       _serverInfo = null;
+      _isServerReachable = false;
       _lastErrorCode = null;
       _user = null;
       _account = null;
@@ -138,15 +163,16 @@ class ServerProvider with ChangeNotifier {
         }
       }
     }
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> setServerUrl(String url) async {
-    final normalized = url.replaceAll(RegExp(r'/$'), '');
-    if (_serverUrl == normalized) return;
+    final normalized = normalizeServerUrl(url);
+    if (normalizeServerUrl(_serverUrl) == normalized) return;
     _serverUrl = normalized;
     final oldTokenStore = _replaceAuthContext();
     _serverInfo = null;
+    _isServerReachable = false;
     _lastErrorCode = null;
     _user = null;
     _account = null;
@@ -169,16 +195,95 @@ class ServerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<ServerInfoDto> checkServer() async {
-    _setBusy(true);
+  Future<ServerInfoDto> checkServer() {
+    if (_disposed) {
+      return Future<ServerInfoDto>.error(
+        StateError('ServerProvider has been disposed'),
+      );
+    }
+    final requestedAtRevision = _contextRevision;
+    final requestedServerUrl = _serverUrl;
+    final inFlight = _serverCheckInFlight;
+    if (inFlight != null &&
+        _serverCheckRevision == requestedAtRevision &&
+        _serverCheckUrl == requestedServerUrl) {
+      return inFlight;
+    }
+
+    late final Future<ServerInfoDto> operation;
+    operation = _runServerCheck(
+      requestedAtRevision,
+      requestedServerUrl,
+    ).whenComplete(() {
+      if (identical(_serverCheckInFlight, operation)) {
+        _serverCheckInFlight = null;
+        _serverCheckRevision = null;
+        _serverCheckUrl = null;
+      }
+    });
+    _serverCheckInFlight = operation;
+    _serverCheckRevision = requestedAtRevision;
+    _serverCheckUrl = requestedServerUrl;
+    return operation;
+  }
+
+  Future<ServerInfoDto> _runServerCheck(
+    int requestedAtRevision,
+    String requestedServerUrl,
+  ) async {
+    _beginServerCheck();
     try {
       return await _fetchServerInfo();
-    } on ServerApiException catch (error) {
-      _lastErrorCode = error.code;
-      notifyListeners();
+    } catch (error) {
+      if (!_disposed &&
+          _contextRevision == requestedAtRevision &&
+          _serverUrl == requestedServerUrl) {
+        _isServerReachable = false;
+        _lastErrorCode =
+            error is ServerApiException ? error.code : 'SERVER_CHECK_FAILED';
+        notifyListeners();
+      }
       rethrow;
     } finally {
-      _setBusy(false);
+      _endServerCheck();
+    }
+  }
+
+  /// Probes [candidate] before committing a real server-context switch.
+  ///
+  /// A typo or offline candidate therefore cannot erase the current login.
+  Future<ServerInfoDto> saveAndCheckServerUrl(String candidate) async {
+    if (_disposed) throw StateError('ServerProvider has been disposed');
+    final normalized = normalizeServerUrl(candidate);
+    if (normalizeServerUrl(_serverUrl) == normalized) return checkServer();
+
+    final requestedAtRevision = _contextRevision;
+    final requestedServerUrl = _serverUrl;
+    ServerApi? candidateApi;
+    _beginServerCheck();
+    try {
+      candidateApi = _buildApiForServerUrl(
+        normalized,
+        tokenStore: MemoryTokenStore(),
+        onAuthInvalidated: () {},
+      );
+      final info = await candidateApi.getServerInfo();
+      _validateServerInfo(info);
+      if (_disposed ||
+          _contextRevision != requestedAtRevision ||
+          _serverUrl != requestedServerUrl) {
+        throw StateError('服务器上下文已变更，请重试');
+      }
+      await setServerUrl(normalized);
+      if (_disposed) return info;
+      _serverInfo = info;
+      _isServerReachable = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      return info;
+    } finally {
+      candidateApi?.close();
+      _endServerCheck();
     }
   }
 
@@ -435,30 +540,52 @@ class ServerProvider with ChangeNotifier {
     final requestedAtRevision = _contextRevision;
     final requestedApi = api;
     final info = await requestedApi.getServerInfo();
+    if (_disposed) return info;
     if (_contextRevision != requestedAtRevision ||
         !identical(_api, requestedApi)) {
       throw StateError('服务器上下文已变更，请重试');
     }
-    if (info.protocolMin > 1 || info.protocolMax < 1) {
-      throw StateError('服务器不支持协作协议 v1');
-    }
+    _validateServerInfo(info);
     _serverInfo = info;
+    _isServerReachable = true;
     _lastErrorCode = null;
     notifyListeners();
     return info;
   }
 
+  void _validateServerInfo(ServerInfoDto info) {
+    if (info.protocolMin > 1 || info.protocolMax < 1) {
+      throw StateError('服务器不支持协作协议 v1');
+    }
+  }
+
   ServerApi _buildApi() {
-    final uri = Uri.tryParse(_serverUrl);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    return _buildApiForServerUrl(
+      _serverUrl,
+      tokenStore: _tokenStore,
+      onAuthInvalidated: null,
+    );
+  }
+
+  ServerApi _buildApiForServerUrl(
+    String serverUrl, {
+    required TokenStore tokenStore,
+    required void Function()? onAuthInvalidated,
+  }) {
+    final uri = Uri.tryParse(serverUrl);
+    if (uri == null ||
+        !uri.hasScheme ||
+        !const {'http', 'https'}.contains(uri.scheme.toLowerCase()) ||
+        uri.host.isEmpty) {
       throw StateError('服务器地址必须是完整的 http(s) URL');
     }
     late final ServerApi builtApi;
     builtApi = _apiFactory(
       baseUri: uri,
-      tokenStore: _tokenStore,
+      tokenStore: tokenStore,
       deviceId: _deviceId,
-      onAuthInvalidated: () => _handleAuthInvalidated(builtApi),
+      onAuthInvalidated:
+          onAuthInvalidated ?? () => _handleAuthInvalidated(builtApi),
     );
     return builtApi;
   }
@@ -487,9 +614,9 @@ class ServerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  TokenStore _replaceAuthContext() {
+  TokenStore _replaceAuthContext({String? tokenStoreServerUrl}) {
     final oldTokenStore = _tokenStore;
-    _tokenStore = _createTokenStore();
+    _tokenStore = _createTokenStore(serverUrl: tokenStoreServerUrl);
     _api?.close();
     _api = null;
     return oldTokenStore;
@@ -521,9 +648,20 @@ class ServerProvider with ChangeNotifier {
   }
 
   void _setBusy(bool value) {
+    if (_disposed) return;
     if (_isBusy == value) return;
     _isBusy = value;
     notifyListeners();
+  }
+
+  void _beginServerCheck() {
+    _serverChecksInProgress += 1;
+    _setBusy(true);
+  }
+
+  void _endServerCheck() {
+    if (_serverChecksInProgress > 0) _serverChecksInProgress -= 1;
+    if (_serverChecksInProgress == 0) _setBusy(false);
   }
 
   Future<void> _clearLocalAuthentication() async {
@@ -551,10 +689,11 @@ class ServerProvider with ChangeNotifier {
         onAuthInvalidated: onAuthInvalidated,
       );
 
-  TokenStore _createTokenStore() {
-    final rawStore = _serverUrl.isEmpty
+  TokenStore _createTokenStore({String? serverUrl}) {
+    final storageServerUrl = serverUrl ?? _serverUrl;
+    final rawStore = storageServerUrl.isEmpty
         ? MemoryTokenStore()
-        : _tokenStoreFactory(_serverUrl);
+        : _tokenStoreFactory(storageServerUrl);
     _watchTokenStorageStatus(rawStore);
     return _tokenStoreScopes.scope(rawStore);
   }
@@ -592,6 +731,7 @@ class ServerProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _tokenStorageStatusSource?.removeListener(_handleTokenStorageStatus);
     _tokenStoreScopes.invalidateCurrentScope();
     _api?.close();

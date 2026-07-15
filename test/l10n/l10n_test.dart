@@ -68,6 +68,18 @@ void main() {
     expect(zh.aboutAppDescription, contains('点名现场工作流'));
     expect(en.aboutAppTitle, 'About OpenLogTool');
     expect(en.aboutAppDescription, contains('net-control workflows'));
+    expect(zh.aboutCheckUpdates, '检查更新');
+    expect(en.aboutCheckUpdates, 'Check for updates');
+    expect(zh.aboutUpToDate('2.1.0-R'), contains('2.1.0-R'));
+    expect(en.aboutUpToDate('2.1.0-R'), contains('up to date'));
+    expect(
+      zh.aboutUpdateAvailableMessage('2.1.0-R', '2.2.0-R'),
+      contains('最新版本：2.2.0-R'),
+    );
+    expect(
+      en.aboutUpdateAvailableMessage('2.1.0-R', '2.2.0-R'),
+      contains('Latest version: 2.2.0-R'),
+    );
     expect(zh.createEditableLocalCopy, '停止协作并创建本地副本');
     expect(
       zh.createEditableLocalCopyConfirmation('周日晚间点名'),
