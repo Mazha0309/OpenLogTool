@@ -2560,6 +2560,55 @@ abstract class AppLocalizations {
   /// **'版本信息已复制'**
   String get aboutVersionInfoCopied;
 
+  /// No description provided for @aboutCheckUpdates.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新'**
+  String get aboutCheckUpdates;
+
+  /// No description provided for @aboutCheckingUpdates.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查…'**
+  String get aboutCheckingUpdates;
+
+  /// No description provided for @aboutUpToDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前已是最新版本（{version}）'**
+  String aboutUpToDate(String version);
+
+  /// No description provided for @aboutUpdateAvailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现新版本'**
+  String get aboutUpdateAvailableTitle;
+
+  /// No description provided for @aboutUpdateAvailableMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本：{currentVersion}\n最新版本：{latestVersion}'**
+  String aboutUpdateAvailableMessage(
+      String currentVersion, String latestVersion);
+
+  /// No description provided for @aboutOpenRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看并下载'**
+  String get aboutOpenRelease;
+
+  /// No description provided for @aboutUpdateLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'稍后'**
+  String get aboutUpdateLater;
+
+  /// No description provided for @aboutUpdateCheckFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新失败，请检查网络后重试'**
+  String get aboutUpdateCheckFailed;
+
   /// No description provided for @aboutProjectSection.
   ///
   /// In zh, this message translates to:

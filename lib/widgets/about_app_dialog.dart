@@ -3,9 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/services/github_release_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 typedef AboutLinkLauncher = Future<bool> Function(Uri uri);
+typedef AboutUpdateChecker = Future<ReleaseUpdateCheck> Function(
+  String currentVersion,
+);
 
 class AboutAppDialog extends StatelessWidget {
   const AboutAppDialog({
@@ -15,18 +19,22 @@ class AboutAppDialog extends StatelessWidget {
     required this.buildNumber,
     required this.commitHash,
     this.linkLauncher,
+    this.updateChecker,
   });
 
   static final Uri repositoryUri =
       Uri.parse('https://github.com/Mazha0309/OpenLogTool');
   static final Uri issueTrackerUri =
       Uri.parse('https://github.com/Mazha0309/OpenLogTool/issues');
+  static final GitHubReleaseService _githubReleaseService =
+      GitHubReleaseService();
 
   final String appName;
   final String fullVersion;
   final String buildNumber;
   final String commitHash;
   final AboutLinkLauncher? linkLauncher;
+  final AboutUpdateChecker? updateChecker;
 
   bool get _hasBuildNumber =>
       buildNumber.trim().isNotEmpty && buildNumber.trim() != '0';
@@ -78,6 +86,9 @@ class AboutAppDialog extends StatelessWidget {
                       buildNumber: buildNumber,
                       commitHash: commitHash,
                       onCopy: () => _copyVersionInformation(context),
+                      checkForUpdate:
+                          updateChecker ?? _githubReleaseService.checkForUpdate,
+                      onOpenRelease: (uri) => _openExternal(context, uri),
                     ),
                     const SizedBox(height: 24),
                     _SectionTitle(context.l10n.aboutProjectSection),
@@ -285,12 +296,16 @@ class _VersionCard extends StatelessWidget {
     required this.buildNumber,
     required this.commitHash,
     required this.onCopy,
+    required this.checkForUpdate,
+    required this.onOpenRelease,
   });
 
   final String fullVersion;
   final String buildNumber;
   final String commitHash;
   final VoidCallback onCopy;
+  final AboutUpdateChecker checkForUpdate;
+  final Future<void> Function(Uri uri) onOpenRelease;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -323,16 +338,123 @@ class _VersionCard extends StatelessWidget {
             const SizedBox(height: 12),
             Align(
               alignment: AlignmentDirectional.centerEnd,
-              child: TextButton.icon(
-                key: const Key('about-copy-version'),
-                onPressed: onCopy,
-                icon: const Icon(Icons.copy_outlined, size: 18),
-                label: Text(context.l10n.aboutCopyVersionInfo),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  TextButton.icon(
+                    key: const Key('about-copy-version'),
+                    onPressed: onCopy,
+                    icon: const Icon(Icons.copy_outlined, size: 18),
+                    label: Text(context.l10n.aboutCopyVersionInfo),
+                  ),
+                  _UpdateCheckButton(
+                    currentVersion: fullVersion,
+                    checkForUpdate: checkForUpdate,
+                    onOpenRelease: onOpenRelease,
+                  ),
+                ],
               ),
             ),
           ],
         ),
       );
+}
+
+class _UpdateCheckButton extends StatefulWidget {
+  const _UpdateCheckButton({
+    required this.currentVersion,
+    required this.checkForUpdate,
+    required this.onOpenRelease,
+  });
+
+  final String currentVersion;
+  final AboutUpdateChecker checkForUpdate;
+  final Future<void> Function(Uri uri) onOpenRelease;
+
+  @override
+  State<_UpdateCheckButton> createState() => _UpdateCheckButtonState();
+}
+
+class _UpdateCheckButtonState extends State<_UpdateCheckButton> {
+  bool _checking = false;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+        key: const Key('about-check-updates'),
+        onPressed: _checking ? null : _checkForUpdate,
+        icon: _checking
+            ? const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.system_update_alt_outlined, size: 18),
+        label: Text(
+          _checking
+              ? context.l10n.aboutCheckingUpdates
+              : context.l10n.aboutCheckUpdates,
+        ),
+      );
+
+  Future<void> _checkForUpdate() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+
+    try {
+      final result = await widget.checkForUpdate(widget.currentVersion);
+      if (!mounted) return;
+      setState(() => _checking = false);
+
+      if (!result.updateAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.aboutUpToDate(result.latestVersion)),
+          ),
+        );
+        return;
+      }
+
+      await _showUpdateAvailable(result);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _checking = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.aboutUpdateCheckFailed)),
+      );
+    }
+  }
+
+  Future<void> _showUpdateAvailable(ReleaseUpdateCheck result) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('about-update-available-dialog'),
+        title: Text(context.l10n.aboutUpdateAvailableTitle),
+        content: Text(
+          context.l10n.aboutUpdateAvailableMessage(
+            result.currentVersion,
+            result.latestVersion,
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('about-update-later'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.aboutUpdateLater),
+          ),
+          FilledButton(
+            key: const Key('about-open-release'),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              widget.onOpenRelease(result.releaseUri);
+            },
+            child: Text(context.l10n.aboutOpenRelease),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _VersionRow extends StatelessWidget {
