@@ -80,6 +80,260 @@ void main() {
     provider.dispose();
   });
 
+  test('production startup restores auth and probes server info once',
+      () async {
+    const serverUrl = 'https://example.test';
+    SharedPreferences.setMockInitialValues({'server_url': serverUrl});
+    final sessions = <String, AuthSessionDto?>{
+      serverUrl: AuthSessionDto.fromJson(_authJsonFor('alice')),
+    };
+    var serverInfoRequests = 0;
+    final client = MockClient((request) async {
+      expect(request.method, 'GET');
+      expect(request.url.path, '/api/v1/server-info');
+      expect(request.headers['authorization'], isNull);
+      serverInfoRequests += 1;
+      return _jsonResponse(_serverInfoJson);
+    });
+    final provider = ServerProvider(
+      tokenStoreFactory: (url) => _BackedTokenStore(sessions, url),
+      apiFactory: ({
+        required baseUri,
+        required tokenStore,
+        required deviceId,
+        required onAuthInvalidated,
+      }) =>
+          ServerApi(
+        baseUri: baseUri,
+        tokenStore: tokenStore,
+        deviceId: deviceId,
+        onAuthInvalidated: onAuthInvalidated,
+        httpClient: client,
+      ),
+    );
+
+    await provider.ready;
+
+    expect(provider.isLoggedIn, isTrue);
+    expect(provider.username, 'alice');
+    expect(provider.serverInfo?.serverInstanceId, 'server-1');
+    expect(provider.isServerReachable, isTrue);
+    expect(provider.lastErrorCode, isNull);
+    expect(serverInfoRequests, 1);
+    provider.dispose();
+  });
+
+  test('a failed startup probe keeps restored authentication', () async {
+    const serverUrl = 'https://example.test';
+    SharedPreferences.setMockInitialValues({'server_url': serverUrl});
+    final sessions = <String, AuthSessionDto?>{
+      serverUrl: AuthSessionDto.fromJson(_authJsonFor('alice')),
+    };
+    final client = MockClient((request) async {
+      throw http.ClientException('server offline', request.url);
+    });
+    final provider = ServerProvider(
+      tokenStoreFactory: (url) => _BackedTokenStore(sessions, url),
+      apiFactory: ({
+        required baseUri,
+        required tokenStore,
+        required deviceId,
+        required onAuthInvalidated,
+      }) =>
+          ServerApi(
+        baseUri: baseUri,
+        tokenStore: tokenStore,
+        deviceId: deviceId,
+        onAuthInvalidated: onAuthInvalidated,
+        httpClient: client,
+      ),
+    );
+
+    await provider.ready;
+
+    expect(provider.isLoggedIn, isTrue);
+    expect(provider.username, 'alice');
+    expect(provider.serverInfo, isNull);
+    expect(provider.isServerReachable, isFalse);
+    expect(provider.lastErrorCode, 'NETWORK_ERROR');
+    expect(sessions[serverUrl]?.refreshToken, 'refresh-alice');
+    provider.dispose();
+  });
+
+  test('failed manual recheck marks server offline without logging out',
+      () async {
+    const serverUrl = 'https://example.test';
+    final sessions = <String, AuthSessionDto?>{};
+    var serverOnline = true;
+    final client = MockClient((request) async {
+      switch ('${request.method} ${request.url.path}') {
+        case 'GET /api/v1/server-info':
+          if (!serverOnline) {
+            throw http.ClientException('server offline', request.url);
+          }
+          return _jsonResponse(_serverInfoJson);
+        case 'POST /api/v1/auth/login':
+          return _jsonResponse(_authJsonFor('alice'));
+        default:
+          fail('Unexpected request: ${request.method} ${request.url}');
+      }
+    });
+    final provider = _providerWithBackedStore(client, sessions);
+    await provider.setServerUrl(serverUrl);
+    await provider.checkServer();
+    await provider.login('alice', 'password');
+    expect(provider.serverInfo, isNotNull);
+    expect(provider.isLoggedIn, isTrue);
+
+    serverOnline = false;
+    await expectLater(
+      provider.checkServer(),
+      throwsA(
+        isA<ServerApiException>().having(
+          (error) => error.code,
+          'code',
+          'NETWORK_ERROR',
+        ),
+      ),
+    );
+
+    expect(provider.serverInfo?.serverInstanceId, 'server-1');
+    expect(provider.isServerReachable, isFalse);
+    expect(provider.lastErrorCode, 'NETWORK_ERROR');
+    expect(provider.isLoggedIn, isTrue);
+    expect(sessions[serverUrl]?.refreshToken, 'refresh-alice');
+    provider.dispose();
+  });
+
+  test('equivalent server URL spellings preserve the auth context', () async {
+    const storedUrl = 'HTTPS://EXAMPLE.TEST:443/api/v1/';
+    const canonicalUrl = 'https://example.test';
+    SharedPreferences.setMockInitialValues({'server_url': storedUrl});
+    final sessions = <String, AuthSessionDto?>{
+      storedUrl: AuthSessionDto.fromJson(_authJsonFor('alice')),
+    };
+    final provider = ServerProvider(
+      autoLoadSettings: false,
+      tokenStoreFactory: (url) => _BackedTokenStore(sessions, url),
+    );
+    await provider.loadSettings();
+    expect(provider.serverUrl, storedUrl);
+    expect(provider.isLoggedIn, isTrue);
+    final authenticatedRevision = provider.contextRevision;
+
+    await provider.setServerUrl(canonicalUrl);
+
+    // Keep the original binding identity while treating the address as the
+    // same server for authentication purposes.
+    expect(provider.serverUrl, storedUrl);
+    expect(provider.contextRevision, authenticatedRevision);
+    expect(provider.isLoggedIn, isTrue);
+    expect(sessions[storedUrl]?.refreshToken, 'refresh-alice');
+    provider.dispose();
+  });
+
+  test('a genuinely different server retains context-switch logout semantics',
+      () async {
+    const firstUrl = 'https://one.example';
+    final sessions = <String, AuthSessionDto?>{};
+    final client = MockClient((request) async {
+      switch ('${request.method} ${request.url.path}') {
+        case 'GET /api/v1/server-info':
+          return _jsonResponse(_serverInfoJson);
+        case 'POST /api/v1/auth/login':
+          return _jsonResponse(_authJsonFor('alice'));
+        default:
+          fail('Unexpected request: ${request.method} ${request.url}');
+      }
+    });
+    final provider = _providerWithBackedStore(client, sessions);
+    await provider.setServerUrl(firstUrl);
+    await provider.checkServer();
+    await provider.login('alice', 'password');
+    expect(sessions[firstUrl], isNotNull);
+
+    await provider.setServerUrl('https://two.example');
+
+    expect(provider.serverUrl, 'https://two.example');
+    expect(provider.isLoggedIn, isFalse);
+    expect(provider.serverInfo, isNull);
+    expect(provider.isServerReachable, isFalse);
+    expect(sessions[firstUrl], isNull);
+    provider.dispose();
+  });
+
+  test('failed candidate probe preserves the current server and login',
+      () async {
+    const currentUrl = 'https://current.example';
+    final sessions = <String, AuthSessionDto?>{};
+    final client = MockClient((request) async {
+      if (request.url.host == 'offline.example') {
+        throw http.ClientException('server offline', request.url);
+      }
+      switch ('${request.method} ${request.url.path}') {
+        case 'GET /api/v1/server-info':
+          return _jsonResponse(_serverInfoJson);
+        case 'POST /api/v1/auth/login':
+          return _jsonResponse(_authJsonFor('alice'));
+        default:
+          fail('Unexpected request: ${request.method} ${request.url}');
+      }
+    });
+    final provider = _providerWithBackedStore(client, sessions);
+    await provider.setServerUrl(currentUrl);
+    await provider.checkServer();
+    await provider.login('alice', 'password');
+
+    await expectLater(
+      provider.saveAndCheckServerUrl('https://offline.example'),
+      throwsA(isA<ServerApiException>()),
+    );
+
+    expect(provider.serverUrl, currentUrl);
+    expect(provider.isLoggedIn, isTrue);
+    expect(provider.isServerReachable, isTrue);
+    expect(provider.serverInfo?.serverInstanceId, 'server-1');
+    expect(provider.lastErrorCode, isNull);
+    expect(sessions[currentUrl]?.refreshToken, 'refresh-alice');
+    provider.dispose();
+  });
+
+  test('new server URLs normalize scheme host API suffix and default ports',
+      () async {
+    final httpsProvider = ServerProvider(autoLoadSettings: false);
+    await httpsProvider.setServerUrl(
+      '  HTTPS://EXAMPLE.TEST:443/api/v1///  ',
+    );
+    expect(httpsProvider.serverUrl, 'https://example.test');
+    httpsProvider.dispose();
+
+    final httpProvider = ServerProvider(autoLoadSettings: false);
+    await httpProvider.setServerUrl('HTTP://EXAMPLE.TEST:80/api/v1/');
+    expect(httpProvider.serverUrl, 'http://example.test');
+    httpProvider.dispose();
+  });
+
+  test('same-context concurrent checks share one public request', () async {
+    final response = Completer<http.Response>();
+    var requestCount = 0;
+    final client = MockClient((request) {
+      requestCount += 1;
+      return response.future;
+    });
+    final provider = _provider(client);
+    await provider.setServerUrl('https://example.test');
+
+    final first = provider.checkServer();
+    final second = provider.checkServer();
+    expect(identical(first, second), isTrue);
+    response.complete(_jsonResponse(_serverInfoJson));
+    await Future.wait([first, second]);
+
+    expect(requestCount, 1);
+    expect(provider.isServerReachable, isTrue);
+    provider.dispose();
+  });
+
   test('device id update keeps an in-flight refresh rotation persisted',
       () async {
     const serverUrl = 'https://example.test';

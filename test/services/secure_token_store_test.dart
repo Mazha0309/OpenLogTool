@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
@@ -8,7 +11,7 @@ void main() {
     final values = _MemorySecureValues();
     final session = _session();
     final first = SecureTokenStore(
-      serverUrl: 'https://example.test/',
+      serverUrl: '  HTTPS://EXAMPLE.TEST:443/api/v1/  ',
       secureValues: values,
     );
 
@@ -22,6 +25,49 @@ void main() {
     expect(restored?.accessToken, session.accessToken);
     expect(restored?.refreshToken, session.refreshToken);
     expect(restored?.user.id, session.user.id);
+  });
+
+  test('migrates a credential stored under the legacy raw URL key', () async {
+    const legacyUrl = 'HTTPS://EXAMPLE.TEST:443/api/v1/';
+    final values = _MemorySecureValues();
+    final session = _session();
+    final legacyNormalized = legacyUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final legacyDigest =
+        sha256.convert(utf8.encode(legacyNormalized)).toString();
+    final legacyKey = 'openlogtool.auth.v1.$legacyDigest';
+    values.values[legacyKey] = jsonEncode(session.toJson());
+    final store = SecureTokenStore(
+      serverUrl: legacyUrl,
+      secureValues: values,
+    );
+
+    final restored = await store.read();
+
+    expect(restored?.refreshToken, session.refreshToken);
+    expect(values.values.containsKey(legacyKey), isFalse);
+    expect(values.values, hasLength(1));
+  });
+
+  test('returns a legacy credential when key migration cannot be written',
+      () async {
+    const legacyUrl = 'HTTPS://EXAMPLE.TEST:443/api/v1/';
+    final values = _ControllableSecureValues();
+    final session = _session();
+    final legacyNormalized = legacyUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final legacyDigest =
+        sha256.convert(utf8.encode(legacyNormalized)).toString();
+    final legacyKey = 'openlogtool.auth.v1.$legacyDigest';
+    values.values[legacyKey] = jsonEncode(session.toJson());
+    values.failWrite = true;
+    final store = SecureTokenStore(
+      serverUrl: legacyUrl,
+      secureValues: values,
+    );
+
+    final restored = await store.read();
+
+    expect(restored?.refreshToken, session.refreshToken);
+    expect(values.values[legacyKey], isNotNull);
   });
 
   test('isolates sessions by server origin and clears only its own session',

@@ -30,7 +30,10 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final provider = context.read<ServerProvider>();
+    // Listen here so an asynchronously restored server URL reaches the field
+    // even though the settings page is already mounted in Home's IndexedStack.
+    // Keep a user's in-progress edit untouched.
+    final provider = Provider.of<ServerProvider>(context);
     if (!_initializedUrl) {
       _serverUrlController.text = provider.serverUrl;
       _initializedUrl = true;
@@ -294,11 +297,14 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
   }
 
   Future<void> _saveAndCheck(ServerProvider server) async {
+    final candidateUrl = _serverUrlController.text.trim();
     try {
-      await server.setServerUrl(_serverUrlController.text.trim());
-      _urlEdited = false;
-      final info = await server.checkServer();
+      final info = await server.saveAndCheckServerUrl(candidateUrl);
       if (!mounted) return;
+      _urlEdited = false;
+      if (_serverUrlController.text != server.serverUrl) {
+        _serverUrlController.text = server.serverUrl;
+      }
       context.showLoggedSnackBar(
         SnackBar(
           content: Text(
@@ -316,7 +322,7 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
           content: Text(
             localizedServerConnectionError(
               l10n: context.l10n,
-              serverUrl: server.serverUrl,
+              serverUrl: candidateUrl,
               error: error,
             ),
           ),
@@ -447,7 +453,7 @@ class _ConnectionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final connected = server.serverInfo != null;
+    final connected = server.isServerReachable;
     return Chip(
       visualDensity: VisualDensity.compact,
       avatar: Icon(
