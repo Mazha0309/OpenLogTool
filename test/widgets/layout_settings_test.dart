@@ -33,6 +33,14 @@ void main() {
     expect(find.textContaining('宽屏平行布局'), findsNothing);
     expect(find.text('分页显示记录'), findsOneWidget);
     expect(find.text('呼号历史一键复用'), findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const Key('pagination-enabled-toggle')),
+          )
+          .value,
+      isTrue,
+    );
     settings.dispose();
   });
 

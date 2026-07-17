@@ -154,7 +154,10 @@ Future<void> _pumpScreen(
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: CollaborationScreen(publicShareUriOpener: opener),
+        home: CollaborationScreen(
+          publicShareUriOpener: opener,
+          focusPublicShare: true,
+        ),
       ),
     ),
   );

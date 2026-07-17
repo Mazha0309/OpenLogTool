@@ -227,6 +227,22 @@ class RustApi {
     );
   }
 
+  static Future<DictItem> renameDictItem({
+    required String dictType,
+    required String oldRaw,
+    required String newRaw,
+    String? pinyin,
+    String? abbreviation,
+  }) {
+    return dict.renameDictItem(
+      dictType: dictType,
+      oldRaw: oldRaw,
+      newRaw: newRaw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+    );
+  }
+
   static Future<void> bulkUpsertDictItems({required String requestJson}) {
     return dict.bulkUpsertDictItems(requestJson: requestJson);
   }

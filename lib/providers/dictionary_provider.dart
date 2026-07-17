@@ -36,6 +36,14 @@ typedef DictionaryClearItems = Future<void> Function({
   required String dictType,
 });
 
+typedef DictionaryRenameItem = Future<bridge.DictItem> Function({
+  required String dictType,
+  required String oldRaw,
+  required String newRaw,
+  String? pinyin,
+  String? abbreviation,
+});
+
 typedef DictionaryAssetLoader = Future<String> Function(String assetPath);
 
 class _RawPinyinAbbrev {
@@ -60,6 +68,7 @@ class DictionaryProvider with ChangeNotifier {
   final DictionaryGetItems _getItems;
   final DictionaryDeleteItem _deleteItem;
   final DictionaryClearItems _clearItems;
+  final DictionaryRenameItem _renameItem;
   final DictionaryAssetLoader _loadAssetString;
 
   List<DictionaryItem> get deviceDict => _deviceDict;
@@ -86,6 +95,7 @@ class DictionaryProvider with ChangeNotifier {
     DictionaryGetItems? getItems,
     DictionaryDeleteItem? deleteItem,
     DictionaryClearItems? clearItems,
+    DictionaryRenameItem? renameItem,
     DictionaryAssetLoader? loadAssetString,
   })  : _upsertItem = upsertItem ?? RustApi.upsertDictItem,
         _upsertActiveItem = upsertActiveItem ?? RustApi.upsertDictItemIfActive,
@@ -97,6 +107,7 @@ class DictionaryProvider with ChangeNotifier {
         _getItems = getItems ?? RustApi.getDictItems,
         _deleteItem = deleteItem ?? RustApi.softDeleteDictItem,
         _clearItems = clearItems ?? RustApi.softDeleteDictItems,
+        _renameItem = renameItem ?? RustApi.renameDictItem,
         _loadAssetString = loadAssetString ?? rootBundle.loadString {
     if (autoload) scheduleMicrotask(_loadDictionaries);
   }
@@ -355,12 +366,7 @@ class DictionaryProvider with ChangeNotifier {
     final jsonData = json.decode(jsonString);
 
     if (jsonData is Map) {
-      return _importDictionaryBatch(<String, List<_RawPinyinAbbrev>>{
-        'device': _extractTypedItems(jsonData['devices']),
-        'antenna': _extractTypedItems(jsonData['antennas']),
-        'callsign': _extractTypedItems(jsonData['callsigns']),
-        'qth': _extractTypedItems(jsonData['qths']),
-      });
+      return _importDictionaryBatch(_extractDictionaryMap(jsonData));
     } else if (jsonData is List) {
       return _importDictionaryBatch(<String, List<_RawPinyinAbbrev>>{
         'device': _extractTypedItems(jsonData),
@@ -368,6 +374,95 @@ class DictionaryProvider with ChangeNotifier {
     }
 
     return <String, int>{};
+  }
+
+  /// Serializes all four lookup libraries without local database identifiers.
+  ///
+  /// The plural top-level arrays intentionally match the existing import
+  /// format. Each entry includes its searchable pinyin and abbreviation so a
+  /// round trip preserves lookup behavior.
+  String exportToJson() {
+    List<Map<String, String>> encodeItems(List<DictionaryItem> items) => items
+        .map(
+          (item) => <String, String>{
+            'raw': item.raw,
+            if (item.pinyin.trim().isNotEmpty) 'pinyin': item.pinyin,
+            if (item.abbreviation.trim().isNotEmpty)
+              'abbreviation': item.abbreviation,
+          },
+        )
+        .toList(growable: false);
+
+    return const JsonEncoder.withIndent('  ').convert(<String, Object>{
+      'format': 'openlogtool-dictionaries',
+      'version': 1,
+      'devices': encodeItems(_deviceDict),
+      'antennas': encodeItems(_antennaDict),
+      'callsigns': encodeItems(_callsignDict),
+      'qths': encodeItems(_qthDict),
+    });
+  }
+
+  Map<String, List<_RawPinyinAbbrev>> _extractDictionaryMap(Map data) {
+    final nested = data['dictionaries'] is Map
+        ? data['dictionaries'] as Map
+        : const <Object?, Object?>{};
+    dynamic firstValue(List<String> keys) {
+      for (final key in keys) {
+        if (data.containsKey(key)) return data[key];
+        if (nested.containsKey(key)) return nested[key];
+      }
+      return null;
+    }
+
+    final requested = <String, List<_RawPinyinAbbrev>>{
+      'device': _extractTypedItems(firstValue(const <String>[
+        'devices',
+        'device',
+        'deviceDict',
+        'device_dictionary',
+      ])),
+      'antenna': _extractTypedItems(firstValue(const <String>[
+        'antennas',
+        'antenna',
+        'antennaDict',
+        'antenna_dictionary',
+      ])),
+      'callsign': _extractTypedItems(firstValue(const <String>[
+        'callsigns',
+        'callsign',
+        'callsignDict',
+        'callsign_dictionary',
+      ])),
+      'qth': _extractTypedItems(firstValue(const <String>[
+        'qths',
+        'qth',
+        'qthDict',
+        'qth_dictionary',
+      ])),
+    };
+
+    final flatItems = data['items'];
+    if (flatItems is List) {
+      const typeAliases = <String, String>{
+        'device': 'device',
+        'device_dictionary': 'device',
+        'antenna': 'antenna',
+        'antenna_dictionary': 'antenna',
+        'callsign': 'callsign',
+        'callsign_dictionary': 'callsign',
+        'qth': 'qth',
+        'qth_dictionary': 'qth',
+      };
+      for (final rawItem in flatItems) {
+        if (rawItem is! Map) continue;
+        final type = typeAliases[
+            (rawItem['dictType'] ?? rawItem['type'])?.toString().trim()];
+        if (type == null) continue;
+        requested[type]!.addAll(_extractTypedItems(<Object?>[rawItem]));
+      }
+    }
+    return requested;
   }
 
   Future<Map<String, int>> _importDictionaryBatch(
@@ -539,6 +634,88 @@ class DictionaryProvider with ChangeNotifier {
 
   Future<void> deleteQth(String raw) async {
     await _deleteDictItem('qth_dictionary', raw, _qthDict);
+  }
+
+  Future<void> renameDevice(String oldRaw, String newRaw) async {
+    await _renameDictItem(
+      'device_dictionary',
+      oldRaw,
+      newRaw,
+      _deviceDict,
+    );
+  }
+
+  Future<void> renameAntenna(String oldRaw, String newRaw) async {
+    await _renameDictItem(
+      'antenna_dictionary',
+      oldRaw,
+      newRaw,
+      _antennaDict,
+    );
+  }
+
+  Future<void> renameCallsign(String oldRaw, String newRaw) async {
+    await _renameDictItem(
+      'callsign_dictionary',
+      oldRaw,
+      newRaw,
+      _callsignDict,
+    );
+  }
+
+  Future<void> renameQth(String oldRaw, String newRaw) async {
+    await _renameDictItem('qth_dictionary', oldRaw, newRaw, _qthDict);
+  }
+
+  Future<void> _renameDictItem(
+    String dictType,
+    String oldRaw,
+    String newRaw,
+    List<DictionaryItem> target,
+  ) async {
+    final normalizedOldRaw = oldRaw.trim();
+    final normalizedNewRaw = newRaw.trim();
+    if (normalizedOldRaw.isEmpty || normalizedNewRaw.isEmpty) {
+      throw ArgumentError('Dictionary entry is empty');
+    }
+    if (normalizedOldRaw == normalizedNewRaw) return;
+    if (target.any((item) => item.raw == normalizedNewRaw)) {
+      throw StateError('DICTIONARY_RENAME_TARGET_EXISTS');
+    }
+    final index = target.indexWhere((item) => item.raw == normalizedOldRaw);
+    if (index < 0) {
+      throw StateError('DICTIONARY_RENAME_SOURCE_NOT_FOUND');
+    }
+
+    final generated = DictionaryPinyinHelper.generate(normalizedNewRaw);
+    await _renameItem(
+      dictType: dictType,
+      oldRaw: normalizedOldRaw,
+      newRaw: normalizedNewRaw,
+      pinyin: generated.pinyin,
+      abbreviation: generated.abbreviation,
+    );
+
+    // Read both names back before mutating visible state. A failed or partial
+    // persistence implementation therefore never makes the UI look renamed.
+    final persisted = await _getItemByRaw(
+      dictType: dictType,
+      raw: normalizedNewRaw,
+    );
+    final staleSource = await _getItemByRaw(
+      dictType: dictType,
+      raw: normalizedOldRaw,
+    );
+    if (persisted == null || staleSource != null) {
+      throw StateError(
+        'DICT_ITEM_RENAME_FAILED: $dictType/$normalizedOldRaw',
+      );
+    }
+
+    target[index] = _toOldDictItem(persisted);
+    target.sort((a, b) => a.raw.compareTo(b.raw));
+    _safeNotify();
+    await _notifyDictionaryChanged();
   }
 
   Future<void> _deleteDictItem(

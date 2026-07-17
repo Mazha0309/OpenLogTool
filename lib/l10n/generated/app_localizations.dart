@@ -289,7 +289,7 @@ abstract class AppLocalizations {
   /// No description provided for @noCurrentSessionHint.
   ///
   /// In zh, this message translates to:
-  /// **'返回点名台创建会话后即可开始记录。'**
+  /// **'创建一个点名会话后即可开始记录。'**
   String get noCurrentSessionHint;
 
   /// No description provided for @sessionActive.
@@ -748,6 +748,12 @@ abstract class AppLocalizations {
   /// **'主控'**
   String get fieldController;
 
+  /// No description provided for @fieldControllerCallsign.
+  ///
+  /// In zh, this message translates to:
+  /// **'主控呼号'**
+  String get fieldControllerCallsign;
+
   /// No description provided for @fieldCallsign.
   ///
   /// In zh, this message translates to:
@@ -813,6 +819,102 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'备注'**
   String get fieldRemarks;
+
+  /// No description provided for @fieldActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作'**
+  String get fieldActions;
+
+  /// No description provided for @inputFieldHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入{field}'**
+  String inputFieldHint(String field);
+
+  /// No description provided for @optionalFieldHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'{field}（可选）'**
+  String optionalFieldHint(String field);
+
+  /// No description provided for @noSavedRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无已保存记录'**
+  String get noSavedRecords;
+
+  /// No description provided for @addFirstRecordHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在上方表单中添加第一条记录。'**
+  String get addFirstRecordHint;
+
+  /// No description provided for @editRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑记录'**
+  String get editRecord;
+
+  /// No description provided for @deleteRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除记录'**
+  String get deleteRecord;
+
+  /// No description provided for @deleteRecordConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定要删除这条记录吗？'**
+  String get deleteRecordConfirmation;
+
+  /// No description provided for @delete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get delete;
+
+  /// No description provided for @recordDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录已删除'**
+  String get recordDeleted;
+
+  /// No description provided for @savedRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存记录'**
+  String get savedRecords;
+
+  /// No description provided for @recordCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条'**
+  String recordCount(int count);
+
+  /// No description provided for @restoreLastDeletedRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复最近删除'**
+  String get restoreLastDeletedRecord;
+
+  /// No description provided for @restoreLastDeletedRecordTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复最近删除的记录？'**
+  String get restoreLastDeletedRecordTitle;
+
+  /// No description provided for @restoreLastDeletedRecordConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将恢复最近一次删除的点名记录，不会影响其他记录。'**
+  String get restoreLastDeletedRecordConfirmation;
+
+  /// No description provided for @recordRestored.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录已恢复'**
+  String get recordRestored;
 
   /// No description provided for @saveRecord.
   ///
@@ -2771,6 +2873,150 @@ abstract class AppLocalizations {
   /// **'应用设置'**
   String get settingsTitle;
 
+  /// No description provided for @settingsSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'统一管理应用外观、点名台行为、主控显示、服务器账户和本机数据。'**
+  String get settingsSubtitle;
+
+  /// No description provided for @settingsAppearanceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'外观与语言'**
+  String get settingsAppearanceTitle;
+
+  /// No description provided for @settingsAppearanceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择主题、字体和界面语言；修改后立即应用。'**
+  String get settingsAppearanceHint;
+
+  /// No description provided for @themeColorSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题颜色'**
+  String get themeColorSetting;
+
+  /// No description provided for @themeColorSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置应用按钮、选中状态与强调内容的主色调。'**
+  String get themeColorSettingHint;
+
+  /// No description provided for @chooseThemeColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择颜色'**
+  String get chooseThemeColor;
+
+  /// No description provided for @darkModeSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'深色模式'**
+  String get darkModeSetting;
+
+  /// No description provided for @darkModeSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换应用的明暗配色。'**
+  String get darkModeSettingHint;
+
+  /// No description provided for @appFontSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用字体'**
+  String get appFontSetting;
+
+  /// No description provided for @appFontSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择界面显示字体。'**
+  String get appFontSettingHint;
+
+  /// No description provided for @appLanguageSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'界面语言'**
+  String get appLanguageSetting;
+
+  /// No description provided for @appLanguageSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可跟随系统，也可固定为简体中文或 English。'**
+  String get appLanguageSettingHint;
+
+  /// No description provided for @languageFollowSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随系统'**
+  String get languageFollowSystem;
+
+  /// No description provided for @languageSimplifiedChinese.
+  ///
+  /// In zh, this message translates to:
+  /// **'简体中文'**
+  String get languageSimplifiedChinese;
+
+  /// No description provided for @languageEnglish.
+  ///
+  /// In zh, this message translates to:
+  /// **'English'**
+  String get languageEnglish;
+
+  /// No description provided for @layoutSettingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'点名台与布局'**
+  String get layoutSettingsTitle;
+
+  /// No description provided for @layoutSettingsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'调整点名台宽度、分页和录入辅助行为。'**
+  String get layoutSettingsHint;
+
+  /// No description provided for @paginationSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'分页显示记录'**
+  String get paginationSetting;
+
+  /// No description provided for @paginationSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'每 5 条记录分为一页显示。'**
+  String get paginationSettingHint;
+
+  /// No description provided for @controllerDisplaySettingsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置主控设备入口、独立窗口和默认显示内容。'**
+  String get controllerDisplaySettingsHint;
+
+  /// No description provided for @serverSettingsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置协作服务器并管理当前账户和登录设备。'**
+  String get serverSettingsHint;
+
+  /// No description provided for @settingsSupportTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用信息与设置维护'**
+  String get settingsSupportTitle;
+
+  /// No description provided for @settingsSupportHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看版本与开源信息，或恢复界面和录入偏好。'**
+  String get settingsSupportHint;
+
+  /// No description provided for @restoreDefaultSettingsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复外观、语言、布局和导出偏好，不影响记录与登录状态。'**
+  String get restoreDefaultSettingsHint;
+
   /// No description provided for @snackbarLogTitle.
   ///
   /// In zh, this message translates to:
@@ -2798,7 +3044,7 @@ abstract class AppLocalizations {
   /// No description provided for @resetSettingsConfirmation.
   ///
   /// In zh, this message translates to:
-  /// **'将外观、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。'**
+  /// **'将外观、语言、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。'**
   String get resetSettingsConfirmation;
 
   /// No description provided for @resetSettingsConfirmAction.
@@ -2990,7 +3236,7 @@ abstract class AppLocalizations {
   /// No description provided for @databaseImportPreviewWarning.
   ///
   /// In zh, this message translates to:
-  /// **'导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和外观设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。'**
+  /// **'导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和应用设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。'**
   String get databaseImportPreviewWarning;
 
   /// No description provided for @databaseImportCollaborationWarning.
@@ -3106,6 +3352,679 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前会话已不是本机协作副本，请刷新页面后重试。'**
   String get localCollaborationRequired;
+
+  /// No description provided for @dataTransferTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据导入与导出'**
+  String get dataTransferTitle;
+
+  /// No description provided for @dataTransferSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份、迁移或分享当前会话的点名记录，并配置 Excel 输出样式。'**
+  String get dataTransferSubtitle;
+
+  /// No description provided for @dataTransferActionsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录文件'**
+  String get dataTransferActionsTitle;
+
+  /// No description provided for @dataTransferActionsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'JSON 适合完整数据迁移，Excel 适合查看、分享和打印。'**
+  String get dataTransferActionsHint;
+
+  /// No description provided for @exportDataTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出数据'**
+  String get exportDataTitle;
+
+  /// No description provided for @exportDataHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'将当前会话中的点名记录导出为文件'**
+  String get exportDataHint;
+
+  /// No description provided for @exportJson.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出 JSON'**
+  String get exportJson;
+
+  /// No description provided for @exportExcel.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出 Excel'**
+  String get exportExcel;
+
+  /// No description provided for @importDataTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入数据'**
+  String get importDataTitle;
+
+  /// No description provided for @importDataHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'从文件导入点名记录到当前会话'**
+  String get importDataHint;
+
+  /// No description provided for @importJson.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 JSON'**
+  String get importJson;
+
+  /// No description provided for @importExcel.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 Excel'**
+  String get importExcel;
+
+  /// No description provided for @excelConfigurationOverview.
+  ///
+  /// In zh, this message translates to:
+  /// **'Excel 配置概览'**
+  String get excelConfigurationOverview;
+
+  /// No description provided for @excelConfigurationOverviewHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'此处展示当前配置；交替行可直接切换，其他选项请打开编辑设置。'**
+  String get excelConfigurationOverviewHint;
+
+  /// No description provided for @editSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑设置'**
+  String get editSettings;
+
+  /// No description provided for @fileNameTemplate.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名模板'**
+  String get fileNameTemplate;
+
+  /// No description provided for @excelHeader.
+  ///
+  /// In zh, this message translates to:
+  /// **'Excel 抬头'**
+  String get excelHeader;
+
+  /// No description provided for @exportPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出路径'**
+  String get exportPath;
+
+  /// No description provided for @systemDownloadsDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统下载目录'**
+  String get systemDownloadsDirectory;
+
+  /// No description provided for @headerBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'抬头背景'**
+  String get headerBackground;
+
+  /// No description provided for @tableHeaderBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'表头背景'**
+  String get tableHeaderBackground;
+
+  /// No description provided for @controllerRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'主控行'**
+  String get controllerRow;
+
+  /// No description provided for @alternatingRows.
+  ///
+  /// In zh, this message translates to:
+  /// **'交替行'**
+  String get alternatingRows;
+
+  /// No description provided for @fileFormatInformation.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件格式说明'**
+  String get fileFormatInformation;
+
+  /// No description provided for @jsonFormatDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。'**
+  String get jsonFormatDescription;
+
+  /// No description provided for @excelFormatDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'Excel：使用 .xlsx 格式，包含分组主控行、颜色样式和底部信息，适合分享与打印。'**
+  String get excelFormatDescription;
+
+  /// No description provided for @excelExportSettingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑 Excel 导出设置'**
+  String get excelExportSettingsTitle;
+
+  /// No description provided for @fileTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get fileTab;
+
+  /// No description provided for @tableStyleTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'表格样式'**
+  String get tableStyleTab;
+
+  /// No description provided for @templateVariablesTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'模板变量'**
+  String get templateVariablesTab;
+
+  /// No description provided for @exportSettingsSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出设置已保存'**
+  String get exportSettingsSaved;
+
+  /// No description provided for @select.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择'**
+  String get select;
+
+  /// No description provided for @exportPathDefaultHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'留空时使用系统下载目录'**
+  String get exportPathDefaultHint;
+
+  /// No description provided for @fileNameTemplateExample.
+  ///
+  /// In zh, this message translates to:
+  /// **'如：点名记录_{yyyy}-{MM}-{dd}'**
+  String fileNameTemplateExample(String MM, String dd, String yyyy);
+
+  /// No description provided for @fileNameTemplateHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用模板变量自动生成文件名'**
+  String get fileNameTemplateHint;
+
+  /// No description provided for @headerTemplate.
+  ///
+  /// In zh, this message translates to:
+  /// **'抬头模板'**
+  String get headerTemplate;
+
+  /// No description provided for @headerTemplateExample.
+  ///
+  /// In zh, this message translates to:
+  /// **'如：{yyyy}-{MM}-{dd}日点名记录'**
+  String headerTemplateExample(String MM, String dd, String yyyy);
+
+  /// No description provided for @headerTemplateHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'未使用会话名或会话名为空时生效；支持模板变量'**
+  String get headerTemplateHint;
+
+  /// No description provided for @headerBackgroundColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'抬头背景色'**
+  String get headerBackgroundColor;
+
+  /// No description provided for @tableHeaderBackgroundColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'表头背景色'**
+  String get tableHeaderBackgroundColor;
+
+  /// No description provided for @controllerRowBackgroundColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'主控栏背景色'**
+  String get controllerRowBackgroundColor;
+
+  /// No description provided for @tableBackgroundColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'表格背景色'**
+  String get tableBackgroundColor;
+
+  /// No description provided for @alternatingRowColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'交替行颜色'**
+  String get alternatingRowColor;
+
+  /// No description provided for @alternatingRowColorHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用交替行背景色'**
+  String get alternatingRowColorHint;
+
+  /// No description provided for @footerInformation.
+  ///
+  /// In zh, this message translates to:
+  /// **'底部说明'**
+  String get footerInformation;
+
+  /// No description provided for @footerInformationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示 OpenLogTool 项目与许可信息'**
+  String get footerInformationHint;
+
+  /// No description provided for @restoreDefaultColors.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认颜色'**
+  String get restoreDefaultColors;
+
+  /// No description provided for @tableFont.
+  ///
+  /// In zh, this message translates to:
+  /// **'表格字体'**
+  String get tableFont;
+
+  /// No description provided for @templateVariablesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'模板变量说明'**
+  String get templateVariablesTitle;
+
+  /// No description provided for @templateYearDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'四位年份，如：2024'**
+  String get templateYearDescription;
+
+  /// No description provided for @templateMonthDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'两位月份，如：01, 12'**
+  String get templateMonthDescription;
+
+  /// No description provided for @templateDayDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'两位日期，如：01, 31'**
+  String get templateDayDescription;
+
+  /// No description provided for @templateHourDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'两位小时（24 小时制），如：14'**
+  String get templateHourDescription;
+
+  /// No description provided for @templateMinuteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'两位分钟，如：30'**
+  String get templateMinuteDescription;
+
+  /// No description provided for @templateSecondDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'两位秒数，如：45'**
+  String get templateSecondDescription;
+
+  /// No description provided for @templateExamplesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用示例'**
+  String get templateExamplesTitle;
+
+  /// No description provided for @templateFileNameExampleOne.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名：点名记录_{yyyy}-{MM}-{dd}'**
+  String templateFileNameExampleOne(String MM, String dd, String yyyy);
+
+  /// No description provided for @templateFileNameExampleOneResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'点名记录_2024-03-28.xlsx'**
+  String get templateFileNameExampleOneResult;
+
+  /// No description provided for @templateFileNameExampleTwo.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名：通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}'**
+  String templateFileNameExampleTwo(
+      String HH, String MM, String dd, String mm, String ss, String yyyy);
+
+  /// No description provided for @templateFileNameExampleTwoResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'通联_2024-03-28_143045.xlsx'**
+  String get templateFileNameExampleTwoResult;
+
+  /// No description provided for @templateHeaderExample.
+  ///
+  /// In zh, this message translates to:
+  /// **'抬头：{yyyy}年{MM}月{dd}日点名记录'**
+  String templateHeaderExample(String MM, String dd, String yyyy);
+
+  /// No description provided for @templateHeaderExampleResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'2024年03月28日点名记录'**
+  String get templateHeaderExampleResult;
+
+  /// No description provided for @templateVariablesTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。'**
+  String get templateVariablesTip;
+
+  /// No description provided for @chooseColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择{label}'**
+  String chooseColor(String label);
+
+  /// No description provided for @colorHexValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'HEX：#{value}'**
+  String colorHexValue(String value);
+
+  /// No description provided for @colorOpacity.
+  ///
+  /// In zh, this message translates to:
+  /// **'透明度'**
+  String get colorOpacity;
+
+  /// No description provided for @noDataToExport.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有数据可以导出'**
+  String get noDataToExport;
+
+  /// No description provided for @saveExportFileDialog.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存 {format} 导出文件'**
+  String saveExportFileDialog(String format);
+
+  /// No description provided for @downloadsDirectoryUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法访问下载目录'**
+  String get downloadsDirectoryUnavailable;
+
+  /// No description provided for @exportSavedViaSystemPicker.
+  ///
+  /// In zh, this message translates to:
+  /// **'{format} 导出成功，已通过系统文件选择器保存'**
+  String exportSavedViaSystemPicker(String format);
+
+  /// No description provided for @exportSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'{format} 导出成功'**
+  String exportSucceeded(String format);
+
+  /// No description provided for @fileSavedTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件已保存到：\n{path}'**
+  String fileSavedTo(String path);
+
+  /// No description provided for @exportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出失败：{error}'**
+  String exportFailed(String error);
+
+  /// No description provided for @excelGenerationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出失败：无法生成 Excel 文件'**
+  String get excelGenerationFailed;
+
+  /// No description provided for @importSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入成功：{count} 条记录'**
+  String importSucceeded(int count);
+
+  /// No description provided for @importFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入失败：{error}'**
+  String importFailed(String error);
+
+  /// No description provided for @excelImportComingSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'Excel 导入功能开发中'**
+  String get excelImportComingSoon;
+
+  /// No description provided for @pathCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'路径已复制'**
+  String get pathCopied;
+
+  /// No description provided for @createSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建会话'**
+  String get createSession;
+
+  /// No description provided for @createSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建点名会话'**
+  String get createSessionTitle;
+
+  /// No description provided for @createSessionNameHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入会话名称'**
+  String get createSessionNameHint;
+
+  /// No description provided for @sessionCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'已创建会话“{title}”'**
+  String sessionCreated(String title);
+
+  /// No description provided for @createSessionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建会话失败：{error}'**
+  String createSessionFailed(String error);
+
+  /// No description provided for @searchSessions.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索会话'**
+  String get searchSessions;
+
+  /// No description provided for @allSessionStatuses.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部状态'**
+  String get allSessionStatuses;
+
+  /// No description provided for @sessionArchived.
+  ///
+  /// In zh, this message translates to:
+  /// **'已归档'**
+  String get sessionArchived;
+
+  /// No description provided for @sessionPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {page} / {total} 页'**
+  String sessionPage(int page, int total);
+
+  /// No description provided for @moreSessionActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多会话操作'**
+  String get moreSessionActions;
+
+  /// No description provided for @openAndManageCollaboration.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开并管理协作'**
+  String get openAndManageCollaboration;
+
+  /// No description provided for @exportLibraryJson.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出词库 JSON'**
+  String get exportLibraryJson;
+
+  /// No description provided for @libraryExportDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出词库'**
+  String get libraryExportDialogTitle;
+
+  /// No description provided for @libraryExportSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库已导出'**
+  String get libraryExportSucceeded;
+
+  /// No description provided for @libraryExportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出词库失败：{error}'**
+  String libraryExportFailed(String error);
+
+  /// No description provided for @editLibraryItem.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get editLibraryItem;
+
+  /// No description provided for @editLibraryItemTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑“{name}”'**
+  String editLibraryItemTitle(String name);
+
+  /// No description provided for @editLibraryItemLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库内容'**
+  String get editLibraryItemLabel;
+
+  /// No description provided for @libraryItemRenamed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已更新为“{value}”'**
+  String libraryItemRenamed(String value);
+
+  /// No description provided for @libraryItemRenameFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改失败：{error}'**
+  String libraryItemRenameFailed(String error);
+
+  /// No description provided for @libraryPageStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {current} / {total} 页'**
+  String libraryPageStatus(int current, int total);
+
+  /// No description provided for @previousPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页'**
+  String get previousPage;
+
+  /// No description provided for @nextPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页'**
+  String get nextPage;
+
+  /// No description provided for @settingsCategoryAppearance.
+  ///
+  /// In zh, this message translates to:
+  /// **'外观'**
+  String get settingsCategoryAppearance;
+
+  /// No description provided for @settingsCategoryWorkbench.
+  ///
+  /// In zh, this message translates to:
+  /// **'工作台'**
+  String get settingsCategoryWorkbench;
+
+  /// No description provided for @settingsCategoryController.
+  ///
+  /// In zh, this message translates to:
+  /// **'主控屏'**
+  String get settingsCategoryController;
+
+  /// No description provided for @settingsCategoryServerAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器与账户'**
+  String get settingsCategoryServerAccount;
+
+  /// No description provided for @settingsCategoryApplication.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用'**
+  String get settingsCategoryApplication;
+
+  /// No description provided for @collaborationOverviewTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'概览'**
+  String get collaborationOverviewTab;
+
+  /// No description provided for @collaborationSyncConflictsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步与冲突'**
+  String get collaborationSyncConflictsTab;
+
+  /// No description provided for @collaborationAccessManagementTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'访问管理'**
+  String get collaborationAccessManagementTab;
+
+  /// No description provided for @dataRecordsExportTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录与导出'**
+  String get dataRecordsExportTab;
+
+  /// No description provided for @dataLookupLibrariesTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询词库'**
+  String get dataLookupLibrariesTab;
+
+  /// No description provided for @dataLocalDatabaseTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地数据库'**
+  String get dataLocalDatabaseTab;
 }
 
 class _AppLocalizationsDelegate

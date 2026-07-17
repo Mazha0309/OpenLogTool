@@ -1,28 +1,35 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 
+const double _wideDictionaryBreakpoint = 720;
+
+// Kept for compatibility with callers that used the previous grid helper.
 int dictionaryGridColumnCount(double width) => width >= 760 ? 2 : 1;
 
+int dictionaryPageSize(double width) =>
+    width >= _wideDictionaryBreakpoint ? 20 : 10;
+
 class DictionaryManager extends StatefulWidget {
-  const DictionaryManager({super.key});
+  const DictionaryManager({super.key, this.embedded = false});
+
+  /// Uses a compact action toolbar when hosted by the data workspace.
+  final bool embedded;
 
   @override
   State<DictionaryManager> createState() => _DictionaryManagerState();
 }
 
 class _DictionaryManagerState extends State<DictionaryManager> {
-  final Map<String, bool> _expandedStates = <String, bool>{
-    'device': false,
-    'antenna': false,
-    'callsign': false,
-    'qth': false,
-  };
+  String _selectedType = 'device';
   final Map<String, TextEditingController> _addControllers =
       <String, TextEditingController>{
     'device': TextEditingController(),
@@ -37,18 +44,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     'callsign': TextEditingController(),
     'qth': TextEditingController(),
   };
-  final Map<String, ScrollController> _listControllers =
-      <String, ScrollController>{
-    'device': ScrollController(),
-    'antenna': ScrollController(),
-    'callsign': ScrollController(),
-    'qth': ScrollController(),
-  };
   final Map<String, String> _queries = <String, String>{};
+  final Map<String, int> _pages = <String, int>{};
   final Set<String> _busyLibraries = <String>{};
   bool _importing = false;
+  bool _exporting = false;
 
-  bool get _mutationInProgress => _importing || _busyLibraries.isNotEmpty;
+  bool get _mutationInProgress =>
+      _importing || _exporting || _busyLibraries.isNotEmpty;
 
   @override
   void dispose() {
@@ -58,23 +61,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     for (final controller in _searchControllers.values) {
       controller.dispose();
     }
-    for (final controller in _listControllers.values) {
-      controller.dispose();
-    }
     super.dispose();
-  }
-
-  void _toggleAll() {
-    final allExpanded = _expandedStates.values.every((state) => state);
-    setState(() {
-      for (final key in _expandedStates.keys) {
-        _expandedStates[key] = !allExpanded;
-      }
-    });
-  }
-
-  void _toggleLibrary(String key) {
-    setState(() => _expandedStates[key] = !_expandedStates[key]!);
   }
 
   String _libraryName(String type) => switch (type) {
@@ -86,15 +73,21 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       };
 
   IconData _libraryIcon(String type) => switch (type) {
-        'device' => Icons.radio,
+        'device' => Icons.radio_outlined,
         'antenna' => Icons.settings_input_antenna,
         'callsign' => Icons.badge_outlined,
         'qth' => Icons.place_outlined,
         _ => Icons.folder_outlined,
       };
 
+  void _selectLibrary(String type) {
+    if (_selectedType == type) return;
+    setState(() => _selectedType = type);
+  }
+
   Future<void> _importFromFile() async {
     if (_mutationInProgress) return;
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<DictionaryProvider>();
     setState(() => _importing = true);
@@ -107,35 +100,77 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       if (result == null || result.files.isEmpty) return;
       final bytes = result.files.first.bytes;
       if (bytes == null) {
-        throw const FormatException('The selected file could not be read.');
+        throw const FormatException('Selected file could not be read');
       }
       final counts = await provider.importFromJson(utf8.decode(bytes));
       if (!mounted) return;
       final imported = counts.entries.where((entry) => entry.value > 0);
       if (imported.isEmpty) {
         messenger.showSnackBar(
-          SnackBar(content: Text(context.l10n.libraryImportEmpty)),
+          SnackBar(content: Text(l10n.libraryImportEmpty)),
         );
         return;
       }
       final summary = imported
           .map(
-            (entry) => context.l10n.libraryImportCount(
+            (entry) => l10n.libraryImportCount(
               _libraryName(entry.key),
               entry.value,
             ),
           )
-          .join(context.l10n.listSeparator);
+          .join(l10n.listSeparator);
+      _pages.clear();
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryImportSucceeded(summary))),
+        SnackBar(content: Text(l10n.libraryImportSucceeded(summary))),
       );
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryImportFailed('$error'))),
+        SnackBar(content: Text(l10n.libraryImportFailed('$error'))),
       );
     } finally {
       if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  Future<void> _exportToFile() async {
+    if (_mutationInProgress) return;
+    final l10n = context.l10n;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<DictionaryProvider>();
+    setState(() => _exporting = true);
+    try {
+      final jsonData = provider.exportToJson();
+      final bytes = Uint8List.fromList(utf8.encode(jsonData));
+      final now = DateTime.now();
+      final fileName = 'openlogtool_dictionaries_${now.year}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}.json';
+      final pickerWritesBytes = kIsWeb || Platform.isAndroid || Platform.isIOS;
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: l10n.libraryExportDialogTitle,
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: const <String>['json'],
+        bytes: pickerWritesBytes ? bytes : null,
+      );
+      if (result == null) return;
+      if (!pickerWritesBytes) {
+        await File(result).writeAsBytes(bytes, flush: true);
+      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.libraryExportSucceeded)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.libraryExportFailed('$error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
   }
 
@@ -143,10 +178,11 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     final controller = _addControllers[library.type]!;
     final value = controller.text.trim();
     if (value.isEmpty || _mutationInProgress) return;
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     if (library.items.any((item) => item.raw == value)) {
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryItemAlreadyExists(value))),
+        SnackBar(content: Text(l10n.libraryItemAlreadyExists(value))),
       );
       return;
     }
@@ -157,12 +193,52 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       if (!mounted) return;
       controller.clear();
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryItemAdded(value))),
+        SnackBar(content: Text(l10n.libraryItemAdded(value))),
       );
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryItemAddFailed('$error'))),
+        SnackBar(content: Text(l10n.libraryItemAddFailed('$error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _busyLibraries.remove(library.type));
+    }
+  }
+
+  Future<void> _editItem(
+    _LibraryDefinition library,
+    DictionaryItem item,
+  ) async {
+    if (_mutationInProgress) return;
+    final renamed = await showDialog<String>(
+      context: context,
+      builder: (_) => _EditLibraryItemDialog(
+        libraryType: library.type,
+        libraryName: _libraryName(library.type),
+        initialValue: item.raw,
+      ),
+    );
+    if (renamed == null || !mounted || renamed == item.raw) return;
+
+    final l10n = context.l10n;
+    final messenger = ScaffoldMessenger.of(context);
+    if (library.items.any((candidate) => candidate.raw == renamed)) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.libraryItemAlreadyExists(renamed))),
+      );
+      return;
+    }
+    setState(() => _busyLibraries.add(library.type));
+    try {
+      await library.onRename(item.raw, renamed);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.libraryItemRenamed(renamed))),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.libraryItemRenameFailed('$error'))),
       );
     } finally {
       if (mounted) setState(() => _busyLibraries.remove(library.type));
@@ -203,20 +279,19 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     );
     if (confirmed != true || !mounted) return;
 
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busyLibraries.add(library.type));
     try {
       await library.onDelete(item.raw);
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryItemDeleted(item.raw))),
+        SnackBar(content: Text(l10n.libraryItemDeleted(item.raw))),
       );
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.libraryItemDeleteFailed('$error')),
-        ),
+        SnackBar(content: Text(l10n.libraryItemDeleteFailed('$error'))),
       );
     } finally {
       if (mounted) setState(() => _busyLibraries.remove(library.type));
@@ -256,24 +331,24 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     );
     if (confirmed != true || !mounted) return;
 
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busyLibraries.add(library.type));
     try {
       await library.onClear();
       if (!mounted) return;
       _searchControllers[library.type]?.clear();
-      setState(() => _queries.remove(library.type));
+      _queries.remove(library.type);
+      _pages.remove(library.type);
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            context.l10n.libraryCleared(_libraryName(library.type)),
-          ),
+          content: Text(l10n.libraryCleared(_libraryName(library.type))),
         ),
       );
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.libraryClearFailed('$error'))),
+        SnackBar(content: Text(l10n.libraryClearFailed('$error'))),
       );
     } finally {
       if (mounted) setState(() => _busyLibraries.remove(library.type));
@@ -286,227 +361,107 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     return library.items.where((item) => item.matches(query)).toList();
   }
 
-  Widget _buildHeader(List<_LibraryDefinition> libraries) {
-    final theme = Theme.of(context);
-    final allExpanded = _expandedStates.values.every((state) => state);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final introduction = Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.dictionaryManagementTitle,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  context.l10n.dictionaryManagementHint,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            );
-            final actions = Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  key: const Key('import-library-json'),
-                  onPressed: _mutationInProgress ? null : _importFromFile,
-                  icon: _importing
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.file_upload_outlined, size: 18),
-                  label: Text(context.l10n.importLibraryJson),
-                ),
-                TextButton.icon(
-                  onPressed: _toggleAll,
-                  icon: Icon(
-                    allExpanded ? Icons.unfold_less : Icons.unfold_more,
-                    size: 18,
-                  ),
-                  label: Text(
-                    allExpanded
-                        ? context.l10n.collapseAll
-                        : context.l10n.expandAll,
-                  ),
-                ),
-              ],
-            );
-            if (constraints.maxWidth < 680) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  introduction,
-                  const SizedBox(height: 12),
-                  Align(alignment: Alignment.centerLeft, child: actions),
-                ],
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: introduction),
-                const SizedBox(width: 16),
-                actions,
-              ],
-            );
-          },
+  List<Widget> _buildHeaderActions() => [
+        OutlinedButton.icon(
+          key: const Key('export-library-json'),
+          onPressed: _mutationInProgress ? null : _exportToFile,
+          icon: _exporting
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.file_download_outlined, size: 18),
+          label: Text(context.l10n.exportLibraryJson),
         ),
-        const SizedBox(height: 12),
-        Wrap(
+        FilledButton.tonalIcon(
+          key: const Key('import-library-json'),
+          onPressed: _mutationInProgress ? null : _importFromFile,
+          icon: _importing
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.file_upload_outlined, size: 18),
+          label: Text(context.l10n.importLibraryJson),
+        ),
+      ];
+
+  Widget _buildHeader() {
+    final actions = _buildHeaderActions();
+    if (widget.embedded) {
+      return Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: Wrap(
           spacing: 8,
           runSpacing: 8,
+          alignment: WrapAlignment.end,
+          children: actions,
+        ),
+      );
+    }
+    return SettingsPageHeader(
+      key: const Key('dictionary-page-header'),
+      icon: Icons.menu_book_outlined,
+      title: context.l10n.dictionaryManagementTitle,
+      description: context.l10n.dictionaryManagementHint,
+      actions: actions,
+    );
+  }
+
+  Widget _buildWideCategories(List<_LibraryDefinition> libraries) {
+    return SizedBox(
+      width: 236,
+      child: SettingsSectionCard(
+        icon: Icons.folder_copy_outlined,
+        title: context.l10n.dictionaryManagementTitle,
+        padding: 12,
+        contentSpacing: 8,
+        child: Column(
           children: libraries
               .map(
-                (library) => ActionChip(
-                  avatar: Icon(_libraryIcon(library.type), size: 16),
-                  label: Text(
-                    '${_libraryName(library.type)} · ${library.items.length}',
+                (library) => ListTile(
+                  key: Key('library-category-${library.type}'),
+                  selected: _selectedType == library.type,
+                  selectedTileColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  onPressed: () => _toggleLibrary(library.type),
+                  leading: Icon(_libraryIcon(library.type)),
+                  title: Text(_libraryName(library.type)),
+                  subtitle: Text(
+                    context.l10n.libraryItemCount(library.items.length),
+                  ),
+                  onTap: () => _selectLibrary(library.type),
                 ),
               )
               .toList(growable: false),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildLibraryCard(_LibraryDefinition library) {
-    final theme = Theme.of(context);
-    final isExpanded = _expandedStates[library.type]!;
-    final isBusy = _busyLibraries.contains(library.type);
-    final items = _filteredItems(library);
-    return Card(
-      key: Key('library-card-${library.type}'),
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => _toggleLibrary(library.type),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      _libraryIcon(library.type),
-                      size: 20,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
+  Widget _buildPhoneCategories(List<_LibraryDefinition> libraries) {
+    return SingleChildScrollView(
+      key: const Key('library-phone-categories'),
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: libraries
+            .map(
+              (library) => Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: ChoiceChip(
+                  key: Key('library-category-${library.type}'),
+                  selected: _selectedType == library.type,
+                  avatar: Icon(_libraryIcon(library.type), size: 18),
+                  label: Text(
+                    '${_libraryName(library.type)} · ${library.items.length}',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _libraryName(library.type),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          context.l10n.libraryItemCount(library.items.length),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (isBusy)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  Tooltip(
-                    message: context.l10n.clearLibraryTitle(
-                      _libraryName(library.type),
-                    ),
-                    child: IconButton(
-                      key: Key('clear-library-${library.type}'),
-                      onPressed: library.items.isEmpty || _mutationInProgress
-                          ? null
-                          : () => _clearLibrary(library),
-                      icon: const Icon(Icons.delete_sweep_outlined),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 160),
-                    child: const Icon(Icons.expand_more),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                  onSelected: (_) => _selectLibrary(library.type),
+                ),
               ),
-            ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: isExpanded
-                ? Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Divider(height: 1),
-                        const SizedBox(height: 12),
-                        _buildAddRow(library, _mutationInProgress),
-                        const SizedBox(height: 10),
-                        TextField(
-                          key: Key('search-library-${library.type}'),
-                          controller: _searchControllers[library.type],
-                          decoration: InputDecoration(
-                            hintText: context.l10n.searchLibrary(
-                              _libraryName(library.type),
-                            ),
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onChanged: (value) => setState(
-                            () => _queries[library.type] = value,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        _buildItemList(
-                          library,
-                          items,
-                          isBusy: _mutationInProgress,
-                        ),
-                      ],
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
+            )
+            .toList(growable: false),
       ),
     );
   }
@@ -548,48 +503,80 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     );
   }
 
-  Widget _buildItemList(_LibraryDefinition library, List<DictionaryItem> items,
-      {required bool isBusy}) {
+  Widget _buildSearchField(_LibraryDefinition library) {
+    final controller = _searchControllers[library.type]!;
+    return TextField(
+      key: Key('search-library-${library.type}'),
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: context.l10n.searchLibrary(_libraryName(library.type)),
+        prefixIcon: const Icon(Icons.search, size: 20),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                onPressed: () {
+                  controller.clear();
+                  setState(() {
+                    _queries.remove(library.type);
+                    _pages[library.type] = 0;
+                  });
+                },
+                icon: const Icon(Icons.close, size: 18),
+              ),
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+      onChanged: (value) => setState(() {
+        _queries[library.type] = value;
+        _pages[library.type] = 0;
+      }),
+    );
+  }
+
+  Widget _buildEmptyState(_LibraryDefinition library) {
     final theme = Theme.of(context);
-    if (items.isEmpty) {
-      final hasQuery = (_queries[library.type]?.trim().isNotEmpty ?? false);
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.35,
-          ),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              hasQuery ? Icons.search_off : Icons.inbox_outlined,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hasQuery
-                  ? context.l10n.noLibrarySearchResults
-                  : context.l10n.libraryEmpty,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      );
-    }
-    final listController = _listControllers[library.type]!;
+    final hasQuery = _queries[library.type]?.trim().isNotEmpty ?? false;
     return Container(
-      constraints: const BoxConstraints(maxHeight: 280),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .35),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            hasQuery ? Icons.search_off : Icons.inbox_outlined,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasQuery
+                ? context.l10n.noLibrarySearchResults
+                : context.l10n.libraryEmpty,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemList(
+    _LibraryDefinition library,
+    List<DictionaryItem> items, {
+    required int startIndex,
+    required bool isBusy,
+  }) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: theme.colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(10),
       ),
       child: ListView.separated(
-        controller: listController,
         primary: false,
         shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: items.length,
         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -600,19 +587,38 @@ class _DictionaryManagerState extends State<DictionaryManager> {
             if (item.abbreviation.trim().isNotEmpty) item.abbreviation.trim(),
           }.join(' · ');
           return ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.only(left: 12, right: 4),
+            key: Key('library-item-${library.type}-${item.syncId}'),
+            contentPadding: const EdgeInsetsDirectional.only(
+              start: 12,
+              end: 4,
+            ),
             leading: CircleAvatar(
-              radius: 13,
-              child: Text('${index + 1}', style: theme.textTheme.labelSmall),
+              radius: 14,
+              child: Text(
+                '${startIndex + index + 1}',
+                style: theme.textTheme.labelSmall,
+              ),
             ),
             title: Text(item.raw, maxLines: 2, overflow: TextOverflow.ellipsis),
             subtitle: searchHint.isEmpty ? null : Text(searchHint),
-            trailing: IconButton(
-              key: Key('delete-library-${library.type}-${item.syncId}'),
-              tooltip: context.l10n.deleteLibraryItemAction,
-              onPressed: isBusy ? null : () => _deleteItem(library, item),
-              icon: const Icon(Icons.delete_outline),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: Key('edit-library-${library.type}-${item.syncId}'),
+                  tooltip: context.l10n.editLibraryItem,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: isBusy ? null : () => _editItem(library, item),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+                IconButton(
+                  key: Key('delete-library-${library.type}-${item.syncId}'),
+                  tooltip: context.l10n.deleteLibraryItemAction,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: isBusy ? null : () => _deleteItem(library, item),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
             ),
           );
         },
@@ -620,62 +626,176 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     );
   }
 
+  Widget _buildPagination(
+    _LibraryDefinition library, {
+    required int currentPage,
+    required int totalPages,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          key: Key('library-previous-page-${library.type}'),
+          tooltip: context.l10n.previousPage,
+          onPressed: currentPage == 0
+              ? null
+              : () => setState(() => _pages[library.type] = currentPage - 1),
+          icon: const Icon(Icons.chevron_left),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            context.l10n.libraryPageStatus(currentPage + 1, totalPages),
+          ),
+        ),
+        IconButton(
+          key: Key('library-next-page-${library.type}'),
+          tooltip: context.l10n.nextPage,
+          onPressed: currentPage >= totalPages - 1
+              ? null
+              : () => setState(() => _pages[library.type] = currentPage + 1),
+          icon: const Icon(Icons.chevron_right),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorkspace(
+    _LibraryDefinition library, {
+    required bool isWide,
+  }) {
+    final pageSize = isWide ? 20 : 10;
+    final filteredItems = _filteredItems(library);
+    final totalPages =
+        filteredItems.isEmpty ? 1 : (filteredItems.length / pageSize).ceil();
+    final requestedPage = _pages[library.type] ?? 0;
+    final currentPage = requestedPage.clamp(0, totalPages - 1);
+    _pages[library.type] = currentPage;
+    final startIndex = currentPage * pageSize;
+    final endIndex = (startIndex + pageSize).clamp(0, filteredItems.length);
+    final pageItems = filteredItems.sublist(startIndex, endIndex);
+    final isBusy = _mutationInProgress;
+
+    return SettingsSectionCard(
+      key: Key('library-workspace-${library.type}'),
+      icon: _libraryIcon(library.type),
+      title: _libraryName(library.type),
+      description: context.l10n.libraryItemCount(library.items.length),
+      headerTrailing: IconButton.filledTonal(
+        key: Key('clear-library-${library.type}'),
+        tooltip: context.l10n.clearLibraryTitle(_libraryName(library.type)),
+        onPressed: library.items.isEmpty || isBusy
+            ? null
+            : () => _clearLibrary(library),
+        icon: const Icon(Icons.delete_sweep_outlined),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildAddRow(library, isBusy),
+          const SizedBox(height: 10),
+          _buildSearchField(library),
+          const SizedBox(height: 12),
+          if (filteredItems.isEmpty)
+            _buildEmptyState(library)
+          else
+            _buildItemList(
+              library,
+              pageItems,
+              startIndex: startIndex,
+              isBusy: isBusy,
+            ),
+          if (filteredItems.isNotEmpty && totalPages > 1) ...[
+            const SizedBox(height: 8),
+            _buildPagination(
+              library,
+              currentPage: currentPage,
+              totalPages: totalPages,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<_LibraryDefinition> _libraries(DictionaryProvider provider) =>
+      <_LibraryDefinition>[
+        _LibraryDefinition(
+          type: 'device',
+          items: provider.deviceDict,
+          onAdd: provider.addDevice,
+          onRename: provider.renameDevice,
+          onDelete: provider.deleteDevice,
+          onClear: provider.clearDeviceDict,
+        ),
+        _LibraryDefinition(
+          type: 'antenna',
+          items: provider.antennaDict,
+          onAdd: provider.addAntenna,
+          onRename: provider.renameAntenna,
+          onDelete: provider.deleteAntenna,
+          onClear: provider.clearAntennaDict,
+        ),
+        _LibraryDefinition(
+          type: 'callsign',
+          items: provider.callsignDict,
+          onAdd: provider.addCallsign,
+          onRename: provider.renameCallsign,
+          onDelete: provider.deleteCallsign,
+          onClear: provider.clearCallsignDict,
+        ),
+        _LibraryDefinition(
+          type: 'qth',
+          items: provider.qthDict,
+          onAdd: provider.addQth,
+          onRename: provider.renameQth,
+          onDelete: provider.deleteQth,
+          onClear: provider.clearQthDict,
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DictionaryProvider>();
-    final libraries = <_LibraryDefinition>[
-      _LibraryDefinition(
-        type: 'device',
-        items: provider.deviceDict,
-        onAdd: provider.addDevice,
-        onDelete: provider.deleteDevice,
-        onClear: provider.clearDeviceDict,
-      ),
-      _LibraryDefinition(
-        type: 'antenna',
-        items: provider.antennaDict,
-        onAdd: provider.addAntenna,
-        onDelete: provider.deleteAntenna,
-        onClear: provider.clearAntennaDict,
-      ),
-      _LibraryDefinition(
-        type: 'callsign',
-        items: provider.callsignDict,
-        onAdd: provider.addCallsign,
-        onDelete: provider.deleteCallsign,
-        onClear: provider.clearCallsignDict,
-      ),
-      _LibraryDefinition(
-        type: 'qth',
-        items: provider.qthDict,
-        onAdd: provider.addQth,
-        onDelete: provider.deleteQth,
-        onClear: provider.clearQthDict,
-      ),
-    ];
+    final libraries = _libraries(context.watch<DictionaryProvider>());
+    final selected = libraries.firstWhere(
+      (library) => library.type == _selectedType,
+      orElse: () => libraries.first,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeader(libraries),
+        _buildHeader(),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
-            const spacing = 12.0;
-            final columns = dictionaryGridColumnCount(constraints.maxWidth);
-            final width = columns == 1
-                ? constraints.maxWidth
-                : (constraints.maxWidth - spacing) / columns;
-            return Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: libraries
-                  .map(
-                    (library) => SizedBox(
-                      width: width,
-                      child: _buildLibraryCard(library),
-                    ),
-                  )
-                  .toList(growable: false),
+            final isWide = constraints.maxWidth >= _wideDictionaryBreakpoint;
+            if (!isWide) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildPhoneCategories(libraries),
+                  const SizedBox(height: 12),
+                  _buildWorkspace(
+                    selected,
+                    isWide: false,
+                  ),
+                ],
+              );
+            }
+            const gap = 16.0;
+            return Row(
+              key: const Key('library-wide-workspace'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildWideCategories(libraries),
+                const SizedBox(width: gap),
+                Expanded(
+                  child: _buildWorkspace(
+                    selected,
+                    isWide: true,
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -689,6 +809,7 @@ class _LibraryDefinition {
     required this.type,
     required this.items,
     required this.onAdd,
+    required this.onRename,
     required this.onDelete,
     required this.onClear,
   });
@@ -696,6 +817,67 @@ class _LibraryDefinition {
   final String type;
   final List<DictionaryItem> items;
   final Future<void> Function(String value) onAdd;
+  final Future<void> Function(String oldValue, String newValue) onRename;
   final Future<void> Function(String value) onDelete;
   final Future<void> Function() onClear;
+}
+
+class _EditLibraryItemDialog extends StatefulWidget {
+  const _EditLibraryItemDialog({
+    required this.libraryType,
+    required this.libraryName,
+    required this.initialValue,
+  });
+
+  final String libraryType;
+  final String libraryName;
+  final String initialValue;
+
+  @override
+  State<_EditLibraryItemDialog> createState() => _EditLibraryItemDialogState();
+}
+
+class _EditLibraryItemDialogState extends State<_EditLibraryItemDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialValue);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.l10n.editLibraryItemTitle(widget.libraryName)),
+      content: TextField(
+        key: Key('edit-library-item-field-${widget.libraryType}'),
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(
+          labelText: context.l10n.editLibraryItemLabel,
+          border: const OutlineInputBorder(),
+        ),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.cancel),
+        ),
+        FilledButton(
+          key: Key('confirm-edit-library-item-${widget.libraryType}'),
+          onPressed: _submit,
+          child: Text(context.l10n.save),
+        ),
+      ],
+    );
+  }
 }

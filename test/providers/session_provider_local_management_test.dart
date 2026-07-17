@@ -37,6 +37,66 @@ void main() {
     expect(prefs.getString('current_session_id'), editableLocal.sessionId);
   });
 
+  test('new session delegates lifecycle replacement to the transactional API',
+      () async {
+    final startedTitles = <String>[];
+    final separatelyClosed = <String>[];
+    final provider = SessionProvider(
+      sessionListLoader: () async => [source],
+      localSessionStarter: (title) async {
+        startedTitles.add(title);
+        return editableLocal;
+      },
+      localSessionCloser: (sessionId) async {
+        separatelyClosed.add(sessionId);
+        return closedLocal;
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.ready;
+
+    await provider.startNewSession(title: '  Sunday replacement  ');
+
+    expect(startedTitles, ['Sunday replacement']);
+    expect(separatelyClosed, isEmpty);
+    expect(provider.currentSession, same(editableLocal));
+    expect(provider.currentSessionId, editableLocal.sessionId);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('current_session_id'), editableLocal.sessionId);
+  });
+
+  test('session entries consume collaboration metadata from one summary load',
+      () async {
+    var fallbackBindingChecks = 0;
+    final provider = SessionProvider(
+      sessionListLoader: () async => [source],
+      sessionSummaryLoader: () async => const [
+        SessionSummary(
+          session: source,
+          hasCollaborationBinding: true,
+        ),
+        SessionSummary(
+          session: closedLocal,
+          hasCollaborationBinding: false,
+        ),
+      ],
+      sessionBindingChecker: (_) async {
+        fallbackBindingChecks += 1;
+        return false;
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.ready;
+
+    final entries = await provider.listAvailableSessionEntries();
+
+    expect(entries, hasLength(2));
+    expect(entries.first.session, closedLocal);
+    expect(entries.last.session, source);
+    expect(entries.last.hasCollaborationBinding, isTrue);
+    expect(fallbackBindingChecks, 0);
+  });
+
   test('device-only close follows a replacement closed local history row',
       () async {
     final requested = <String>[];

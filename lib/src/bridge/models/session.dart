@@ -52,3 +52,29 @@ class Session {
           closedAt == other.closedAt &&
           deletedAt == other.deletedAt;
 }
+
+/// Lightweight session metadata used by lifecycle/history surfaces.
+///
+/// Keeping the collaboration marker beside the Session avoids an N+1 binding
+/// lookup when rendering history and, more importantly, lets callers decide
+/// whether a closed row can be reopened locally before offering the action.
+class SessionSummary {
+  final Session session;
+  final bool hasCollaborationBinding;
+
+  const SessionSummary({
+    required this.session,
+    required this.hasCollaborationBinding,
+  });
+
+  @override
+  int get hashCode => session.hashCode ^ hasCollaborationBinding.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SessionSummary &&
+          runtimeType == other.runtimeType &&
+          session == other.session &&
+          hasCollaborationBinding == other.hasCollaborationBinding;
+}

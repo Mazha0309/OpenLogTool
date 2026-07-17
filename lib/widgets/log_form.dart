@@ -336,6 +336,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     setState(() => _submissionInProgress = true);
     try {
       await _submitValidatedForm(collaboration);
+    } catch (error, stackTrace) {
+      debugPrint('[LogForm] submit failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+        );
+      }
     } finally {
       if (mounted) setState(() => _submissionInProgress = false);
     }
@@ -534,7 +541,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       return '$fallback · ${context.l10n.fieldLockedBy(lock.username)}';
     }
 
-    return LayoutBuilder(
+    final content = LayoutBuilder(
       builder: (context, constraints) {
         // 根据可用宽度计算每行显示几个字段
         final availableWidth = constraints.maxWidth;
@@ -567,11 +574,16 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _controllerController,
-                        label: fieldLabel('controller', '主控呼号 *'),
-                        hintText: '输入主控呼号',
+                        label: fieldLabel(
+                          'controller',
+                          '${context.l10n.fieldControllerCallsign} *',
+                        ),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldControllerCallsign,
+                        ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return '请输入主控呼号';
+                            return context.l10n.fieldRequired;
                           }
                           return null;
                         },
@@ -593,8 +605,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                         reportController: _reportController,
                         rstRcvdController: _rstRcvdController,
                         controllerController: _controllerController,
-                        label: fieldLabel('callsign', '点名呼号'),
-                        hintText: '输入呼号',
+                        label: fieldLabel(
+                          'callsign',
+                          context.l10n.fieldCallsign,
+                        ),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldCallsign,
+                        ),
                         focusNode: _callsignFocusNode,
                         isCompact: isNarrow,
                         textInputAction: TextInputAction.next,
@@ -613,8 +630,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildAutocompleteField(
                         controller: _deviceController,
-                        label: fieldLabel('device', '设备'),
-                        hintText: '输入设备名称',
+                        label: fieldLabel('device', context.l10n.fieldDevice),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldDevice,
+                        ),
                         options: dictionaryProvider.deviceDict,
                         upperCase: false,
                         isCompact: isNarrow,
@@ -627,8 +646,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildAutocompleteField(
                         controller: _antennaController,
-                        label: fieldLabel('antenna', '天线'),
-                        hintText: '输入天线名称',
+                        label: fieldLabel('antenna', context.l10n.fieldAntenna),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldAntenna,
+                        ),
                         options: dictionaryProvider.antennaDict,
                         upperCase: false,
                         isCompact: isNarrow,
@@ -641,8 +662,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _powerController,
-                        label: fieldLabel('power', '功率'),
-                        hintText: '输入功率',
+                        label: fieldLabel('power', context.l10n.fieldPower),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldPower,
+                        ),
                         keyboardType: TextInputType.number,
                         upperCase: false,
                         isCompact: isNarrow,
@@ -655,8 +678,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildAutocompleteField(
                         controller: _qthController,
-                        label: fieldLabel('qth', 'QTH'),
-                        hintText: '输入QTH',
+                        label: fieldLabel('qth', context.l10n.fieldQth),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldQth,
+                        ),
                         options: dictionaryProvider.qthDict,
                         upperCase: false,
                         isCompact: isNarrow,
@@ -669,8 +694,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _heightController,
-                        label: fieldLabel('height', '高度'),
-                        hintText: '输入高度',
+                        label: fieldLabel('height', context.l10n.fieldHeight),
+                        hintText: context.l10n.inputFieldHint(
+                          context.l10n.fieldHeight,
+                        ),
                         keyboardType: TextInputType.number,
                         upperCase: false,
                         isCompact: isNarrow,
@@ -684,7 +711,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       child: _buildMaterialTextField(
                         key: const Key('log-time-field'),
                         controller: _timeController,
-                        label: fieldLabel('time', '时间'),
+                        label: fieldLabel('time', context.l10n.fieldTime),
                         hintText: 'HH:mm',
                         upperCase: false,
                         validator: (value) => isValidLogTimeInput(
@@ -703,7 +730,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _reportController,
-                        label: fieldLabel('rstSent', 'RST发'),
+                        label: fieldLabel('rstSent', context.l10n.fieldRstSent),
                         hintText: '59',
                         upperCase: false,
                         isCompact: isNarrow,
@@ -716,7 +743,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _rstRcvdController,
-                        label: fieldLabel('rstRcvd', 'RST收'),
+                        label: fieldLabel('rstRcvd', context.l10n.fieldRstRcvd),
                         hintText: '59',
                         upperCase: false,
                         isCompact: isNarrow,
@@ -729,8 +756,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       width: calculatedFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _remarksController,
-                        label: fieldLabel('remarks', '备注'),
-                        hintText: '可选备注',
+                        label: fieldLabel('remarks', context.l10n.fieldRemarks),
+                        hintText: context.l10n.optionalFieldHint(
+                          context.l10n.fieldRemarks,
+                        ),
                         upperCase: false,
                         isCompact: isNarrow,
                         textInputAction: TextInputAction.done,
@@ -757,32 +786,35 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 ],
 
                 // 操作按钮 - 占满宽度
-                SizedBox(
-                  height: isNarrow ? 44 : 48,
-                  child: FilledButton.icon(
-                    key: const Key('save-log-record'),
-                    onPressed: canSubmit ? _submitForm : null,
-                    icon: Icon(
-                      _historyReuseInProgress
-                          ? Icons.auto_fix_high
-                          : readOnly || firstForeignLock != null
-                              ? Icons.lock_outline
-                              : Icons.add,
-                    ),
-                    label: Text(
-                      _historyReuseInProgress
-                          ? context.l10n.reuseDatabaseInformation
-                          : readOnly
-                              ? context.l10n.sharedDraftReadOnly
-                              : firstForeignLock != null
-                                  ? context.l10n.fieldLockedBy(
-                                      firstForeignLock.username,
-                                    )
-                                  : context.l10n.saveRecord,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding:
-                          EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
+                Tooltip(
+                  message: 'Ctrl/⌘ + Enter',
+                  child: SizedBox(
+                    height: isNarrow ? 44 : 48,
+                    child: FilledButton.icon(
+                      key: const Key('save-log-record'),
+                      onPressed: canSubmit ? _submitForm : null,
+                      icon: Icon(
+                        _historyReuseInProgress
+                            ? Icons.auto_fix_high
+                            : readOnly || firstForeignLock != null
+                                ? Icons.lock_outline
+                                : Icons.add,
+                      ),
+                      label: Text(
+                        _historyReuseInProgress
+                            ? context.l10n.reuseDatabaseInformation
+                            : readOnly
+                                ? context.l10n.sharedDraftReadOnly
+                                : firstForeignLock != null
+                                    ? context.l10n.fieldLockedBy(
+                                        firstForeignLock.username,
+                                      )
+                                    : context.l10n.saveRecord,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding:
+                            EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
+                      ),
                     ),
                   ),
                 ),
@@ -791,6 +823,18 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           ),
         );
       },
+    );
+
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (canSubmit) unawaited(_submitForm());
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
+          if (canSubmit) unawaited(_submitForm());
+        },
+      },
+      child: content,
     );
   }
 
@@ -819,7 +863,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         labelText: label,
         hintText: hintText,
         errorText: error,
-        border: const OutlineInputBorder(),
         isDense: true,
         contentPadding:
             EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 10 : 14),
@@ -909,7 +952,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           decoration: InputDecoration(
             labelText: label,
             hintText: hintText,
-            border: const OutlineInputBorder(),
             isDense: true,
             contentPadding: EdgeInsets.symmetric(
                 horizontal: 12, vertical: isCompact ? 10 : 14),

@@ -7,15 +7,28 @@ import '../frb_generated.dart';
 import '../models/session.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `close_session_locally_from_pool`, `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `reopen_local_session_from_pool`, `replace_collaboration_session_locally_from_pool`, `replace_collaboration_session_locally_in_tx`, `stop_collaboration_session_locally_from_pool`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LocalCopyLogRow`, `LocalReplacementStatus`, `SessionRow`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `from_row`, `from_row`
+// These functions are ignored because they are not marked as `pub`: `close_session_locally_from_pool`, `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `into_summary`, `list_session_summaries_from_pool`, `reopen_local_session_from_pool`, `replace_collaboration_session_locally_from_pool`, `replace_collaboration_session_locally_in_tx`, `start_local_session_from_pool`, `stop_collaboration_session_locally_from_pool`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LocalCopyLogRow`, `LocalReplacementStatus`, `SessionRow`, `SessionSummaryRow`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `from_row`, `from_row`, `from_row`
 
 Future<Session> createSession({required String title}) =>
     RustLib.instance.api.crateApiSessionsCreateSession(title: title);
 
+/// Starts a new writable local session atomically.
+///
+/// Any currently active local-only session is closed in the same transaction
+/// that inserts the replacement. Collaboration replicas stay untouched, so a
+/// recorder can leave an on-device shared-session cache available while
+/// starting an independent local net. If insertion fails, the transaction
+/// rolls back the close as well.
+Future<Session> startLocalSession({required String title}) =>
+    RustLib.instance.api.crateApiSessionsStartLocalSession(title: title);
+
 Future<List<Session>> listSessions() =>
     RustLib.instance.api.crateApiSessionsListSessions();
+
+Future<List<SessionSummary>> listSessionSummaries() =>
+    RustLib.instance.api.crateApiSessionsListSessionSummaries();
 
 Future<void> closeSession({required String sessionId}) =>
     RustLib.instance.api.crateApiSessionsCloseSession(sessionId: sessionId);

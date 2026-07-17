@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
+import 'package:provider/provider.dart';
 
 class ThemeSettings extends StatelessWidget {
   final bool isNarrow;
@@ -18,39 +20,25 @@ class ThemeSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final settingsProvider = context.watch<SettingsProvider>();
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.palette, color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '主题设置',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-              ],
-            ),
-            SizedBox(height: isNarrow ? 12 : 16),
-            _buildSettingTile(
-              context,
-              title: '主题颜色',
-              subtitle: '选择应用主色调',
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+    return SettingsSectionCard(
+      icon: Icons.palette_outlined,
+      title: l10n.settingsAppearanceTitle,
+      description: l10n.settingsAppearanceHint,
+      padding: cardPadding,
+      contentSpacing: isNarrow ? 10 : 14,
+      child: SettingsTileGroup(
+        children: [
+          SettingsActionTile(
+            icon: Icons.color_lens_outlined,
+            title: l10n.themeColorSetting,
+            subtitle: l10n.themeColorSettingHint,
+            trailing: SizedBox(
+              width: isNarrow ? 200 : 220,
+              child: Row(
                 children: [
                   Container(
                     width: 28,
@@ -58,75 +46,100 @@ class ThemeSettings extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: settingsProvider.themeColor,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: theme.colorScheme.outlineVariant),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: onPickColor,
-                    child: const Text('选择颜色'),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onPickColor,
+                      child: Text(
+                        l10n.chooseThemeColor,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 24),
-            _buildSettingTile(
-              context,
-              title: '暗色模式',
-              subtitle: '切换到暗色主题',
-              trailing: Switch(
-                value: settingsProvider.isDarkMode,
-                onChanged: (value) => settingsProvider.setDarkMode(value),
-              ),
-            ),
-            const Divider(height: 24),
-            _buildSettingTile(
-              context,
-              title: '应用字体',
-              subtitle: '选择显示字体',
-              trailing: FilledButton(
-                onPressed: onPickFont,
-                child: Text(settingsProvider.fontFamily ?? '系统默认'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSettingTile(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required Widget trailing,
-  }) {
-    final theme = Theme.of(context);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
           ),
-        ),
-        const SizedBox(width: 16),
-        trailing,
-      ],
+          SettingsActionTile(
+            icon: Icons.dark_mode_outlined,
+            title: l10n.darkModeSetting,
+            subtitle: l10n.darkModeSettingHint,
+            trailing: Switch(
+              value: settingsProvider.isDarkMode,
+              onChanged: settingsProvider.setDarkMode,
+            ),
+          ),
+          SettingsActionTile(
+            icon: Icons.font_download_outlined,
+            title: l10n.appFontSetting,
+            subtitle: l10n.appFontSettingHint,
+            trailing: SizedBox(
+              width: isNarrow ? 200 : 220,
+              child: OutlinedButton(
+                onPressed: onPickFont,
+                child: Text(
+                  settingsProvider.fontFamily ?? l10n.fontSystemDefault,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+          SettingsActionTile(
+            icon: Icons.translate_outlined,
+            title: l10n.appLanguageSetting,
+            subtitle: l10n.appLanguageSettingHint,
+            trailing: SizedBox(
+              width: isNarrow ? 200 : 220,
+              child: DropdownButton<AppLocalePreference>(
+                key: const Key('app-language-picker'),
+                value: settingsProvider.appLocalePreference,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                borderRadius: BorderRadius.circular(12),
+                items: [
+                  DropdownMenuItem(
+                    value: AppLocalePreference.system,
+                    child: Text(
+                      l10n.languageFollowSystem,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: AppLocalePreference.simplifiedChinese,
+                    child: Text(
+                      l10n.languageSimplifiedChinese,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: AppLocalePreference.english,
+                    child: Text(
+                      l10n.languageEnglish,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                onChanged: (preference) {
+                  if (preference != null) {
+                    settingsProvider.setAppLocalePreference(preference);
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

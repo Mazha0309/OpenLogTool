@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/widgets/hsv_color_painter.dart';
 
 class ThemeColorPreset {
@@ -13,15 +14,19 @@ class ThemeColorPreset {
 /// A single color-selection surface for both presets and custom colors.
 ///
 /// Presets update the same HSV/HEX controls as manual selection and nothing is
-/// persisted until the user presses Apply. This avoids the old nested dialogs,
-/// whose preset lists and confirmation behavior differed.
+/// persisted until the user presses Apply. Export settings can opt into an
+/// opacity control while application theme colors remain opaque.
 class ThemeColorPickerDialog extends StatefulWidget {
   const ThemeColorPickerDialog({
     super.key,
     required this.initialColor,
+    this.title,
+    this.allowOpacity = false,
   });
 
   final Color initialColor;
+  final String? title;
+  final bool allowOpacity;
 
   @override
   State<ThemeColorPickerDialog> createState() => _ThemeColorPickerDialogState();
@@ -44,7 +49,8 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
   late final TextEditingController _hexController;
   late final ScrollController _scrollController;
 
-  Color get _color => _hsv.toColor().withAlpha(255);
+  Color get _color =>
+      widget.allowOpacity ? _hsv.toColor() : _hsv.toColor().withAlpha(255);
 
   List<ThemeColorPreset> get _presets => [
         ThemeColorPreset(
@@ -76,7 +82,11 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
   @override
   void initState() {
     super.initState();
-    _hsv = HSVColor.fromColor(widget.initialColor.withAlpha(255));
+    _hsv = HSVColor.fromColor(
+      widget.allowOpacity
+          ? widget.initialColor
+          : widget.initialColor.withAlpha(255),
+    );
     _hexController = TextEditingController(text: _hexFor(_color));
     _scrollController = ScrollController();
   }
@@ -89,12 +99,18 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
   }
 
   void _setColor(Color color) {
-    setState(() => _hsv = HSVColor.fromColor(color.withAlpha(255)));
+    setState(() {
+      _hsv = HSVColor.fromColor(
+        widget.allowOpacity ? color : color.withAlpha(255),
+      );
+    });
     _syncHex();
   }
 
   void _setHsv(HSVColor color) {
-    setState(() => _hsv = color.withAlpha(1));
+    setState(() {
+      _hsv = widget.allowOpacity ? color : color.withAlpha(1);
+    });
     _syncHex();
   }
 
@@ -113,7 +129,8 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
     final parsed = int.tryParse(normalized, radix: 16);
     if (parsed == null) return;
     setState(() {
-      _hsv = HSVColor.fromColor(Color(0xFF000000 | parsed));
+      final parsedColor = HSVColor.fromColor(Color(0xFF000000 | parsed));
+      _hsv = parsedColor.withAlpha(widget.allowOpacity ? _hsv.alpha : 1);
     });
   }
 
@@ -130,7 +147,7 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
     final presets = _presets;
     return AlertDialog(
       key: const Key('theme-color-picker-dialog'),
-      title: Text(l10n.themeColorPickerTitle),
+      title: Text(widget.title ?? l10n.themeColorPickerTitle),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Scrollbar(
@@ -144,7 +161,7 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
             child: SingleChildScrollView(
               key: const Key('theme-color-content-scroll'),
               controller: _scrollController,
-              padding: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.only(right: AppSpace.xs),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,10 +170,10 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                     l10n.themeColorPresets,
                     style: theme.textTheme.labelLarge,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpace.xs),
                   Wrap(
-                    spacing: 3,
-                    runSpacing: 4,
+                    spacing: AppSpace.xxs,
+                    runSpacing: AppSpace.xs,
                     children: [
                       for (final preset in presets)
                         _PresetButton(
@@ -170,23 +187,25 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpace.sm),
                   const Divider(height: 1),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppSpace.sm),
                   Text(
                     l10n.themeColorCustom,
                     style: theme.textTheme.labelLarge,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpace.xs),
                   AspectRatio(
                     aspectRatio: 2.15,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(AppRadius.control),
                         border: Border.all(color: theme.colorScheme.outline),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(
+                          AppRadius.control - 1,
+                        ),
                         child: Builder(
                           builder: (colorAreaContext) {
                             void update(DragUpdateDetails details) {
@@ -230,7 +249,7 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppSpace.sm),
                   Row(
                     children: [
                       Container(
@@ -239,11 +258,12 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                         height: 40,
                         decoration: BoxDecoration(
                           color: _color,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.control),
                           border: Border.all(color: theme.colorScheme.outline),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: AppSpace.sm),
                       Expanded(
                         child: TextField(
                           key: const Key('theme-color-hex-field'),
@@ -269,7 +289,7 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpace.xs),
                   Row(
                     children: [
                       SizedBox(
@@ -282,10 +302,12 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                           children: [
                             Container(
                               height: 16,
-                              margin:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: AppSpace.sm,
+                              ),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.small),
                                 gradient: _hueGradient,
                               ),
                             ),
@@ -310,6 +332,36 @@ class _ThemeColorPickerDialogState extends State<ThemeColorPickerDialog> {
                       ),
                     ],
                   ),
+                  if (widget.allowOpacity) ...[
+                    const SizedBox(height: AppSpace.xs),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 72,
+                          child: Text(l10n.colorOpacity),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            key: const Key('theme-color-opacity-slider'),
+                            value: _hsv.alpha,
+                            min: 0,
+                            max: 1,
+                            activeColor: _color.withAlpha(255),
+                            onChanged: (value) =>
+                                _setHsv(_hsv.withAlpha(value)),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          child: Text(
+                            '${(_hsv.alpha * 100).round()}%',
+                            textAlign: TextAlign.end,
+                            style: theme.textTheme.labelMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -353,7 +405,7 @@ class _PresetButton extends StatelessWidget {
       selected: selected,
       label: label,
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: onPressed,
         child: Padding(
           padding: const EdgeInsets.all(1),
@@ -361,12 +413,12 @@ class _PresetButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
+                duration: AppMotion.fast,
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                   border: Border.all(
                     color: selected
                         ? colorScheme.onSurface
@@ -378,12 +430,10 @@ class _PresetButton extends StatelessWidget {
                     ? Icon(Icons.check, color: _foregroundFor(color), size: 18)
                     : null,
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: AppSpace.xxs),
               Text(
                 label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      fontSize: 9,
-                    ),
+                style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
           ),

@@ -58,6 +58,16 @@ pub async fn upsert_dict_item_if_active(
     dict::search::upsert_dict_item_if_active(&item).await
 }
 
+pub async fn rename_dict_item(
+    dict_type: String,
+    old_raw: String,
+    new_raw: String,
+    pinyin: Option<String>,
+    abbreviation: Option<String>,
+) -> anyhow::Result<DictItem> {
+    dict::search::rename_dict_item(&dict_type, &old_raw, &new_raw, pinyin, abbreviation).await
+}
+
 /// Atomically imports user-supplied dictionary entries.
 ///
 /// Unlike built-in dictionary synchronization, an explicit import revives an

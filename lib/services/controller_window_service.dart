@@ -28,6 +28,7 @@ class ControllerWindowAppearance {
     this.themeColor = const Color(0xFF2196F3),
     this.isDarkMode = false,
     this.fontFamily,
+    this.locale,
   });
 
   factory ControllerWindowAppearance.fromJson(Object? value) {
@@ -41,6 +42,10 @@ class ControllerWindowAppearance {
     if (rawFont != null && rawFont is! String) {
       throw const FormatException('Controller font family must be a string');
     }
+    final rawLocale = map['locale'];
+    if (rawLocale != null && rawLocale is! String) {
+      throw const FormatException('Controller locale must be a string');
+    }
     final parsedColor =
         colorValue is int ? Color(colorValue) : const Color(0xFF2196F3);
     final parsedFont =
@@ -49,19 +54,41 @@ class ControllerWindowAppearance {
       themeColor: parsedColor,
       isDarkMode: map['isDarkMode'] == true,
       fontFamily: parsedFont,
+      locale: _controllerLocaleFromStorage(rawLocale as String?),
     );
   }
 
   final Color themeColor;
   final bool isDarkMode;
   final String? fontFamily;
+  final Locale? locale;
+
+  Locale resolveLocale(Locale systemLocale) => resolveAppLocale(
+        locale ?? systemLocale,
+        AppLocalizations.supportedLocales,
+      );
 
   Map<String, Object?> toJson() => {
         'themeColor': themeColor.toARGB32(),
         'isDarkMode': isDarkMode,
         'fontFamily': fontFamily,
+        'locale': _controllerLocaleToStorage(locale),
       };
 }
+
+Locale? _controllerLocaleFromStorage(String? locale) => switch (locale) {
+      null => null,
+      'zh_CN' => const Locale('zh', 'CN'),
+      'en_US' => const Locale('en', 'US'),
+      _ => throw FormatException('Unsupported controller locale: $locale'),
+    };
+
+String? _controllerLocaleToStorage(Locale? locale) => switch (locale) {
+      null => null,
+      Locale(languageCode: 'zh', countryCode: 'CN') => 'zh_CN',
+      Locale(languageCode: 'en', countryCode: 'US') => 'en_US',
+      _ => throw ArgumentError.value(locale, 'locale', 'is not supported'),
+    };
 
 class ControllerWindowLaunch {
   const ControllerWindowLaunch({
@@ -659,7 +686,7 @@ class ControllerDisplayWindowApp extends StatefulWidget {
 }
 
 class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
-    with WindowListener {
+    with WindowListener, WidgetsBindingObserver {
   late ControllerDisplayDto _data = widget.session.launch.data;
   late ControllerDisplayPreferences _preferences =
       widget.session.launch.preferences;
@@ -674,6 +701,7 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _commands = widget.session.commands.listen(_handleCommand);
     _configureWindow().catchError((Object error, StackTrace stackTrace) {
       debugPrint('[ControllerWindow] child initialization failed: $error');
@@ -694,11 +722,15 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
       case ControllerWindowMessageType.show:
         final launch = message.launch;
         if (launch != null && mounted) {
+          final localeChanged = launch.appearance.locale != _appearance.locale;
           setState(() {
             _data = launch.data;
             _preferences = launch.preferences;
             _appearance = launch.appearance;
           });
+          if (localeChanged && _windowReady) {
+            unawaited(_updateWindowTitle(launch.appearance));
+          }
         }
         if (message.type == ControllerWindowMessageType.show && _windowReady) {
           unawaited(windowManager.show());
@@ -714,9 +746,8 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
   Future<void> _configureWindow() async {
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
-    final locale = resolveAppLocale(
+    final locale = _appearance.resolveLocale(
       WidgetsBinding.instance.platformDispatcher.locale,
-      AppLocalizations.supportedLocales,
     );
     final l10n = await AppLocalizations.delegate.load(locale);
     final floating =
@@ -738,12 +769,32 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
       await windowManager.focus();
     });
     _windowReady = true;
+    await _updateWindowTitle(_appearance);
     if (_closeRequested) {
       await _terminateChildWindow();
       return;
     }
     stdout.writeln(ControllerWindowProtocol.readyMarker);
     await stdout.flush();
+  }
+
+  Future<void> _updateWindowTitle(
+    ControllerWindowAppearance appearance,
+  ) async {
+    final locale = appearance.resolveLocale(
+      WidgetsBinding.instance.platformDispatcher.locale,
+    );
+    final l10n = await AppLocalizations.delegate.load(locale);
+    if (!mounted || !_windowReady || _appearance.locale != appearance.locale) {
+      return;
+    }
+    final floating =
+        widget.session.launch.mode == ControllerWindowMode.floating;
+    await windowManager.setTitle(
+      floating
+          ? l10n.controllerFloatingWindowTitle
+          : l10n.controllerScreenTitle,
+    );
   }
 
   void _updatePreferences(ControllerDisplayPreferences preferences) {
@@ -762,7 +813,15 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
   }
 
   @override
+  void didChangeLocales(List<Locale>? locales) {
+    if (_appearance.locale == null && _windowReady) {
+      unawaited(_updateWindowTitle(_appearance));
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     windowManager.removeListener(this);
     unawaited(_commands.cancel());
     unawaited(widget.session.dispose());
@@ -775,6 +834,7 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
         debugShowCheckedModeBanner: false,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        locale: _appearance.locale,
         localeResolutionCallback: resolveAppLocale,
         theme: buildAppTheme(
           brightness: Brightness.light,

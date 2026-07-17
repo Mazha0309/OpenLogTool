@@ -296,6 +296,108 @@ void main() {
     provider.dispose();
   });
 
+  test('rename changes visible state only after atomic persistence succeeds',
+      () async {
+    final store = _DictionaryStore();
+    final provider = _providerForStore(store);
+    await provider.addDevice('Old radio');
+
+    await provider.renameDevice('Old radio', 'New radio');
+
+    expect(provider.deviceDict.single.raw, 'New radio');
+    expect(
+      await store.getByRaw(
+        dictType: 'device_dictionary',
+        raw: 'Old radio',
+      ),
+      isNull,
+    );
+    expect(provider.deviceDict.single.syncId, 'persisted-Old radio');
+    provider.dispose();
+  });
+
+  test('rename failure leaves the original visible entry untouched', () async {
+    final store = _DictionaryStore(failRename: true);
+    final provider = _providerForStore(store);
+    await provider.addAntenna('Old antenna');
+
+    await expectLater(
+      provider.renameAntenna('Old antenna', 'New antenna'),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(provider.antennaDict.single.raw, 'Old antenna');
+    expect(
+      await store.getByRaw(
+        dictType: 'antenna_dictionary',
+        raw: 'Old antenna',
+      ),
+      isNotNull,
+    );
+    provider.dispose();
+  });
+
+  test('full JSON export round-trips all four libraries and search metadata',
+      () async {
+    final sourceStore = _DictionaryStore();
+    final source = _providerForStore(sourceStore);
+    await source.importFromJson('''
+      {
+        "devices":[{"raw":"FT-991A","pinyin":"radio alpha","abbreviation":"RDA"}],
+        "antennas":["Yagi"],
+        "callsigns":["BG5CRL"],
+        "qths":[{"raw":"浙江杭州","pinyin":"zhe jiang hang zhou","abbreviation":"ZJHZ"}]
+      }
+    ''');
+
+    final exported = source.exportToJson();
+    final decoded = json.decode(exported) as Map<String, dynamic>;
+    expect(decoded['format'], 'openlogtool-dictionaries');
+    expect(decoded['version'], 1);
+    expect(decoded['devices'], hasLength(1));
+    expect(decoded['antennas'], hasLength(1));
+    expect(decoded['callsigns'], hasLength(1));
+    expect(decoded['qths'], hasLength(1));
+
+    final destinationStore = _DictionaryStore();
+    final destination = _providerForStore(destinationStore);
+    final counts = await destination.importFromJson(exported);
+    expect(counts.values.fold<int>(0, (sum, count) => sum + count), 4);
+    expect(destination.filterDevices('rda').single.raw, 'FT-991A');
+    expect(destination.filterQths('zhe jiang').single.raw, '浙江杭州');
+    source.dispose();
+    destination.dispose();
+  });
+
+  test('legacy named maps and flat typed items merge into current libraries',
+      () async {
+    final store = _DictionaryStore();
+    final provider = _providerForStore(store);
+
+    final counts = await provider.importFromJson('''
+      {
+        "deviceDict":["FT-991A"],
+        "dictionaries":{"antenna":["Yagi"]},
+        "items":[
+          {"type":"callsign_dictionary","raw":"BG5CRL"},
+          {"dictType":"qth_dictionary","raw":"浙江杭州"}
+        ]
+      }
+    ''');
+
+    expect(counts, <String, int>{
+      'device': 1,
+      'antenna': 1,
+      'callsign': 1,
+      'qth': 1,
+    });
+    expect(provider.deviceDict.single.raw, 'FT-991A');
+    expect(provider.antennaDict.single.raw, 'Yagi');
+    expect(provider.callsignDict.single.raw, 'BG5CRL');
+    expect(provider.qthDict.single.raw, '浙江杭州');
+    provider.dispose();
+  });
+
   test('strict built-in synchronization propagates an asset restore failure',
       () async {
     final store = _DictionaryStore();
@@ -333,6 +435,7 @@ DictionaryProvider _providerForStore(_DictionaryStore store) {
     getItems: store.getItems,
     deleteItem: store.delete,
     clearItems: store.clear,
+    renameItem: store.rename,
   );
 }
 
@@ -341,11 +444,13 @@ class _DictionaryStore {
     this.ignoreDeletes = false,
     this.ignoreClears = false,
     this.failBatchRaw,
+    this.failRename = false,
   });
 
   final bool ignoreDeletes;
   final bool ignoreClears;
   final String? failBatchRaw;
+  final bool failRename;
   final Map<String, bridge.DictItem> items = <String, bridge.DictItem>{};
   int batchCalls = 0;
 
@@ -357,7 +462,12 @@ class _DictionaryStore {
     String? pinyin,
     String? abbreviation,
   }) async {
-    items[_key(dictType, raw)] = _persistedItem(dictType, raw);
+    items[_key(dictType, raw)] = _persistedItem(
+      dictType,
+      raw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+    );
   }
 
   Future<void> bulkUpsert({required String requestJson}) async {
@@ -410,15 +520,50 @@ class _DictionaryStore {
     if (ignoreClears) return;
     items.removeWhere((_, item) => item.dictType == dictType);
   }
+
+  Future<bridge.DictItem> rename({
+    required String dictType,
+    required String oldRaw,
+    required String newRaw,
+    String? pinyin,
+    String? abbreviation,
+  }) async {
+    if (failRename) throw StateError('forced atomic rename failure');
+    final oldKey = _key(dictType, oldRaw);
+    final newKey = _key(dictType, newRaw);
+    final existing = items[oldKey];
+    if (existing == null) throw StateError('rename source missing');
+    if (items.containsKey(newKey)) throw StateError('rename target exists');
+    final renamed = bridge.DictItem(
+      id: existing.id,
+      dictType: dictType,
+      raw: newRaw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+      syncId: existing.syncId,
+      createdAt: existing.createdAt,
+      updatedAt: '2026-07-17T00:00:00Z',
+      deletedAt: null,
+    );
+    items
+      ..remove(oldKey)
+      ..[newKey] = renamed;
+    return renamed;
+  }
 }
 
-bridge.DictItem _persistedItem(String dictType, String raw) {
+bridge.DictItem _persistedItem(
+  String dictType,
+  String raw, {
+  String? pinyin,
+  String? abbreviation,
+}) {
   const timestamp = '2026-07-13T00:00:00Z';
   return bridge.DictItem(
     dictType: dictType,
     raw: raw,
-    pinyin: '',
-    abbreviation: '',
+    pinyin: pinyin ?? '',
+    abbreviation: abbreviation ?? '',
     syncId: 'persisted-$raw',
     createdAt: timestamp,
     updatedAt: timestamp,

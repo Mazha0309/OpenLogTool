@@ -7,225 +7,171 @@ import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  test('zh_CN and en_US use library terminology consistently', () async {
-    final zh = await AppLocalizations.delegate.load(const Locale('zh', 'CN'));
-    final en = await AppLocalizations.delegate.load(const Locale('en', 'US'));
-
-    expect(zh.dictionaryManagementTitle, '词库管理');
-    expect(zh.deviceLibrary, '设备词库');
-    expect(en.dictionaryManagementTitle, 'Lookup libraries');
-    expect(en.deviceLibrary, 'Radio library');
+  test('dictionary workspace uses responsive page sizes', () {
+    expect(dictionaryPageSize(360), 10);
+    expect(dictionaryPageSize(719), 10);
+    expect(dictionaryPageSize(720), 20);
+    expect(dictionaryPageSize(1200), 20);
   });
 
-  test('dictionary grid uses two columns only when space is available', () {
-    expect(dictionaryGridColumnCount(759), 1);
-    expect(dictionaryGridColumnCount(760), 2);
-  });
-
-  testWidgets('library management uses consistent terminology and search',
+  testWidgets('phone shows top categories and paginates ten entries',
       (tester) async {
-    final provider = _TestDictionaryProvider();
-    await tester.pumpWidget(
-      ChangeNotifierProvider<DictionaryProvider>.value(
-        value: provider,
-        child: const MaterialApp(
-          locale: Locale('zh', 'CN'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: SizedBox(width: 700, child: DictionaryManager()),
-            ),
-          ),
-        ),
-      ),
-    );
+    final provider = _TestDictionaryProvider(deviceCount: 25);
+    await _pumpManager(tester, provider, width: 360, height: 900);
+
+    expect(find.byKey(const Key('library-phone-categories')), findsOneWidget);
+    expect(find.byKey(const Key('library-wide-workspace')), findsNothing);
+    expect(find.byKey(const Key('library-workspace-device')), findsOneWidget);
+    expect(find.text('Device 01'), findsOneWidget);
+    expect(find.text('Device 09'), findsOneWidget);
+    expect(find.text('Device 10'), findsNothing);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+
+    final nextPage = find.byKey(const Key('library-next-page-device'));
+    await tester.ensureVisible(nextPage);
+    await tester.tap(nextPage);
     await tester.pump();
+    expect(find.text('Device 01'), findsNothing);
+    expect(find.text('Device 10'), findsOneWidget);
+    expect(find.text('Device 19'), findsOneWidget);
+    expect(find.text('第 2 / 3 页'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
-    expect(find.text('词库管理'), findsOneWidget);
-    expect(find.textContaining('词典'), findsNothing);
-    expect(find.byKey(const Key('import-library-json')), findsOneWidget);
-    expect(find.byIcon(Icons.delete_sweep_outlined), findsNWidgets(4));
+  testWidgets('wide layout keeps categories left and shows twenty entries',
+      (tester) async {
+    final provider = _TestDictionaryProvider(deviceCount: 25);
+    await _pumpManager(tester, provider, width: 1100, height: 1000);
 
-    final deviceTop = tester.getTopLeft(
-      find.byKey(const Key('library-card-device')),
-    );
-    final antennaTop = tester.getTopLeft(
-      find.byKey(const Key('library-card-antenna')),
-    );
-    expect(antennaTop.dy, greaterThan(deviceTop.dy));
+    final category = find.byKey(const Key('library-category-device'));
+    final workspace = find.byKey(const Key('library-workspace-device'));
+    expect(find.byKey(const Key('library-wide-workspace')), findsOneWidget);
+    expect(find.byKey(const Key('library-phone-categories')), findsNothing);
+    expect(tester.getTopLeft(category).dx,
+        lessThan(tester.getTopLeft(workspace).dx));
+    expect(find.text('Device 19'), findsOneWidget);
+    expect(find.text('Device 20'), findsNothing);
+    expect(find.text('第 1 / 2 页'), findsOneWidget);
 
-    final deviceCard = find.byKey(const Key('library-card-device'));
-    await tester.tap(
-      find.descendant(of: deviceCard, matching: find.byType(InkWell)).first,
-    );
+    await tester.tap(find.byKey(const Key('library-category-antenna')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('library-workspace-antenna')), findsOneWidget);
+    expect(find.text('Yagi'), findsOneWidget);
+  });
 
+  testWidgets('search matches raw pinyin and abbreviation', (tester) async {
+    final provider = _TestDictionaryProvider(deviceCount: 1);
+    await _pumpManager(tester, provider, width: 700);
     final search = find.byKey(const Key('search-library-device'));
-    expect(search, findsOneWidget);
-    expect(find.text('FT-991A'), findsOneWidget);
+
+    await tester.enterText(search, 'Handheld');
+    await tester.pump();
+    expect(find.text('Handheld radio'), findsOneWidget);
+
+    await tester.enterText(search, 'shou tai');
+    await tester.pump();
+    expect(find.text('Handheld radio'), findsOneWidget);
+
+    await tester.enterText(search, 'ST');
+    await tester.pump();
+    expect(find.text('Handheld radio'), findsOneWidget);
+
     await tester.enterText(search, 'not-found');
     await tester.pump();
     expect(find.text('没有匹配的词库内容'), findsOneWidget);
-
-    await tester.tap(
-      find.descendant(of: deviceCard, matching: find.byType(InkWell)).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.descendant(of: deviceCard, matching: find.byType(InkWell)).first,
-    );
-    await tester.pumpAndSettle();
-    final reopenedSearch = tester.widget<TextField>(search);
-    expect(reopenedSearch.controller?.text, 'not-found');
-    expect(find.text('没有匹配的词库内容'), findsOneWidget);
   });
 
-  testWidgets('wide library management lays cards out in two columns',
+  testWidgets('editing persists before replacing the visible entry',
       (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(1200, 900);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
-    final provider = _TestDictionaryProvider();
-    await tester.pumpWidget(
-      ChangeNotifierProvider<DictionaryProvider>.value(
-        value: provider,
-        child: const MaterialApp(
-          locale: Locale('en', 'US'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: SizedBox(width: 900, child: DictionaryManager()),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
+    final provider = _TestDictionaryProvider(deviceCount: 1);
+    await _pumpManager(tester, provider, width: 700);
 
-    final deviceTop = tester.getTopLeft(
-      find.byKey(const Key('library-card-device')),
+    await tester.tap(find.byKey(const Key('edit-library-device-device-0')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('edit-library-item-field-device')),
+      'Renamed radio',
     );
-    final antennaTop = tester.getTopLeft(
-      find.byKey(const Key('library-card-antenna')),
-    );
-    expect(antennaTop.dy, deviceTop.dy);
-    expect(antennaTop.dx, greaterThan(deviceTop.dx));
-    expect(find.text('Lookup libraries'), findsOneWidget);
-    expect(find.byIcon(Icons.delete_sweep_outlined), findsNWidgets(4));
-  });
-
-  testWidgets('single entry deletion requires confirmation and refreshes UI',
-      (tester) async {
-    final provider = _TestDictionaryProvider();
-    await _pumpManager(tester, provider);
-    await _expandDeviceLibrary(tester);
-
-    final deviceCard = find.byKey(const Key('library-card-device'));
     await tester.tap(
-      find.descendant(
-        of: deviceCard,
-        matching: find.byIcon(Icons.delete_outline),
-      ),
+      find.byKey(const Key('confirm-edit-library-item-device')),
     );
     await tester.pumpAndSettle();
 
+    expect(
+        provider.renamedValues, const <String>['Handheld radio→Renamed radio']);
+    expect(find.text('Renamed radio'), findsOneWidget);
+    expect(find.text('Handheld radio'), findsNothing);
+  });
+
+  testWidgets('failed edit keeps the original entry visible', (tester) async {
+    final provider = _TestDictionaryProvider(
+      deviceCount: 1,
+      failRename: true,
+    );
+    await _pumpManager(tester, provider, width: 700);
+
+    await tester.tap(find.byKey(const Key('edit-library-device-device-0')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('edit-library-item-field-device')),
+      'Rejected radio',
+    );
+    await tester.tap(
+      find.byKey(const Key('confirm-edit-library-item-device')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Handheld radio'), findsOneWidget);
+    expect(find.text('Rejected radio'), findsNothing);
+    expect(find.textContaining('修改失败'), findsOneWidget);
+  });
+
+  testWidgets('delete and clear remain confirmed destructive operations',
+      (tester) async {
+    final provider = _TestDictionaryProvider(deviceCount: 2);
+    await _pumpManager(tester, provider, width: 700);
+
+    await tester.tap(find.byKey(const Key('delete-library-device-device-0')));
+    await tester.pumpAndSettle();
     expect(find.text('删除词库条目'), findsOneWidget);
-    expect(provider.deletedValues, isEmpty);
     await tester.tap(
       find.byKey(const Key('confirm-delete-library-item-device')),
     );
     await tester.pumpAndSettle();
-
-    expect(provider.deletedValues, const <String>['FT-991A']);
-    expect(provider.deviceDict, isEmpty);
-    expect(find.text('词库中还没有内容'), findsOneWidget);
-  });
-
-  testWidgets('clear by type requires confirmation and refreshes its count',
-      (tester) async {
-    final provider = _TestDictionaryProvider();
-    await _pumpManager(tester, provider);
-    await _expandDeviceLibrary(tester);
-    await tester.enterText(
-      find.byKey(const Key('search-library-device')),
-      'FT',
-    );
+    expect(provider.deletedValues, const <String>['Handheld radio']);
 
     await tester.tap(find.byKey(const Key('clear-library-device')));
     await tester.pumpAndSettle();
     expect(find.text('清空设备词库'), findsOneWidget);
-    expect(find.textContaining('全部 1 条'), findsOneWidget);
-
-    await tester.tap(
-      find.byKey(const Key('confirm-clear-library-device')),
-    );
+    await tester.tap(find.byKey(const Key('confirm-clear-library-device')));
     await tester.pumpAndSettle();
-
     expect(provider.clearedTypes, const <String>['device']);
-    expect(find.text('设备词库 · 0'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const Key('search-library-device')),
-          )
-          .controller
-          ?.text,
-      isEmpty,
-    );
+    expect(find.text('词库中还没有内容'), findsOneWidget);
   });
 
-  testWidgets('delete failure leaves entry visible and explains the failure',
+  testWidgets('workspace exposes full JSON import and export actions',
       (tester) async {
-    final provider = _TestDictionaryProvider(failDelete: true);
-    await _pumpManager(tester, provider);
-    await _expandDeviceLibrary(tester);
-    final deviceCard = find.byKey(const Key('library-card-device'));
+    final provider = _TestDictionaryProvider(deviceCount: 1);
+    await _pumpManager(tester, provider, width: 700);
 
-    await tester.tap(
-      find.descendant(
-        of: deviceCard,
-        matching: find.byIcon(Icons.delete_outline),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('confirm-delete-library-item-device')),
-    );
-    await tester.pump();
-
-    expect(find.text('FT-991A'), findsOneWidget);
-    expect(find.textContaining('删除失败'), findsOneWidget);
-  });
-
-  testWidgets('narrow phone layout keeps library actions on screen',
-      (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(360, 800);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
-    final provider = _TestDictionaryProvider();
-
-    await _pumpManager(tester, provider, width: 360);
-    await _expandDeviceLibrary(tester);
-
+    expect(find.byKey(const Key('export-library-json')), findsOneWidget);
     expect(find.byKey(const Key('import-library-json')), findsOneWidget);
-    expect(find.byKey(const Key('clear-library-device')), findsOneWidget);
-    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(find.text('导出词库 JSON'), findsOneWidget);
+    expect(find.text('导入 JSON'), findsOneWidget);
   });
 }
 
 Future<void> _pumpManager(
   WidgetTester tester,
   DictionaryProvider provider, {
-  double width = 700,
+  required double width,
+  double height = 900,
 }) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = Size(width, height);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(provider.dispose);
   await tester.pumpWidget(
     ChangeNotifierProvider<DictionaryProvider>.value(
       value: provider,
@@ -244,35 +190,43 @@ Future<void> _pumpManager(
   await tester.pump();
 }
 
-Future<void> _expandDeviceLibrary(WidgetTester tester) async {
-  final deviceCard = find.byKey(const Key('library-card-device'));
-  await tester.tap(
-    find.descendant(of: deviceCard, matching: find.byType(InkWell)).first,
-  );
-  await tester.pumpAndSettle();
-}
-
 class _TestDictionaryProvider extends DictionaryProvider {
-  _TestDictionaryProvider({this.failDelete = false}) : super(autoload: false);
+  _TestDictionaryProvider({
+    required int deviceCount,
+    this.failRename = false,
+  })  : _devices = List<DictionaryItem>.generate(
+          deviceCount,
+          (index) => DictionaryItem(
+            raw: index == 0
+                ? 'Handheld radio'
+                : 'Device ${index.toString().padLeft(2, '0')}',
+            pinyin: index == 0 ? 'shou tai' : '',
+            abbreviation: index == 0 ? 'ST' : '',
+            syncId: 'device-$index',
+            type: 'device_dictionary',
+          ),
+        ),
+        super(autoload: false);
 
-  final bool failDelete;
+  final bool failRename;
+  final List<DictionaryItem> _devices;
+  final List<String> renamedValues = <String>[];
   final List<String> deletedValues = <String>[];
   final List<String> clearedTypes = <String>[];
-
-  final List<DictionaryItem> _devices = <DictionaryItem>[
-    DictionaryItem(
-      raw: 'FT-991A',
-      pinyin: '',
-      abbreviation: 'FT991A',
-      type: 'device_dictionary',
-    ),
-  ];
 
   @override
   List<DictionaryItem> get deviceDict => _devices;
 
   @override
-  List<DictionaryItem> get antennaDict => const <DictionaryItem>[];
+  List<DictionaryItem> get antennaDict => <DictionaryItem>[
+        DictionaryItem(
+          raw: 'Yagi',
+          pinyin: '',
+          abbreviation: '',
+          syncId: 'antenna-0',
+          type: 'antenna_dictionary',
+        ),
+      ];
 
   @override
   List<DictionaryItem> get callsignDict => const <DictionaryItem>[];
@@ -281,8 +235,17 @@ class _TestDictionaryProvider extends DictionaryProvider {
   List<DictionaryItem> get qthDict => const <DictionaryItem>[];
 
   @override
+  Future<void> renameDevice(String oldRaw, String newRaw) async {
+    if (failRename) throw StateError('simulated atomic rename failure');
+    final index = _devices.indexWhere((item) => item.raw == oldRaw);
+    if (index < 0) throw StateError('source missing');
+    renamedValues.add('$oldRaw→$newRaw');
+    _devices[index] = _devices[index].copyWith(raw: newRaw);
+    notifyListeners();
+  }
+
+  @override
   Future<void> deleteDevice(String raw) async {
-    if (failDelete) throw StateError('simulated persistent delete failure');
     deletedValues.add(raw);
     _devices.removeWhere((item) => item.raw == raw);
     notifyListeners();

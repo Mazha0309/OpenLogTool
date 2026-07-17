@@ -3,6 +3,7 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/live_draft.dart';
@@ -22,6 +23,209 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  for (final locale in const <Locale>[
+    Locale('zh', 'CN'),
+    Locale('en', 'US'),
+  ]) {
+    testWidgets('${locale.toLanguageTag()} localizes workbench form fields',
+        (tester) async {
+      final collaboration = _RecordingCollaborationProvider();
+      addTearDown(collaboration.dispose);
+      final isEnglish = locale.languageCode == 'en';
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          locale: locale,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final decorations = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .map((field) => field.decoration!)
+          .toList(growable: false);
+      expect(
+        decorations.map((decoration) => decoration.labelText),
+        containsAll(
+          isEnglish
+              ? const <String>[
+                  'Controller callsign *',
+                  'Callsign',
+                  'Radio',
+                  'Antenna',
+                  'Power',
+                  'QTH',
+                  'Height',
+                  'Time',
+                  'RST sent',
+                  'RST received',
+                  'Remarks',
+                ]
+              : const <String>[
+                  '主控呼号 *',
+                  '来台呼号',
+                  '设备',
+                  '天线',
+                  '功率',
+                  'QTH',
+                  '高度',
+                  '时间',
+                  'RST 发',
+                  'RST 收',
+                  '备注',
+                ],
+        ),
+      );
+      final controllerDecoration = decorations.singleWhere(
+        (decoration) =>
+            decoration.labelText ==
+            (isEnglish ? 'Controller callsign *' : '主控呼号 *'),
+      );
+      final remarksDecoration = decorations.singleWhere(
+        (decoration) => decoration.labelText == (isEnglish ? 'Remarks' : '备注'),
+      );
+      expect(
+        controllerDecoration.hintText,
+        isEnglish ? 'Enter Controller callsign' : '输入主控呼号',
+      );
+      expect(
+        remarksDecoration.hintText,
+        isEnglish ? 'Remarks (optional)' : '备注（可选）',
+      );
+
+      tester
+          .widget<FilledButton>(find.byKey(const Key('save-log-record')))
+          .onPressed!();
+      await tester.pump();
+
+      expect(
+        find.text(isEnglish ? 'This field is required' : '此项不能为空'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(isEnglish ? 'Enter a callsign' : '请输入点名呼号'),
+        findsOneWidget,
+      );
+    });
+  }
+
+  for (final shortcut in <String, LogicalKeyboardKey>{
+    'Ctrl+Enter': LogicalKeyboardKey.controlLeft,
+    'Meta+Enter': LogicalKeyboardKey.metaLeft,
+  }.entries) {
+    testWidgets('${shortcut.key} saves a valid form', (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Ctrl/⌘ + Enter'), findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CallsignHistoryField),
+          matching: find.byType(EditableText),
+        ),
+      );
+      await tester.pump();
+      await _sendSaveShortcut(tester, shortcut.value);
+      await tester.pumpAndSettle();
+
+      expect(collaboration.commitCalls, 1);
+    });
+  }
+
+  testWidgets('save shortcut keeps invalid and read-only forms blocked',
+      (tester) async {
+    final invalidCollaboration = _RecordingCollaborationProvider();
+    addTearDown(invalidCollaboration.dispose);
+    await tester.pumpWidget(
+      _LogFormTestApp(collaboration: invalidCollaboration),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EditableText).first);
+    await tester.pump();
+    await _sendSaveShortcut(tester, LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(invalidCollaboration.commitCalls, 0);
+
+    final readOnlyCollaboration = _RecordingCollaborationProvider(
+      initialFields: const {
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+      },
+    );
+    addTearDown(readOnlyCollaboration.dispose);
+    await tester.pumpWidget(
+      _LogFormTestApp(
+        collaboration: readOnlyCollaboration,
+        readOnly: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final shortcuts =
+        tester.widget<CallbackShortcuts>(find.byType(CallbackShortcuts));
+    shortcuts.bindings[
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true)]!();
+    await tester.pump();
+    expect(readOnlyCollaboration.commitCalls, 0);
+  });
+
+  testWidgets('rapid save shortcuts only start one submission', (tester) async {
+    final collaboration = _RecordingCollaborationProvider(
+      initialFields: const {
+        'time': '',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+        'rstSent': '59',
+        'rstRcvd': '59',
+      },
+    );
+    final gate = Completer<void>();
+    collaboration.commitGate = gate;
+    addTearDown(collaboration.dispose);
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+
+    await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CallsignHistoryField),
+        matching: find.byType(EditableText),
+      ),
+    );
+    await tester.pump();
+
+    await _sendSaveShortcut(tester, LogicalKeyboardKey.controlLeft);
+    await _sendSaveShortcut(tester, LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(collaboration.commitCalls, 1);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('save-log-record')))
+          .onPressed,
+      isNull,
+    );
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(collaboration.commitCalls, 1);
   });
 
   testWidgets(
@@ -274,17 +478,13 @@ void main() {
       final time = tester
           .widget<TextFormField>(find.byKey(const Key('log-time-field')))
           .controller!;
-      final errors = <Object>[];
-      runZonedGuarded(
-        () => tester
-            .widget<FilledButton>(find.byKey(const Key('save-log-record')))
-            .onPressed!(),
-        (error, _) => errors.add(error),
-      );
+      tester
+          .widget<FilledButton>(find.byKey(const Key('save-log-record')))
+          .onPressed!();
       await tester.pump();
 
-      expect(errors, hasLength(1));
-      expect(errors.single, isA<StateError>());
+      expect(
+          find.text('Action failed: Bad state: commit failed'), findsOneWidget);
       expect(collaboration.liveDraftFields['time'], isNotEmpty);
       expect(time.text, isEmpty);
 
@@ -446,7 +646,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final remarksField = find.ancestor(
-        of: find.text('备注'),
+        of: find.text('Remarks'),
         matching: find.byType(TextFormField),
       );
       expect(remarksField, findsOneWidget);
@@ -497,11 +697,28 @@ const _historyRecord = bridge.LogEntry(
   updatedAt: '2026-07-12T08:15:00Z',
 );
 
+Future<void> _sendSaveShortcut(
+  WidgetTester tester,
+  LogicalKeyboardKey modifier,
+) async {
+  await tester.sendKeyDownEvent(modifier);
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+  await tester.sendKeyUpEvent(modifier);
+}
+
 class _LogFormTestApp extends StatelessWidget {
-  const _LogFormTestApp({required this.collaboration, this.logFormKey});
+  const _LogFormTestApp({
+    required this.collaboration,
+    this.logFormKey,
+    this.readOnly = false,
+    this.locale = const Locale('en', 'US'),
+  });
 
   final CollaborationProvider collaboration;
   final Key? logFormKey;
+  final bool readOnly;
+  final Locale locale;
 
   @override
   Widget build(BuildContext context) => MultiProvider(
@@ -522,7 +739,7 @@ class _LogFormTestApp extends StatelessWidget {
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ],
         child: MaterialApp(
-          locale: const Locale('en', 'US'),
+          locale: locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
@@ -530,7 +747,7 @@ class _LogFormTestApp extends StatelessWidget {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    child: LogForm(key: logFormKey),
+                    child: LogForm(key: logFormKey, readOnly: readOnly),
                   ),
                 ),
                 Container(

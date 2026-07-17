@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/widgets/primary_navigation_rail.dart';
 
 void main() {
@@ -22,6 +23,26 @@ void main() {
     );
     expect(collapse.tooltip, '收起侧边栏');
     expect(find.text('OpenLogTool'), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq), findsNothing);
+    final navigationSurface = tester.widget<Container>(
+      find.byKey(const Key('primary-navigation-surface')),
+    );
+    final navigationDecoration = navigationSurface.decoration! as BoxDecoration;
+    final colorScheme = Theme.of(
+      tester.element(find.byKey(const Key('desktop-navigation'))),
+    ).colorScheme;
+    expect(navigationDecoration.color, colorScheme.surfaceContainerLow);
+    expect(navigationDecoration.borderRadius, isNull);
+    final navigationBorder = navigationDecoration.border! as Border;
+    expect(navigationBorder.right.color, colorScheme.outlineVariant);
+    expect(navigationBorder.right.width, 1);
+    expect(navigationBorder.left, BorderSide.none);
+    expect(
+      tester
+          .widget<NavigationRail>(find.byType(NavigationRail))
+          .backgroundColor,
+      Colors.transparent,
+    );
     final expandedHeaderSize =
         tester.getSize(find.byKey(const Key('primary-sidebar-header')));
     final expandedRailWidth =
@@ -51,7 +72,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     await tester.pump(const Duration(milliseconds: 160));
     expect(contentLayoutCount, layoutsAfterAtomicSwitch);
-    expect(tester.hasRunningAnimations, isFalse);
 
     expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
         isFalse);
@@ -69,7 +89,9 @@ void main() {
       tester.getSize(find.byKey(const Key('desktop-navigation'))).width,
       expandedRailWidth,
     );
-    expect(tester.hasRunningAnimations, isFalse);
+    final layoutsAfterExpand = contentLayoutCount;
+    await tester.pump(const Duration(milliseconds: 240));
+    expect(contentLayoutCount, layoutsAfterExpand);
   });
 
   testWidgets('tablet remains compact and has no manual toggle',
@@ -88,6 +110,7 @@ void main() {
     expect(find.byKey(const Key('collapse-primary-sidebar')), findsNothing);
     expect(find.byKey(const Key('expand-primary-sidebar')), findsNothing);
     expect(find.byKey(const Key('tablet-navigation')), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq), findsNothing);
   });
 }
 
@@ -117,6 +140,10 @@ class _RailHarnessState extends State<_RailHarness> {
         locale: widget.locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildAppTheme(
+          brightness: Brightness.light,
+          seedColor: Colors.blue,
+        ),
         home: Scaffold(
           body: Row(
             children: [

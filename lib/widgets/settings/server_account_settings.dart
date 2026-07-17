@@ -8,6 +8,7 @@ import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/utils/server_connection_error.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 
 class ServerAccountSettings extends StatefulWidget {
@@ -53,89 +54,69 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
     return Consumer<ServerProvider>(
       builder: (context, server, _) {
         final l10n = context.l10n;
-        return Card(
+        return SettingsSectionCard(
           key: const Key('server-account-settings'),
-          child: Padding(
-            padding: EdgeInsets.all(widget.cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.cloud_outlined,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        l10n.serverSettingsTitle,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    _ConnectionBadge(server: server),
-                  ],
+          icon: Icons.cloud_outlined,
+          title: l10n.serverSettingsTitle,
+          description: l10n.serverSettingsHint,
+          padding: widget.cardPadding,
+          headerTrailing: _ConnectionBadge(server: server),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                key: const Key('server-url-field'),
+                controller: _serverUrlController,
+                enabled: !server.isBusy,
+                keyboardType: TextInputType.url,
+                autofillHints: const [AutofillHints.url],
+                decoration: InputDecoration(
+                  labelText: l10n.serverAddressLabel,
+                  hintText: l10n.serverAddressHint,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.link, size: 18),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const Key('server-url-field'),
-                  controller: _serverUrlController,
-                  enabled: !server.isBusy,
-                  keyboardType: TextInputType.url,
-                  autofillHints: const [AutofillHints.url],
-                  decoration: InputDecoration(
-                    labelText: l10n.serverAddressLabel,
-                    hintText: l10n.serverAddressHint,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    prefixIcon: const Icon(Icons.link, size: 18),
-                  ),
-                  onChanged: (_) => _urlEdited = true,
-                  onSubmitted: server.isBusy
-                      ? null
-                      : (_) => unawaited(_saveAndCheck(server)),
+                onChanged: (_) => _urlEdited = true,
+                onSubmitted: server.isBusy
+                    ? null
+                    : (_) => unawaited(_saveAndCheck(server)),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('server-check-button'),
+                  icon: server.isBusy
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.wifi_tethering, size: 16),
+                  label: Text(l10n.serverSaveAndCheck),
+                  onPressed: server.isBusy ? null : () => _saveAndCheck(server),
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    key: const Key('server-check-button'),
-                    icon: server.isBusy
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.wifi_tethering, size: 16),
-                    label: Text(l10n.serverSaveAndCheck),
-                    onPressed:
-                        server.isBusy ? null : () => _saveAndCheck(server),
+              ),
+              if (server.serverInfo != null) ...[
+                const SizedBox(height: 8),
+                SelectableText(
+                  l10n.serverInstanceDetails(
+                    server.serverInfo!.serverInstanceId,
+                    server.serverInfo!.features.join(', '),
                   ),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (server.serverInfo != null) ...[
-                  const SizedBox(height: 8),
-                  SelectableText(
-                    l10n.serverInstanceDetails(
-                      server.serverInfo!.serverInstanceId,
-                      server.serverInfo!.features.join(', '),
-                    ),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                if (server.tokenStorageStatus.isDegraded) ...[
-                  const SizedBox(height: 12),
-                  _tokenStorageWarning(server.tokenStorageStatus),
-                ],
-                const Divider(height: 28),
-                if (!server.isLoggedIn)
-                  _signedOutActions(server)
-                else
-                  _signedInAccount(server),
               ],
-            ),
+              if (server.tokenStorageStatus.isDegraded) ...[
+                const SizedBox(height: 12),
+                _tokenStorageWarning(server.tokenStorageStatus),
+              ],
+              const Divider(height: 28),
+              if (!server.isLoggedIn)
+                _signedOutActions(server)
+              else
+                _signedInAccount(server),
+            ],
           ),
         );
       },
@@ -143,40 +124,14 @@ class _ServerAccountSettingsState extends State<ServerAccountSettings> {
   }
 
   Widget _tokenStorageWarning(TokenStorageStatus status) {
-    final colors = Theme.of(context).colorScheme;
     final memoryOnly = status.backend == TokenStorageBackend.memoryOnly;
-    return Container(
+    return AppNotice(
       key: Key('token-storage-warning-${status.backend.name}'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: memoryOnly ? colors.errorContainer : colors.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            memoryOnly ? Icons.error_outline : Icons.key_off_outlined,
-            color: memoryOnly
-                ? colors.onErrorContainer
-                : colors.onTertiaryContainer,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              memoryOnly
-                  ? context.l10n.tokenStorageMemoryOnlyWarning
-                  : context.l10n.tokenStoragePrivateFileWarning,
-              style: TextStyle(
-                color: memoryOnly
-                    ? colors.onErrorContainer
-                    : colors.onTertiaryContainer,
-              ),
-            ),
-          ),
-        ],
-      ),
+      icon: memoryOnly ? Icons.error_outline : Icons.key_off_outlined,
+      tone: memoryOnly ? AppTone.danger : AppTone.warning,
+      message: memoryOnly
+          ? context.l10n.tokenStorageMemoryOnlyWarning
+          : context.l10n.tokenStoragePrivateFileWarning,
     );
   }
 
@@ -454,17 +409,12 @@ class _ConnectionBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final connected = server.isServerReachable;
-    return Chip(
-      visualDensity: VisualDensity.compact,
-      avatar: Icon(
-        connected ? Icons.check_circle_outline : Icons.cloud_off_outlined,
-        size: 16,
-      ),
-      label: Text(
-        connected
-            ? context.l10n.serverConnected
-            : context.l10n.serverNotConnected,
-      ),
+    return AppStatusPill(
+      icon: connected ? Icons.check_circle_outline : Icons.cloud_off_outlined,
+      tone: connected ? AppTone.success : AppTone.neutral,
+      label: connected
+          ? context.l10n.serverConnected
+          : context.l10n.serverNotConnected,
     );
   }
 }

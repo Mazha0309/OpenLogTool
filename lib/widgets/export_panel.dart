@@ -11,11 +11,16 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
-import 'package:openlogtool/widgets/hsv_color_painter.dart';
 import 'package:openlogtool/config/app_config.dart';
+import 'package:openlogtool/theme/app_theme.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
+import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
 
 class ExportPanel extends StatefulWidget {
-  const ExportPanel({super.key});
+  const ExportPanel({super.key, this.embedded = false});
+
+  /// Omits the page-level title when hosted by the tabbed data workspace.
+  final bool embedded;
 
   @override
   State<ExportPanel> createState() => _ExportPanelState();
@@ -36,37 +41,46 @@ class _ExportPanelState extends State<ExportPanel> {
             horizontal: isNarrow ? 12 : 16,
             vertical: isNarrow ? 8 : 12,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '数据导入导出',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppDimensions.standardContentWidth,
               ),
-              SizedBox(height: sectionSpacing),
-              if (isWideScreen)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _buildQuickActionsCard(context, cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!widget.embedded) ...[
+                    SettingsPageHeader(
+                      key: const Key('data-transfer-page-header'),
+                      icon: Icons.import_export_outlined,
+                      title: context.l10n.dataTransferTitle,
+                      description: context.l10n.dataTransferSubtitle,
                     ),
-                    SizedBox(width: sectionSpacing),
-                    Expanded(
-                      child: _buildExcelSettingsCard(context, cardPadding),
-                    ),
+                    SizedBox(height: sectionSpacing),
                   ],
-                )
-              else ...[
-                _buildQuickActionsCard(context, cardPadding),
-                SizedBox(height: sectionSpacing),
-                _buildExcelSettingsCard(context, cardPadding),
-              ],
-              SizedBox(height: sectionSpacing),
-              _buildFormatInfoCard(context, cardPadding),
-            ],
+                  if (isWideScreen)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildQuickActionsCard(context, cardPadding),
+                        ),
+                        SizedBox(width: sectionSpacing),
+                        Expanded(
+                          child: _buildExcelSettingsCard(context, cardPadding),
+                        ),
+                      ],
+                    )
+                  else ...[
+                    _buildQuickActionsCard(context, cardPadding),
+                    SizedBox(height: sectionSpacing),
+                    _buildExcelSettingsCard(context, cardPadding),
+                  ],
+                  SizedBox(height: sectionSpacing),
+                  _buildFormatInfoCard(context, cardPadding),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -75,91 +89,65 @@ class _ExportPanelState extends State<ExportPanel> {
 
   Widget _buildQuickActionsCard(BuildContext context, double cardPadding) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side:
-            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.swap_horiz,
-                    color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '导入 / 导出',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '支持 JSON（完整数据）和 Excel（可视化表格）两种格式。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    return SettingsSectionCard(
+      icon: Icons.swap_horiz,
+      title: l10n.dataTransferActionsTitle,
+      description: l10n.dataTransferActionsHint,
+      padding: cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Export section
+          _buildActionGroup(
+            context,
+            title: l10n.exportDataTitle,
+            icon: Icons.file_download,
+            description: l10n.exportDataHint,
+            children: [
+              _buildActionButton(
+                context,
+                label: l10n.exportJson,
+                icon: Icons.code,
+                color: theme.colorScheme.primary,
+                onPressed: () => _exportJSON(context),
               ),
-            ),
-            SizedBox(height: cardPadding),
+              _buildActionButton(
+                context,
+                label: l10n.exportExcel,
+                icon: Icons.table_chart,
+                color: theme.colorScheme.secondary,
+                onPressed: () => _exportExcel(context),
+              ),
+            ],
+          ),
+          SizedBox(height: cardPadding),
 
-            // Export section
-            _buildActionGroup(
-              context,
-              title: '导出数据',
-              icon: Icons.file_download,
-              description: '将当前会话中的点名记录导出为文件',
-              children: [
-                _buildActionButton(
-                  context,
-                  label: '导出 JSON',
-                  icon: Icons.code,
-                  color: theme.colorScheme.primary,
-                  onPressed: () => _exportJSON(context),
-                ),
-                _buildActionButton(
-                  context,
-                  label: '导出 Excel',
-                  icon: Icons.table_chart,
-                  color: theme.colorScheme.secondary,
-                  onPressed: () => _exportExcel(context),
-                ),
-              ],
-            ),
-            SizedBox(height: cardPadding),
-
-            // Import section
-            _buildActionGroup(
-              context,
-              title: '导入数据',
-              icon: Icons.file_upload,
-              description: '从文件导入点名记录到当前会话',
-              children: [
-                _buildActionButton(
-                  context,
-                  label: '导入 JSON',
-                  icon: Icons.code,
-                  color: theme.colorScheme.tertiary,
-                  onPressed: () => _importJSON(context),
-                ),
-                _buildActionButton(
-                  context,
-                  label: '导入 Excel',
-                  icon: Icons.table_chart,
-                  color: theme.colorScheme.outline,
-                  onPressed: () => _importExcel(context),
-                ),
-              ],
-            ),
-          ],
-        ),
+          // Import section
+          _buildActionGroup(
+            context,
+            title: l10n.importDataTitle,
+            icon: Icons.file_upload,
+            description: l10n.importDataHint,
+            children: [
+              _buildActionButton(
+                context,
+                label: l10n.importJson,
+                icon: Icons.code,
+                color: theme.colorScheme.tertiary,
+                onPressed: () => _importJSON(context),
+              ),
+              _buildActionButton(
+                context,
+                label: l10n.importExcel,
+                icon: Icons.table_chart,
+                color: theme.colorScheme.outline,
+                onPressed: () => _importExcel(context),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -228,121 +216,84 @@ class _ExportPanelState extends State<ExportPanel> {
   }
 
   Widget _buildExcelSettingsCard(BuildContext context, double cardPadding) {
-    final theme = Theme.of(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final settings = settingsProvider.exportSettings;
+    final l10n = context.l10n;
     final currentSessionTitle =
         Provider.of<SessionProvider>(context).currentSession?.title.trim();
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side:
-            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
+    return SettingsSectionCard(
+      icon: Icons.preview_outlined,
+      title: l10n.excelConfigurationOverview,
+      description: l10n.excelConfigurationOverviewHint,
+      padding: cardPadding,
+      headerTrailing: OutlinedButton.icon(
+        onPressed: () => _showExportSettingsDialog(context),
+        icon: const Icon(Icons.edit_outlined, size: 16),
+        label: Text(l10n.editSettings),
       ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.preview_outlined,
-                        color: theme.colorScheme.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Excel 配置概览',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _showExportSettingsDialog(context),
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('编辑设置'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '这里展示当前配置；交替行可直接切换，其他选项请点击“编辑设置”。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSettingRow(
+            context,
+            label: l10n.fileNameTemplate,
+            value: settings.fileNameTemplate,
+            icon: Icons.insert_drive_file,
+          ),
+          const Divider(height: 24),
+          _buildSettingRow(
+            context,
+            label: l10n.excelHeader,
+            value: settings.useSessionTitleAsHeader
+                ? (currentSessionTitle?.isNotEmpty == true
+                    ? currentSessionTitle!
+                    : settings.headerText)
+                : settings.headerText,
+            icon: Icons.title,
+          ),
+          const Divider(height: 24),
+          _buildSettingRow(
+            context,
+            label: l10n.exportPath,
+            value: settings.exportPath.isEmpty
+                ? l10n.systemDownloadsDirectory
+                : settings.exportPath,
+            icon: Icons.folder,
+          ),
+          const Divider(height: 24),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildColorChip(
+                context,
+                l10n.headerBackground,
+                settings.headerBackgroundColor,
               ),
-            ),
-            SizedBox(height: cardPadding),
-            _buildSettingRow(
-              context,
-              label: '文件名模板',
-              value: settings.fileNameTemplate,
-              icon: Icons.insert_drive_file,
-            ),
-            const Divider(height: 24),
-            _buildSettingRow(
-              context,
-              label: 'Excel 抬头',
-              value: settings.useSessionTitleAsHeader
-                  ? (currentSessionTitle?.isNotEmpty == true
-                      ? currentSessionTitle!
-                      : settings.headerText)
-                  : settings.headerText,
-              icon: Icons.title,
-            ),
-            const Divider(height: 24),
-            _buildSettingRow(
-              context,
-              label: '导出路径',
-              value:
-                  settings.exportPath.isEmpty ? '系统下载目录' : settings.exportPath,
-              icon: Icons.folder,
-            ),
-            const Divider(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _buildColorChip(
-                  context,
-                  '抬头背景',
-                  settings.headerBackgroundColor,
-                ),
-                _buildColorChip(
-                  context,
-                  '表头背景',
-                  settings.headerRowBackgroundColor,
-                ),
-                _buildColorChip(
-                  context,
-                  '主控行',
-                  settings.controllerBackgroundColor,
-                ),
-                _buildToggleChip(
-                  context,
-                  label: '交替行',
-                  value: settings.useAlternateColors,
-                  onChanged: (v) {
-                    final updated = settings.copyWith(useAlternateColors: v);
-                    settingsProvider.updateExportSettings(updated);
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
+              _buildColorChip(
+                context,
+                l10n.tableHeaderBackground,
+                settings.headerRowBackgroundColor,
+              ),
+              _buildColorChip(
+                context,
+                l10n.controllerRow,
+                settings.controllerBackgroundColor,
+              ),
+              _buildToggleChip(
+                context,
+                label: l10n.alternatingRows,
+                value: settings.useAlternateColors,
+                onChanged: (v) {
+                  final updated = settings.copyWith(useAlternateColors: v);
+                  settingsProvider.updateExportSettings(updated);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -447,39 +398,18 @@ class _ExportPanelState extends State<ExportPanel> {
   Widget _buildFormatInfoCard(BuildContext context, double cardPadding) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: EdgeInsets.all(cardPadding),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: theme.colorScheme.outlineVariant.withAlpha(128)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.info_outline,
-                  size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                '文件格式说明',
-                style: theme.textTheme.bodyLarge
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '• JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。\n'
-            '• Excel：使用 .xlsx 格式，包含分组主控行、颜色样式和底部信息，适合分享与打印。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.5,
-            ),
-          ),
-        ],
+    return SettingsSectionCard(
+      icon: Icons.info_outline,
+      title: context.l10n.fileFormatInformation,
+      padding: cardPadding,
+      tone: SettingsTone.tertiary,
+      child: Text(
+        '• ${context.l10n.jsonFormatDescription}\n'
+        '• ${context.l10n.excelFormatDescription}',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          height: 1.5,
+        ),
       ),
     );
   }
@@ -518,7 +448,7 @@ class _ExportPanelState extends State<ExportPanel> {
               horizontal: horizontalInset,
               vertical: 24,
             ),
-            title: const Text('编辑 Excel 导出设置'),
+            title: Text(context.l10n.excelExportSettingsTitle),
             contentPadding: EdgeInsets.zero,
             content: SizedBox(
               width: dialogWidth,
@@ -527,11 +457,20 @@ class _ExportPanelState extends State<ExportPanel> {
                 length: 3,
                 child: Column(
                   children: [
-                    const TabBar(
+                    TabBar(
                       tabs: [
-                        Tab(icon: Icon(Icons.folder_outlined), text: '文件'),
-                        Tab(icon: Icon(Icons.palette_outlined), text: '表格样式'),
-                        Tab(icon: Icon(Icons.help_outline), text: '模板变量'),
+                        Tab(
+                          icon: const Icon(Icons.folder_outlined),
+                          text: context.l10n.fileTab,
+                        ),
+                        Tab(
+                          icon: const Icon(Icons.palette_outlined),
+                          text: context.l10n.tableStyleTab,
+                        ),
+                        Tab(
+                          icon: const Icon(Icons.help_outline),
+                          text: context.l10n.templateVariablesTab,
+                        ),
                       ],
                     ),
                     Expanded(
@@ -562,7 +501,7 @@ class _ExportPanelState extends State<ExportPanel> {
                   headerTextController.dispose();
                   Navigator.pop(context);
                 },
-                child: const Text('取消'),
+                child: Text(context.l10n.cancel),
               ),
               ElevatedButton(
                 onPressed: () {
@@ -575,10 +514,10 @@ class _ExportPanelState extends State<ExportPanel> {
                   headerTextController.dispose();
                   Navigator.pop(context);
                   context.showLoggedSnackBar(
-                    const SnackBar(content: Text('设置已保存')),
+                    SnackBar(content: Text(context.l10n.exportSettingsSaved)),
                   );
                 },
-                child: const Text('保存'),
+                child: Text(context.l10n.save),
               ),
             ],
           );
@@ -602,11 +541,11 @@ class _ExportPanelState extends State<ExportPanel> {
         children: [
           _buildTextFieldGroup(
             context,
-            label: '导出路径',
+            label: context.l10n.exportPath,
             controller: exportPathController,
-            hintText: '系统下载目录',
+            hintText: context.l10n.systemDownloadsDirectory,
             readOnly: true,
-            helperText: '留空时使用系统下载目录',
+            helperText: context.l10n.exportPathDefaultHint,
             trailing: FilledButton(
               onPressed: () async {
                 final result = await FilePicker.platform.getDirectoryPath();
@@ -616,16 +555,20 @@ class _ExportPanelState extends State<ExportPanel> {
                   setState(() {});
                 }
               },
-              child: const Text('选择'),
+              child: Text(context.l10n.select),
             ),
           ),
           const SizedBox(height: 20),
           _buildTextFieldGroup(
             context,
-            label: '文件名模板',
+            label: context.l10n.fileNameTemplate,
             controller: fileNameController,
-            hintText: '如：点名记录_{yyyy}-{MM}-{dd}',
-            helperText: '使用模板变量自动生成文件名',
+            hintText: context.l10n.fileNameTemplateExample(
+              '{MM}',
+              '{dd}',
+              '{yyyy}',
+            ),
+            helperText: context.l10n.fileNameTemplateHint,
           ),
           const SizedBox(height: 20),
           _buildSwitchTile(
@@ -640,10 +583,14 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 20),
           _buildTextFieldGroup(
             context,
-            label: '抬头模板',
+            label: context.l10n.headerTemplate,
             controller: headerTextController,
-            hintText: '如：{yyyy}-{MM}-{dd}日点名记录',
-            helperText: '未使用会话名或会话名为空时生效；支持模板变量',
+            hintText: context.l10n.headerTemplateExample(
+              '{MM}',
+              '{dd}',
+              '{yyyy}',
+            ),
+            helperText: context.l10n.headerTemplateHint,
           ),
         ],
       ),
@@ -707,7 +654,7 @@ class _ExportPanelState extends State<ExportPanel> {
         children: [
           _buildColorSetting(
             context,
-            '抬头背景色',
+            context.l10n.headerBackgroundColor,
             settings.headerBackgroundColor,
             (color) => setState(() => settings.headerBackgroundColor = color),
             settings.fontFamily,
@@ -715,7 +662,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 16),
           _buildColorSetting(
             context,
-            '表头背景色',
+            context.l10n.tableHeaderBackgroundColor,
             settings.headerRowBackgroundColor,
             (color) =>
                 setState(() => settings.headerRowBackgroundColor = color),
@@ -724,7 +671,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 16),
           _buildColorSetting(
             context,
-            '主控栏背景色',
+            context.l10n.controllerRowBackgroundColor,
             settings.controllerBackgroundColor,
             (color) =>
                 setState(() => settings.controllerBackgroundColor = color),
@@ -733,7 +680,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 16),
           _buildColorSetting(
             context,
-            '表格背景色',
+            context.l10n.tableBackgroundColor,
             settings.tableBackgroundColor,
             (color) => setState(() => settings.tableBackgroundColor = color),
             settings.fontFamily,
@@ -742,7 +689,7 @@ class _ExportPanelState extends State<ExportPanel> {
             const SizedBox(height: 16),
             _buildColorSetting(
               context,
-              '交替行颜色',
+              context.l10n.alternatingRowColor,
               settings.alternateRowColor,
               (color) => setState(() => settings.alternateRowColor = color),
               settings.fontFamily,
@@ -751,16 +698,16 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 20),
           _buildSwitchTile(
             context,
-            title: '交替行颜色',
-            subtitle: '使用交替行背景色',
+            title: context.l10n.alternatingRowColor,
+            subtitle: context.l10n.alternatingRowColorHint,
             value: settings.useAlternateColors,
             onChanged: (value) =>
                 setState(() => settings.useAlternateColors = value),
           ),
           _buildSwitchTile(
             context,
-            title: '底部说明',
-            subtitle: '显示 OpenLogTool 项目与许可信息',
+            title: context.l10n.footerInformation,
+            subtitle: context.l10n.footerInformationHint,
             value: settings.showFooter,
             onChanged: (value) => setState(() => settings.showFooter = value),
           ),
@@ -769,7 +716,7 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 16),
           OutlinedButton.icon(
             icon: const Icon(Icons.restore, size: 18),
-            label: const Text('恢复默认颜色'),
+            label: Text(context.l10n.restoreDefaultColors),
             onPressed: () {
               setState(() {
                 settings.headerBackgroundColor = const Color(0xFF1E84D2);
@@ -825,7 +772,7 @@ class _ExportPanelState extends State<ExportPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('表格字体', style: TextStyle(fontSize: 14)),
+        Text(context.l10n.tableFont, style: const TextStyle(fontSize: 14)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: initialValue,
@@ -835,13 +782,16 @@ class _ExportPanelState extends State<ExportPanel> {
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
           items: [
-            const DropdownMenuItem(
+            DropdownMenuItem(
                 value: '',
-                child: Text('系统默认', overflow: TextOverflow.ellipsis)),
+                child: Text(context.l10n.fontSystemDefault,
+                    overflow: TextOverflow.ellipsis)),
             ...fontOptions.map((font) => DropdownMenuItem(
                   value: font,
                   child: Text(
-                    font == 'SarasaGothicSC' ? '$font (内置)' : font,
+                    font == 'SarasaGothicSC'
+                        ? '$font (${context.l10n.fontBuiltIn})'
+                        : font,
                     overflow: TextOverflow.ellipsis,
                   ),
                 )),
@@ -863,24 +813,30 @@ class _ExportPanelState extends State<ExportPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '模板变量说明',
+            context.l10n.templateVariablesTitle,
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          _buildTemplateHelpItem(context, '{yyyy}', '四位年份，如：2024'),
-          _buildTemplateHelpItem(context, '{MM}', '两位月份，如：01, 12'),
-          _buildTemplateHelpItem(context, '{dd}', '两位日期，如：01, 31'),
-          _buildTemplateHelpItem(context, '{HH}', '两位小时（24h），如：14'),
-          _buildTemplateHelpItem(context, '{mm}', '两位分钟，如：30'),
-          _buildTemplateHelpItem(context, '{ss}', '两位秒数，如：45'),
+          _buildTemplateHelpItem(
+              context, '{yyyy}', context.l10n.templateYearDescription),
+          _buildTemplateHelpItem(
+              context, '{MM}', context.l10n.templateMonthDescription),
+          _buildTemplateHelpItem(
+              context, '{dd}', context.l10n.templateDayDescription),
+          _buildTemplateHelpItem(
+              context, '{HH}', context.l10n.templateHourDescription),
+          _buildTemplateHelpItem(
+              context, '{mm}', context.l10n.templateMinuteDescription),
+          _buildTemplateHelpItem(
+              context, '{ss}', context.l10n.templateSecondDescription),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 16),
           Text(
-            '使用示例',
+            context.l10n.templateExamplesTitle,
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
@@ -888,15 +844,39 @@ class _ExportPanelState extends State<ExportPanel> {
           ),
           const SizedBox(height: 8),
           _buildExampleItem(
-              context, '文件名：点名记录_{yyyy}-{MM}-{dd}', '点名记录_2024-03-28.xlsx'),
-          _buildExampleItem(context, '文件名：通联_{yyyy}-{MM}-{dd}_{HH}{mm}{ss}',
-              '通联_2024-03-28_143045.xlsx'),
+            context,
+            context.l10n.templateFileNameExampleOne(
+              '{MM}',
+              '{dd}',
+              '{yyyy}',
+            ),
+            context.l10n.templateFileNameExampleOneResult,
+          ),
           _buildExampleItem(
-              context, '抬头：{yyyy}年{MM}月{dd}日点名记录', '2024年03月28日点名记录'),
+            context,
+            context.l10n.templateFileNameExampleTwo(
+              '{HH}',
+              '{MM}',
+              '{dd}',
+              '{mm}',
+              '{ss}',
+              '{yyyy}',
+            ),
+            context.l10n.templateFileNameExampleTwoResult,
+          ),
+          _buildExampleItem(
+            context,
+            context.l10n.templateHeaderExample(
+              '{MM}',
+              '{dd}',
+              '{yyyy}',
+            ),
+            context.l10n.templateHeaderExampleResult,
+          ),
           const SizedBox(height: 16),
           _buildInfoBox(
             context,
-            '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。',
+            context.l10n.templateVariablesTip,
           ),
         ],
       ),
@@ -939,9 +919,8 @@ class _ExportPanelState extends State<ExportPanel> {
         _buildColorButton(color, () async {
           final newColor = await _showColorPickerDialog(
             context,
-            '选择$label',
+            context.l10n.chooseColor(label),
             color,
-            fontFamily,
           );
           if (newColor != null) {
             onColorChanged(newColor);
@@ -1081,263 +1060,19 @@ class _ExportPanelState extends State<ExportPanel> {
     BuildContext context,
     String title,
     Color initialColor,
-    String fontFamily,
-  ) async {
-    HSVColor hsvColor = HSVColor.fromColor(initialColor);
-
+  ) {
     return showDialog<Color>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            const dialogFont = TextStyle(fontSize: 14);
-            Color currentColor = hsvColor.toColor();
-
-            return AlertDialog(
-              title: Text(title, style: dialogFont),
-              content: SizedBox(
-                width: 320,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 280,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border:
-                            Border.all(color: Colors.grey.shade400, width: 1),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: GestureDetector(
-                          onPanStart: (details) {
-                            _updateHsvFromTap(
-                                details.localPosition,
-                                const Size(280, 150),
-                                hsvColor.hue,
-                                setState, (newHsv) {
-                              hsvColor = newHsv;
-                              currentColor = hsvColor.toColor();
-                            });
-                          },
-                          onPanUpdate: (details) {
-                            _updateHsvFromTap(
-                                details.localPosition,
-                                const Size(280, 150),
-                                hsvColor.hue,
-                                setState, (newHsv) {
-                              hsvColor = newHsv;
-                              currentColor = hsvColor.toColor();
-                            });
-                          },
-                          child: CustomPaint(
-                            size: const Size(280, 150),
-                            painter: HsvSaturationValuePainter(
-                              hsvColor.hue,
-                              hsvColor.saturation,
-                              hsvColor.value,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: currentColor,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: Colors.grey.shade400, width: 2),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'HEX: #${currentColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontFamily:
-                                    fontFamily.isEmpty ? null : fontFamily),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('色相:', style: dialogFont),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Stack(
-                            alignment: Alignment.centerLeft,
-                            children: [
-                              Container(
-                                height: 20,
-                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFF0000),
-                                      Color(0xFFFFFF00),
-                                      Color(0xFF00FF00),
-                                      Color(0xFF00FFFF),
-                                      Color(0xFF0000FF),
-                                      Color(0xFFFF00FF),
-                                      Color(0xFFFF0000),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SliderTheme(
-                                data: SliderThemeData(
-                                  trackHeight: 20,
-                                  thumbShape: const RoundSliderThumbShape(
-                                      enabledThumbRadius: 10),
-                                  overlayShape: SliderComponentShape.noOverlay,
-                                  activeTrackColor: Colors.transparent,
-                                  inactiveTrackColor: Colors.transparent,
-                                ),
-                                child: Slider(
-                                  value: hsvColor.hue,
-                                  min: 0,
-                                  max: 360,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      hsvColor = hsvColor.withHue(value);
-                                      currentColor = hsvColor.toColor();
-                                    });
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('透明度:', style: dialogFont),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Slider(
-                            value: hsvColor.alpha,
-                            min: 0,
-                            max: 1,
-                            activeColor: currentColor,
-                            inactiveColor: Colors.grey.shade300,
-                            onChanged: (value) {
-                              setState(() {
-                                hsvColor = hsvColor.withAlpha(value);
-                                currentColor = hsvColor.toColor();
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildQuickColorButton(const Color(0xFF2196F3), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF2196F3));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF4CAF50), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF4CAF50));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFFF44336), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFFF44336));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFFFF9800), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFFFF9800));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF9C27B0), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF9C27B0));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                        _buildQuickColorButton(const Color(0xFF607D8B), () {
-                          setState(() {
-                            hsvColor =
-                                HSVColor.fromColor(const Color(0xFF607D8B));
-                            currentColor = hsvColor.toColor();
-                          });
-                        }),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context, currentColor);
-                  },
-                  child: const Text('确定'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _updateHsvFromTap(Offset position, Size size, double hue,
-      StateSetter setState, Function(HSVColor) onUpdate) {
-    double saturation = (position.dx / size.width).clamp(0.0, 1.0);
-    double value = 1.0 - (position.dy / size.height).clamp(0.0, 1.0);
-    final newHsv = HSVColor.fromAHSV(1.0, hue, saturation, value);
-    setState(() {});
-    onUpdate(newHsv);
-  }
-
-  Widget _buildQuickColorButton(Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey.shade400, width: 1),
-        ),
+      builder: (_) => ThemeColorPickerDialog(
+        initialColor: initialColor,
+        title: title,
+        allowOpacity: true,
       ),
     );
   }
 
   Future<void> _exportJSON(BuildContext context) async {
+    final l10n = context.l10n;
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final settingsProvider =
         Provider.of<SettingsProvider>(context, listen: false);
@@ -1345,7 +1080,7 @@ class _ExportPanelState extends State<ExportPanel> {
     final logs = logProvider.logs;
 
     if (logs.isEmpty) {
-      _showSnackBar('没有数据可以导出');
+      _showSnackBar(l10n.noDataToExport);
       return;
     }
 
@@ -1362,31 +1097,32 @@ class _ExportPanelState extends State<ExportPanel> {
         configuredPath: settings.exportPath,
         filename: filename,
         bytes: jsonBytes,
-        dialogTitle: '保存 JSON 导出文件',
+        dialogTitle: l10n.saveExportFileDialog('JSON'),
         allowedExtensions: const ['json'],
       );
 
       if (saveResult.cancelled) return;
       if (saveResult.path == null) {
-        _showSnackBar('无法访问下载目录');
+        _showSnackBar(l10n.downloadsDirectoryUnavailable);
         return;
       }
 
       if (saveResult.usedSaf) {
-        _showSnackBar('JSON 导出成功，已通过系统文件选择器保存');
+        _showSnackBar(l10n.exportSavedViaSystemPicker('JSON'));
       } else {
         _showSuccessDialog(
-          'JSON 导出成功',
-          '文件已保存到:\n${saveResult.path}',
+          l10n.exportSucceeded('JSON'),
+          l10n.fileSavedTo(saveResult.path!),
           saveResult.path!,
         );
       }
     } catch (e) {
-      _showSnackBar('导出失败: $e');
+      _showSnackBar(l10n.exportFailed('$e'));
     }
   }
 
   Future<void> _exportExcel(BuildContext context) async {
+    final l10n = context.l10n;
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final settingsProvider =
         Provider.of<SettingsProvider>(context, listen: false);
@@ -1396,7 +1132,7 @@ class _ExportPanelState extends State<ExportPanel> {
     final logs = logProvider.logs;
 
     if (logs.isEmpty) {
-      _showSnackBar('没有数据可以导出');
+      _showSnackBar(l10n.noDataToExport);
       return;
     }
 
@@ -1409,7 +1145,7 @@ class _ExportPanelState extends State<ExportPanel> {
         sessionTitle: sessionProvider.currentSession?.title,
       );
       if (bytes == null) {
-        _showSnackBar('导出失败: 无法生成 Excel 文件');
+        _showSnackBar(l10n.excelGenerationFailed);
         return;
       }
 
@@ -1423,31 +1159,32 @@ class _ExportPanelState extends State<ExportPanel> {
         configuredPath: settings.exportPath,
         filename: filename,
         bytes: Uint8List.fromList(bytes),
-        dialogTitle: '保存 Excel 导出文件',
+        dialogTitle: l10n.saveExportFileDialog('Excel'),
         allowedExtensions: const ['xlsx'],
       );
 
       if (saveResult.cancelled) return;
       if (saveResult.path == null) {
-        _showSnackBar('无法访问下载目录');
+        _showSnackBar(l10n.downloadsDirectoryUnavailable);
         return;
       }
 
       if (saveResult.usedSaf) {
-        _showSnackBar('Excel 导出成功，已通过系统文件选择器保存');
+        _showSnackBar(l10n.exportSavedViaSystemPicker('Excel'));
       } else {
         _showSuccessDialog(
-          'Excel 导出成功',
-          '文件已保存到:\n${saveResult.path}',
+          l10n.exportSucceeded('Excel'),
+          l10n.fileSavedTo(saveResult.path!),
           saveResult.path!,
         );
       }
     } catch (e) {
-      _showSnackBar('导出失败: $e');
+      _showSnackBar(l10n.exportFailed('$e'));
     }
   }
 
   Future<void> _importJSON(BuildContext context) async {
+    final l10n = context.l10n;
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final sessionProvider =
         Provider.of<SessionProvider>(context, listen: false);
@@ -1468,17 +1205,22 @@ class _ExportPanelState extends State<ExportPanel> {
       await logProvider.importLogs(importResult.logs,
           sessionId: sessionProvider.currentSessionId);
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('导入成功: ${importResult.logs.length} 条记录')),
+        SnackBar(
+          content: Text(l10n.importSucceeded(importResult.logs.length)),
+        ),
       );
     } catch (e) {
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('导入失败: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(l10n.importFailed('$e')),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
 
   Future<void> _importExcel(BuildContext context) async {
-    _showSnackBar('Excel 导入功能开发中');
+    _showSnackBar(context.l10n.excelImportComingSoon);
   }
 
   void _showSnackBar(String message) {
@@ -1521,7 +1263,7 @@ class _ExportPanelState extends State<ExportPanel> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: path));
                     messenger.showSnackBar(
-                      const SnackBar(content: Text('路径已复制')),
+                      SnackBar(content: Text(context.l10n.pathCopied)),
                     );
                   },
                 ),
@@ -1532,7 +1274,7 @@ class _ExportPanelState extends State<ExportPanel> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+            child: Text(context.l10n.close),
           ),
         ],
       ),

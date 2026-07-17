@@ -1,5 +1,5 @@
 use crate::get_db;
-use crate::models::session::Session;
+use crate::models::session::{Session, SessionSummary};
 use sqlx::SqlitePool;
 
 pub async fn create_session(title: String) -> anyhow::Result<Session> {
@@ -20,6 +20,58 @@ pub async fn create_session(title: String) -> anyhow::Result<Session> {
     Ok(session)
 }
 
+/// Starts a new writable local session atomically.
+///
+/// Any currently active local-only session is closed in the same transaction
+/// that inserts the replacement. Collaboration replicas stay untouched, so a
+/// recorder can leave an on-device shared-session cache available while
+/// starting an independent local net. If insertion fails, the transaction
+/// rolls back the close as well.
+pub async fn start_local_session(title: String) -> anyhow::Result<Session> {
+    start_local_session_from_pool(get_db()?, &title).await
+}
+
+async fn start_local_session_from_pool(pool: &SqlitePool, title: &str) -> anyhow::Result<Session> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        anyhow::bail!("SESSION_TITLE_INVALID");
+    }
+
+    let mut tx = pool.begin().await?;
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "UPDATE sessions
+         SET status = 'closed', closed_at = ?, updated_at = ?
+         WHERE status = 'active'
+           AND deleted_at IS NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM collaboration_bindings binding
+               WHERE binding.session_id = sessions.session_id
+           )",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    let session = Session::new(title.to_string());
+    sqlx::query(
+        "INSERT INTO sessions (session_id, title, status, share_code, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&session.session_id)
+    .bind(&session.title)
+    .bind(&session.status)
+    .bind(&session.share_code)
+    .bind(&session.created_at)
+    .bind(&session.updated_at)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(session)
+}
+
 pub async fn list_sessions() -> anyhow::Result<Vec<Session>> {
     let pool = get_db()?;
     let rows = sqlx::query_as::<_, SessionRow>(
@@ -28,6 +80,32 @@ pub async fn list_sessions() -> anyhow::Result<Vec<Session>> {
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|r| r.into_session()).collect())
+}
+
+pub async fn list_session_summaries() -> anyhow::Result<Vec<SessionSummary>> {
+    list_session_summaries_from_pool(get_db()?).await
+}
+
+async fn list_session_summaries_from_pool(
+    pool: &SqlitePool,
+) -> anyhow::Result<Vec<SessionSummary>> {
+    let rows = sqlx::query_as::<_, SessionSummaryRow>(
+        "SELECT sessions.*,
+                EXISTS(
+                    SELECT 1
+                    FROM collaboration_bindings binding
+                    WHERE binding.session_id = sessions.session_id
+                ) AS has_collaboration_binding
+         FROM sessions
+         WHERE sessions.deleted_at IS NULL
+         ORDER BY sessions.created_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(SessionSummaryRow::into_summary)
+        .collect())
 }
 
 pub async fn close_session(session_id: String) -> anyhow::Result<()> {
@@ -647,6 +725,19 @@ struct SessionRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct SessionSummaryRow {
+    session_id: String,
+    title: String,
+    status: String,
+    share_code: Option<String>,
+    created_at: String,
+    updated_at: String,
+    closed_at: Option<String>,
+    deleted_at: Option<String>,
+    has_collaboration_binding: bool,
+}
+
+#[derive(sqlx::FromRow)]
 struct LocalCopyLogRow {
     time: String,
     controller: String,
@@ -679,12 +770,31 @@ impl SessionRow {
     }
 }
 
+impl SessionSummaryRow {
+    fn into_summary(self) -> SessionSummary {
+        SessionSummary {
+            session: Session {
+                session_id: self.session_id,
+                title: self.title,
+                status: self.status,
+                share_code: self.share_code,
+                created_at: self.created_at,
+                updated_at: self.updated_at,
+                closed_at: self.closed_at,
+                deleted_at: self.deleted_at,
+            },
+            has_collaboration_binding: self.has_collaboration_binding,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         close_session_locally_from_pool, convert_collaboration_session_to_local_from_pool,
         copy_collaboration_session_to_local_from_pool, hard_delete_session_from_pool,
-        reopen_local_session_from_pool, stop_collaboration_session_locally_from_pool,
+        list_session_summaries_from_pool, reopen_local_session_from_pool,
+        start_local_session_from_pool, stop_collaboration_session_locally_from_pool,
         LocalCopyLogRow,
     };
     use crate::db::migrations;
@@ -814,6 +924,68 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn start_local_session_atomically_replaces_only_active_local_sessions() {
+        let pool = setup().await;
+        insert_session(&pool, "previous-local", "active").await;
+        insert_session(&pool, "shared-active", "active").await;
+        insert_collaboration_binding(&pool, "shared-active").await;
+
+        let started = start_local_session_from_pool(&pool, " Friday net ")
+            .await
+            .unwrap();
+
+        assert_eq!(started.title, "Friday net");
+        assert_eq!(started.status, "active");
+        let states: Vec<(String, String)> =
+            sqlx::query_as("SELECT session_id, status FROM sessions ORDER BY session_id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert!(states.contains(&("previous-local".to_string(), "closed".to_string())));
+        assert!(states.contains(&("shared-active".to_string(), "active".to_string())));
+        assert!(states.contains(&(started.session_id, "active".to_string())));
+    }
+
+    #[tokio::test]
+    async fn invalid_local_session_start_leaves_current_local_session_active() {
+        let pool = setup().await;
+        insert_session(&pool, "previous-local", "active").await;
+
+        let error = start_local_session_from_pool(&pool, "   ")
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("SESSION_TITLE_INVALID"));
+        let status: (String,) =
+            sqlx::query_as("SELECT status FROM sessions WHERE session_id = 'previous-local'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(status.0, "active");
+    }
+
+    #[tokio::test]
+    async fn session_summaries_expose_collaboration_binding_without_hiding_local_rows() {
+        let pool = setup().await;
+        insert_session(&pool, "local", "closed").await;
+        insert_session(&pool, "shared", "active").await;
+        insert_collaboration_binding(&pool, "shared").await;
+
+        let summaries = list_session_summaries_from_pool(&pool).await.unwrap();
+        let local = summaries
+            .iter()
+            .find(|summary| summary.session.session_id == "local")
+            .unwrap();
+        let shared = summaries
+            .iter()
+            .find(|summary| summary.session.session_id == "shared")
+            .unwrap();
+
+        assert!(!local.has_collaboration_binding);
+        assert!(shared.has_collaboration_binding);
     }
 
     #[tokio::test]

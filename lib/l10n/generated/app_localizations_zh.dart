@@ -116,7 +116,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noCurrentSession => '当前没有点名会话';
 
   @override
-  String get noCurrentSessionHint => '返回点名台创建会话后即可开始记录。';
+  String get noCurrentSessionHint => '创建一个点名会话后即可开始记录。';
 
   @override
   String get sessionActive => '进行中';
@@ -387,6 +387,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fieldController => '主控';
 
   @override
+  String get fieldControllerCallsign => '主控呼号';
+
+  @override
   String get fieldCallsign => '来台呼号';
 
   @override
@@ -418,6 +421,60 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fieldRemarks => '备注';
+
+  @override
+  String get fieldActions => '操作';
+
+  @override
+  String inputFieldHint(String field) {
+    return '输入$field';
+  }
+
+  @override
+  String optionalFieldHint(String field) {
+    return '$field（可选）';
+  }
+
+  @override
+  String get noSavedRecords => '暂无已保存记录';
+
+  @override
+  String get addFirstRecordHint => '在上方表单中添加第一条记录。';
+
+  @override
+  String get editRecord => '编辑记录';
+
+  @override
+  String get deleteRecord => '删除记录';
+
+  @override
+  String get deleteRecordConfirmation => '确定要删除这条记录吗？';
+
+  @override
+  String get delete => '删除';
+
+  @override
+  String get recordDeleted => '记录已删除';
+
+  @override
+  String get savedRecords => '已保存记录';
+
+  @override
+  String recordCount(int count) {
+    return '$count 条';
+  }
+
+  @override
+  String get restoreLastDeletedRecord => '恢复最近删除';
+
+  @override
+  String get restoreLastDeletedRecordTitle => '恢复最近删除的记录？';
+
+  @override
+  String get restoreLastDeletedRecordConfirmation => '将恢复最近一次删除的点名记录，不会影响其他记录。';
+
+  @override
+  String get recordRestored => '记录已恢复';
 
   @override
   String get saveRecord => '保存记录';
@@ -1531,6 +1588,78 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTitle => '应用设置';
 
   @override
+  String get settingsSubtitle => '统一管理应用外观、点名台行为、主控显示、服务器账户和本机数据。';
+
+  @override
+  String get settingsAppearanceTitle => '外观与语言';
+
+  @override
+  String get settingsAppearanceHint => '选择主题、字体和界面语言；修改后立即应用。';
+
+  @override
+  String get themeColorSetting => '主题颜色';
+
+  @override
+  String get themeColorSettingHint => '设置应用按钮、选中状态与强调内容的主色调。';
+
+  @override
+  String get chooseThemeColor => '选择颜色';
+
+  @override
+  String get darkModeSetting => '深色模式';
+
+  @override
+  String get darkModeSettingHint => '切换应用的明暗配色。';
+
+  @override
+  String get appFontSetting => '应用字体';
+
+  @override
+  String get appFontSettingHint => '选择界面显示字体。';
+
+  @override
+  String get appLanguageSetting => '界面语言';
+
+  @override
+  String get appLanguageSettingHint => '可跟随系统，也可固定为简体中文或 English。';
+
+  @override
+  String get languageFollowSystem => '跟随系统';
+
+  @override
+  String get languageSimplifiedChinese => '简体中文';
+
+  @override
+  String get languageEnglish => 'English';
+
+  @override
+  String get layoutSettingsTitle => '点名台与布局';
+
+  @override
+  String get layoutSettingsHint => '调整点名台宽度、分页和录入辅助行为。';
+
+  @override
+  String get paginationSetting => '分页显示记录';
+
+  @override
+  String get paginationSettingHint => '每 5 条记录分为一页显示。';
+
+  @override
+  String get controllerDisplaySettingsHint => '配置主控设备入口、独立窗口和默认显示内容。';
+
+  @override
+  String get serverSettingsHint => '配置协作服务器并管理当前账户和登录设备。';
+
+  @override
+  String get settingsSupportTitle => '应用信息与设置维护';
+
+  @override
+  String get settingsSupportHint => '查看版本与开源信息，或恢复界面和录入偏好。';
+
+  @override
+  String get restoreDefaultSettingsHint => '恢复外观、语言、布局和导出偏好，不影响记录与登录状态。';
+
+  @override
   String get snackbarLogTitle => '底部消息日志';
 
   @override
@@ -1544,7 +1673,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get resetSettingsConfirmation =>
-      '将外观、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。';
+      '将外观、语言、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。';
 
   @override
   String get resetSettingsConfirmAction => '恢复默认';
@@ -1651,7 +1780,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get databaseImportPreviewWarning =>
-      '导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和外观设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。';
+      '导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和应用设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。';
 
   @override
   String get databaseImportCollaborationWarning =>
@@ -1723,6 +1852,388 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localCollaborationRequired => '当前会话已不是本机协作副本，请刷新页面后重试。';
+
+  @override
+  String get dataTransferTitle => '数据导入与导出';
+
+  @override
+  String get dataTransferSubtitle => '备份、迁移或分享当前会话的点名记录，并配置 Excel 输出样式。';
+
+  @override
+  String get dataTransferActionsTitle => '记录文件';
+
+  @override
+  String get dataTransferActionsHint => 'JSON 适合完整数据迁移，Excel 适合查看、分享和打印。';
+
+  @override
+  String get exportDataTitle => '导出数据';
+
+  @override
+  String get exportDataHint => '将当前会话中的点名记录导出为文件';
+
+  @override
+  String get exportJson => '导出 JSON';
+
+  @override
+  String get exportExcel => '导出 Excel';
+
+  @override
+  String get importDataTitle => '导入数据';
+
+  @override
+  String get importDataHint => '从文件导入点名记录到当前会话';
+
+  @override
+  String get importJson => '导入 JSON';
+
+  @override
+  String get importExcel => '导入 Excel';
+
+  @override
+  String get excelConfigurationOverview => 'Excel 配置概览';
+
+  @override
+  String get excelConfigurationOverviewHint => '此处展示当前配置；交替行可直接切换，其他选项请打开编辑设置。';
+
+  @override
+  String get editSettings => '编辑设置';
+
+  @override
+  String get fileNameTemplate => '文件名模板';
+
+  @override
+  String get excelHeader => 'Excel 抬头';
+
+  @override
+  String get exportPath => '导出路径';
+
+  @override
+  String get systemDownloadsDirectory => '系统下载目录';
+
+  @override
+  String get headerBackground => '抬头背景';
+
+  @override
+  String get tableHeaderBackground => '表头背景';
+
+  @override
+  String get controllerRow => '主控行';
+
+  @override
+  String get alternatingRows => '交替行';
+
+  @override
+  String get fileFormatInformation => '文件格式说明';
+
+  @override
+  String get jsonFormatDescription => 'JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。';
+
+  @override
+  String get excelFormatDescription =>
+      'Excel：使用 .xlsx 格式，包含分组主控行、颜色样式和底部信息，适合分享与打印。';
+
+  @override
+  String get excelExportSettingsTitle => '编辑 Excel 导出设置';
+
+  @override
+  String get fileTab => '文件';
+
+  @override
+  String get tableStyleTab => '表格样式';
+
+  @override
+  String get templateVariablesTab => '模板变量';
+
+  @override
+  String get exportSettingsSaved => '导出设置已保存';
+
+  @override
+  String get select => '选择';
+
+  @override
+  String get exportPathDefaultHint => '留空时使用系统下载目录';
+
+  @override
+  String fileNameTemplateExample(String MM, String dd, String yyyy) {
+    return '如：点名记录_$yyyy-$MM-$dd';
+  }
+
+  @override
+  String get fileNameTemplateHint => '使用模板变量自动生成文件名';
+
+  @override
+  String get headerTemplate => '抬头模板';
+
+  @override
+  String headerTemplateExample(String MM, String dd, String yyyy) {
+    return '如：$yyyy-$MM-$dd日点名记录';
+  }
+
+  @override
+  String get headerTemplateHint => '未使用会话名或会话名为空时生效；支持模板变量';
+
+  @override
+  String get headerBackgroundColor => '抬头背景色';
+
+  @override
+  String get tableHeaderBackgroundColor => '表头背景色';
+
+  @override
+  String get controllerRowBackgroundColor => '主控栏背景色';
+
+  @override
+  String get tableBackgroundColor => '表格背景色';
+
+  @override
+  String get alternatingRowColor => '交替行颜色';
+
+  @override
+  String get alternatingRowColorHint => '使用交替行背景色';
+
+  @override
+  String get footerInformation => '底部说明';
+
+  @override
+  String get footerInformationHint => '显示 OpenLogTool 项目与许可信息';
+
+  @override
+  String get restoreDefaultColors => '恢复默认颜色';
+
+  @override
+  String get tableFont => '表格字体';
+
+  @override
+  String get templateVariablesTitle => '模板变量说明';
+
+  @override
+  String get templateYearDescription => '四位年份，如：2024';
+
+  @override
+  String get templateMonthDescription => '两位月份，如：01, 12';
+
+  @override
+  String get templateDayDescription => '两位日期，如：01, 31';
+
+  @override
+  String get templateHourDescription => '两位小时（24 小时制），如：14';
+
+  @override
+  String get templateMinuteDescription => '两位分钟，如：30';
+
+  @override
+  String get templateSecondDescription => '两位秒数，如：45';
+
+  @override
+  String get templateExamplesTitle => '使用示例';
+
+  @override
+  String templateFileNameExampleOne(String MM, String dd, String yyyy) {
+    return '文件名：点名记录_$yyyy-$MM-$dd';
+  }
+
+  @override
+  String get templateFileNameExampleOneResult => '点名记录_2024-03-28.xlsx';
+
+  @override
+  String templateFileNameExampleTwo(
+      String HH, String MM, String dd, String mm, String ss, String yyyy) {
+    return '文件名：通联_$yyyy-$MM-${dd}_$HH$mm$ss';
+  }
+
+  @override
+  String get templateFileNameExampleTwoResult => '通联_2024-03-28_143045.xlsx';
+
+  @override
+  String templateHeaderExample(String MM, String dd, String yyyy) {
+    return '抬头：$yyyy年$MM月$dd日点名记录';
+  }
+
+  @override
+  String get templateHeaderExampleResult => '2024年03月28日点名记录';
+
+  @override
+  String get templateVariablesTip => '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。';
+
+  @override
+  String chooseColor(String label) {
+    return '选择$label';
+  }
+
+  @override
+  String colorHexValue(String value) {
+    return 'HEX：#$value';
+  }
+
+  @override
+  String get colorOpacity => '透明度';
+
+  @override
+  String get noDataToExport => '没有数据可以导出';
+
+  @override
+  String saveExportFileDialog(String format) {
+    return '保存 $format 导出文件';
+  }
+
+  @override
+  String get downloadsDirectoryUnavailable => '无法访问下载目录';
+
+  @override
+  String exportSavedViaSystemPicker(String format) {
+    return '$format 导出成功，已通过系统文件选择器保存';
+  }
+
+  @override
+  String exportSucceeded(String format) {
+    return '$format 导出成功';
+  }
+
+  @override
+  String fileSavedTo(String path) {
+    return '文件已保存到：\n$path';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get excelGenerationFailed => '导出失败：无法生成 Excel 文件';
+
+  @override
+  String importSucceeded(int count) {
+    return '导入成功：$count 条记录';
+  }
+
+  @override
+  String importFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String get excelImportComingSoon => 'Excel 导入功能开发中';
+
+  @override
+  String get pathCopied => '路径已复制';
+
+  @override
+  String get createSession => '新建会话';
+
+  @override
+  String get createSessionTitle => '新建点名会话';
+
+  @override
+  String get createSessionNameHint => '输入会话名称';
+
+  @override
+  String sessionCreated(String title) {
+    return '已创建会话“$title”';
+  }
+
+  @override
+  String createSessionFailed(String error) {
+    return '创建会话失败：$error';
+  }
+
+  @override
+  String get searchSessions => '搜索会话';
+
+  @override
+  String get allSessionStatuses => '全部状态';
+
+  @override
+  String get sessionArchived => '已归档';
+
+  @override
+  String sessionPage(int page, int total) {
+    return '第 $page / $total 页';
+  }
+
+  @override
+  String get moreSessionActions => '更多会话操作';
+
+  @override
+  String get openAndManageCollaboration => '打开并管理协作';
+
+  @override
+  String get exportLibraryJson => '导出词库 JSON';
+
+  @override
+  String get libraryExportDialogTitle => '导出词库';
+
+  @override
+  String get libraryExportSucceeded => '词库已导出';
+
+  @override
+  String libraryExportFailed(String error) {
+    return '导出词库失败：$error';
+  }
+
+  @override
+  String get editLibraryItem => '编辑';
+
+  @override
+  String editLibraryItemTitle(String name) {
+    return '编辑“$name”';
+  }
+
+  @override
+  String get editLibraryItemLabel => '词库内容';
+
+  @override
+  String libraryItemRenamed(String value) {
+    return '已更新为“$value”';
+  }
+
+  @override
+  String libraryItemRenameFailed(String error) {
+    return '修改失败：$error';
+  }
+
+  @override
+  String libraryPageStatus(int current, int total) {
+    return '第 $current / $total 页';
+  }
+
+  @override
+  String get previousPage => '上一页';
+
+  @override
+  String get nextPage => '下一页';
+
+  @override
+  String get settingsCategoryAppearance => '外观';
+
+  @override
+  String get settingsCategoryWorkbench => '工作台';
+
+  @override
+  String get settingsCategoryController => '主控屏';
+
+  @override
+  String get settingsCategoryServerAccount => '服务器与账户';
+
+  @override
+  String get settingsCategoryApplication => '应用';
+
+  @override
+  String get collaborationOverviewTab => '概览';
+
+  @override
+  String get collaborationSyncConflictsTab => '同步与冲突';
+
+  @override
+  String get collaborationAccessManagementTab => '访问管理';
+
+  @override
+  String get dataRecordsExportTab => '记录与导出';
+
+  @override
+  String get dataLookupLibrariesTab => '查询词库';
+
+  @override
+  String get dataLocalDatabaseTab => '本地数据库';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).

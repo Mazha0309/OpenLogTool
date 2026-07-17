@@ -45,7 +45,7 @@ void main() {
     expect(find.text('Excel 配置概览'), findsOneWidget);
     expect(find.text('编辑设置'), findsOneWidget);
     expect(
-      find.text('这里展示当前配置；交替行可直接切换，其他选项请点击“编辑设置”。'),
+      find.text('此处展示当前配置；交替行可直接切换，其他选项请打开编辑设置。'),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -57,6 +57,91 @@ void main() {
     expect(find.text('编辑 Excel 导出设置'), findsOneWidget);
     expect(find.text('表格样式'), findsOneWidget);
     expect(find.text('模板变量'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('data transfer panel and Excel editor are localized in English',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final settings = SettingsProvider();
+    final sessions = SessionProvider();
+    addTearDown(settings.dispose);
+    addTearDown(sessions.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<SettingsProvider>.value(value: settings),
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+        ],
+        child: const MaterialApp(
+          locale: Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: ExportPanel()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Import and export'), findsOneWidget);
+    expect(find.text('Record files'), findsOneWidget);
+    expect(find.text('Export JSON'), findsOneWidget);
+    expect(find.text('Import Excel'), findsOneWidget);
+    expect(find.text('Excel configuration'), findsOneWidget);
+    expect(find.text('File formats'), findsOneWidget);
+    expect(find.text('数据导入导出'), findsNothing);
+
+    await tester.tap(find.text('Edit settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Excel export settings'), findsOneWidget);
+    expect(find.text('File'), findsOneWidget);
+    expect(find.text('Table style'), findsOneWidget);
+    expect(find.text('Template variables'), findsOneWidget);
+    expect(find.text('Export location'), findsWidgets);
+    expect(find.text('Filename template'), findsWidgets);
+
+    await tester.tap(find.text('Table style'));
+    await tester.pumpAndSettle();
+    expect(find.text('Header background color'), findsOneWidget);
+    expect(find.text('Alternating row color'), findsWidgets);
+    expect(find.text('Footer information'), findsOneWidget);
+    expect(find.text('Table font'), findsOneWidget);
+
+    await tester.ensureVisible(find.byIcon(Icons.colorize).first);
+    await tester.tap(find.byIcon(Icons.colorize).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose Header background color'), findsOneWidget);
+    expect(
+      find.byKey(const Key('theme-color-picker-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('Preset colors'), findsOneWidget);
+    expect(find.text('Custom color'), findsOneWidget);
+    expect(
+      find.byKey(const Key('theme-color-hex-field')),
+      findsOneWidget,
+    );
+    expect(find.text('Hue'), findsOneWidget);
+    expect(find.text('Opacity'), findsOneWidget);
+    expect(
+      find.byKey(const Key('theme-color-opacity-slider')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Template variables'));
+    await tester.pumpAndSettle();
+    expect(find.text('Template variable reference'), findsOneWidget);
+    expect(find.text('Four-digit year, for example 2024'), findsOneWidget);
+    expect(find.text('Examples'), findsOneWidget);
+    expect(find.text('Net_Log_2024-03-28.xlsx'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

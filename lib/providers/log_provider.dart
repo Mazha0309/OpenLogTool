@@ -23,6 +23,7 @@ typedef LogUpdater = Future<bridge.LogEntry> Function(
   old.LogEntry replacement,
 );
 typedef LogDeleter = Future<void> Function(String syncId);
+typedef LogRestorer = Future<bridge.LogEntry> Function(String syncId);
 
 Future<bridge.LogEntry> _createLogWithRust(
   String sessionId,
@@ -89,6 +90,7 @@ class LogProvider with ChangeNotifier {
   final LogCreator _logCreator;
   final LogUpdater _logUpdater;
   final LogDeleter _logDeleter;
+  final LogRestorer _logRestorer;
   String? _currentSessionId;
   bool _currentSessionWritable = false;
   int _sessionStateGeneration = 0;
@@ -302,6 +304,7 @@ class LogProvider with ChangeNotifier {
     LogCreator? logCreator,
     LogUpdater? logUpdater,
     LogDeleter? logDeleter,
+    LogRestorer? logRestorer,
   })  : _sessionListLoader = sessionListLoader ?? RustApi.listSessions,
         _sessionLogPageLoader = sessionLogPageLoader ??
             ((sessionId, page, pageSize) => RustApi.getLogs(
@@ -312,7 +315,9 @@ class LogProvider with ChangeNotifier {
         _logCreator = logCreator ?? _createLogWithRust,
         _logUpdater = logUpdater ?? _updateLogWithRust,
         _logDeleter =
-            logDeleter ?? ((syncId) => RustApi.deleteLog(syncId: syncId)) {
+            logDeleter ?? ((syncId) => RustApi.deleteLog(syncId: syncId)),
+        _logRestorer =
+            logRestorer ?? ((syncId) => RustApi.restoreLog(syncId: syncId)) {
     scheduleMicrotask(_loadLogs);
   }
 
@@ -451,14 +456,12 @@ class LogProvider with ChangeNotifier {
     final pendingRestore = _undoStack.last;
     _ensureLogWritable(pendingRestore);
     final log = _undoStack.removeLast();
-    final sessionId = _currentSessionId;
-    if (sessionId == null) {
-      _safeNotify();
-      return;
-    }
+    _safeNotify();
     try {
-      await RustApi.undoLastLog(sessionId: sessionId);
-      await _loadLogs();
+      final restored = await _logRestorer(log.id);
+      if (_currentSessionId == restored.sessionId) {
+        _mergeCanonicalLog(restored);
+      }
       if (_onLogChanged != null) {
         await _onLogChanged!(log, false);
       }
@@ -467,6 +470,7 @@ class LogProvider with ChangeNotifier {
       debugPrint('[LogProvider] undoLastLog failed: $e\n$st');
       _undoStack.add(log);
       _safeNotify();
+      rethrow;
     }
   }
 

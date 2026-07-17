@@ -7,11 +7,16 @@ pub async fn search_dict(
     limit: i64,
 ) -> anyhow::Result<Vec<DictItem>> {
     let pool = get_db()?;
-    let pattern = format!("%{}%", query);
+    let pattern = format!("%{}%", query.trim());
+    let limit = limit.clamp(1, 200);
     let rows = sqlx::query_as::<_, DictItemRow>(
         "SELECT * FROM dictionary_items
          WHERE dict_type = ? AND deleted_at IS NULL
-         AND (raw LIKE ? OR pinyin LIKE ? OR abbreviation LIKE ?)
+         AND (
+             LOWER(raw) LIKE LOWER(?) OR
+             LOWER(COALESCE(pinyin, '')) LIKE LOWER(?) OR
+             LOWER(COALESCE(abbreviation, '')) LIKE LOWER(?)
+         )
          ORDER BY raw ASC LIMIT ?",
     )
     .bind(dict_type)
@@ -22,6 +27,94 @@ pub async fn search_dict(
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|r| r.into_item()).collect())
+}
+
+/// Renames one active dictionary row in a single transaction.
+///
+/// The existing row keeps its stable sync id and creation timestamp. A
+/// tombstoned row with the target value is removed inside the same transaction
+/// so a deliberate rename may reuse a previously deleted value. An active
+/// target is treated as a conflict. Any error rolls the complete transaction
+/// back, leaving both the source and target rows unchanged.
+pub async fn rename_dict_item(
+    dict_type: &str,
+    old_raw: &str,
+    new_raw: &str,
+    pinyin: Option<String>,
+    abbreviation: Option<String>,
+) -> anyhow::Result<DictItem> {
+    let old_raw = old_raw.trim();
+    let new_raw = new_raw.trim();
+    if old_raw.is_empty() || new_raw.is_empty() {
+        anyhow::bail!("DICTIONARY_RENAME_EMPTY_ITEM");
+    }
+
+    let pool = get_db()?;
+    let mut tx = pool.begin().await?;
+    let source_exists: Option<(i64,)> = sqlx::query_as(
+        "SELECT id FROM dictionary_items
+         WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+    )
+    .bind(dict_type)
+    .bind(old_raw)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if source_exists.is_none() {
+        anyhow::bail!("DICTIONARY_RENAME_SOURCE_NOT_FOUND");
+    }
+
+    if old_raw != new_raw {
+        let active_target: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM dictionary_items
+             WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+        )
+        .bind(dict_type)
+        .bind(new_raw)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if active_target.is_some() {
+            anyhow::bail!("DICTIONARY_RENAME_TARGET_EXISTS");
+        }
+
+        sqlx::query(
+            "DELETE FROM dictionary_items
+             WHERE dict_type = ? AND raw = ? AND deleted_at IS NOT NULL",
+        )
+        .bind(dict_type)
+        .bind(new_raw)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let result = sqlx::query(
+        "UPDATE dictionary_items
+         SET raw = ?, pinyin = ?, abbreviation = ?, updated_at = ?
+         WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+    )
+    .bind(new_raw)
+    .bind(pinyin)
+    .bind(abbreviation)
+    .bind(&now)
+    .bind(dict_type)
+    .bind(old_raw)
+    .execute(&mut *tx)
+    .await?;
+    if result.rows_affected() != 1 {
+        anyhow::bail!("DICTIONARY_RENAME_WRITE_FAILED");
+    }
+
+    let renamed = sqlx::query_as::<_, DictItemRow>(
+        "SELECT * FROM dictionary_items
+         WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+    )
+    .bind(dict_type)
+    .bind(new_raw)
+    .fetch_one(&mut *tx)
+    .await?
+    .into_item();
+    tx.commit().await?;
+    Ok(renamed)
 }
 
 pub async fn add_dict_item(item: &DictItem) -> anyhow::Result<()> {
@@ -137,10 +230,7 @@ pub async fn get_dict_items(dict_type: &str) -> anyhow::Result<Vec<DictItem>> {
     Ok(rows.into_iter().map(|r| r.into_item()).collect())
 }
 
-pub async fn get_dict_item_by_raw(
-    dict_type: &str,
-    raw: &str,
-) -> anyhow::Result<Option<DictItem>> {
+pub async fn get_dict_item_by_raw(dict_type: &str, raw: &str) -> anyhow::Result<Option<DictItem>> {
     let pool = get_db()?;
     let row = sqlx::query_as::<_, DictItemRow>(
         "SELECT * FROM dictionary_items
@@ -186,18 +276,18 @@ pub async fn soft_delete_dict_items(dict_type: &str) -> anyhow::Result<()> {
 
 pub async fn reset_dictionaries() -> anyhow::Result<()> {
     let pool = get_db()?;
-    sqlx::query("DELETE FROM dictionary_items").execute(pool).await?;
+    sqlx::query("DELETE FROM dictionary_items")
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 pub async fn seed_dict(dict_type: &str, items: Vec<String>) -> anyhow::Result<usize> {
     let pool = get_db()?;
-    let count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM dictionary_items WHERE dict_type = ?",
-    )
-    .bind(dict_type)
-    .fetch_one(pool)
-    .await?;
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dictionary_items WHERE dict_type = ?")
+        .bind(dict_type)
+        .fetch_one(pool)
+        .await?;
     if count.0 > 0 {
         return Ok(count.0 as usize);
     }
@@ -216,12 +306,10 @@ pub async fn seed_dict(dict_type: &str, items: Vec<String>) -> anyhow::Result<us
         .execute(pool)
         .await?;
     }
-    let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM dictionary_items WHERE dict_type = ?",
-    )
-    .bind(dict_type)
-    .fetch_one(pool)
-    .await?;
+    let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dictionary_items WHERE dict_type = ?")
+        .bind(dict_type)
+        .fetch_one(pool)
+        .await?;
     Ok(total.0 as usize)
 }
 

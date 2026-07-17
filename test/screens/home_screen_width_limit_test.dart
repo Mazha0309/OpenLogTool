@@ -63,17 +63,43 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
+    expect(find.byKey(const Key('current-record-section')), findsOneWidget);
+    expect(find.byKey(const Key('saved-records-section')), findsOneWidget);
     final limited = find.byKey(const Key('workbench-width-limit'));
     expect(limited, findsOneWidget);
     expect(tester.getSize(limited).width, 1440);
     expect(_workbenchScrollWidth(tester), 1600);
+    for (final key in const [
+      'workbench-status-bar',
+      'current-record-section',
+      'saved-records-section',
+    ]) {
+      expect(
+        find.ancestor(of: find.byKey(Key(key)), matching: limited),
+        findsOneWidget,
+      );
+    }
+    expect(
+      tester.getSize(find.byKey(const Key('workbench-status-bar'))).height,
+      lessThanOrEqualTo(56),
+    );
+    final statusHeader =
+        tester.getRect(find.byKey(const Key('workbench-session-header')));
+    final statuses =
+        tester.getRect(find.byKey(const Key('workbench-session-statuses')));
+    expect(statusHeader.right - statuses.right, lessThanOrEqualTo(13));
+    final currentSection =
+        tester.getRect(find.byKey(const Key('current-record-section')));
+    final ordinal =
+        tester.getRect(find.byKey(const Key('current-ordinal-badge')));
+    expect(currentSection.right - ordinal.right, lessThanOrEqualTo(20));
 
     await settings.setLimitWorkbenchWidth(false);
     await tester.pump();
 
     expect(find.byKey(const Key('workbench-width-limit')), findsNothing);
     expect(_workbenchScrollWidth(tester), 1600);
-    expect(tester.getSize(find.byType(Card).first).width, closeTo(1584, 0.1));
+    expect(tester.getSize(find.byType(Card).first).width, closeTo(1560, 0.1));
   });
 }
 

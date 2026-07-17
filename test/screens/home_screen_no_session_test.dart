@@ -1,0 +1,257 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/collaboration_provider.dart';
+import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/server_provider.dart';
+import 'package:openlogtool/providers/session_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/providers/snackbar_log_provider.dart';
+import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/src/bridge/models/session.dart';
+import 'package:openlogtool/widgets/log_form.dart';
+import 'package:openlogtool/widgets/log_table.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('direct workbench without a session is informative and inert',
+      (tester) async {
+    final sessions = _EmptySessionProvider();
+    await tester.pumpWidget(_AddRecordTestApp(sessions: sessions));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LogForm), findsNothing);
+    expect(find.byType(LogTable), findsNothing);
+    expect(find.byKey(const Key('current-ordinal-badge')), findsNothing);
+    expect(find.text('当前没有点名会话'), findsOneWidget);
+    expect(find.byKey(const Key('start-new-record')), findsNothing);
+    expect(
+      find.byKey(const Key('open-workbench-session-history')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('create-session')), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('first launch opens Sessions without a startup dialog',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final sessions = _EmptySessionProvider();
+    await tester.pumpWidget(_HomeScreenTestApp(sessions: sessions));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const Key('current-session-section')), findsOneWidget);
+    expect(find.byKey(const Key('create-session')), findsOneWidget);
+    expect(find.byKey(const Key('session-history-section')), findsOneWidget);
+    expect(
+      tester
+          .widget<NavigationBar>(find.byKey(const Key('mobile-navigation')))
+          .selectedIndex,
+      1,
+    );
+    expect(find.byType(LogForm), findsNothing);
+    expect(find.byType(LogTable), findsNothing);
+    expect(find.byKey(const Key('workbench-status-bar')), findsNothing);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
+    expect(find.text('单机记录'), findsNothing);
+  });
+
+  testWidgets('active workbench keeps the new hierarchy on a phone',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final sessions = _EmptySessionProvider();
+    await sessions.startNewSession(title: '周五晚间点名');
+    await tester.pumpWidget(_HomeScreenTestApp(sessions: sessions));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('mobile-navigation')), findsOneWidget);
+    expect(find.byKey(const Key('workbench-session-header')), findsOneWidget);
+    expect(find.byKey(const Key('current-record-section')), findsOneWidget);
+    expect(find.byKey(const Key('saved-records-section')), findsOneWidget);
+    expect(find.byType(LogForm), findsOneWidget);
+    expect(find.byType(LogTable), findsOneWidget);
+    expect(find.byKey(const Key('start-new-record')), findsNothing);
+    expect(
+      find.byKey(const Key('open-workbench-session-history')),
+      findsNothing,
+    );
+    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
+    final statusBar = find.byKey(const Key('workbench-status-bar'));
+    final statusScroll = find.ancestor(
+      of: statusBar,
+      matching: find.byType(SingleChildScrollView),
+    );
+    final formScroll = find.ancestor(
+      of: find.byType(LogForm),
+      matching: find.byType(SingleChildScrollView),
+    );
+    expect(statusScroll, findsOneWidget);
+    expect(formScroll, findsOneWidget);
+    expect(tester.element(statusScroll), same(tester.element(formScroll)));
+    expect(tester.getSize(statusBar).height, lessThanOrEqualTo(56));
+
+    final initialTop = tester.getTopLeft(statusBar).dy;
+    await tester.drag(statusScroll, const Offset(0, -260));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(statusBar).dy, lessThan(initialTop - 80));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop workbench actions align at screenshot-sized width',
+      (tester) async {
+    tester.view.physicalSize = const Size(1270, 685);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final sessions = _EmptySessionProvider();
+    await sessions.startNewSession(title: '周五晚间点名');
+    await tester.pumpWidget(_HomeScreenTestApp(sessions: sessions));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('desktop-navigation')), findsOneWidget);
+    final statusHeader =
+        tester.getRect(find.byKey(const Key('workbench-session-header')));
+    final statuses =
+        tester.getRect(find.byKey(const Key('workbench-session-statuses')));
+    final currentSection =
+        tester.getRect(find.byKey(const Key('current-record-section')));
+    final ordinal =
+        tester.getRect(find.byKey(const Key('current-ordinal-badge')));
+    final savedSection =
+        tester.getRect(find.byKey(const Key('saved-records-section')));
+    final restore = tester.getRect(
+      find.widgetWithText(OutlinedButton, '恢复最近删除'),
+    );
+
+    expect(tester.getSize(find.byKey(const Key('workbench-status-bar'))).height,
+        lessThanOrEqualTo(56));
+    expect(statusHeader.right - statuses.right, lessThanOrEqualTo(13));
+    expect(currentSection.right - ordinal.right, lessThanOrEqualTo(20));
+    expect(savedSection.right - restore.right, lessThanOrEqualTo(20));
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _AddRecordTestApp extends StatelessWidget {
+  const _AddRecordTestApp({required this.sessions});
+
+  final _EmptySessionProvider sessions;
+
+  @override
+  Widget build(BuildContext context) => _TestProviders(
+        sessions: sessions,
+        child: const Scaffold(body: AddRecordPage()),
+      );
+}
+
+class _HomeScreenTestApp extends StatelessWidget {
+  const _HomeScreenTestApp({required this.sessions});
+
+  final _EmptySessionProvider sessions;
+
+  @override
+  Widget build(BuildContext context) => _TestProviders(
+        sessions: sessions,
+        includeHomeDependencies: true,
+        child: const HomeScreen(),
+      );
+}
+
+class _TestProviders extends StatelessWidget {
+  const _TestProviders({
+    required this.sessions,
+    required this.child,
+    this.includeHomeDependencies = false,
+  });
+
+  final _EmptySessionProvider sessions;
+  final Widget child;
+  final bool includeHomeDependencies;
+
+  @override
+  Widget build(BuildContext context) {
+    final providers = [
+      ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+      ChangeNotifierProvider(
+        create: (_) => LogProvider(
+          sessionListLoader: () async => [
+            if (sessions.currentSession case final session?) session,
+          ],
+          sessionLogPageLoader: (_, __, ___) async => [],
+        ),
+      ),
+      ChangeNotifierProvider(create: (_) => CollaborationProvider()),
+      ChangeNotifierProvider(
+        create: (_) => DictionaryProvider(autoload: false),
+      ),
+      ChangeNotifierProvider(create: (_) => SettingsProvider()),
+      ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
+      if (includeHomeDependencies) ...[
+        ChangeNotifierProvider(create: (_) => AppInfoProvider()),
+        ChangeNotifierProvider(
+          create: (_) => ServerProvider(autoLoadSettings: false),
+        ),
+      ],
+    ];
+    return MultiProvider(
+      providers: providers,
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: child,
+      ),
+    );
+  }
+}
+
+class _EmptySessionProvider extends SessionProvider {
+  _EmptySessionProvider() : super(sessionListLoader: () async => const []);
+
+  Session? _current;
+  final List<String?> startedTitles = [];
+
+  @override
+  Future<void> get ready => Future<void>.value();
+
+  @override
+  String? get currentSessionId => _current?.sessionId;
+
+  @override
+  Session? get currentSession => _current;
+
+  @override
+  Future<void> startNewSession({
+    String? title,
+    bool autoGenerated = false,
+  }) async {
+    startedTitles.add(title);
+    _current = const Session(
+      sessionId: 'new-session',
+      title: '周五晚间点名',
+      status: 'active',
+      createdAt: '2026-07-17T10:00:00Z',
+      updatedAt: '2026-07-17T10:00:00Z',
+    );
+    notifyListeners();
+  }
+}

@@ -63,6 +63,72 @@ void main() {
     expect(result, const Color(0xFF123456));
   });
 
+  testWidgets('theme mode hides opacity and always returns an opaque color',
+      (tester) async {
+    Color? result;
+    await tester.pumpWidget(
+      _PickerHarness(
+        locale: const Locale('en', 'US'),
+        initialColor: const Color(0x402196F3),
+        onResult: (color) => result = color,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-theme-color-picker')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('theme-color-opacity-slider')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('apply-theme-color')));
+    await tester.pumpAndSettle();
+
+    expect(result, const Color(0xFF2196F3));
+  });
+
+  testWidgets('export mode preserves opacity while editing the RGB value',
+      (tester) async {
+    Color? result;
+    await tester.pumpWidget(
+      _PickerHarness(
+        locale: const Locale('en', 'US'),
+        initialColor: const Color(0x802196F3),
+        title: 'Choose export color',
+        allowOpacity: true,
+        onResult: (color) => result = color,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-theme-color-picker')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose export color'), findsOneWidget);
+    final opacityFinder = find.byKey(const Key('theme-color-opacity-slider'));
+    expect(opacityFinder, findsOneWidget);
+    expect(
+      tester.widget<Slider>(opacityFinder).value,
+      closeTo(128 / 255, 0.001),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('theme-color-hex-field')),
+      '#123456',
+    );
+    await tester.pump();
+    expect(
+      tester.widget<Slider>(opacityFinder).value,
+      closeTo(128 / 255, 0.001),
+    );
+
+    tester.widget<Slider>(opacityFinder).onChanged!(0.25);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('apply-theme-color')));
+    await tester.pumpAndSettle();
+
+    expect(result, const Color(0x40123456));
+  });
+
   testWidgets('SV drag uses the actual narrow-dialog color area',
       (tester) async {
     tester.view.devicePixelRatio = 1;
@@ -172,11 +238,15 @@ class _PickerHarness extends StatelessWidget {
     required this.locale,
     required this.initialColor,
     required this.onResult,
+    this.title,
+    this.allowOpacity = false,
   });
 
   final Locale locale;
   final Color initialColor;
   final ValueChanged<Color?> onResult;
+  final String? title;
+  final bool allowOpacity;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -191,8 +261,11 @@ class _PickerHarness extends StatelessWidget {
                 onPressed: () async {
                   final result = await showDialog<Color>(
                     context: context,
-                    builder: (_) =>
-                        ThemeColorPickerDialog(initialColor: initialColor),
+                    builder: (_) => ThemeColorPickerDialog(
+                      initialColor: initialColor,
+                      title: title,
+                      allowOpacity: allowOpacity,
+                    ),
                   );
                   onResult(result);
                 },

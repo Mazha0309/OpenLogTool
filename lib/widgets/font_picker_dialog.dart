@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 
 class FontPickerResult {
   const FontPickerResult(this.fontFamily);
@@ -29,16 +32,19 @@ class FontPickerDialog extends StatefulWidget {
 
 class _FontPickerDialogState extends State<FontPickerDialog> {
   late final TextEditingController _searchController;
+  late final List<_FontOption> _fonts;
   late String? _pendingFont;
+  late String? _previewFont;
+  Timer? _searchDebounce;
+  Timer? _previewDebounce;
   String _query = '';
 
   String? get _normalizedCurrent => _normalizeFont(widget.currentFont);
 
-  List<String> get _filteredFonts {
-    if (_query.isEmpty) return widget.availableFonts;
-    final lower = _query.toLowerCase();
-    return widget.availableFonts
-        .where((font) => font.toLowerCase().contains(lower))
+  List<_FontOption> get _filteredFonts {
+    if (_query.isEmpty) return _fonts;
+    return _fonts
+        .where((font) => font.searchLabel.contains(_query))
         .toList(growable: false);
   }
 
@@ -47,18 +53,59 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
     super.initState();
     _searchController = TextEditingController();
     _pendingFont = _normalizedCurrent;
+    _previewFont = _pendingFont;
+
+    // Font discovery can contain blank or duplicate family names. Normalize
+    // and index it once instead of repeating trim/lowercase work on every
+    // keystroke and every dialog rebuild.
+    final seen = <String>{};
+    final fonts = <_FontOption>[];
+    for (final rawFont in widget.availableFonts) {
+      final font = rawFont.trim();
+      final searchLabel = font.toLowerCase();
+      if (font.isEmpty || !seen.add(searchLabel)) continue;
+      fonts.add(_FontOption(font, searchLabel));
+    }
+    _fonts = List.unmodifiable(fonts);
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _previewDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _search(String value) {
+    _searchDebounce?.cancel();
+    final normalized = value.trim().toLowerCase();
+    _searchDebounce = Timer(AppMotion.fast, () {
+      if (!mounted || normalized == _query) return;
+      setState(() => _query = normalized);
+    });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    if (_query.isEmpty) return;
+    setState(() => _query = '');
   }
 
   void _select(String? font) {
     final normalized = _normalizeFont(font);
     if (_pendingFont == normalized) return;
     setState(() => _pendingFont = normalized);
+
+    // Resolving a newly selected desktop font can block the UI thread. Keep
+    // selection/checkmark feedback immediate and update only the one preview
+    // after the pointer interaction has completed.
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(AppMotion.fast, () {
+      if (!mounted || _previewFont == normalized) return;
+      setState(() => _previewFont = normalized);
+    });
   }
 
   void _apply() {
@@ -93,24 +140,21 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
+                        onPressed: _clearSearch,
                       )
                     : null,
                 border: const OutlineInputBorder(),
                 isDense: true,
               ),
-              onChanged: (value) => setState(() => _query = value.trim()),
+              onChanged: _search,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpace.sm),
             Container(
               key: const Key('font-preview'),
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpace.sm),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.control),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,20 +177,20 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: AppSpace.xs),
                   Text(
                     l10n.fontPreviewSample,
                     key: const Key('font-preview-sample'),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      fontFamily: _pendingFont,
+                      fontFamily: _previewFont,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpace.xs),
             Text(
               l10n.fontResultCount(filtered.length),
               key: const Key('font-result-count'),
@@ -154,7 +198,7 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpace.xxs),
             Expanded(
               child: ListView.builder(
                 key: const Key('font-list'),
@@ -176,7 +220,7 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
                     );
                   }
 
-                  final font = filtered[index - 1];
+                  final font = filtered[index - 1].name;
                   final selected = font == _pendingFont;
                   final builtIn = font == 'SarasaGothicSC';
                   return ListTile(
@@ -216,4 +260,11 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
 String? _normalizeFont(String? font) {
   final normalized = font?.trim() ?? '';
   return normalized.isEmpty ? null : normalized;
+}
+
+class _FontOption {
+  const _FontOption(this.name, this.searchLabel);
+
+  final String name;
+  final String searchLabel;
 }

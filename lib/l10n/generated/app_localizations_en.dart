@@ -117,8 +117,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noCurrentSession => 'No current net session';
 
   @override
-  String get noCurrentSessionHint =>
-      'Create a session from the Net Desk to start logging.';
+  String get noCurrentSessionHint => 'Create a net session to start logging.';
 
   @override
   String get sessionActive => 'Active';
@@ -397,6 +396,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldController => 'Controller';
 
   @override
+  String get fieldControllerCallsign => 'Controller callsign';
+
+  @override
   String get fieldCallsign => 'Callsign';
 
   @override
@@ -428,6 +430,62 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fieldRemarks => 'Remarks';
+
+  @override
+  String get fieldActions => 'Actions';
+
+  @override
+  String inputFieldHint(String field) {
+    return 'Enter $field';
+  }
+
+  @override
+  String optionalFieldHint(String field) {
+    return '$field (optional)';
+  }
+
+  @override
+  String get noSavedRecords => 'No saved records';
+
+  @override
+  String get addFirstRecordHint => 'Add the first record using the form above.';
+
+  @override
+  String get editRecord => 'Edit record';
+
+  @override
+  String get deleteRecord => 'Delete record';
+
+  @override
+  String get deleteRecordConfirmation => 'Delete this record?';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get recordDeleted => 'Record deleted';
+
+  @override
+  String get savedRecords => 'Saved records';
+
+  @override
+  String recordCount(int count) {
+    return '$count records';
+  }
+
+  @override
+  String get restoreLastDeletedRecord => 'Restore last deleted';
+
+  @override
+  String get restoreLastDeletedRecordTitle =>
+      'Restore the last deleted record?';
+
+  @override
+  String get restoreLastDeletedRecordConfirmation =>
+      'This restores the most recently deleted net record without changing any other records.';
+
+  @override
+  String get recordRestored => 'Record restored';
 
   @override
   String get saveRecord => 'Save record';
@@ -1596,6 +1654,89 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTitle => 'App settings';
 
   @override
+  String get settingsSubtitle =>
+      'Manage appearance, Net Desk behavior, controller displays, server accounts, and on-device data in one place.';
+
+  @override
+  String get settingsAppearanceTitle => 'Appearance & language';
+
+  @override
+  String get settingsAppearanceHint =>
+      'Choose the theme, font, and interface language. Changes apply immediately.';
+
+  @override
+  String get themeColorSetting => 'Theme color';
+
+  @override
+  String get themeColorSettingHint =>
+      'Set the accent color used for actions, selections, and highlights.';
+
+  @override
+  String get chooseThemeColor => 'Choose color';
+
+  @override
+  String get darkModeSetting => 'Dark mode';
+
+  @override
+  String get darkModeSettingHint =>
+      'Switch between the light and dark color schemes.';
+
+  @override
+  String get appFontSetting => 'App font';
+
+  @override
+  String get appFontSettingHint =>
+      'Choose the font used throughout the interface.';
+
+  @override
+  String get appLanguageSetting => 'Interface language';
+
+  @override
+  String get appLanguageSettingHint =>
+      'Follow the system or use Simplified Chinese or English.';
+
+  @override
+  String get languageFollowSystem => 'Follow system';
+
+  @override
+  String get languageSimplifiedChinese => '简体中文';
+
+  @override
+  String get languageEnglish => 'English';
+
+  @override
+  String get layoutSettingsTitle => 'Net Desk & layout';
+
+  @override
+  String get layoutSettingsHint =>
+      'Adjust Net Desk width, pagination, and logging assistance.';
+
+  @override
+  String get paginationSetting => 'Paginate records';
+
+  @override
+  String get paginationSettingHint => 'Show five records on each page.';
+
+  @override
+  String get controllerDisplaySettingsHint =>
+      'Configure controller-device access, separate windows, and default display content.';
+
+  @override
+  String get serverSettingsHint =>
+      'Configure the collaboration server and manage the current account and sign-in devices.';
+
+  @override
+  String get settingsSupportTitle => 'App information & settings maintenance';
+
+  @override
+  String get settingsSupportHint =>
+      'Review version and open-source information, or restore interface and logging preferences.';
+
+  @override
+  String get restoreDefaultSettingsHint =>
+      'Restore appearance, language, layout, and export preferences without affecting records or sign-in state.';
+
+  @override
   String get snackbarLogTitle => 'In-app message log';
 
   @override
@@ -1611,7 +1752,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resetSettingsConfirmation =>
-      'Restore appearance, layout, and export preferences to their defaults. Local records, lookup libraries, server accounts, and sign-in state are not affected.';
+      'Restore appearance, language, layout, and export preferences to their defaults. Local records, lookup libraries, server accounts, and sign-in state are not affected.';
 
   @override
   String get resetSettingsConfirmAction => 'Restore defaults';
@@ -1724,7 +1865,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get databaseImportPreviewWarning =>
-      'Import completely replaces the current on-device database, including unsynchronized changes. Server sessions, sign-in credentials in secure storage, and appearance settings are not affected. Built-in library content is completed for this app version. This cannot be undone.';
+      'Import completely replaces the current on-device database, including unsynchronized changes. Server sessions, sign-in credentials in secure storage, and app settings are not affected. Built-in library content is completed for this app version. This cannot be undone.';
 
   @override
   String get databaseImportCollaborationWarning =>
@@ -1801,6 +1942,404 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get localCollaborationRequired =>
       'The current session is no longer an on-device collaboration replica. Refresh the page and try again.';
+
+  @override
+  String get dataTransferTitle => 'Import and export';
+
+  @override
+  String get dataTransferSubtitle =>
+      'Back up, migrate, or share the current session\'s net records, and configure the Excel output style.';
+
+  @override
+  String get dataTransferActionsTitle => 'Record files';
+
+  @override
+  String get dataTransferActionsHint =>
+      'Use JSON for complete data migration and Excel for viewing, sharing, and printing.';
+
+  @override
+  String get exportDataTitle => 'Export data';
+
+  @override
+  String get exportDataHint =>
+      'Export the current session\'s net records to a file';
+
+  @override
+  String get exportJson => 'Export JSON';
+
+  @override
+  String get exportExcel => 'Export Excel';
+
+  @override
+  String get importDataTitle => 'Import data';
+
+  @override
+  String get importDataHint =>
+      'Import net records from a file into the current session';
+
+  @override
+  String get importJson => 'Import JSON';
+
+  @override
+  String get importExcel => 'Import Excel';
+
+  @override
+  String get excelConfigurationOverview => 'Excel configuration';
+
+  @override
+  String get excelConfigurationOverviewHint =>
+      'This is the current configuration. Alternating rows can be toggled here; open the editor for all other options.';
+
+  @override
+  String get editSettings => 'Edit settings';
+
+  @override
+  String get fileNameTemplate => 'Filename template';
+
+  @override
+  String get excelHeader => 'Excel header';
+
+  @override
+  String get exportPath => 'Export location';
+
+  @override
+  String get systemDownloadsDirectory => 'System Downloads folder';
+
+  @override
+  String get headerBackground => 'Header background';
+
+  @override
+  String get tableHeaderBackground => 'Column header background';
+
+  @override
+  String get controllerRow => 'Controller row';
+
+  @override
+  String get alternatingRows => 'Alternating rows';
+
+  @override
+  String get fileFormatInformation => 'File formats';
+
+  @override
+  String get jsonFormatDescription =>
+      'JSON: A standard JSON array containing every field, suitable for backup and migration between apps.';
+
+  @override
+  String get excelFormatDescription =>
+      'Excel: An .xlsx workbook with grouped controller rows, color styling, and footer information, suitable for sharing and printing.';
+
+  @override
+  String get excelExportSettingsTitle => 'Edit Excel export settings';
+
+  @override
+  String get fileTab => 'File';
+
+  @override
+  String get tableStyleTab => 'Table style';
+
+  @override
+  String get templateVariablesTab => 'Template variables';
+
+  @override
+  String get exportSettingsSaved => 'Export settings saved';
+
+  @override
+  String get select => 'Choose';
+
+  @override
+  String get exportPathDefaultHint =>
+      'Leave blank to use the system Downloads folder';
+
+  @override
+  String fileNameTemplateExample(String MM, String dd, String yyyy) {
+    return 'Example: Net_Log_$yyyy-$MM-$dd';
+  }
+
+  @override
+  String get fileNameTemplateHint =>
+      'Use template variables to generate filenames automatically';
+
+  @override
+  String get headerTemplate => 'Header template';
+
+  @override
+  String headerTemplateExample(String MM, String dd, String yyyy) {
+    return 'Example: Net log for $yyyy-$MM-$dd';
+  }
+
+  @override
+  String get headerTemplateHint =>
+      'Used when the session name option is off or the session name is blank; template variables are supported';
+
+  @override
+  String get headerBackgroundColor => 'Header background color';
+
+  @override
+  String get tableHeaderBackgroundColor => 'Column header background color';
+
+  @override
+  String get controllerRowBackgroundColor => 'Controller row background color';
+
+  @override
+  String get tableBackgroundColor => 'Table background color';
+
+  @override
+  String get alternatingRowColor => 'Alternating row color';
+
+  @override
+  String get alternatingRowColorHint => 'Use alternating row background colors';
+
+  @override
+  String get footerInformation => 'Footer information';
+
+  @override
+  String get footerInformationHint =>
+      'Show OpenLogTool project and license information';
+
+  @override
+  String get restoreDefaultColors => 'Restore default colors';
+
+  @override
+  String get tableFont => 'Table font';
+
+  @override
+  String get templateVariablesTitle => 'Template variable reference';
+
+  @override
+  String get templateYearDescription => 'Four-digit year, for example 2024';
+
+  @override
+  String get templateMonthDescription =>
+      'Two-digit month, for example 01 or 12';
+
+  @override
+  String get templateDayDescription => 'Two-digit day, for example 01 or 31';
+
+  @override
+  String get templateHourDescription =>
+      'Two-digit hour (24-hour clock), for example 14';
+
+  @override
+  String get templateMinuteDescription => 'Two-digit minute, for example 30';
+
+  @override
+  String get templateSecondDescription => 'Two-digit second, for example 45';
+
+  @override
+  String get templateExamplesTitle => 'Examples';
+
+  @override
+  String templateFileNameExampleOne(String MM, String dd, String yyyy) {
+    return 'Filename: Net_Log_$yyyy-$MM-$dd';
+  }
+
+  @override
+  String get templateFileNameExampleOneResult => 'Net_Log_2024-03-28.xlsx';
+
+  @override
+  String templateFileNameExampleTwo(
+      String HH, String MM, String dd, String mm, String ss, String yyyy) {
+    return 'Filename: Contact_$yyyy-$MM-${dd}_$HH$mm$ss';
+  }
+
+  @override
+  String get templateFileNameExampleTwoResult =>
+      'Contact_2024-03-28_143045.xlsx';
+
+  @override
+  String templateHeaderExample(String MM, String dd, String yyyy) {
+    return 'Header: Net log for $yyyy-$MM-$dd';
+  }
+
+  @override
+  String get templateHeaderExampleResult => 'Net log for 2024-03-28';
+
+  @override
+  String get templateVariablesTip =>
+      'Tip: Template variables add the current date and time to filenames and headers automatically, making files easier to organize.';
+
+  @override
+  String chooseColor(String label) {
+    return 'Choose $label';
+  }
+
+  @override
+  String colorHexValue(String value) {
+    return 'HEX: #$value';
+  }
+
+  @override
+  String get colorOpacity => 'Opacity';
+
+  @override
+  String get noDataToExport => 'There is no data to export';
+
+  @override
+  String saveExportFileDialog(String format) {
+    return 'Save $format export file';
+  }
+
+  @override
+  String get downloadsDirectoryUnavailable =>
+      'The Downloads folder is unavailable';
+
+  @override
+  String exportSavedViaSystemPicker(String format) {
+    return '$format export completed and was saved with the system file picker';
+  }
+
+  @override
+  String exportSucceeded(String format) {
+    return '$format export completed';
+  }
+
+  @override
+  String fileSavedTo(String path) {
+    return 'File saved to:\n$path';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get excelGenerationFailed =>
+      'Export failed: Could not generate the Excel file';
+
+  @override
+  String importSucceeded(int count) {
+    return 'Imported $count records';
+  }
+
+  @override
+  String importFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get excelImportComingSoon => 'Excel import is not available yet';
+
+  @override
+  String get pathCopied => 'Path copied';
+
+  @override
+  String get createSession => 'New session';
+
+  @override
+  String get createSessionTitle => 'Create a net session';
+
+  @override
+  String get createSessionNameHint => 'Enter a session name';
+
+  @override
+  String sessionCreated(String title) {
+    return 'Created session \"$title\"';
+  }
+
+  @override
+  String createSessionFailed(String error) {
+    return 'Could not create session: $error';
+  }
+
+  @override
+  String get searchSessions => 'Search sessions';
+
+  @override
+  String get allSessionStatuses => 'All statuses';
+
+  @override
+  String get sessionArchived => 'Archived';
+
+  @override
+  String sessionPage(int page, int total) {
+    return 'Page $page of $total';
+  }
+
+  @override
+  String get moreSessionActions => 'More session actions';
+
+  @override
+  String get openAndManageCollaboration => 'Open and manage collaboration';
+
+  @override
+  String get exportLibraryJson => 'Export library JSON';
+
+  @override
+  String get libraryExportDialogTitle => 'Export lookup libraries';
+
+  @override
+  String get libraryExportSucceeded => 'Lookup libraries exported';
+
+  @override
+  String libraryExportFailed(String error) {
+    return 'Could not export lookup libraries: $error';
+  }
+
+  @override
+  String get editLibraryItem => 'Edit';
+
+  @override
+  String editLibraryItemTitle(String name) {
+    return 'Edit \"$name\"';
+  }
+
+  @override
+  String get editLibraryItemLabel => 'Library entry';
+
+  @override
+  String libraryItemRenamed(String value) {
+    return 'Updated to \"$value\"';
+  }
+
+  @override
+  String libraryItemRenameFailed(String error) {
+    return 'Could not update entry: $error';
+  }
+
+  @override
+  String libraryPageStatus(int current, int total) {
+    return 'Page $current of $total';
+  }
+
+  @override
+  String get previousPage => 'Previous page';
+
+  @override
+  String get nextPage => 'Next page';
+
+  @override
+  String get settingsCategoryAppearance => 'Appearance';
+
+  @override
+  String get settingsCategoryWorkbench => 'Workbench';
+
+  @override
+  String get settingsCategoryController => 'Controller display';
+
+  @override
+  String get settingsCategoryServerAccount => 'Server & account';
+
+  @override
+  String get settingsCategoryApplication => 'Application';
+
+  @override
+  String get collaborationOverviewTab => 'Overview';
+
+  @override
+  String get collaborationSyncConflictsTab => 'Sync & conflicts';
+
+  @override
+  String get collaborationAccessManagementTab => 'Access management';
+
+  @override
+  String get dataRecordsExportTab => 'Records & export';
+
+  @override
+  String get dataLookupLibrariesTab => 'Lookup libraries';
+
+  @override
+  String get dataLocalDatabaseTab => 'Local database';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
