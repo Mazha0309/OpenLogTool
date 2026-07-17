@@ -11,24 +11,22 @@ import 'package:provider/provider.dart';
 
 typedef SessionHistoryLoader = Future<List<Session>> Function();
 typedef SessionHistoryAction = Future<void> Function(Session session);
+typedef SessionHistoryCurrentIdGetter = String? Function();
 typedef SessionCollaborationBindingChecker = Future<bool> Function(
   String sessionId,
 );
 
-const _historyCollaborationCloseRequiresOpen =
-    'HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN';
-const _historyCollaborationCloseOwnerRequired =
-    'HISTORY_COLLABORATION_CLOSE_OWNER_REQUIRED';
-
 String historySessionCloseErrorText(BuildContext context, Object error) {
   final raw = error.toString();
-  if (raw.contains(_historyCollaborationCloseRequiresOpen)) {
-    return context.l10n.historySessionCollaborationCloseRequiresOpen;
+  if (raw.contains('COLLABORATION_OPERATION_IN_PROGRESS')) {
+    return context.l10n.localCollaborationOperationBusy;
   }
-  if (raw.contains(_historyCollaborationCloseOwnerRequired)) {
-    return context.l10n.historySessionCollaborationCloseOwnerRequired;
+  if (raw.contains('LOCAL_COLLABORATION_REQUIRED')) {
+    return context.l10n.localCollaborationRequired;
   }
-  return context.l10n.historySessionCloseFailed(raw);
+  return context.l10n.historySessionCloseFailed(
+    raw.replaceFirst('Bad state: ', ''),
+  );
 }
 
 Future<void> closeSessionFromHistory({
@@ -36,22 +34,14 @@ Future<void> closeSessionFromHistory({
   required String? currentSessionId,
   required SessionCollaborationBindingChecker hasCollaborationBinding,
   required SessionHistoryAction closeLocalSession,
-  required Future<void> Function() refreshCurrentCollaboration,
-  required bool Function() canCloseCurrentCollaboration,
-  required Future<void> Function() closeCurrentCollaboration,
+  required Future<void> Function() closeCurrentCollaborationLocally,
 }) async {
-  if (!await hasCollaborationBinding(session.sessionId)) {
+  final collaboration = await hasCollaborationBinding(session.sessionId);
+  if (collaboration && session.sessionId == currentSessionId) {
+    await closeCurrentCollaborationLocally();
+  } else {
     await closeLocalSession(session);
-    return;
   }
-  if (session.sessionId != currentSessionId) {
-    throw StateError(_historyCollaborationCloseRequiresOpen);
-  }
-  await refreshCurrentCollaboration();
-  if (!canCloseCurrentCollaboration()) {
-    throw StateError(_historyCollaborationCloseOwnerRequired);
-  }
-  await closeCurrentCollaboration();
 }
 
 String localSessionReopenErrorText(BuildContext context, Object error) {
@@ -183,6 +173,7 @@ Future<void> showSessionHistoryDialog(
     context: context,
     builder: (_) => SessionHistoryDialog(
       currentSessionId: sessionProvider.currentSessionId,
+      currentSessionIdGetter: () => sessionProvider.currentSessionId,
       loadSessions: sessionProvider.listAvailableSessions,
       openSession: loadAndSwitch,
       reopenSession: (session) async {
@@ -216,20 +207,24 @@ Future<void> showSessionHistoryDialog(
               sessionId: sessionId,
             ) !=
             null,
-        closeLocalSession: (target) =>
-            logProvider.closeSession(target.sessionId),
-        refreshCurrentCollaboration:
-            collaborationProvider.refreshCurrentSession,
-        canCloseCurrentCollaboration: () =>
-            collaborationProvider.binding?.sessionId == session.sessionId &&
-            collaborationProvider.isOwner,
-        closeCurrentCollaboration: collaborationProvider.closeCurrentSession,
+        closeLocalSession: (target) async {
+          final closed =
+              await sessionProvider.closeSessionLocally(target.sessionId);
+          if (sessionProvider.currentSessionId == closed.sessionId) {
+            await logProvider.reloadForSession(
+              closed.sessionId,
+              propagateErrors: true,
+            );
+          }
+        },
+        closeCurrentCollaborationLocally:
+            collaborationProvider.closeCurrentSessionLocally,
       ),
-      canCloseCurrentSession: collaborationProvider.binding?.sessionId ==
-              sessionProvider.currentSessionId &&
-          collaborationProvider.isOwner,
-      deleteSession: (session) =>
-          logProvider.hardDeleteSession(session.sessionId),
+      canCloseCurrentSession: sessionProvider.currentSessionId != null,
+      deleteSession: (session) async {
+        await sessionProvider.deleteSessionLocally(session.sessionId);
+        await logProvider.forgetDeletedSession(session.sessionId);
+      },
     ),
   );
   if (selected == null || !context.mounted) return;
@@ -262,9 +257,11 @@ class SessionHistoryDialog extends StatefulWidget {
     required this.closeSession,
     required this.deleteSession,
     this.canCloseCurrentSession = false,
+    this.currentSessionIdGetter,
   });
 
   final String? currentSessionId;
+  final SessionHistoryCurrentIdGetter? currentSessionIdGetter;
   final SessionHistoryLoader loadSessions;
   final SessionHistoryAction openSession;
   final SessionHistoryAction reopenSession;
@@ -327,7 +324,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(context.l10n.closeSession),
+            child: Text(context.l10n.closeCollaborationLocally),
           ),
         ],
       ),
@@ -474,7 +471,9 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
   }
 
   Widget _sessionTile(Session session) {
-    final isCurrent = widget.currentSessionId == session.sessionId;
+    final currentSessionId =
+        widget.currentSessionIdGetter?.call() ?? widget.currentSessionId;
+    final isCurrent = currentSessionId == session.sessionId;
     final isActive = session.status == 'active';
     final isClosed = session.status == 'closed';
     final busy = _busySessionId == session.sessionId;
@@ -509,7 +508,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                     if (isActive && widget.canCloseCurrentSession)
                       IconButton(
                         key: Key('close-history-session-${session.sessionId}'),
-                        tooltip: context.l10n.closeSession,
+                        tooltip: context.l10n.closeCollaborationLocally,
                         onPressed: _busySessionId == null
                             ? () => _close(session)
                             : null,
@@ -547,7 +546,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                     if (isActive)
                       IconButton(
                         key: Key('close-history-session-${session.sessionId}'),
-                        tooltip: context.l10n.closeSession,
+                        tooltip: context.l10n.closeCollaborationLocally,
                         onPressed: _busySessionId == null
                             ? () => _close(session)
                             : null,
@@ -570,20 +569,19 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                           color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                    if (isClosed)
-                      IconButton(
-                        key: Key(
-                          'delete-history-session-${session.sessionId}',
-                        ),
-                        tooltip: context.l10n.historySessionDeleteAction,
-                        onPressed: _busySessionId == null
-                            ? () => _delete(session)
-                            : null,
-                        icon: Icon(
-                          Icons.delete_forever,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                    IconButton(
+                      key: Key(
+                        'delete-history-session-${session.sessionId}',
                       ),
+                      tooltip: context.l10n.historySessionDeleteAction,
+                      onPressed: _busySessionId == null
+                          ? () => _delete(session)
+                          : null,
+                      icon: Icon(
+                        Icons.delete_forever,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ],
                 ),
     );

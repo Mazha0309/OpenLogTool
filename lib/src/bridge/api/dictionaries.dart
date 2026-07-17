@@ -7,6 +7,8 @@ import '../frb_generated.dart';
 import '../models/dict_item.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BulkUpsertDictItem`, `BulkUpsertDictRequest`
+
 Future<List<DictItem>> searchDict(
         {required String dictType,
         required String query,
@@ -29,6 +31,27 @@ Future<void> upsertDictItem(
         pinyin: pinyin,
         abbreviation: abbreviation);
 
+Future<void> upsertDictItemIfActive(
+        {required String dictType,
+        required String raw,
+        String? pinyin,
+        String? abbreviation}) =>
+    RustLib.instance.api.crateApiDictionariesUpsertDictItemIfActive(
+        dictType: dictType,
+        raw: raw,
+        pinyin: pinyin,
+        abbreviation: abbreviation);
+
+/// Atomically imports user-supplied dictionary entries.
+///
+/// Unlike built-in dictionary synchronization, an explicit import revives an
+/// existing tombstoned `(dict_type, raw)` row. The whole request is committed
+/// in one SQLite transaction, so a failure cannot leave a partially imported
+/// file behind.
+Future<void> bulkUpsertDictItems({required String requestJson}) =>
+    RustLib.instance.api
+        .crateApiDictionariesBulkUpsertDictItems(requestJson: requestJson);
+
 Future<List<DictItem>> getDictItems({required String dictType}) =>
     RustLib.instance.api.crateApiDictionariesGetDictItems(dictType: dictType);
 
@@ -36,6 +59,11 @@ Future<DictItem?> getDictItemByRaw(
         {required String dictType, required String raw}) =>
     RustLib.instance.api
         .crateApiDictionariesGetDictItemByRaw(dictType: dictType, raw: raw);
+
+Future<bool> softDeleteDictItem(
+        {required String dictType, required String raw}) =>
+    RustLib.instance.api
+        .crateApiDictionariesSoftDeleteDictItem(dictType: dictType, raw: raw);
 
 Future<void> softDeleteDictItems({required String dictType}) =>
     RustLib.instance.api

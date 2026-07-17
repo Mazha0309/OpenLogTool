@@ -1,15 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:provider/provider.dart';
 
-/// Presents the appropriate way to continue locally from the current
-/// collaboration session.
+String localCollaborationActionErrorText(
+  AppLocalizations l10n,
+  Object error,
+) {
+  final raw = error.toString();
+  if (raw.contains('COLLABORATION_OPERATION_IN_PROGRESS')) {
+    return l10n.localCollaborationOperationBusy;
+  }
+  if (raw.contains('LOCAL_COLLABORATION_REQUIRED')) {
+    return l10n.localCollaborationRequired;
+  }
+  return l10n.operationFailed(raw.replaceFirst('Bad state: ', ''));
+}
+
+/// Device-local escape hatches for the current collaboration replica.
 ///
-/// A synchronized session can be converted directly. When direct conversion
-/// is unavailable, the action remains visible as a disaster-recovery copy of
-/// the materialized local replica.
+/// These actions never claim to close, delete, or leave the shared server
+/// session. Server membership and shared-session actions remain on the
+/// collaboration management screen as separate controls.
 class CollaborationLocalSessionAction extends StatelessWidget {
   const CollaborationLocalSessionAction({
     super.key,
@@ -31,64 +46,104 @@ class CollaborationLocalSessionAction extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final convertDirectly = collaboration.canConvertCurrentSessionDirectly;
-    final action = OutlinedButton.icon(
-      key: Key(
-        convertDirectly
-            ? 'convert-collaboration-to-local'
-            : 'create-editable-local-copy',
-      ),
-      onPressed: collaboration.isBusy
-          ? null
-          : () => _confirmAndRun(
-                context,
-                collaboration: collaboration,
-                sourceTitle: session.title,
-                convertDirectly: convertDirectly,
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton.icon(
+          key: const Key('convert-collaboration-to-local'),
+          onPressed: collaboration.isBusy
+              ? null
+              : () => _confirmStopCollaboration(
+                    context,
+                    collaboration: collaboration,
+                    sourceTitle: session.title,
+                  ),
+          icon: const Icon(Icons.cloud_off_outlined),
+          label: Text(context.l10n.convertCollaborationToLocal),
+        ),
+        OutlinedButton.icon(
+          key: const Key('close-collaboration-locally'),
+          onPressed: collaboration.isBusy
+              ? null
+              : () => _confirmCloseLocally(
+                    context,
+                    collaboration: collaboration,
+                    sourceTitle: session.title,
+                  ),
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: Text(context.l10n.closeCollaborationLocally),
+        ),
+        MenuAnchor(
+          menuChildren: [
+            MenuItemButton(
+              key: const Key('create-editable-local-copy'),
+              leadingIcon: const Icon(Icons.copy_all_outlined),
+              onPressed: () => unawaited(
+                _confirmCreateCopy(
+                  context,
+                  collaboration: collaboration,
+                  sourceTitle: session.title,
+                ),
               ),
-      icon: Icon(
-        convertDirectly ? Icons.cloud_off_outlined : Icons.copy_all_outlined,
-      ),
-      label: Text(
-        convertDirectly
-            ? context.l10n.convertCollaborationToLocal
-            : context.l10n.createEditableLocalCopy,
-      ),
+              child: Text(context.l10n.createEditableLocalCopy),
+            ),
+            MenuItemButton(
+              key: const Key('delete-collaboration-locally'),
+              leadingIcon: Icon(
+                Icons.delete_forever,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => unawaited(
+                _confirmDeleteLocally(
+                  context,
+                  collaboration: collaboration,
+                  sourceTitle: session.title,
+                ),
+              ),
+              child: Text(context.l10n.historySessionDeleteAction),
+            ),
+          ],
+          builder: (context, controller, child) => OutlinedButton.icon(
+            key: const Key('more-local-collaboration-actions'),
+            onPressed: collaboration.isBusy
+                ? null
+                : () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+            icon: const Icon(Icons.more_horiz),
+            label: Text(context.l10n.moreLocalCollaborationActions),
+          ),
+        ),
+      ],
     );
 
     return Padding(
       padding: padding,
       child: alignment == null
-          ? action
-          : Align(alignment: alignment!, child: action),
+          ? actions
+          : Align(alignment: alignment!, child: actions),
     );
   }
 
-  Future<void> _confirmAndRun(
+  Future<void> _confirmStopCollaboration(
     BuildContext context, {
     required CollaborationProvider collaboration,
     required String sourceTitle,
-    required bool convertDirectly,
   }) async {
+    final cleanConversion = collaboration.canConvertCurrentSessionDirectly;
     final accepted = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            key: Key(
-              convertDirectly
-                  ? 'convert-collaboration-to-local-dialog'
-                  : 'create-editable-local-copy-dialog',
-            ),
-            title: Text(
-              convertDirectly
-                  ? context.l10n.convertCollaborationToLocalTitle
-                  : context.l10n.createEditableLocalCopyTitle,
-            ),
+            key: const Key('convert-collaboration-to-local-dialog'),
+            title: Text(context.l10n.convertCollaborationToLocalTitle),
             content: Text(
-              convertDirectly
+              cleanConversion
                   ? context.l10n.convertCollaborationToLocalConfirmation(
                       sourceTitle,
                     )
-                  : context.l10n.createEditableLocalCopyConfirmation(
+                  : context.l10n
+                      .convertCollaborationToLocalUnsyncedConfirmation(
                       sourceTitle,
                     ),
             ),
@@ -98,17 +153,9 @@ class CollaborationLocalSessionAction extends StatelessWidget {
                 child: Text(context.l10n.cancel),
               ),
               FilledButton(
-                key: Key(
-                  convertDirectly
-                      ? 'confirm-convert-collaboration-to-local'
-                      : 'confirm-create-editable-local-copy',
-                ),
+                key: const Key('confirm-convert-collaboration-to-local'),
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(
-                  convertDirectly
-                      ? context.l10n.convertCollaborationToLocal
-                      : context.l10n.createEditableLocalCopy,
-                ),
+                child: Text(context.l10n.convertCollaborationToLocal),
               ),
             ],
           ),
@@ -116,27 +163,126 @@ class CollaborationLocalSessionAction extends StatelessWidget {
         false;
     if (!accepted || !context.mounted) return;
 
+    await _runLocalAction(
+      context,
+      cleanConversion
+          ? collaboration.convertCurrentSessionToLocal
+          : collaboration.stopCurrentSessionLocally,
+      success: context.l10n.convertCollaborationToLocalSucceeded,
+    );
+  }
+
+  Future<void> _confirmCloseLocally(
+    BuildContext context, {
+    required CollaborationProvider collaboration,
+    required String sourceTitle,
+  }) async {
+    final accepted = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            key: const Key('close-collaboration-locally-dialog'),
+            title: Text(context.l10n.historySessionCloseTitle),
+            content: Text(
+              context.l10n.historySessionCloseConfirmation(sourceTitle),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('confirm-close-collaboration-locally'),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.closeCollaborationLocally),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!accepted || !context.mounted) return;
+
+    await _runLocalAction(
+      context,
+      collaboration.closeCurrentSessionLocally,
+      success: context.l10n.historySessionClosed,
+    );
+  }
+
+  Future<void> _confirmCreateCopy(
+    BuildContext context, {
+    required CollaborationProvider collaboration,
+    required String sourceTitle,
+  }) async {
+    final accepted = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            key: const Key('create-editable-local-copy-dialog'),
+            title: Text(context.l10n.createEditableLocalCopyTitle),
+            content: Text(
+              context.l10n.createEditableLocalCopyConfirmation(sourceTitle),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('confirm-create-editable-local-copy'),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.createEditableLocalCopy),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!accepted || !context.mounted) return;
+
+    await _runLocalAction(
+      context,
+      () => collaboration.createEditableLocalCopy(
+        title: _editableLocalCopyTitle(context, sourceTitle),
+      ),
+      success: context.l10n.editableLocalCopySucceeded,
+    );
+  }
+
+  Future<void> _confirmDeleteLocally(
+    BuildContext context, {
+    required CollaborationProvider collaboration,
+    required String sourceTitle,
+  }) async {
+    final accepted = await showDialog<bool>(
+          context: context,
+          builder: (_) => _DeleteCurrentCollaborationConfirmationDialog(
+            sessionTitle: sourceTitle,
+          ),
+        ) ??
+        false;
+    if (!accepted || !context.mounted) return;
+
+    await _runLocalAction(
+      context,
+      collaboration.deleteCurrentSessionLocally,
+      success: context.l10n.historySessionDeleted,
+    );
+  }
+
+  Future<void> _runLocalAction(
+    BuildContext context,
+    Future<void> Function() action, {
+    required String success,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
-    final successMessage = convertDirectly
-        ? context.l10n.convertCollaborationToLocalSucceeded
-        : context.l10n.editableLocalCopySucceeded;
+    final l10n = context.l10n;
     try {
-      if (convertDirectly) {
-        await collaboration.convertCurrentSessionToLocal();
-      } else {
-        await collaboration.createEditableLocalCopy(
-          title: _editableLocalCopyTitle(context, sourceTitle),
-        );
-      }
-      if (context.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(successMessage)));
-      }
+      await action();
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(success)));
     } catch (error) {
-      if (context.mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
-        );
-      }
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(localCollaborationActionErrorText(l10n, error))),
+      );
     }
   }
 
@@ -155,4 +301,86 @@ class CollaborationLocalSessionAction extends StatelessWidget {
         ? String.fromCharCodes(localTitle.runes.take(200))
         : localTitle;
   }
+}
+
+class _DeleteCurrentCollaborationConfirmationDialog extends StatefulWidget {
+  const _DeleteCurrentCollaborationConfirmationDialog({
+    required this.sessionTitle,
+  });
+
+  final String sessionTitle;
+
+  @override
+  State<_DeleteCurrentCollaborationConfirmationDialog> createState() =>
+      _DeleteCurrentCollaborationConfirmationDialogState();
+}
+
+class _DeleteCurrentCollaborationConfirmationDialogState
+    extends State<_DeleteCurrentCollaborationConfirmationDialog> {
+  final _nameController = TextEditingController();
+  bool _nameMatches = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        key: const Key('delete-current-collaboration-locally-dialog'),
+        title: Text(context.l10n.historySessionDeleteTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.historySessionDeleteWarning(widget.sessionTitle),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                context.l10n
+                    .historySessionDeleteExpectedName(widget.sessionTitle),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('delete-current-collaboration-name'),
+                controller: _nameController,
+                autofocus: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: InputDecoration(
+                  labelText: context.l10n.historySessionDeleteNameLabel,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  final matches = value.trim() == widget.sessionTitle;
+                  if (matches != _nameMatches) {
+                    setState(() => _nameMatches = matches);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key(
+              'confirm-delete-current-collaboration-locally',
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: _nameMatches ? () => Navigator.pop(context, true) : null,
+            child: Text(context.l10n.historySessionDeleteAction),
+          ),
+        ],
+      );
 }

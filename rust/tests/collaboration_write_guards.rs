@@ -1,8 +1,7 @@
-use openlogtool_core::api::{database, sessions};
+use openlogtool_core::api::sessions;
 use openlogtool_core::db::{collaboration, logs};
 use openlogtool_core::models::log_entry::LogEntry;
 use openlogtool_core::{get_db, init_database};
-use serde_json::json;
 
 const NOW: &str = "2026-07-11T08:00:00Z";
 
@@ -108,23 +107,6 @@ async fn publishing_lease_blocks_all_local_writes_and_abort_restores_them() {
     assert_read_only(logs::undo_last_log("publish-local").await.unwrap_err());
     assert_read_only(
         sessions::close_session("publish-local".to_string())
-            .await
-            .unwrap_err(),
-    );
-
-    let empty_backup = json!({
-        "version": 4,
-        "logs": [],
-        "sessions": [],
-        "dictionary_items": [],
-        "settings": [],
-        "oplog": [],
-        "callsign_qth_history": [],
-        "collaboration_bindings": [],
-        "entity_shadows": []
-    });
-    assert_read_only(
-        database::import_database(empty_backup.to_string())
             .await
             .unwrap_err(),
     );

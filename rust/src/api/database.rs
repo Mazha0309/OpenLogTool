@@ -1,4 +1,5 @@
 use crate::get_db;
+use chrono::DateTime;
 use serde_json::{json, Value};
 use sqlx::{sqlite::SqliteRow, Column, Row, TypeInfo};
 
@@ -6,36 +7,27 @@ const EXPORT_VERSION: i32 = 6;
 
 pub async fn get_database_status() -> anyhow::Result<String> {
     let pool = get_db()?;
-    let mut info = String::new();
-
-    info.push_str("=== 应用状态 ===\n");
-
     let tables = sqlx::query_as::<_, (String,)>(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
     )
     .fetch_all(pool)
     .await?;
-
-    for (name,) in &tables {
-        let count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM \"{}\"", name))
+    let schema_version: (Option<i64>,) = sqlx::query_as("SELECT MAX(version) FROM schema_version")
+        .fetch_one(pool)
+        .await?;
+    let mut table_status = Vec::with_capacity(tables.len());
+    for (name,) in tables {
+        let quoted_name = format!("\"{}\"", name.replace('"', "\"\""));
+        let count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {quoted_name}"))
             .fetch_one(pool)
             .await?;
-        info.push_str(&format!("{}: {}\n", name, count.0));
+        table_status.push(json!({"name": name, "rowCount": count.0}));
     }
-
-    info.push_str("\n=== 数据库表 ===\n");
-    for (name,) in tables {
-        let count: (i64,) = match sqlx::query_as(&format!("SELECT COUNT(*) FROM \"{}\"", name))
-            .fetch_one(pool)
-            .await
-        {
-            Ok(c) => c,
-            Err(_) => (0,),
-        };
-        info.push_str(&format!("表: {}\n  行数: {}\n", name, count.0));
-    }
-
-    Ok(info)
+    Ok(json!({
+        "schemaVersion": schema_version.0,
+        "tables": table_status,
+    })
+    .to_string())
 }
 
 pub async fn export_database() -> anyhow::Result<String> {
@@ -83,55 +75,21 @@ pub async fn import_database(json_data: String) -> anyhow::Result<()> {
     let pool = get_db()?;
     let data: Value = serde_json::from_str(&json_data)?;
     validate_backup(&data)?;
+    let version = data["version"]
+        .as_i64()
+        .ok_or_else(|| anyhow::anyhow!("DATABASE_BACKUP_INVALID_FORMAT"))?;
 
     let mut tx = pool.begin().await?;
-    let active_bindings: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM collaboration_bindings")
-        .fetch_one(&mut *tx)
+    // sync_outbox rows may reference an earlier mutation. JSON array order is
+    // not a relational guarantee, so defer FK checks until every table and row
+    // has been restored instead of requiring parent-first backup ordering.
+    sqlx::query("PRAGMA defer_foreign_keys = ON")
+        .execute(&mut *tx)
         .await?;
-    if active_bindings.0 > 0 {
-        anyhow::bail!("COLLABORATION_SESSION_READ_ONLY");
-    }
-
     // Clear identity-scoped replica data before its materialized Sessions. The
     // installation-level device_state is intentionally not imported/exported:
     // restoring a backup on another device must not clone its device identity.
-    sqlx::query("DELETE FROM collaboration_offline_records")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM collaboration_live_drafts")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM sync_conflicts")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM applied_events")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM sync_outbox")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM entity_shadows")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM collaboration_bindings")
-        .execute(&mut *tx)
-        .await?;
-
-    // 清空现有数据（保留表结构）
-    sqlx::query("DELETE FROM logs").execute(&mut *tx).await?;
-    sqlx::query("DELETE FROM sessions")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM dictionary_items")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM settings")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM oplog").execute(&mut *tx).await?;
-    sqlx::query("DELETE FROM callsign_qth_history")
-        .execute(&mut *tx)
-        .await?;
+    clear_database_tables(&mut tx).await?;
 
     insert_from_json(&mut tx, "sessions", data.get("sessions")).await?;
     insert_from_json(&mut tx, "logs", data.get("logs")).await?;
@@ -144,29 +102,36 @@ pub async fn import_database(json_data: String) -> anyhow::Result<()> {
         data.get("callsign_qth_history"),
     )
     .await?;
-    insert_from_json(
-        &mut tx,
-        "collaboration_bindings",
-        data.get("collaboration_bindings"),
-    )
-    .await?;
-    insert_from_json(&mut tx, "entity_shadows", data.get("entity_shadows")).await?;
-    insert_from_json(&mut tx, "sync_outbox", data.get("sync_outbox")).await?;
-    insert_from_json(&mut tx, "applied_events", data.get("applied_events")).await?;
-    insert_from_json(&mut tx, "sync_conflicts", data.get("sync_conflicts")).await?;
-    insert_from_json(
-        &mut tx,
-        "collaboration_live_drafts",
-        data.get("collaboration_live_drafts"),
-    )
-    .await?;
-    insert_from_json(
-        &mut tx,
-        "collaboration_offline_records",
-        data.get("collaboration_offline_records"),
-    )
-    .await?;
+    if version >= 4 {
+        insert_from_json(
+            &mut tx,
+            "collaboration_bindings",
+            data.get("collaboration_bindings"),
+        )
+        .await?;
+        insert_from_json(&mut tx, "entity_shadows", data.get("entity_shadows")).await?;
+    }
+    if version >= 5 {
+        insert_from_json(&mut tx, "sync_outbox", data.get("sync_outbox")).await?;
+        insert_from_json(&mut tx, "applied_events", data.get("applied_events")).await?;
+        insert_from_json(&mut tx, "sync_conflicts", data.get("sync_conflicts")).await?;
+    }
+    if version >= 6 {
+        insert_from_json(
+            &mut tx,
+            "collaboration_live_drafts",
+            data.get("collaboration_live_drafts"),
+        )
+        .await?;
+        insert_from_json(
+            &mut tx,
+            "collaboration_offline_records",
+            data.get("collaboration_offline_records"),
+        )
+        .await?;
+    }
 
+    validate_restored_database(&mut tx).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -174,13 +139,13 @@ pub async fn import_database(json_data: String) -> anyhow::Result<()> {
 fn validate_backup(data: &Value) -> anyhow::Result<()> {
     let object = data
         .as_object()
-        .ok_or_else(|| anyhow::anyhow!("未知的数据库备份格式"))?;
+        .ok_or_else(|| anyhow::anyhow!("DATABASE_BACKUP_INVALID_FORMAT"))?;
     let version = object
         .get("version")
         .and_then(Value::as_i64)
-        .ok_or_else(|| anyhow::anyhow!("未知的数据库备份格式"))?;
+        .ok_or_else(|| anyhow::anyhow!("DATABASE_BACKUP_INVALID_FORMAT"))?;
     if !(1..=i64::from(EXPORT_VERSION)).contains(&version) {
-        anyhow::bail!("不支持的数据库备份版本: {version}");
+        anyhow::bail!("DATABASE_BACKUP_UNSUPPORTED_VERSION:{version}");
     }
 
     let mut required_tables = vec![
@@ -204,9 +169,17 @@ fn validate_backup(data: &Value) -> anyhow::Result<()> {
         let rows = object
             .get(table)
             .and_then(Value::as_array)
-            .ok_or_else(|| anyhow::anyhow!("数据库备份缺少有效表: {table}"))?;
-        if rows.iter().any(|row| !row.is_object()) {
-            anyhow::bail!("数据库备份表包含无效行: {table}");
+            .ok_or_else(|| anyhow::anyhow!("DATABASE_BACKUP_INVALID_TABLE:{table}"))?;
+        for row in rows {
+            let fields = row
+                .as_object()
+                .filter(|fields| !fields.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("DATABASE_BACKUP_INVALID_ROW:{table}"))?;
+            for field in fields.keys() {
+                if !allowed_columns(table).contains(&field.as_str()) {
+                    anyhow::bail!("DATABASE_BACKUP_UNKNOWN_COLUMN:{table}.{field}");
+                }
+            }
         }
     }
     Ok(())
@@ -215,52 +188,845 @@ fn validate_backup(data: &Value) -> anyhow::Result<()> {
 pub async fn clear_all_data() -> anyhow::Result<()> {
     let pool = get_db()?;
     let mut tx = pool.begin().await?;
-
-    let active_bindings: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM collaboration_bindings")
-        .fetch_one(&mut *tx)
-        .await?;
-    if active_bindings.0 > 0 {
-        anyhow::bail!("COLLABORATION_SESSION_READ_ONLY");
-    }
-
-    sqlx::query("DELETE FROM collaboration_offline_records")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM collaboration_live_drafts")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM sync_conflicts")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM applied_events")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM sync_outbox")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM entity_shadows")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM collaboration_bindings")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM logs").execute(&mut *tx).await?;
-    sqlx::query("DELETE FROM sessions")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM dictionary_items")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM settings")
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM oplog").execute(&mut *tx).await?;
-    sqlx::query("DELETE FROM callsign_qth_history")
-        .execute(&mut *tx)
-        .await?;
+    clear_database_tables(&mut tx).await?;
 
     tx.commit().await?;
     Ok(())
+}
+
+async fn clear_database_tables(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> anyhow::Result<()> {
+    // Delete children before parents so this remains correct even when a
+    // restored database has foreign-key enforcement enabled.
+    for table in [
+        "collaboration_offline_records",
+        "collaboration_live_drafts",
+        "sync_conflicts",
+        "applied_events",
+        "sync_outbox",
+        "entity_shadows",
+        "collaboration_bindings",
+        "logs",
+        "sessions",
+        "dictionary_items",
+        "settings",
+        "oplog",
+        "callsign_qth_history",
+    ] {
+        sqlx::query(&format!("DELETE FROM \"{table}\""))
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+fn allowed_columns(table: &str) -> &'static [&'static str] {
+    match table {
+        "logs" => &[
+            "id",
+            "sync_id",
+            "session_id",
+            "time",
+            "controller",
+            "callsign",
+            "rst_sent",
+            "rst_rcvd",
+            "qth",
+            "device",
+            "power",
+            "antenna",
+            "height",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "source_device_id",
+            "remarks",
+        ],
+        "sessions" => &[
+            "session_id",
+            "title",
+            "status",
+            "share_code",
+            "created_at",
+            "updated_at",
+            "closed_at",
+            "deleted_at",
+        ],
+        "dictionary_items" => &[
+            "id",
+            "dict_type",
+            "raw",
+            "pinyin",
+            "abbreviation",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        ],
+        "settings" => &["key", "value"],
+        "oplog" => &[
+            "id",
+            "session_id",
+            "op_type",
+            "entity_type",
+            "entity_id",
+            "data",
+            "device_id",
+            "created_at",
+            "applied",
+        ],
+        "callsign_qth_history" => &[
+            "id",
+            "sync_id",
+            "callsign",
+            "qth",
+            "recorded_at",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "source_device_id",
+        ],
+        "collaboration_bindings" => &[
+            "server_instance_id",
+            "server_origin",
+            "account_id",
+            "session_id",
+            "membership_id",
+            "membership_version",
+            "role",
+            "replica_state",
+            "last_applied_seq",
+            "last_seen_head_seq",
+            "joined_at",
+            "updated_at",
+            "revoked_at",
+        ],
+        "entity_shadows" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "entity_type",
+            "entity_id",
+            "server_version",
+            "last_event_seq",
+            "server_json",
+            "deleted",
+        ],
+        "sync_outbox" => &[
+            "local_seq",
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "mutation_id",
+            "entity_type",
+            "entity_id",
+            "operation",
+            "base_version",
+            "observed_seq",
+            "base_json",
+            "payload_json",
+            "state",
+            "attempts",
+            "next_attempt_at",
+            "accepted_event_seq",
+            "depends_on_mutation_id",
+            "last_error_code",
+            "last_error_message",
+            "last_error_details_json",
+            "created_at",
+            "updated_at",
+        ],
+        "applied_events" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "event_id",
+            "event_seq",
+            "mutation_id",
+            "applied_at",
+        ],
+        "sync_conflicts" => &[
+            "conflict_id",
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "entity_type",
+            "entity_id",
+            "mutation_id",
+            "base_version",
+            "remote_version",
+            "base_json",
+            "local_json",
+            "remote_json",
+            "conflicting_fields_json",
+            "state",
+            "resolution_mutation_id",
+            "created_at",
+            "resolved_at",
+        ],
+        "collaboration_live_drafts" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "draft_id",
+            "draft_version",
+            "remote_json",
+            "local_fields_json",
+            "field_revisions_json",
+            "dirty_fields_json",
+            "client_seq",
+            "remote_updated_at",
+            "local_updated_at",
+        ],
+        "collaboration_offline_records" => &[
+            "mutation_id",
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "draft_id",
+            "expected_draft_version",
+            "provisional_ordinal",
+            "record_json",
+            "state",
+            "resolution",
+            "last_error_code",
+            "created_at",
+            "updated_at",
+        ],
+        _ => &[],
+    }
+}
+
+async fn validate_restored_database(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> anyhow::Result<()> {
+    for table in backup_tables() {
+        let required_text = required_text_columns(table);
+        let optional_text = optional_text_columns(table);
+        let required_integer = required_integer_columns(table);
+        let optional_integer = optional_integer_columns(table);
+
+        // Keep the validator exhaustive as the export schema evolves. Adding a
+        // column without defining its stored type must fail development/tests,
+        // never silently weaken backup validation.
+        for column in allowed_columns(table) {
+            if !required_text.contains(column)
+                && !optional_text.contains(column)
+                && !required_integer.contains(column)
+                && !optional_integer.contains(column)
+            {
+                anyhow::bail!("DATABASE_BACKUP_VALIDATOR_MISSING:{table}.{column}");
+            }
+        }
+
+        for column in required_text {
+            ensure_sqlite_column_type(tx, table, column, "text", false).await?;
+        }
+        for column in optional_text {
+            ensure_sqlite_column_type(tx, table, column, "text", true).await?;
+        }
+        for column in required_integer {
+            ensure_sqlite_column_type(tx, table, column, "integer", false).await?;
+        }
+        for column in optional_integer {
+            ensure_sqlite_column_type(tx, table, column, "integer", true).await?;
+        }
+    }
+
+    for (table, column) in json_object_columns() {
+        ensure_json_column_type(tx, table, column, "object").await?;
+    }
+    for (table, column) in json_array_columns() {
+        ensure_json_column_type(tx, table, column, "array").await?;
+    }
+    for (table, column) in json_any_columns() {
+        ensure_json_column_type(tx, table, column, "").await?;
+    }
+
+    for (table, columns) in required_identifier_columns() {
+        for column in *columns {
+            ensure_nonblank_identifier(tx, table, column, false).await?;
+        }
+    }
+    for (table, columns) in optional_identifier_columns() {
+        for column in *columns {
+            ensure_nonblank_identifier(tx, table, column, true).await?;
+        }
+    }
+    for (table, columns) in required_value_columns() {
+        for column in *columns {
+            ensure_nonblank_required_value(tx, table, column).await?;
+        }
+    }
+    ensure_dictionary_types(tx).await?;
+
+    for (table, columns) in required_rfc3339_columns() {
+        for column in *columns {
+            ensure_rfc3339_column(tx, table, column, false).await?;
+        }
+    }
+    for (table, columns) in optional_rfc3339_columns() {
+        for column in *columns {
+            ensure_rfc3339_column(tx, table, column, true).await?;
+        }
+    }
+    ensure_log_time_column(tx).await?;
+
+    let invalid_status: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sessions
+         WHERE status NOT IN ('active', 'closed', 'archived')",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if invalid_status.0 != 0 {
+        anyhow::bail!("DATABASE_BACKUP_INVALID_SESSION_STATUS");
+    }
+
+    for (child_table, session_column) in [("logs", "session_id"), ("oplog", "session_id")] {
+        let orphan_count: (i64,) = sqlx::query_as(&format!(
+            "SELECT COUNT(*) FROM \"{child_table}\" child
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM sessions parent
+                 WHERE parent.session_id = child.\"{session_column}\"
+             )"
+        ))
+        .fetch_one(&mut **tx)
+        .await?;
+        if orphan_count.0 != 0 {
+            anyhow::bail!("DATABASE_BACKUP_ORPHAN_SESSION:{child_table}");
+        }
+    }
+
+    if let Some(violation) = sqlx::query("PRAGMA foreign_key_check")
+        .fetch_optional(&mut **tx)
+        .await?
+    {
+        let table = violation
+            .try_get::<String, _>(0)
+            .unwrap_or_else(|_| "unknown".to_string());
+        anyhow::bail!("DATABASE_BACKUP_FOREIGN_KEY_VIOLATION:{table}");
+    }
+    Ok(())
+}
+
+async fn ensure_sqlite_column_type(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    column: &str,
+    expected_type: &str,
+    nullable: bool,
+) -> anyhow::Result<()> {
+    let nullable_clause = if nullable {
+        format!("\"{column}\" IS NOT NULL AND ")
+    } else {
+        String::new()
+    };
+    let invalid: (i64,) = sqlx::query_as(&format!(
+        "SELECT COUNT(*) FROM \"{table}\"
+         WHERE {nullable_clause}typeof(\"{column}\") != ?"
+    ))
+    .bind(expected_type)
+    .fetch_one(&mut **tx)
+    .await?;
+    if invalid.0 != 0 {
+        anyhow::bail!("DATABASE_BACKUP_UNREADABLE_COLUMN:{table}.{column}:{expected_type}");
+    }
+    Ok(())
+}
+
+async fn ensure_json_column_type(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    column: &str,
+    expected_json_type: &str,
+) -> anyhow::Result<()> {
+    let invalid_json = if expected_json_type.is_empty() {
+        format!("json_valid(\"{column}\") = 0")
+    } else {
+        format!(
+            "CASE
+                WHEN json_valid(\"{column}\") = 0 THEN 1
+                WHEN json_type(\"{column}\") != '{expected_json_type}' THEN 1
+                ELSE 0
+             END = 1"
+        )
+    };
+    let invalid: (i64,) = sqlx::query_as(&format!(
+        "SELECT COUNT(*) FROM \"{table}\"
+         WHERE \"{column}\" IS NOT NULL
+           AND ({invalid_json})"
+    ))
+    .fetch_one(&mut **tx)
+    .await?;
+    if invalid.0 != 0 {
+        anyhow::bail!("DATABASE_BACKUP_INVALID_JSON_COLUMN:{table}.{column}");
+    }
+    Ok(())
+}
+
+async fn ensure_nonblank_identifier(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    column: &str,
+    nullable: bool,
+) -> anyhow::Result<()> {
+    let invalid = if nullable {
+        let values: Vec<(Option<String>,)> =
+            sqlx::query_as(&format!("SELECT \"{column}\" FROM \"{table}\""))
+                .fetch_all(&mut **tx)
+                .await?;
+        values.iter().any(|(value,)| {
+            value
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+        })
+    } else {
+        let values: Vec<(String,)> =
+            sqlx::query_as(&format!("SELECT \"{column}\" FROM \"{table}\""))
+                .fetch_all(&mut **tx)
+                .await?;
+        values.iter().any(|(value,)| value.trim().is_empty())
+    };
+    if invalid {
+        anyhow::bail!("DATABASE_BACKUP_EMPTY_IDENTIFIER:{table}.{column}");
+    }
+    Ok(())
+}
+
+async fn ensure_nonblank_required_value(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    column: &str,
+) -> anyhow::Result<()> {
+    let values: Vec<(String,)> = sqlx::query_as(&format!("SELECT \"{column}\" FROM \"{table}\""))
+        .fetch_all(&mut **tx)
+        .await?;
+    if values.iter().any(|(value,)| value.trim().is_empty()) {
+        anyhow::bail!("DATABASE_BACKUP_EMPTY_REQUIRED_VALUE:{table}.{column}");
+    }
+    Ok(())
+}
+
+async fn ensure_dictionary_types(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> anyhow::Result<()> {
+    let invalid: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM dictionary_items
+         WHERE dict_type NOT IN (
+             'device_dictionary', 'antenna_dictionary',
+             'callsign_dictionary', 'qth_dictionary'
+         )",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if invalid.0 != 0 {
+        anyhow::bail!("DATABASE_BACKUP_INVALID_DICTIONARY_TYPE");
+    }
+    Ok(())
+}
+
+async fn ensure_rfc3339_column(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    column: &str,
+    nullable: bool,
+) -> anyhow::Result<()> {
+    let nullable_clause = if nullable {
+        format!("WHERE \"{column}\" IS NOT NULL")
+    } else {
+        String::new()
+    };
+    let values: Vec<(String,)> = sqlx::query_as(&format!(
+        "SELECT \"{column}\" FROM \"{table}\" {nullable_clause}"
+    ))
+    .fetch_all(&mut **tx)
+    .await?;
+    if values
+        .iter()
+        .any(|(value,)| DateTime::parse_from_rfc3339(value).is_err())
+    {
+        anyhow::bail!("DATABASE_BACKUP_INVALID_TIMESTAMP:{table}.{column}");
+    }
+    Ok(())
+}
+
+async fn ensure_log_time_column(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> anyhow::Result<()> {
+    let values: Vec<(String,)> = sqlx::query_as("SELECT time FROM logs")
+        .fetch_all(&mut **tx)
+        .await?;
+    if values.iter().any(|(value,)| !is_valid_log_time(value)) {
+        anyhow::bail!("DATABASE_BACKUP_INVALID_LOG_TIME:logs.time");
+    }
+    Ok(())
+}
+
+fn is_valid_log_time(value: &str) -> bool {
+    let value = value.trim();
+    if DateTime::parse_from_rfc3339(value).is_ok() {
+        return true;
+    }
+
+    let parts: Vec<&str> = value.split(':').collect();
+    if !(2..=3).contains(&parts.len())
+        || !(1..=2).contains(&parts[0].len())
+        || parts[1].len() != 2
+        || (parts.len() == 3 && parts[2].len() != 2)
+        || parts
+            .iter()
+            .any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return false;
+    }
+
+    let Ok(hour) = parts[0].parse::<u8>() else {
+        return false;
+    };
+    let Ok(minute) = parts[1].parse::<u8>() else {
+        return false;
+    };
+    let second = if parts.len() == 3 {
+        let Ok(second) = parts[2].parse::<u8>() else {
+            return false;
+        };
+        second
+    } else {
+        0
+    };
+    hour <= 23 && minute <= 59 && second <= 59
+}
+
+fn backup_tables() -> &'static [&'static str] {
+    &[
+        "logs",
+        "sessions",
+        "dictionary_items",
+        "settings",
+        "oplog",
+        "callsign_qth_history",
+        "collaboration_bindings",
+        "entity_shadows",
+        "sync_outbox",
+        "applied_events",
+        "sync_conflicts",
+        "collaboration_live_drafts",
+        "collaboration_offline_records",
+    ]
+}
+
+fn required_text_columns(table: &str) -> &'static [&'static str] {
+    match table {
+        "logs" => &[
+            "sync_id",
+            "session_id",
+            "time",
+            "controller",
+            "callsign",
+            "created_at",
+            "updated_at",
+        ],
+        "sessions" => &["session_id", "title", "status", "created_at", "updated_at"],
+        "dictionary_items" => &["dict_type", "raw", "sync_id", "created_at", "updated_at"],
+        "settings" => &["key", "value"],
+        "oplog" => &[
+            "session_id",
+            "op_type",
+            "entity_type",
+            "entity_id",
+            "data",
+            "created_at",
+        ],
+        "callsign_qth_history" => &[
+            "sync_id",
+            "callsign",
+            "qth",
+            "recorded_at",
+            "created_at",
+            "updated_at",
+        ],
+        "collaboration_bindings" => &[
+            "server_instance_id",
+            "server_origin",
+            "account_id",
+            "session_id",
+            "membership_id",
+            "role",
+            "replica_state",
+            "joined_at",
+            "updated_at",
+        ],
+        "entity_shadows" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "entity_type",
+            "entity_id",
+            "server_json",
+        ],
+        "sync_outbox" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "mutation_id",
+            "entity_type",
+            "entity_id",
+            "operation",
+            "payload_json",
+            "state",
+            "created_at",
+            "updated_at",
+        ],
+        "applied_events" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "event_id",
+            "applied_at",
+        ],
+        "sync_conflicts" => &[
+            "conflict_id",
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "entity_type",
+            "entity_id",
+            "mutation_id",
+            "local_json",
+            "remote_json",
+            "conflicting_fields_json",
+            "state",
+            "created_at",
+        ],
+        "collaboration_live_drafts" => &[
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "draft_id",
+            "remote_json",
+            "local_fields_json",
+            "field_revisions_json",
+            "dirty_fields_json",
+            "local_updated_at",
+        ],
+        "collaboration_offline_records" => &[
+            "mutation_id",
+            "server_instance_id",
+            "account_id",
+            "session_id",
+            "draft_id",
+            "record_json",
+            "state",
+            "created_at",
+            "updated_at",
+        ],
+        _ => &[],
+    }
+}
+
+fn optional_text_columns(table: &str) -> &'static [&'static str] {
+    match table {
+        "logs" => &[
+            "rst_sent",
+            "rst_rcvd",
+            "qth",
+            "device",
+            "power",
+            "antenna",
+            "height",
+            "deleted_at",
+            "source_device_id",
+            "remarks",
+        ],
+        "sessions" => &["share_code", "closed_at", "deleted_at"],
+        "dictionary_items" => &["pinyin", "abbreviation", "deleted_at"],
+        "oplog" => &["device_id"],
+        "callsign_qth_history" => &["deleted_at", "source_device_id"],
+        "collaboration_bindings" => &["revoked_at"],
+        "sync_outbox" => &[
+            "base_json",
+            "next_attempt_at",
+            "depends_on_mutation_id",
+            "last_error_code",
+            "last_error_message",
+            "last_error_details_json",
+        ],
+        "applied_events" => &["mutation_id"],
+        "sync_conflicts" => &["base_json", "resolution_mutation_id", "resolved_at"],
+        "collaboration_live_drafts" => &["remote_updated_at"],
+        "collaboration_offline_records" => &["resolution", "last_error_code"],
+        _ => &[],
+    }
+}
+
+fn required_integer_columns(table: &str) -> &'static [&'static str] {
+    match table {
+        "logs" | "dictionary_items" | "callsign_qth_history" => &["id"],
+        "oplog" => &["id", "applied"],
+        "collaboration_bindings" => &[
+            "membership_version",
+            "last_applied_seq",
+            "last_seen_head_seq",
+        ],
+        "entity_shadows" => &["server_version", "last_event_seq", "deleted"],
+        "sync_outbox" => &["local_seq", "base_version", "observed_seq", "attempts"],
+        "applied_events" => &["event_seq"],
+        "sync_conflicts" => &["base_version", "remote_version"],
+        "collaboration_live_drafts" => &["draft_version", "client_seq"],
+        "collaboration_offline_records" => &["expected_draft_version", "provisional_ordinal"],
+        _ => &[],
+    }
+}
+
+fn optional_integer_columns(table: &str) -> &'static [&'static str] {
+    match table {
+        "sync_outbox" => &["accepted_event_seq"],
+        _ => &[],
+    }
+}
+
+fn json_object_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("entity_shadows", "server_json"),
+        ("sync_outbox", "base_json"),
+        ("sync_outbox", "payload_json"),
+        ("sync_conflicts", "base_json"),
+        ("sync_conflicts", "local_json"),
+        ("sync_conflicts", "remote_json"),
+        ("collaboration_live_drafts", "remote_json"),
+        ("collaboration_live_drafts", "local_fields_json"),
+        ("collaboration_live_drafts", "field_revisions_json"),
+        ("collaboration_offline_records", "record_json"),
+    ]
+}
+
+fn json_array_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("sync_conflicts", "conflicting_fields_json"),
+        ("collaboration_live_drafts", "dirty_fields_json"),
+    ]
+}
+
+fn json_any_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("oplog", "data"),
+        ("sync_outbox", "last_error_details_json"),
+    ]
+}
+
+fn required_identifier_columns() -> &'static [(&'static str, &'static [&'static str])] {
+    &[
+        ("logs", &["sync_id", "session_id"]),
+        ("sessions", &["session_id"]),
+        ("dictionary_items", &["sync_id"]),
+        ("settings", &["key"]),
+        ("oplog", &["session_id", "entity_id"]),
+        ("callsign_qth_history", &["sync_id"]),
+        (
+            "collaboration_bindings",
+            &[
+                "server_instance_id",
+                "server_origin",
+                "account_id",
+                "session_id",
+                "membership_id",
+            ],
+        ),
+        (
+            "entity_shadows",
+            &[
+                "server_instance_id",
+                "account_id",
+                "session_id",
+                "entity_id",
+            ],
+        ),
+        (
+            "sync_outbox",
+            &[
+                "server_instance_id",
+                "account_id",
+                "session_id",
+                "mutation_id",
+                "entity_id",
+            ],
+        ),
+        (
+            "applied_events",
+            &["server_instance_id", "account_id", "session_id", "event_id"],
+        ),
+        (
+            "sync_conflicts",
+            &[
+                "conflict_id",
+                "server_instance_id",
+                "account_id",
+                "session_id",
+                "entity_id",
+                "mutation_id",
+            ],
+        ),
+        (
+            "collaboration_live_drafts",
+            &["server_instance_id", "account_id", "session_id", "draft_id"],
+        ),
+        (
+            "collaboration_offline_records",
+            &[
+                "mutation_id",
+                "server_instance_id",
+                "account_id",
+                "session_id",
+                "draft_id",
+            ],
+        ),
+    ]
+}
+
+fn optional_identifier_columns() -> &'static [(&'static str, &'static [&'static str])] {
+    &[
+        ("logs", &["source_device_id"]),
+        ("oplog", &["device_id"]),
+        ("callsign_qth_history", &["source_device_id"]),
+        ("sync_outbox", &["depends_on_mutation_id"]),
+        ("applied_events", &["mutation_id"]),
+        ("sync_conflicts", &["resolution_mutation_id"]),
+    ]
+}
+
+fn required_value_columns() -> &'static [(&'static str, &'static [&'static str])] {
+    &[
+        ("logs", &["controller", "callsign"]),
+        ("sessions", &["title"]),
+        ("dictionary_items", &["dict_type", "raw"]),
+        ("callsign_qth_history", &["callsign", "qth"]),
+    ]
+}
+
+fn required_rfc3339_columns() -> &'static [(&'static str, &'static [&'static str])] {
+    &[
+        ("logs", &["created_at", "updated_at"]),
+        ("sessions", &["created_at", "updated_at"]),
+        ("collaboration_bindings", &["joined_at", "updated_at"]),
+        ("sync_outbox", &["created_at", "updated_at"]),
+        ("applied_events", &["applied_at"]),
+        ("sync_conflicts", &["created_at"]),
+        ("collaboration_live_drafts", &["local_updated_at"]),
+        (
+            "collaboration_offline_records",
+            &["created_at", "updated_at"],
+        ),
+    ]
+}
+
+fn optional_rfc3339_columns() -> &'static [(&'static str, &'static [&'static str])] {
+    &[
+        ("logs", &["deleted_at"]),
+        ("sessions", &["closed_at", "deleted_at"]),
+        ("collaboration_bindings", &["revoked_at"]),
+        ("sync_outbox", &["next_attempt_at"]),
+        ("sync_conflicts", &["resolved_at"]),
+        ("collaboration_live_drafts", &["remote_updated_at"]),
+    ]
 }
 
 async fn query_table(
@@ -273,50 +1039,45 @@ async fn query_table(
 
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
-        result.push(row_to_json(&row));
+        result.push(row_to_json(&row)?);
     }
     Ok(result)
 }
 
-fn row_to_json(row: &SqliteRow) -> Value {
+fn row_to_json(row: &SqliteRow) -> anyhow::Result<Value> {
     let mut map = serde_json::Map::new();
     for (i, column) in row.columns().iter().enumerate() {
         let name = column.name();
-        let value: Value = match column.type_info().name() {
+        let type_name = column.type_info().name();
+        let value: Value = match type_name {
             "INTEGER" => row
                 .try_get::<Option<i64>, _>(i)
-                .ok()
-                .flatten()
-                .map(|v| json!(v))
-                .unwrap_or(Value::Null),
+                .map_err(|error| export_column_decode_error(name, type_name, error))?
+                .map_or(Value::Null, |v| json!(v)),
             "REAL" => row
                 .try_get::<Option<f64>, _>(i)
-                .ok()
-                .flatten()
-                .map(|v| json!(v))
-                .unwrap_or(Value::Null),
+                .map_err(|error| export_column_decode_error(name, type_name, error))?
+                .map_or(Value::Null, |v| json!(v)),
             "TEXT" => row
                 .try_get::<Option<String>, _>(i)
-                .ok()
-                .flatten()
-                .map(|v| json!(v))
-                .unwrap_or(Value::Null),
+                .map_err(|error| export_column_decode_error(name, type_name, error))?
+                .map_or(Value::Null, |v| json!(v)),
             "BLOB" => row
                 .try_get::<Option<Vec<u8>>, _>(i)
-                .ok()
-                .flatten()
-                .map(|v| json!(v))
-                .unwrap_or(Value::Null),
+                .map_err(|error| export_column_decode_error(name, type_name, error))?
+                .map_or(Value::Null, |v| json!(v)),
             _ => row
                 .try_get::<Option<String>, _>(i)
-                .ok()
-                .flatten()
-                .map(|v| json!(v))
-                .unwrap_or(Value::Null),
+                .map_err(|error| export_column_decode_error(name, type_name, error))?
+                .map_or(Value::Null, |v| json!(v)),
         };
         map.insert(name.to_string(), value);
     }
-    Value::Object(map)
+    Ok(Value::Object(map))
+}
+
+fn export_column_decode_error(column: &str, type_name: &str, error: sqlx::Error) -> anyhow::Error {
+    anyhow::anyhow!("DATABASE_BACKUP_EXPORT_UNREADABLE_COLUMN:{column}:{type_name}:{error}")
 }
 
 async fn insert_from_json<'a>(
@@ -335,19 +1096,29 @@ async fn insert_from_json<'a>(
             continue;
         }
 
-        let columns: Vec<String> = map.keys().cloned().collect();
+        let columns: Vec<&str> = map.keys().map(String::as_str).collect();
+        let allowed = allowed_columns(table);
+        for column in &columns {
+            if !allowed.contains(column) {
+                anyhow::bail!("DATABASE_BACKUP_UNKNOWN_COLUMN:{table}.{column}");
+            }
+        }
         let placeholders: Vec<String> = (1..=columns.len()).map(|i| format!("?{i}")).collect();
+        let quoted_columns: Vec<String> = columns
+            .iter()
+            .map(|column| format!("\"{column}\""))
+            .collect();
 
         let sql = format!(
             "INSERT INTO \"{}\" ({}) VALUES ({})",
             table,
-            columns.join(", "),
+            quoted_columns.join(", "),
             placeholders.join(", ")
         );
 
         let mut query = sqlx::query(&sql);
         for col in &columns {
-            query = bind_value(query, map.get(col).unwrap_or(&Value::Null));
+            query = bind_value(query, map.get(*col).unwrap_or(&Value::Null));
         }
         query.execute(&mut **tx).await?;
     }
@@ -373,5 +1144,45 @@ fn bind_value<'a>(
         }
         Value::String(s) => query.bind(s.as_str()),
         Value::Array(_) | Value::Object(_) => query.bind(value.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::query_table;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn query_table_propagates_text_decode_errors() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE malformed_export (value TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO malformed_export (value) VALUES (CAST(X'80' AS TEXT))")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let error = query_table(&mut tx, "malformed_export").await.unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("DATABASE_BACKUP_EXPORT_UNREADABLE_COLUMN:value:TEXT"));
+        assert!(message.contains("invalid utf-8"));
+    }
+
+    #[test]
+    fn log_time_accepts_rfc3339_and_historical_clock_values() {
+        assert!(super::is_valid_log_time("2026-07-17T10:30:45+08:00"));
+        assert!(super::is_valid_log_time("8:05"));
+        assert!(super::is_valid_log_time("23:59:59"));
+        assert!(!super::is_valid_log_time("24:00"));
+        assert!(!super::is_valid_log_time("08:60"));
+        assert!(!super::is_valid_log_time("2026-07-17 10:30"));
     }
 }

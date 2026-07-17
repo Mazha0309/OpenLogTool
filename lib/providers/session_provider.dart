@@ -12,7 +12,13 @@ typedef CollaborationSessionLocalCopier = Future<Session> Function(
 typedef CollaborationSessionLocalConverter = Future<Session> Function(
   String sessionId,
 );
+typedef CollaborationSessionLocalStopper = Future<Session> Function(
+  String sessionId,
+);
+typedef LocalSessionCloser = Future<Session> Function(String sessionId);
+typedef LocalSessionDeleter = Future<void> Function(String sessionId);
 typedef CurrentSessionIdWriter = Future<bool> Function(String sessionId);
+typedef SessionListLoader = Future<List<Session>> Function();
 
 class SessionProvider with ChangeNotifier {
   static const _key = 'current_session_id';
@@ -20,7 +26,11 @@ class SessionProvider with ChangeNotifier {
   final LocalSessionReopener _localSessionReopener;
   final CollaborationSessionLocalCopier _collaborationSessionLocalCopier;
   final CollaborationSessionLocalConverter _collaborationSessionLocalConverter;
+  final CollaborationSessionLocalStopper _collaborationSessionLocalStopper;
+  final LocalSessionCloser _localSessionCloser;
+  final LocalSessionDeleter _localSessionDeleter;
   final CurrentSessionIdWriter? _currentSessionIdWriter;
+  final SessionListLoader _sessionListLoader;
   bool _disposed = false;
   String? _currentSessionId;
   Session? _currentSession;
@@ -35,7 +45,11 @@ class SessionProvider with ChangeNotifier {
     LocalSessionReopener? localSessionReopener,
     CollaborationSessionLocalCopier? collaborationSessionLocalCopier,
     CollaborationSessionLocalConverter? collaborationSessionLocalConverter,
+    CollaborationSessionLocalStopper? collaborationSessionLocalStopper,
+    LocalSessionCloser? localSessionCloser,
+    LocalSessionDeleter? localSessionDeleter,
     CurrentSessionIdWriter? currentSessionIdWriter,
+    SessionListLoader? sessionListLoader,
   })  : _localSessionReopener = localSessionReopener ??
             ((sessionId) => RustApi.reopenLocalSession(sessionId: sessionId)),
         _collaborationSessionLocalCopier = collaborationSessionLocalCopier ??
@@ -48,7 +62,16 @@ class SessionProvider with ChangeNotifier {
                 ((sessionId) => RustApi.convertCollaborationSessionToLocal(
                       sessionId: sessionId,
                     )),
-        _currentSessionIdWriter = currentSessionIdWriter {
+        _collaborationSessionLocalStopper = collaborationSessionLocalStopper ??
+            ((sessionId) => RustApi.stopCollaborationSessionLocally(
+                  sessionId: sessionId,
+                )),
+        _localSessionCloser = localSessionCloser ??
+            ((sessionId) => RustApi.closeSessionLocally(sessionId: sessionId)),
+        _localSessionDeleter = localSessionDeleter ??
+            ((sessionId) => RustApi.hardDeleteSession(sessionId: sessionId)),
+        _currentSessionIdWriter = currentSessionIdWriter,
+        _sessionListLoader = sessionListLoader ?? RustApi.listSessions {
     final completer = Completer<void>();
     _initCompleter = completer;
     scheduleMicrotask(() async {
@@ -79,7 +102,7 @@ class SessionProvider with ChangeNotifier {
 
     if (storedId != null && storedId.isNotEmpty) {
       try {
-        final sessions = await RustApi.listSessions();
+        final sessions = await _sessionListLoader();
         final match = sessions
             .where((s) => s.sessionId == storedId && s.deletedAt == null)
             .toList();
@@ -108,7 +131,7 @@ class SessionProvider with ChangeNotifier {
 
   Future<void> _ensureActiveSession() async {
     try {
-      final sessions = await RustApi.listSessions();
+      final sessions = await _sessionListLoader();
       final active = sessions
           .where((s) => s.status == 'active' && s.deletedAt == null)
           .toList();
@@ -133,7 +156,7 @@ class SessionProvider with ChangeNotifier {
         );
         if (collaborationBinding == null) {
           debugPrint('[Session] closing session: $previousSessionId');
-          await RustApi.closeSession(sessionId: previousSessionId);
+          await _localSessionCloser(previousSessionId);
         } else {
           debugPrint(
             '[Session] preserving read-only collaboration session: '
@@ -161,7 +184,7 @@ class SessionProvider with ChangeNotifier {
 
   Future<List<Session>> listAvailableSessions() async {
     await ready;
-    final sessions = await RustApi.listSessions();
+    final sessions = await _sessionListLoader();
     final available = sessions
         .where((session) => session.deletedAt == null)
         .toList(growable: false);
@@ -228,11 +251,15 @@ class SessionProvider with ChangeNotifier {
       sourceSessionId,
       normalized,
     );
-    if (_currentSessionId != sourceSessionId) {
-      throw StateError('SESSION_CONTEXT_CHANGED');
-    }
     if (local.sessionId == sourceSessionId || local.status != 'active') {
       throw StateError('LOCAL_SESSION_COPY_INVALID');
+    }
+    if (_currentSessionId != sourceSessionId) {
+      debugPrint(
+        '[Session] local collaboration copy committed after the user selected '
+        'another session; preserving the newer selection',
+      );
+      return local;
     }
 
     _currentSession = local;
@@ -260,11 +287,15 @@ class SessionProvider with ChangeNotifier {
     }
 
     final local = await _collaborationSessionLocalConverter(sourceSessionId);
-    if (_currentSessionId != sourceSessionId) {
-      throw StateError('SESSION_CONTEXT_CHANGED');
-    }
     if (local.sessionId == sourceSessionId || local.status != 'active') {
       throw StateError('LOCAL_SESSION_CONVERSION_INVALID');
+    }
+    if (_currentSessionId != sourceSessionId) {
+      debugPrint(
+        '[Session] collaboration conversion committed after the user selected '
+        'another session; preserving the newer selection',
+      );
+      return local;
     }
 
     _currentSession = local;
@@ -281,10 +312,86 @@ class SessionProvider with ChangeNotifier {
     return local;
   }
 
+  /// Stops synchronization for the current collaboration replica without
+  /// contacting its server. Saved rows are retained in a replacement local
+  /// session; replica queues and draft-only state are discarded by Rust.
+  Future<Session> stopCurrentCollaborationSessionLocally() async {
+    await ready;
+    final sourceSessionId = _currentSessionId;
+    if (sourceSessionId == null || _currentSession == null) {
+      throw StateError('NO_CURRENT_SESSION');
+    }
+
+    final local = await _collaborationSessionLocalStopper(sourceSessionId);
+    if (local.sessionId == sourceSessionId || local.status != 'active') {
+      throw StateError('LOCAL_SESSION_CONVERSION_INVALID');
+    }
+    if (_currentSessionId != sourceSessionId) {
+      debugPrint(
+        '[Session] local collaboration stop committed after the user selected '
+        'another session; preserving the newer selection',
+      );
+      return local;
+    }
+
+    await _adoptCurrentSession(local, operation: 'stopped collaboration');
+    return local;
+  }
+
+  /// Closes one session only on this device. A collaboration replica may be
+  /// replaced by a closed local-only row with a new identifier; the selected
+  /// session pointer follows that replacement when necessary.
+  Future<Session> closeSessionLocally(String sessionId) async {
+    await ready;
+    final wasCurrent = _currentSessionId == sessionId;
+    final closed = await _localSessionCloser(sessionId);
+    if (wasCurrent && _currentSessionId == sessionId) {
+      await _adoptCurrentSession(closed, operation: 'closed local session');
+    }
+    return closed;
+  }
+
+  /// Permanently deletes one device-local session or collaboration replica.
+  /// This method never contacts the server.
+  Future<void> deleteSessionLocally(String sessionId) async {
+    await ready;
+    await _localSessionDeleter(sessionId);
+    if (_currentSessionId != sessionId) return;
+    _currentSession = null;
+    _currentSessionId = null;
+    _safeNotify();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_key);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Session] failed to clear deleted session selection: '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
+  Future<void> _adoptCurrentSession(
+    Session session, {
+    required String operation,
+  }) async {
+    _currentSession = session;
+    _currentSessionId = session.sessionId;
+    _safeNotify();
+    try {
+      await _persistCurrentSessionId(session.sessionId);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Session] failed to persist $operation selection: '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
   Future<void> reloadCurrentSession() async {
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
-    final sessions = await RustApi.listSessions();
+    final sessions = await _sessionListLoader();
     final matches = sessions.where((session) => session.sessionId == sessionId);
     if (matches.isEmpty) {
       await handleSessionDeleted(sessionId);
@@ -293,6 +400,55 @@ class SessionProvider with ChangeNotifier {
     }
     _currentSession = matches.first;
     _safeNotify();
+  }
+
+  /// Reconciles the selected session after the entire local database has been
+  /// cleared or replaced from a backup.
+  ///
+  /// The previous selection is retained when the imported database contains
+  /// it. Otherwise the newest active local row is selected so imported records
+  /// become visible immediately; an empty database clears the selection.
+  Future<void> reloadAfterDatabaseReplacement() async {
+    await ready;
+    final previousSessionId = _currentSessionId;
+    final sessions = (await _sessionListLoader())
+        .where((session) => session.deletedAt == null)
+        .toList(growable: false);
+
+    Session? selected;
+    for (final session in sessions) {
+      if (session.sessionId == previousSessionId) {
+        selected = session;
+        break;
+      }
+    }
+    if (selected == null) {
+      final active = sessions
+          .where((session) => session.status == 'active')
+          .toList(growable: false)
+        ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+      if (active.isNotEmpty) selected = active.first;
+    }
+
+    _currentSession = selected;
+    _currentSessionId = selected?.sessionId;
+    _safeNotify();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (selected == null) {
+        await prefs.remove(_key);
+      } else {
+        await _persistCurrentSessionId(selected.sessionId);
+      }
+    } catch (error, stackTrace) {
+      // The database replacement has already committed. A preference failure
+      // must not put the in-memory providers back on stale database rows.
+      debugPrint(
+        '[Session] failed to persist database replacement selection: '
+        '$error\n$stackTrace',
+      );
+    }
   }
 
   Future<void> renameCurrentSession(String title) async {

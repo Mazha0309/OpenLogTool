@@ -184,19 +184,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get historySessionCloseTitle => '关闭会话';
+  String get historySessionCloseTitle => '仅在本机关闭会话';
 
   @override
   String historySessionCloseConfirmation(String title) {
-    return '确定关闭“$title”吗？关闭后仍可在历史会话中只读查看。';
+    return '仅在本机关闭“$title”吗？关闭后会作为只读本地历史保留。如果这是协作副本，本机将停止同步并丢弃未同步队列、冲突、离线待复核记录及未提交草稿的本机副本；服务器共享会话、成员及其他设备不受影响。';
   }
 
   @override
-  String get historySessionClosed => '会话已关闭';
+  String get historySessionClosed => '已在本机关闭会话';
 
   @override
   String historySessionCloseFailed(String error) {
-    return '关闭会话失败：$error';
+    return '在本机关闭会话失败：$error';
   }
 
   @override
@@ -455,10 +455,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callsignRequired => '请输入点名呼号';
 
   @override
-  String get leaveSession => '退出协作会话';
+  String get leaveSession => '退出服务器协作';
 
   @override
-  String get leaveSessionConfirmation => '退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。';
+  String get leaveSessionConfirmation =>
+      '这会向服务器提交退出成员关系的请求。成功后本地副本保持只读；如需再次参与，必须重新获得邀请。服务器不可达时请改用本机数据操作。';
 
   @override
   String get convertCollaborationToLocal => '停止本机协作并转为本地会话';
@@ -468,11 +469,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String convertCollaborationToLocalConfirmation(String title) {
-    return '将停止本机对“$title”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。';
+    return '将停止本机对“$title”的协作同步，并替换为可编辑的本地会话。仅复制表格中已经保存的记录；未提交的共享实时草稿仍留在服务器上，不会写入本地会话。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
+  }
+
+  @override
+  String convertCollaborationToLocalUnsyncedConfirmation(String title) {
+    return '将停止本机对“$title”的协作同步，并保留当前表格中已保存的记录。未同步队列、冲突、离线待复核记录及未提交实时草稿会从本机永久丢弃。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
   }
 
   @override
   String get convertCollaborationToLocalSucceeded => '已停止本机协作并转为本地会话';
+
+  @override
+  String get closeCollaborationLocally => '仅在本机关闭';
+
+  @override
+  String get moreLocalCollaborationActions => '更多本机操作';
 
   @override
   String get createEditableLocalCopy => '停止协作并创建本地副本';
@@ -656,11 +668,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sessionTitleQueued => '标题已保存到本地，等待同步确认';
 
   @override
-  String get closeCollaborationSessionTitle => '关闭协作会话';
+  String get closeCollaborationSessionTitle => '关闭服务器共享会话';
 
   @override
   String get closeCollaborationSessionMessage =>
-      '关闭后所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。';
+      '这会向服务器提交关闭共享会话的请求。服务器确认后，所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。';
+
+  @override
+  String get closeSharedSession => '关闭服务器共享会话';
 
   @override
   String get closeCollaborationDraftNotEmpty =>
@@ -686,7 +701,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '记录仅保存到离线队列，尚未提交到服务器；会话没有关闭。请恢复网络并处理该记录后重试。';
 
   @override
-  String get closeSessionQueued => '会话已在本地关闭，等待同步确认';
+  String get closeSessionQueued => '已提交关闭共享会话请求，等待服务器同步确认';
 
   @override
   String get reopenCollaborationSessionTitle => '重新打开协作会话';
@@ -1322,6 +1337,50 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get deleteLibraryItemTitle => '删除词库条目';
+
+  @override
+  String deleteLibraryItemConfirmation(String value, String name) {
+    return '确定从$name中删除“$value”吗？';
+  }
+
+  @override
+  String get deleteLibraryItemAction => '删除';
+
+  @override
+  String libraryItemDeleted(String value) {
+    return '已删除：$value';
+  }
+
+  @override
+  String libraryItemDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String clearLibraryTitle(String name) {
+    return '清空$name';
+  }
+
+  @override
+  String clearLibraryConfirmation(String name, int count) {
+    return '将删除$name中的全部 $count 条内容。此操作无法撤销，确定继续吗？';
+  }
+
+  @override
+  String get clearLibraryAction => '全部清空';
+
+  @override
+  String libraryCleared(String name) {
+    return '已清空$name';
+  }
+
+  @override
+  String libraryClearFailed(String error) {
+    return '清空失败：$error';
+  }
+
+  @override
   String get libraryImportEmpty => '文件中没有可导入的词库内容';
 
   @override
@@ -1467,6 +1526,203 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restoreDefaultSettings => '恢复默认设置';
+
+  @override
+  String get settingsTitle => '应用设置';
+
+  @override
+  String get snackbarLogTitle => '底部消息日志';
+
+  @override
+  String get snackbarLogHint => '查看本次运行期间显示过的底部消息';
+
+  @override
+  String get snackbarLogEmpty => '本次运行尚未记录底部消息';
+
+  @override
+  String get resetSettingsTitle => '恢复默认设置';
+
+  @override
+  String get resetSettingsConfirmation =>
+      '将外观、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。';
+
+  @override
+  String get resetSettingsConfirmAction => '恢复默认';
+
+  @override
+  String get resetSettingsSucceeded => '已恢复默认设置';
+
+  @override
+  String resetSettingsFailed(String error) {
+    return '恢复默认设置失败：$error';
+  }
+
+  @override
+  String get localDataOperationsTitle => '本机数据';
+
+  @override
+  String get localDataOperationsHint => '管理本机数据库的诊断、备份与重置；这些操作不会直接修改服务器数据。';
+
+  @override
+  String get databaseDiagnosticsSection => '诊断';
+
+  @override
+  String get databaseBackupSection => '备份与恢复';
+
+  @override
+  String get databaseDangerZoneSection => '危险操作';
+
+  @override
+  String get databaseStatusTitle => '本机数据库状态';
+
+  @override
+  String get databaseStatusHint => '查看数据库版本和各表行数';
+
+  @override
+  String databaseStatusSchemaVersion(String version) {
+    return '数据库结构版本：$version';
+  }
+
+  @override
+  String databaseStatusTableRow(String name, int count) {
+    return '$name: $count';
+  }
+
+  @override
+  String get databaseStatusUnknown => '未知';
+
+  @override
+  String databaseStatusLoadFailed(String error) {
+    return '读取本机数据库状态失败：$error';
+  }
+
+  @override
+  String get databaseExportTitle => '导出本机数据库';
+
+  @override
+  String get databaseExportHint => '备份会话、记录、词库、QTH 历史以及本机协作副本和待同步状态';
+
+  @override
+  String get databaseExportDialogTitle => '保存 OpenLogTool 本机数据库备份';
+
+  @override
+  String get databaseExportSucceeded => '本机数据库备份已导出';
+
+  @override
+  String databaseExportFailed(String error) {
+    return '导出本机数据库失败：$error';
+  }
+
+  @override
+  String get databaseImportTitle => '导入本机数据库';
+
+  @override
+  String get databaseImportHint => '选择 JSON 备份并预览后，完整替换当前本机数据库';
+
+  @override
+  String get databaseImportPickerTitle => '选择 OpenLogTool 本机数据库备份';
+
+  @override
+  String get databaseImportPreviewTitle => '确认导入备份';
+
+  @override
+  String get databaseImportBackupVersion => '备份格式版本';
+
+  @override
+  String get databaseImportExportedAt => '导出时间';
+
+  @override
+  String get databaseImportUnknownTime => '未记录';
+
+  @override
+  String get databaseImportSessionCount => '会话';
+
+  @override
+  String get databaseImportLogCount => '点名记录';
+
+  @override
+  String get databaseImportDictionaryCount => '词库条目';
+
+  @override
+  String get databaseImportCollaborationCount => '协作副本';
+
+  @override
+  String get databaseImportPendingSyncCount => '待同步/待复核项';
+
+  @override
+  String get databaseImportPreviewWarning =>
+      '导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和外观设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。';
+
+  @override
+  String get databaseImportCollaborationWarning =>
+      '此备份包含本机协作副本。当服务器地址和登录账户匹配时，导入后可能继续同步。';
+
+  @override
+  String get databaseImportConfirmAction => '覆盖并导入';
+
+  @override
+  String get databaseImportSucceeded => '本机数据库已导入，界面数据已刷新';
+
+  @override
+  String databaseImportInvalid(String error) {
+    return '所选文件不是有效的 OpenLogTool 数据库备份（$error）';
+  }
+
+  @override
+  String databaseImportReadFailed(String error) {
+    return '无法读取所选备份：$error';
+  }
+
+  @override
+  String databaseImportFailed(String error) {
+    return '导入本机数据库失败：$error';
+  }
+
+  @override
+  String get databaseClearTitle => '清空本机数据';
+
+  @override
+  String get databaseClearHint => '清除本机记录、协作副本和自定义词条，并恢复内置词库默认内容';
+
+  @override
+  String get databaseClearWarning =>
+      '此操作不可撤销。将清除本机的所有会话、点名记录、QTH 历史、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。';
+
+  @override
+  String get databaseClearConfirmationPhrase => '清空全部数据';
+
+  @override
+  String databaseClearConfirmationInstruction(String phrase) {
+    return '请输入“$phrase”以确认：';
+  }
+
+  @override
+  String get databaseClearConfirmationLabel => '确认文本';
+
+  @override
+  String get databaseClearConfirmAction => '永久清空本机数据';
+
+  @override
+  String get databaseClearSucceeded => '本机数据已清空，内置词库已恢复为默认内容';
+
+  @override
+  String databaseClearFailed(String error) {
+    return '清空本机数据失败：$error';
+  }
+
+  @override
+  String get databaseReplacementRefreshFailed =>
+      '操作已写入本机数据库，但界面刷新或内置词库恢复失败。请返回会话页后重试；如仍异常再重启应用。';
+
+  @override
+  String get databaseMaintenanceCollaborationBusy =>
+      '当前正在发布、加入或处理其他协作操作，请等待操作结束后再管理本机数据库。';
+
+  @override
+  String get localCollaborationOperationBusy => '另一项协作操作仍在进行，请等待结束后重试。';
+
+  @override
+  String get localCollaborationRequired => '当前会话已不是本机协作副本，请刷新页面后重试。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -1649,19 +1905,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String get historySessionCloseTitle => '关闭会话';
+  String get historySessionCloseTitle => '仅在本机关闭会话';
 
   @override
   String historySessionCloseConfirmation(String title) {
-    return '确定关闭“$title”吗？关闭后仍可在历史会话中只读查看。';
+    return '仅在本机关闭“$title”吗？关闭后会作为只读本地历史保留。如果这是协作副本，本机将停止同步并丢弃未同步队列、冲突、离线待复核记录及未提交草稿的本机副本；服务器共享会话、成员及其他设备不受影响。';
   }
 
   @override
-  String get historySessionClosed => '会话已关闭';
+  String get historySessionClosed => '已在本机关闭会话';
 
   @override
   String historySessionCloseFailed(String error) {
-    return '关闭会话失败：$error';
+    return '在本机关闭会话失败：$error';
   }
 
   @override
@@ -1901,10 +2157,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get callsignRequired => '请输入点名呼号';
 
   @override
-  String get leaveSession => '退出协作会话';
+  String get leaveSession => '退出服务器协作';
 
   @override
-  String get leaveSessionConfirmation => '退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。';
+  String get leaveSessionConfirmation =>
+      '这会向服务器提交退出成员关系的请求。成功后本地副本保持只读；如需再次参与，必须重新获得邀请。服务器不可达时请改用本机数据操作。';
 
   @override
   String get convertCollaborationToLocal => '停止本机协作并转为本地会话';
@@ -1914,11 +2171,22 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String convertCollaborationToLocalConfirmation(String title) {
-    return '将停止本机对“$title”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。';
+    return '将停止本机对“$title”的协作同步，并替换为可编辑的本地会话。仅复制表格中已经保存的记录；未提交的共享实时草稿仍留在服务器上，不会写入本地会话。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
+  }
+
+  @override
+  String convertCollaborationToLocalUnsyncedConfirmation(String title) {
+    return '将停止本机对“$title”的协作同步，并保留当前表格中已保存的记录。未同步队列、冲突、离线待复核记录及未提交实时草稿会从本机永久丢弃。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
   }
 
   @override
   String get convertCollaborationToLocalSucceeded => '已停止本机协作并转为本地会话';
+
+  @override
+  String get closeCollaborationLocally => '仅在本机关闭';
+
+  @override
+  String get moreLocalCollaborationActions => '更多本机操作';
 
   @override
   String get confirm => '确认';
@@ -2388,6 +2656,50 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String get deleteLibraryItemTitle => '删除词库条目';
+
+  @override
+  String deleteLibraryItemConfirmation(String value, String name) {
+    return '确定从$name中删除“$value”吗？';
+  }
+
+  @override
+  String get deleteLibraryItemAction => '删除';
+
+  @override
+  String libraryItemDeleted(String value) {
+    return '已删除：$value';
+  }
+
+  @override
+  String libraryItemDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String clearLibraryTitle(String name) {
+    return '清空$name';
+  }
+
+  @override
+  String clearLibraryConfirmation(String name, int count) {
+    return '将删除$name中的全部 $count 条内容。此操作无法撤销，确定继续吗？';
+  }
+
+  @override
+  String get clearLibraryAction => '全部清空';
+
+  @override
+  String libraryCleared(String name) {
+    return '已清空$name';
+  }
+
+  @override
+  String libraryClearFailed(String error) {
+    return '清空失败：$error';
+  }
+
+  @override
   String get libraryImportEmpty => '文件中没有可导入的词库内容';
 
   @override
@@ -2430,4 +2742,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get fontPreviewSample => 'OpenLogTool · CQ CQ · 点名记录 123';
+
+  @override
+  String get localCollaborationOperationBusy => '另一项协作操作仍在进行，请等待结束后重试。';
+
+  @override
+  String get localCollaborationRequired => '当前会话已不是本机协作副本，请刷新页面后重试。';
 }

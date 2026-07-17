@@ -179,21 +179,92 @@ pub async fn convert_collaboration_session_to_local(session_id: String) -> anyho
     convert_collaboration_session_to_local_from_pool(get_db()?, &session_id).await
 }
 
+/// Stops synchronization for one collaboration replica on this device.
+///
+/// The currently materialized, non-deleted logs are preserved in an
+/// independent local session with new identifiers. All replica-only state,
+/// including pending mutations, conflicts, cached live drafts, and offline
+/// records, is discarded. No request or mutation is sent to the server.
+pub async fn stop_collaboration_session_locally(session_id: String) -> anyhow::Result<Session> {
+    stop_collaboration_session_locally_from_pool(get_db()?, &session_id).await
+}
+
+/// Closes a session only on this device and returns its canonical local row.
+///
+/// A local-only session keeps its identifier. A collaboration replica is
+/// replaced by a closed local-only session with new session and log identifiers
+/// so the server session, membership, and other devices remain untouched.
+pub async fn close_session_locally(session_id: String) -> anyhow::Result<Session> {
+    close_session_locally_from_pool(get_db()?, &session_id).await
+}
+
+#[derive(Clone, Copy)]
+enum LocalReplacementStatus {
+    Preserve,
+    Closed,
+}
+
+async fn stop_collaboration_session_locally_from_pool(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> anyhow::Result<Session> {
+    replace_collaboration_session_locally_from_pool(
+        pool,
+        session_id,
+        false,
+        LocalReplacementStatus::Preserve,
+    )
+    .await
+}
+
 async fn convert_collaboration_session_to_local_from_pool(
     pool: &SqlitePool,
     session_id: &str,
+) -> anyhow::Result<Session> {
+    replace_collaboration_session_locally_from_pool(
+        pool,
+        session_id,
+        true,
+        LocalReplacementStatus::Preserve,
+    )
+    .await
+}
+
+async fn replace_collaboration_session_locally_from_pool(
+    pool: &SqlitePool,
+    session_id: &str,
+    require_clean_replica: bool,
+    replacement_status: LocalReplacementStatus,
 ) -> anyhow::Result<Session> {
     if session_id.trim().is_empty() {
         anyhow::bail!("SESSION_ID_REQUIRED");
     }
 
     let mut tx = pool.begin().await?;
-    let source: Option<(String, Option<String>)> =
-        sqlx::query_as("SELECT title, deleted_at FROM sessions WHERE session_id = ?")
+    let local = replace_collaboration_session_locally_in_tx(
+        &mut tx,
+        session_id,
+        require_clean_replica,
+        replacement_status,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(local)
+}
+
+async fn replace_collaboration_session_locally_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    session_id: &str,
+    require_clean_replica: bool,
+    replacement_status: LocalReplacementStatus,
+) -> anyhow::Result<Session> {
+    let source: Option<(String, String, Option<String>)> =
+        sqlx::query_as("SELECT title, created_at, deleted_at FROM sessions WHERE session_id = ?")
             .bind(session_id)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **tx)
             .await?;
-    let (source_title, deleted_at) = source.ok_or_else(|| anyhow::anyhow!("SESSION_NOT_FOUND"))?;
+    let (source_title, source_created_at, deleted_at) =
+        source.ok_or_else(|| anyhow::anyhow!("SESSION_NOT_FOUND"))?;
     if deleted_at.is_some() {
         anyhow::bail!("SESSION_DELETED");
     }
@@ -201,66 +272,81 @@ async fn convert_collaboration_session_to_local_from_pool(
     let binding_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM collaboration_bindings WHERE session_id = ?")
             .bind(session_id)
-            .fetch_one(&mut *tx)
+            .fetch_one(&mut **tx)
             .await?;
     if binding_count.0 != 1 {
         anyhow::bail!("LOCAL_CONVERSION_COLLABORATION_REQUIRED");
     }
 
-    // A conflict references its outbox mutation, so checking conflicts first
-    // keeps the conflict-specific error observable while still requiring the
-    // entire outbox to be empty below.
-    let open_conflict_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM sync_conflicts WHERE session_id = ? AND state = 'open'",
-    )
-    .bind(session_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if open_conflict_count.0 != 0 {
-        anyhow::bail!("LOCAL_CONVERSION_OPEN_CONFLICTS");
-    }
+    if require_clean_replica {
+        // A conflict references its outbox mutation, so checking conflicts first
+        // keeps the conflict-specific error observable while still requiring the
+        // entire outbox to be empty below.
+        let open_conflict_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sync_conflicts WHERE session_id = ? AND state = 'open'",
+        )
+        .bind(session_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if open_conflict_count.0 != 0 {
+            anyhow::bail!("LOCAL_CONVERSION_OPEN_CONFLICTS");
+        }
 
-    let outbox_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM sync_outbox WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_one(&mut *tx)
-            .await?;
-    if outbox_count.0 != 0 {
-        anyhow::bail!("LOCAL_CONVERSION_SYNC_OUTBOX_NOT_EMPTY");
-    }
+        let outbox_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM sync_outbox WHERE session_id = ?")
+                .bind(session_id)
+                .fetch_one(&mut **tx)
+                .await?;
+        if outbox_count.0 != 0 {
+            anyhow::bail!("LOCAL_CONVERSION_SYNC_OUTBOX_NOT_EMPTY");
+        }
 
-    let unresolved_offline_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)
-         FROM collaboration_offline_records
-         WHERE session_id = ? AND state IN ('pending', 'submitting', 'reviewing')",
-    )
-    .bind(session_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if unresolved_offline_count.0 != 0 {
-        anyhow::bail!("LOCAL_CONVERSION_OFFLINE_RECORDS_PENDING");
+        let unresolved_offline_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*)
+             FROM collaboration_offline_records
+             WHERE session_id = ? AND state IN ('pending', 'submitting', 'reviewing')",
+        )
+        .bind(session_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if unresolved_offline_count.0 != 0 {
+            anyhow::bail!("LOCAL_CONVERSION_OFFLINE_RECORDS_PENDING");
+        }
     }
 
     let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        "UPDATE sessions
-         SET status = 'closed', closed_at = ?, updated_at = ?
-         WHERE status = 'active'
-           AND deleted_at IS NULL
-           AND NOT EXISTS (
-               SELECT 1 FROM collaboration_bindings binding
-               WHERE binding.session_id = sessions.session_id
-           )",
-    )
-    .bind(&now)
-    .bind(&now)
-    .execute(&mut *tx)
-    .await?;
+    let close_replacement = matches!(replacement_status, LocalReplacementStatus::Closed);
+    if !close_replacement {
+        sqlx::query(
+            "UPDATE sessions
+             SET status = 'closed', closed_at = ?, updated_at = ?
+             WHERE status = 'active'
+               AND deleted_at IS NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM collaboration_bindings binding
+                   WHERE binding.session_id = sessions.session_id
+               )",
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut **tx)
+        .await?;
+    }
 
-    let local = Session::new(source_title);
+    let mut local = Session::new(source_title);
+    // The replacement is still the same net/check-in event in history and
+    // exports. Preserve that event's original start time while using `now` for
+    // the local conversion/close update timestamp below.
+    local.created_at = source_created_at;
+    if close_replacement {
+        local.status = "closed".to_string();
+        local.updated_at = now.clone();
+        local.closed_at = Some(now.clone());
+    }
     sqlx::query(
-        "INSERT INTO sessions (session_id, title, status, share_code, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sessions (
+            session_id, title, status, share_code, created_at, updated_at, closed_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&local.session_id)
     .bind(&local.title)
@@ -268,7 +354,8 @@ async fn convert_collaboration_session_to_local_from_pool(
     .bind(&local.share_code)
     .bind(&local.created_at)
     .bind(&local.updated_at)
-    .execute(&mut *tx)
+    .bind(&local.closed_at)
+    .execute(&mut **tx)
     .await?;
 
     let logs = sqlx::query_as::<_, LocalCopyLogRow>(
@@ -280,7 +367,7 @@ async fn convert_collaboration_session_to_local_from_pool(
          ORDER BY id ASC",
     )
     .bind(session_id)
-    .fetch_all(&mut *tx)
+    .fetch_all(&mut **tx)
     .await?;
     for log in logs {
         sqlx::query(
@@ -306,7 +393,7 @@ async fn convert_collaboration_session_to_local_from_pool(
         .bind(log.created_at)
         .bind(log.updated_at)
         .bind(log.source_device_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
 
@@ -314,29 +401,91 @@ async fn convert_collaboration_session_to_local_from_pool(
     // predate foreign keys and are removed explicitly before the source row.
     let deleted_binding = sqlx::query("DELETE FROM collaboration_bindings WHERE session_id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     if deleted_binding.rows_affected() != 1 {
         anyhow::bail!("LOCAL_CONVERSION_BINDING_CHANGED");
     }
     sqlx::query("DELETE FROM logs WHERE session_id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     sqlx::query("DELETE FROM oplog WHERE session_id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     let deleted_session = sqlx::query("DELETE FROM sessions WHERE session_id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     if deleted_session.rows_affected() != 1 {
         anyhow::bail!("LOCAL_CONVERSION_SOURCE_CHANGED");
     }
 
-    tx.commit().await?;
     Ok(local)
+}
+
+async fn close_session_locally_from_pool(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> anyhow::Result<Session> {
+    if session_id.trim().is_empty() {
+        anyhow::bail!("SESSION_ID_REQUIRED");
+    }
+
+    let mut tx = pool.begin().await?;
+    let current: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT status, deleted_at FROM sessions WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (status, deleted_at) = current.ok_or_else(|| anyhow::anyhow!("SESSION_NOT_FOUND"))?;
+    if deleted_at.is_some() {
+        anyhow::bail!("SESSION_DELETED");
+    }
+    let binding_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM collaboration_bindings WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let closed = if binding_count.0 == 1 {
+        if status != "active" && status != "closed" {
+            anyhow::bail!("SESSION_NOT_CLOSABLE");
+        }
+        replace_collaboration_session_locally_in_tx(
+            &mut tx,
+            session_id,
+            false,
+            LocalReplacementStatus::Closed,
+        )
+        .await?
+    } else if binding_count.0 == 0 {
+        if status != "active" {
+            anyhow::bail!("SESSION_CLOSED");
+        }
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            "UPDATE sessions
+             SET status = 'closed', closed_at = ?, updated_at = ?
+             WHERE session_id = ?",
+        )
+        .bind(&now)
+        .bind(&now)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query_as::<_, SessionRow>(
+            "SELECT * FROM sessions WHERE session_id = ? AND deleted_at IS NULL",
+        )
+        .bind(session_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .into_session()
+    } else {
+        anyhow::bail!("LOCAL_CONVERSION_BINDING_CHANGED");
+    };
+    tx.commit().await?;
+    Ok(closed)
 }
 
 async fn reopen_local_session_from_pool(
@@ -411,11 +560,13 @@ async fn reopen_local_session_from_pool(
     Ok(reopened)
 }
 
-/// Permanently removes a closed session from this device.
+/// Permanently removes a session from this device.
 ///
 /// This is deliberately a local-only operation. Deleting the collaboration
 /// binding also cascades through every local replica table, but no mutation is
-/// sent to the server and the shared server session is left untouched.
+/// sent to the server and the shared server session is left untouched. Callers
+/// that keep a selected-session pointer must clear it before or immediately
+/// after deleting that selected row.
 pub async fn hard_delete_session(session_id: String) -> anyhow::Result<()> {
     hard_delete_session_from_pool(get_db()?, &session_id).await
 }
@@ -426,14 +577,13 @@ async fn hard_delete_session_from_pool(pool: &SqlitePool, session_id: &str) -> a
     }
 
     let mut tx = pool.begin().await?;
-    let session: Option<(String,)> =
-        sqlx::query_as("SELECT status FROM sessions WHERE session_id = ?")
+    let session: Option<(i64,)> =
+        sqlx::query_as("SELECT 1 FROM sessions WHERE session_id = ? AND deleted_at IS NULL")
             .bind(session_id)
             .fetch_optional(&mut *tx)
             .await?;
-    let (status,) = session.ok_or_else(|| anyhow::anyhow!("SESSION_NOT_FOUND"))?;
-    if status == "active" {
-        anyhow::bail!("SESSION_ACTIVE_DELETE_FORBIDDEN");
+    if session.is_none() {
+        anyhow::bail!("SESSION_NOT_FOUND");
     }
 
     // The replica tables all reference collaboration_bindings with ON DELETE
@@ -532,9 +682,10 @@ impl SessionRow {
 #[cfg(test)]
 mod tests {
     use super::{
-        convert_collaboration_session_to_local_from_pool,
+        close_session_locally_from_pool, convert_collaboration_session_to_local_from_pool,
         copy_collaboration_session_to_local_from_pool, hard_delete_session_from_pool,
-        reopen_local_session_from_pool, LocalCopyLogRow,
+        reopen_local_session_from_pool, stop_collaboration_session_locally_from_pool,
+        LocalCopyLogRow,
     };
     use crate::db::migrations;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -593,23 +744,328 @@ mod tests {
         .unwrap();
     }
 
+    async fn insert_dirty_collaboration_replica(pool: &SqlitePool, session_id: &str) {
+        insert_collaboration_binding(pool, session_id).await;
+        sqlx::query(
+            "INSERT INTO logs (
+                sync_id, session_id, time, controller, callsign,
+                rst_sent, rst_rcvd, qth, device, power, antenna, height,
+                remarks, created_at, updated_at, source_device_id
+             ) VALUES (
+                ?, ?, '2026-07-13T08:01:00Z', 'BG5CRL', 'BA4AAA',
+                '59', '57', 'Hangzhou', 'IC-7300', '20W', 'DP', '8m',
+                'visible note', '2026-07-13T08:02:00Z',
+                '2026-07-13T08:03:00Z', 'device-1'
+             )",
+        )
+        .bind(format!("log-{session_id}"))
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO sync_outbox (
+                server_instance_id, account_id, session_id, mutation_id,
+                entity_type, entity_id, operation, base_version, observed_seq,
+                payload_json, state, created_at, updated_at
+             ) VALUES (
+                'server', 'account', ?, ?, 'log', ?, 'update', 1, 1,
+                '{}', 'pending', ?, ?
+             )",
+        )
+        .bind(session_id)
+        .bind(format!("mutation-{session_id}"))
+        .bind(format!("log-{session_id}"))
+        .bind(NOW)
+        .bind(NOW)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO collaboration_live_drafts (
+                server_instance_id, account_id, session_id, draft_id,
+                draft_version, remote_json, local_fields_json,
+                field_revisions_json, dirty_fields_json, local_updated_at
+             ) VALUES (
+                'server', 'account', ?, ?, 1, '{}',
+                '{\"callsign\":\"BA4BBB\"}', '{}', '[\"callsign\"]', ?
+             )",
+        )
+        .bind(session_id)
+        .bind(format!("draft-{session_id}"))
+        .bind(NOW)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO collaboration_offline_records (
+                mutation_id, server_instance_id, account_id, session_id,
+                draft_id, expected_draft_version, provisional_ordinal,
+                record_json, state, created_at, updated_at
+             ) VALUES (
+                ?, 'server', 'account', ?, ?, 1, 1, '{}', 'pending', ?, ?
+             )",
+        )
+        .bind(format!("offline-{session_id}"))
+        .bind(session_id)
+        .bind(format!("draft-{session_id}"))
+        .bind(NOW)
+        .bind(NOW)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     #[tokio::test]
-    async fn hard_delete_rejects_an_active_session_without_changing_it() {
+    async fn hard_delete_removes_active_local_and_collaboration_rows_only_on_this_device() {
         let pool = setup().await;
-        insert_session(&pool, "active-session", "active").await;
+        insert_session(&pool, "active-local", "active").await;
+        insert_session(&pool, "active-collaboration", "active").await;
+        insert_session(&pool, "unrelated", "closed").await;
+        insert_dirty_collaboration_replica(&pool, "active-collaboration").await;
 
-        let error = hard_delete_session_from_pool(&pool, "active-session")
+        hard_delete_session_from_pool(&pool, "active-local")
             .await
-            .unwrap_err()
-            .to_string();
+            .unwrap();
+        hard_delete_session_from_pool(&pool, "active-collaboration")
+            .await
+            .unwrap();
 
-        assert!(error.contains("SESSION_ACTIVE_DELETE_FORBIDDEN"));
-        let count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM sessions WHERE session_id = 'active-session'")
+        let remaining: Vec<(String, String)> =
+            sqlx::query_as("SELECT session_id, status FROM sessions ORDER BY session_id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            remaining,
+            vec![("unrelated".to_string(), "closed".to_string())]
+        );
+        for table in [
+            "logs",
+            "collaboration_bindings",
+            "sync_outbox",
+            "collaboration_live_drafts",
+            "collaboration_offline_records",
+        ] {
+            let query = format!("SELECT COUNT(*) FROM {table}");
+            let count: (i64,) = sqlx::query_as(&query).fetch_one(&pool).await.unwrap();
+            assert_eq!(count.0, 0, "{table} retained deleted replica data");
+        }
+    }
+
+    #[tokio::test]
+    async fn local_stop_discards_dirty_replica_state_and_preserves_saved_log_fields() {
+        let pool = setup().await;
+        insert_session(&pool, "collaboration-session", "active").await;
+        insert_session(&pool, "previous-local", "active").await;
+        sqlx::query(
+            "UPDATE sessions SET title = 'Sunday net'
+             WHERE session_id = 'collaboration-session'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        insert_dirty_collaboration_replica(&pool, "collaboration-session").await;
+
+        let local = stop_collaboration_session_locally_from_pool(&pool, "collaboration-session")
+            .await
+            .unwrap();
+
+        assert_ne!(local.session_id, "collaboration-session");
+        assert_eq!(local.title, "Sunday net");
+        assert_eq!(local.status, "active");
+        assert_eq!(local.created_at, NOW);
+        assert_ne!(local.updated_at, NOW);
+        let copied = sqlx::query_as::<_, LocalCopyLogRow>(
+            "SELECT time, controller, callsign, rst_sent, rst_rcvd, qth, device,
+                    power, antenna, height, remarks, created_at, updated_at,
+                    source_device_id
+             FROM logs WHERE session_id = ?",
+        )
+        .bind(&local.session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(copied.time, "2026-07-13T08:01:00Z");
+        assert_eq!(copied.controller, "BG5CRL");
+        assert_eq!(copied.callsign, "BA4AAA");
+        assert_eq!(copied.rst_sent.as_deref(), Some("59"));
+        assert_eq!(copied.rst_rcvd.as_deref(), Some("57"));
+        assert_eq!(copied.qth.as_deref(), Some("Hangzhou"));
+        assert_eq!(copied.device.as_deref(), Some("IC-7300"));
+        assert_eq!(copied.power.as_deref(), Some("20W"));
+        assert_eq!(copied.antenna.as_deref(), Some("DP"));
+        assert_eq!(copied.height.as_deref(), Some("8m"));
+        assert_eq!(copied.remarks.as_deref(), Some("visible note"));
+        assert_eq!(copied.created_at, "2026-07-13T08:02:00Z");
+        assert_eq!(copied.updated_at, "2026-07-13T08:03:00Z");
+        assert_eq!(copied.source_device_id.as_deref(), Some("device-1"));
+
+        let copied_sync_id: String =
+            sqlx::query_scalar("SELECT sync_id FROM logs WHERE session_id = ?")
+                .bind(&local.session_id)
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(count.0, 1);
+        assert_ne!(copied_sync_id, "log-collaboration-session");
+        for table in [
+            "sessions",
+            "logs",
+            "collaboration_bindings",
+            "sync_outbox",
+            "collaboration_live_drafts",
+            "collaboration_offline_records",
+        ] {
+            let query = format!("SELECT COUNT(*) FROM {table} WHERE session_id = ?");
+            let count: (i64,) = sqlx::query_as(&query)
+                .bind("collaboration-session")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count.0, 0, "{table} retained stopped replica data");
+        }
+        let replacement_replica_state: (i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT
+                (SELECT COUNT(*) FROM collaboration_bindings WHERE session_id = ?),
+                (SELECT COUNT(*) FROM sync_outbox WHERE session_id = ?),
+                (SELECT COUNT(*) FROM collaboration_live_drafts WHERE session_id = ?),
+                (SELECT COUNT(*) FROM collaboration_offline_records WHERE session_id = ?)",
+        )
+        .bind(&local.session_id)
+        .bind(&local.session_id)
+        .bind(&local.session_id)
+        .bind(&local.session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(replacement_replica_state, (0, 0, 0, 0));
+        let previous_local: (String, Option<String>) = sqlx::query_as(
+            "SELECT status, closed_at FROM sessions WHERE session_id = 'previous-local'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(previous_local.0, "closed");
+        assert!(previous_local.1.is_some());
+    }
+
+    #[tokio::test]
+    async fn local_stop_turns_a_closed_replica_into_active_local_recorder() {
+        let pool = setup().await;
+        insert_session(&pool, "closed-collaboration", "closed").await;
+        insert_dirty_collaboration_replica(&pool, "closed-collaboration").await;
+
+        let local = stop_collaboration_session_locally_from_pool(&pool, "closed-collaboration")
+            .await
+            .unwrap();
+
+        assert_ne!(local.session_id, "closed-collaboration");
+        assert_eq!(local.status, "active");
+        assert_eq!(local.created_at, NOW);
+        assert_eq!(local.closed_at, None);
+        let copied_log_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM logs WHERE session_id = ?")
+                .bind(&local.session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(copied_log_count.0, 1);
+    }
+
+    #[tokio::test]
+    async fn local_close_replaces_dirty_collaboration_replica_with_closed_history() {
+        let pool = setup().await;
+        insert_session(&pool, "collaboration-session", "active").await;
+        insert_session(&pool, "other-local", "active").await;
+        insert_dirty_collaboration_replica(&pool, "collaboration-session").await;
+
+        let closed = close_session_locally_from_pool(&pool, "collaboration-session")
+            .await
+            .unwrap();
+
+        assert_ne!(closed.session_id, "collaboration-session");
+        assert_eq!(closed.status, "closed");
+        assert_eq!(closed.created_at, NOW);
+        assert_ne!(closed.updated_at, NOW);
+        assert!(closed.closed_at.is_some());
+        let stored: (String, Option<String>, i64) = sqlx::query_as(
+            "SELECT status, closed_at,
+                    (SELECT COUNT(*) FROM logs WHERE session_id = sessions.session_id)
+             FROM sessions WHERE session_id = ?",
+        )
+        .bind(&closed.session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(stored.0, "closed");
+        assert!(stored.1.is_some());
+        assert_eq!(stored.2, 1);
+        let old_count: (i64,) = sqlx::query_as(
+            "SELECT
+                (SELECT COUNT(*) FROM sessions WHERE session_id = 'collaboration-session') +
+                (SELECT COUNT(*) FROM collaboration_bindings
+                 WHERE session_id = 'collaboration-session') +
+                (SELECT COUNT(*) FROM sync_outbox
+                 WHERE session_id = 'collaboration-session') +
+                (SELECT COUNT(*) FROM collaboration_live_drafts
+                 WHERE session_id = 'collaboration-session') +
+                (SELECT COUNT(*) FROM collaboration_offline_records
+                 WHERE session_id = 'collaboration-session')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(old_count.0, 0);
+        let other: (String, Option<String>) = sqlx::query_as(
+            "SELECT status, closed_at FROM sessions WHERE session_id = 'other-local'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(other, ("active".to_string(), None));
+    }
+
+    #[tokio::test]
+    async fn local_close_accepts_an_already_closed_collaboration_replica() {
+        let pool = setup().await;
+        insert_session(&pool, "closed-collaboration", "closed").await;
+        insert_dirty_collaboration_replica(&pool, "closed-collaboration").await;
+
+        let closed = close_session_locally_from_pool(&pool, "closed-collaboration")
+            .await
+            .unwrap();
+
+        assert_ne!(closed.session_id, "closed-collaboration");
+        assert_eq!(closed.status, "closed");
+        assert_eq!(closed.created_at, NOW);
+        assert!(closed.closed_at.is_some());
+        let copied_log_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM logs WHERE session_id = ?")
+                .bind(&closed.session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(copied_log_count.0, 1);
+    }
+
+    #[tokio::test]
+    async fn local_close_keeps_a_local_only_session_id_and_creates_no_outbox() {
+        let pool = setup().await;
+        insert_session(&pool, "local-session", "active").await;
+
+        let closed = close_session_locally_from_pool(&pool, "local-session")
+            .await
+            .unwrap();
+
+        assert_eq!(closed.session_id, "local-session");
+        assert_eq!(closed.status, "closed");
+        assert!(closed.closed_at.is_some());
+        let outbox: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM sync_outbox WHERE session_id = 'local-session'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(outbox.0, 0);
     }
 
     #[tokio::test]

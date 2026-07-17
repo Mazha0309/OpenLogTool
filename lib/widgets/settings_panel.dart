@@ -1,22 +1,27 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
-import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/models/database_backup_summary.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/collaboration_provider.dart';
+import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
-import 'package:openlogtool/widgets/settings/theme_settings.dart';
-import 'package:openlogtool/widgets/settings/layout_settings.dart';
-import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
-import 'package:openlogtool/widgets/settings/data_operations.dart';
-import 'package:openlogtool/widgets/settings/server_account_settings.dart';
 import 'package:openlogtool/widgets/about_app_dialog.dart';
 import 'package:openlogtool/widgets/font_picker_dialog.dart';
+import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
+import 'package:openlogtool/widgets/settings/data_operations.dart';
+import 'package:openlogtool/widgets/settings/layout_settings.dart';
+import 'package:openlogtool/widgets/settings/server_account_settings.dart';
+import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
+import 'package:provider/provider.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({super.key});
@@ -32,7 +37,7 @@ class SettingsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '应用设置',
+            context.l10n.settingsTitle,
             style: TextStyle(
               fontSize: isNarrow ? 18 : 20,
               fontWeight: FontWeight.bold,
@@ -82,7 +87,7 @@ class SettingsPanel extends StatelessWidget {
             cardPadding: cardPadding,
             onViewDatabaseLog: () => _showDatabaseLogDialog(context),
             onExportDatabase: () => _exportDatabase(context),
-            onImportDatabase: () => _showImportDatabaseDialog(context),
+            onImportDatabase: () => _importDatabase(context),
             onViewSnackbarLog: () => _showSnackbarLogDialog(context),
             onClearAllData: () => _showClearDataConfirmation(context),
           ),
@@ -124,10 +129,6 @@ class SettingsPanel extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => _showResetConfirmation(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-                side: BorderSide(color: Theme.of(context).colorScheme.error),
-              ),
               icon: const Icon(Icons.restore_outlined),
               label: Text(context.l10n.restoreDefaultSettings),
             ),
@@ -137,50 +138,60 @@ class SettingsPanel extends StatelessWidget {
     });
   }
 
-  void _showSnackbarLogDialog(BuildContext context) {
-    final entries =
-        Provider.of<SnackbarLogProvider>(context, listen: false).entries;
-
-    showDialog(
+  Future<void> _showSnackbarLogDialog(BuildContext context) async {
+    final entries = context.read<SnackbarLogProvider>().entries;
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('弹窗日志'),
+        insetPadding: _dialogInsetPadding(dialogContext),
+        title: Text(dialogContext.l10n.snackbarLogTitle),
         content: SizedBox(
-          width: double.maxFinite,
-          child: entries.isEmpty
-              ? const Text('当前没有弹窗日志')
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: entries.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 16),
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    final time =
-                        '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SelectableText(
-                          entry.message,
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$time · ${entry.type} · ${entry.source}',
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+          width: 560,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 480),
+            child: entries.isEmpty
+                ? Text(dialogContext.l10n.snackbarLogEmpty)
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: entries.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 16),
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      final time =
+                          '${entry.createdAt.hour.toString().padLeft(2, '0')}:'
+                          '${entry.createdAt.minute.toString().padLeft(2, '0')}:'
+                          '${entry.createdAt.second.toString().padLeft(2, '0')}';
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SelectableText(
+                            entry.message,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$time · ${entry.type} · ${entry.source}',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('关闭'),
+            child: Text(dialogContext.l10n.close),
           ),
         ],
       ),
@@ -200,228 +211,368 @@ class SettingsPanel extends StatelessWidget {
     }
   }
 
-  void _showResetConfirmation(BuildContext context) {
-    showDialog(
+  Future<void> _showResetConfirmation(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('恢复默认设置'),
-        content: const Text('确定要恢复所有设置为默认值吗？'),
+      builder: (dialogContext) => AlertDialog(
+        insetPadding: _dialogInsetPadding(dialogContext),
+        scrollable: true,
+        title: Text(dialogContext.l10n.resetSettingsTitle),
+        content: Text(dialogContext.l10n.resetSettingsConfirmation),
         actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.cancel),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () {
-              Provider.of<SettingsProvider>(context, listen: false)
-                  .resetToDefaults();
-              Navigator.pop(context);
-              context.showLoggedSnackBar(
-                const SnackBar(
-                  content: Text('已恢复默认设置'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text('确认恢复'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.resetSettingsConfirmAction),
           ),
         ],
       ),
     );
-  }
+    if (confirmed != true || !context.mounted) return;
 
-  void _showClearDataConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('清空所有数据'),
-        content: const Text(
-            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词库\n• QTH 历史记录\n\n确定要继续吗？'),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                await RustApi.clearAllData();
-                if (context.mounted) {
-                  context.showLoggedSnackBar(
-                    const SnackBar(
-                      content: Text('已清空所有数据，请重启应用以重新加载。'),
-                      duration: Duration(seconds: 3),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  context.showLoggedSnackBar(
-                    SnackBar(
-                      content: Text('清空失败: $e'),
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('确认清空'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _exportDatabase(BuildContext context) async {
     try {
-      final jsonData = await RustApi.exportDatabase();
-
-      final now = DateTime.now();
-      final fileName =
-          'openlogtool_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
-
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: '保存数据库备份',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        bytes: utf8.encode(jsonData),
+      await context.read<SettingsProvider>().resetToDefaults();
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(context.l10n.resetSettingsSucceeded),
+          duration: const Duration(seconds: 2),
+        ),
       );
-
-      if (result != null) {
-        if (!Platform.isAndroid) {
-          final file = File(result);
-          await file.writeAsString(jsonData);
-        }
-
-        if (context.mounted) {
-          context.showLoggedSnackBar(
-            const SnackBar(
-              content: Text('数据库已导出！'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(
-          SnackBar(
-            content: Text('导出失败: $e'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
+    } catch (error) {
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(context.l10n.resetSettingsFailed(error.toString())),
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 
-  void _showImportDatabaseDialog(BuildContext context) {
-    showDialog(
+  Future<void> _showClearDataConfirmation(BuildContext context) async {
+    final phrase = context.l10n.databaseClearConfirmationPhrase;
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('导入数据库'),
-        content:
-            const Text('⚠️ 警告：导入将覆盖所有现有数据！\n\n此操作不可恢复，建议先导出当前数据库。\n\n确定要继续吗？'),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(dialogContext),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await _importDatabase(context);
-            },
-            child: const Text('继续导入'),
-          ),
-        ],
+      builder: (_) => _ClearDatabaseConfirmationDialog(
+        confirmationPhrase: phrase,
       ),
     );
+    if (confirmed != true || !context.mounted) return;
+
+    await _replaceLocalDatabase(
+      context,
+      replacement: RustApi.clearAllData,
+      successMessage: (l10n) => l10n.databaseClearSucceeded,
+      failureMessage: (l10n, error) =>
+          l10n.databaseClearFailed(_friendlyDatabaseError(l10n, error)),
+    );
+  }
+
+  Future<void> _exportDatabase(BuildContext context) async {
+    final l10n = context.l10n;
+    try {
+      final jsonData = await RustApi.exportDatabase();
+      final encodedBackup = utf8.encode(jsonData);
+      final pickerWritesBytes = kIsWeb || Platform.isAndroid || Platform.isIOS;
+      final now = DateTime.now();
+      final fileName = 'openlogtool_backup_${now.year}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}.json';
+
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: l10n.databaseExportDialogTitle,
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        // Mobile document providers require bytes and write them themselves.
+        // Desktop pickers only select a path (macOS rejects a bytes argument).
+        bytes: pickerWritesBytes ? encodedBackup : null,
+      );
+      if (result == null) return;
+
+      if (!pickerWritesBytes) {
+        await File(result).writeAsString(jsonData, flush: true);
+      }
+
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(context.l10n.databaseExportSucceeded),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.databaseExportFailed(error.toString()),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   Future<void> _importDatabase(BuildContext context) async {
+    final PlatformFile selectedFile;
+    final String jsonData;
+    final DatabaseBackupSummary summary;
     try {
       final result = await FilePicker.platform.pickFiles(
-        dialogTitle: '选择数据库备份文件',
+        dialogTitle: context.l10n.databaseImportPickerTitle,
         type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true,
+        allowedExtensions: const ['json'],
+        // Native platforms expose a temporary/local path. On web a stream
+        // avoids keeping both a byte buffer and the decoded JSON in memory.
+        withData: false,
+        withReadStream: kIsWeb,
+      );
+      if (result == null || result.files.isEmpty) return;
+      selectedFile = result.files.single;
+      jsonData = await _readSelectedBackup(selectedFile);
+      summary = DatabaseBackupSummary.parse(jsonData);
+    } on FormatException catch (error) {
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.databaseImportInvalid(error.message),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    } catch (error) {
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.databaseImportReadFailed(error.toString()),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+
+    final confirmed = await _showImportConfirmation(
+      context,
+      fileName: selectedFile.name,
+      summary: summary,
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    await _replaceLocalDatabase(
+      context,
+      replacement: () => RustApi.importDatabase(jsonData: jsonData),
+      successMessage: (l10n) => l10n.databaseImportSucceeded,
+      failureMessage: (l10n, error) =>
+          l10n.databaseImportFailed(_friendlyDatabaseError(l10n, error)),
+    );
+  }
+
+  Future<bool?> _showImportConfirmation(
+    BuildContext context, {
+    required String fileName,
+    required DatabaseBackupSummary summary,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = dialogContext.l10n;
+        final exportedAt = summary.exportedAt == null
+            ? l10n.databaseImportUnknownTime
+            : _formatLocalDateTime(dialogContext, summary.exportedAt!);
+        return AlertDialog(
+          insetPadding: _dialogInsetPadding(dialogContext),
+          scrollable: true,
+          title: Text(l10n.databaseImportPreviewTitle),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fileName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(dialogContext).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 12),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportBackupVersion,
+                  value: summary.formatVersion.toString(),
+                ),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportExportedAt,
+                  value: exportedAt,
+                ),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportSessionCount,
+                  value: summary.sessionCount.toString(),
+                ),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportLogCount,
+                  value: summary.logCount.toString(),
+                ),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportDictionaryCount,
+                  value: summary.dictionaryItemCount.toString(),
+                ),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportCollaborationCount,
+                  value: summary.collaborationBindingCount.toString(),
+                ),
+                _BackupSummaryRow(
+                  label: l10n.databaseImportPendingSyncCount,
+                  value: summary.pendingSyncCount.toString(),
+                ),
+                const SizedBox(height: 12),
+                _DangerNotice(message: l10n.databaseImportPreviewWarning),
+                if (summary.containsCollaborationData) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    l10n.databaseImportCollaborationWarning,
+                    style: Theme.of(dialogContext).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('database-import-confirm-action'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(l10n.databaseImportConfirmAction),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _replaceLocalDatabase(
+    BuildContext context, {
+    required Future<void> Function() replacement,
+    required String Function(AppLocalizations l10n) successMessage,
+    required String Function(AppLocalizations l10n, Object error)
+        failureMessage,
+  }) async {
+    final collaboration = context.read<CollaborationProvider>();
+    final dictionaries = context.read<DictionaryProvider>();
+    var databaseCommitted = false;
+    try {
+      await collaboration.runLocalDatabaseMaintenance(() async {
+        await replacement();
+        databaseCommitted = true;
+      });
+      // CollaborationProvider has already rebuilt SessionProvider/LogProvider
+      // while synchronization was stopped. Dictionaries are independent of
+      // the collaboration replica and are refreshed immediately afterwards.
+      await dictionaries.reloadFromDatabase(
+        synchronizeBuiltins: true,
+        strictBuiltinSynchronization: true,
       );
 
-      if (result != null && result.files.single.bytes != null) {
-        final jsonData = utf8.decode(result.files.single.bytes!);
-        await RustApi.importDatabase(jsonData: jsonData);
-
-        if (context.mounted) {
-          context.showLoggedSnackBar(
-            const SnackBar(
-              content: Text('数据库导入成功！请重启应用以重新加载数据。'),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(
-          SnackBar(
-            content: Text('导入失败: $e'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(successMessage(context.l10n)),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      final message = databaseCommitted
+          ? context.l10n.databaseReplacementRefreshFailed
+          : failureMessage(context.l10n, error);
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 6),
+        ),
+      );
     }
   }
 
-  void _showDatabaseLogDialog(BuildContext context) async {
+  Future<void> _showDatabaseLogDialog(BuildContext context) async {
     final status = await _buildDatabaseStatus(context);
     if (!context.mounted) return;
-    showDialog(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('数据库状态'),
+        insetPadding: _dialogInsetPadding(dialogContext),
+        title: Text(dialogContext.l10n.databaseStatusTitle),
         content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              status,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          width: 560,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 520),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                status,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
             ),
           ),
         ),
         actions: [
-          FilledButton(
-            child: const Text('关闭'),
+          TextButton(
             onPressed: () => Navigator.pop(dialogContext),
+            child: Text(dialogContext.l10n.close),
           ),
         ],
       ),
     );
   }
 
-  Future<String> _buildDatabaseStatus(BuildContext ctx) async {
+  Future<String> _buildDatabaseStatus(BuildContext context) async {
+    final l10n = context.l10n;
     try {
-      return await RustApi.getDatabaseStatus();
-    } catch (e) {
-      return '读取数据库状态失败: $e';
+      final raw = await RustApi.getDatabaseStatus();
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> || decoded['tables'] is! List) {
+        return raw;
+      }
+      final buffer = StringBuffer();
+      final schemaVersion = decoded['schemaVersion'];
+      buffer.writeln(
+        l10n.databaseStatusSchemaVersion(
+          schemaVersion?.toString() ?? l10n.databaseStatusUnknown,
+        ),
+      );
+      buffer.writeln();
+      for (final table in decoded['tables'] as List) {
+        if (table is! Map) continue;
+        final name = table['name']?.toString();
+        final count = table['rowCount'];
+        if (name == null || count is! num) continue;
+        buffer.writeln(l10n.databaseStatusTableRow(name, count.toInt()));
+      }
+      return buffer.toString().trimRight();
+    } catch (error) {
+      return l10n.databaseStatusLoadFailed(error.toString());
     }
   }
 
   void _showAboutDialog(BuildContext context) {
-    final appInfoProvider =
-        Provider.of<AppInfoProvider>(context, listen: false);
-
-    showDialog(
+    final appInfoProvider = context.read<AppInfoProvider>();
+    showDialog<void>(
       context: context,
       builder: (dialogContext) => AboutAppDialog(
         appName: appInfoProvider.appName,
@@ -448,5 +599,195 @@ class SettingsPanel extends StatelessWidget {
     if (result == null || !context.mounted) return;
     await WidgetsBinding.instance.endOfFrame;
     await settingsProvider.setFontFamily(result.fontFamily);
+  }
+
+  static Future<String> _readSelectedBackup(PlatformFile file) async {
+    final bytes = file.bytes;
+    if (bytes != null) return utf8.decode(bytes);
+    final stream = file.readStream;
+    if (stream != null) return utf8.decoder.bind(stream).join();
+    final path = file.path;
+    if (path != null && path.isNotEmpty && !kIsWeb) {
+      return File(path).readAsString();
+    }
+    throw StateError('DATABASE_BACKUP_FILE_UNAVAILABLE');
+  }
+
+  static String _formatLocalDateTime(BuildContext context, DateTime value) {
+    final material = MaterialLocalizations.of(context);
+    return '${material.formatFullDate(value)} '
+        '${material.formatTimeOfDay(
+      TimeOfDay.fromDateTime(value),
+      alwaysUse24HourFormat: true,
+    )}';
+  }
+
+  static EdgeInsets _dialogInsetPadding(BuildContext context) {
+    return MediaQuery.sizeOf(context).width < 600
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+        : const EdgeInsets.symmetric(horizontal: 40, vertical: 24);
+  }
+
+  static String _friendlyDatabaseError(
+    AppLocalizations l10n,
+    Object error,
+  ) {
+    final raw = error.toString();
+    if (raw.contains('COLLABORATION_OPERATION_IN_PROGRESS')) {
+      return l10n.databaseMaintenanceCollaborationBusy;
+    }
+    if (raw.contains('DATABASE_BACKUP_')) {
+      return l10n.databaseImportInvalid(raw);
+    }
+    return raw;
+  }
+}
+
+class _BackupSummaryRow extends StatelessWidget {
+  const _BackupSummaryRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClearDatabaseConfirmationDialog extends StatefulWidget {
+  const _ClearDatabaseConfirmationDialog({
+    required this.confirmationPhrase,
+  });
+
+  final String confirmationPhrase;
+
+  @override
+  State<_ClearDatabaseConfirmationDialog> createState() =>
+      _ClearDatabaseConfirmationDialogState();
+}
+
+class _ClearDatabaseConfirmationDialogState
+    extends State<_ClearDatabaseConfirmationDialog> {
+  final _controller = TextEditingController();
+  bool _phraseMatches = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        insetPadding: MediaQuery.sizeOf(context).width < 600
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        scrollable: true,
+        title: Text(context.l10n.databaseClearTitle),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DangerNotice(message: context.l10n.databaseClearWarning),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.databaseClearConfirmationInstruction(
+                  widget.confirmationPhrase,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('database-clear-confirmation-field'),
+                controller: _controller,
+                decoration: InputDecoration(
+                  labelText: context.l10n.databaseClearConfirmationLabel,
+                  hintText: widget.confirmationPhrase,
+                  border: const OutlineInputBorder(),
+                ),
+                autocorrect: false,
+                enableSuggestions: false,
+                onChanged: (value) {
+                  final matches = value.trim() == widget.confirmationPhrase;
+                  if (matches != _phraseMatches) {
+                    setState(() => _phraseMatches = matches);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('database-clear-confirm-action'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed:
+                _phraseMatches ? () => Navigator.pop(context, true) : null,
+            child: Text(context.l10n.databaseClearConfirmAction),
+          ),
+        ],
+      );
+}
+
+class _DangerNotice extends StatelessWidget {
+  const _DangerNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: colors.onErrorContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: colors.onErrorContainer),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

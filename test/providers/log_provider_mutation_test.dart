@@ -225,6 +225,40 @@ void main() {
     expect(provider.logs.map((log) => log.id), ['keep']);
     provider.dispose();
   });
+
+  test('database replacement drops stale overlays and permission markers',
+      () async {
+    var rows = [
+      _bridgeLog(
+        id: 'before-import',
+        sessionId: 'session-a',
+        time: '2026-07-13T10:00:00Z',
+      ),
+    ];
+    final provider = LogProvider(
+      sessionListLoader: () async => [_session('session-a')],
+      sessionLogPageLoader: (_, __, ___) async => rows,
+    );
+    await provider.reloadForSession('session-a');
+    provider.setCollaborationReadOnly('session-a', true);
+    provider.stageCanonicalLog(
+      _modelLog(id: 'stale-overlay', sessionId: 'session-a'),
+    );
+
+    rows = [
+      _bridgeLog(
+        id: 'after-import',
+        sessionId: 'session-a',
+        time: '2026-07-13T12:00:00Z',
+      ),
+    ];
+    await provider.reloadAfterDatabaseReplacement('session-a');
+
+    expect(provider.logs.map((log) => log.id), ['after-import']);
+    expect(provider.currentSessionReadOnly, isFalse);
+    expect(provider.mutationBlockReason(provider.logs.single), isNull);
+    provider.dispose();
+  });
 }
 
 Session _session(String sessionId) => Session(

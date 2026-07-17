@@ -1146,10 +1146,12 @@ class DatabaseHelper {
   }
 
   Future<int> deleteDictionaryItem(String tableName, int id) async {
+    _assertDictionaryTable(tableName);
     final db = await database;
+    final now = _now();
     return db.update(
       tableName,
-      <String, dynamic>{'deleted_at': _now()},
+      <String, dynamic>{'deleted_at': now, 'updated_at': now},
       where: 'id = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[id],
     );
@@ -1158,9 +1160,10 @@ class DatabaseHelper {
   Future<void> clearDictionary(String tableName) async {
     _assertDictionaryTable(tableName);
     final db = await database;
+    final now = _now();
     await db.update(
       tableName,
-      <String, dynamic>{'deleted_at': _now()},
+      <String, dynamic>{'deleted_at': now, 'updated_at': now},
       where: 'deleted_at IS NULL',
     );
   }
@@ -1204,6 +1207,7 @@ class DatabaseHelper {
     await clearDictionary('antenna_dictionary');
     await clearDictionary('device_dictionary');
     await clearDictionary('qth_dictionary');
+    await clearDictionary('callsign_dictionary');
     final db = await database;
     await _loadInitialDictionaries(db);
   }

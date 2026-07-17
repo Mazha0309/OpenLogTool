@@ -30,6 +30,13 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     'callsign': TextEditingController(),
     'qth': TextEditingController(),
   };
+  final Map<String, TextEditingController> _searchControllers =
+      <String, TextEditingController>{
+    'device': TextEditingController(),
+    'antenna': TextEditingController(),
+    'callsign': TextEditingController(),
+    'qth': TextEditingController(),
+  };
   final Map<String, ScrollController> _listControllers =
       <String, ScrollController>{
     'device': ScrollController(),
@@ -46,6 +53,9 @@ class _DictionaryManagerState extends State<DictionaryManager> {
   @override
   void dispose() {
     for (final controller in _addControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _searchControllers.values) {
       controller.dispose();
     }
     for (final controller in _listControllers.values) {
@@ -159,6 +169,117 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     }
   }
 
+  Future<void> _deleteItem(
+    _LibraryDefinition library,
+    DictionaryItem item,
+  ) async {
+    if (_mutationInProgress) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.deleteLibraryItemTitle),
+        content: Text(
+          dialogContext.l10n.deleteLibraryItemConfirmation(
+            item.raw,
+            _libraryName(library.type),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.cancel),
+          ),
+          FilledButton(
+            key: Key('confirm-delete-library-item-${library.type}'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.deleteLibraryItemAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busyLibraries.add(library.type));
+    try {
+      await library.onDelete(item.raw);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryItemDeleted(item.raw))),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.libraryItemDeleteFailed('$error')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busyLibraries.remove(library.type));
+    }
+  }
+
+  Future<void> _clearLibrary(_LibraryDefinition library) async {
+    if (_mutationInProgress || library.items.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          dialogContext.l10n.clearLibraryTitle(_libraryName(library.type)),
+        ),
+        content: Text(
+          dialogContext.l10n.clearLibraryConfirmation(
+            _libraryName(library.type),
+            library.items.length,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.cancel),
+          ),
+          FilledButton(
+            key: Key('confirm-clear-library-${library.type}'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.clearLibraryAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busyLibraries.add(library.type));
+    try {
+      await library.onClear();
+      if (!mounted) return;
+      _searchControllers[library.type]?.clear();
+      setState(() => _queries.remove(library.type));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.libraryCleared(_libraryName(library.type)),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(context.l10n.libraryClearFailed('$error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _busyLibraries.remove(library.type));
+    }
+  }
+
   List<DictionaryItem> _filteredItems(_LibraryDefinition library) {
     final query = _queries[library.type]?.trim() ?? '';
     if (query.isEmpty) return library.items;
@@ -171,34 +292,27 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: 420,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.dictionaryManagementTitle,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final introduction = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.dictionaryManagementTitle,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    context.l10n.dictionaryManagementHint,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.l10n.dictionaryManagementHint,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ],
-              ),
-            ),
-            Wrap(
+                ),
+              ],
+            );
+            final actions = Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
@@ -226,8 +340,26 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                   ),
                 ),
               ],
-            ),
-          ],
+            );
+            if (constraints.maxWidth < 680) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  introduction,
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: actions),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: introduction),
+                const SizedBox(width: 16),
+                actions,
+              ],
+            );
+          },
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -312,6 +444,18 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     ),
+                  Tooltip(
+                    message: context.l10n.clearLibraryTitle(
+                      _libraryName(library.type),
+                    ),
+                    child: IconButton(
+                      key: Key('clear-library-${library.type}'),
+                      onPressed: library.items.isEmpty || _mutationInProgress
+                          ? null
+                          : () => _clearLibrary(library),
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                    ),
+                  ),
                   AnimatedRotation(
                     turns: isExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 160),
@@ -338,6 +482,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                         const SizedBox(height: 10),
                         TextField(
                           key: Key('search-library-${library.type}'),
+                          controller: _searchControllers[library.type],
                           decoration: InputDecoration(
                             hintText: context.l10n.searchLibrary(
                               _libraryName(library.type),
@@ -351,7 +496,11 @@ class _DictionaryManagerState extends State<DictionaryManager> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        _buildItemList(library, items),
+                        _buildItemList(
+                          library,
+                          items,
+                          isBusy: _mutationInProgress,
+                        ),
                       ],
                     ),
                   )
@@ -399,10 +548,8 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     );
   }
 
-  Widget _buildItemList(
-    _LibraryDefinition library,
-    List<DictionaryItem> items,
-  ) {
+  Widget _buildItemList(_LibraryDefinition library, List<DictionaryItem> items,
+      {required bool isBusy}) {
     final theme = Theme.of(context);
     if (items.isEmpty) {
       final hasQuery = (_queries[library.type]?.trim().isNotEmpty ?? false);
@@ -454,12 +601,19 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           }.join(' · ');
           return ListTile(
             dense: true,
+            contentPadding: const EdgeInsets.only(left: 12, right: 4),
             leading: CircleAvatar(
               radius: 13,
               child: Text('${index + 1}', style: theme.textTheme.labelSmall),
             ),
-            title: Text(item.raw),
+            title: Text(item.raw, maxLines: 2, overflow: TextOverflow.ellipsis),
             subtitle: searchHint.isEmpty ? null : Text(searchHint),
+            trailing: IconButton(
+              key: Key('delete-library-${library.type}-${item.syncId}'),
+              tooltip: context.l10n.deleteLibraryItemAction,
+              onPressed: isBusy ? null : () => _deleteItem(library, item),
+              icon: const Icon(Icons.delete_outline),
+            ),
           );
         },
       ),
@@ -474,21 +628,29 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         type: 'device',
         items: provider.deviceDict,
         onAdd: provider.addDevice,
+        onDelete: provider.deleteDevice,
+        onClear: provider.clearDeviceDict,
       ),
       _LibraryDefinition(
         type: 'antenna',
         items: provider.antennaDict,
         onAdd: provider.addAntenna,
+        onDelete: provider.deleteAntenna,
+        onClear: provider.clearAntennaDict,
       ),
       _LibraryDefinition(
         type: 'callsign',
         items: provider.callsignDict,
         onAdd: provider.addCallsign,
+        onDelete: provider.deleteCallsign,
+        onClear: provider.clearCallsignDict,
       ),
       _LibraryDefinition(
         type: 'qth',
         items: provider.qthDict,
         onAdd: provider.addQth,
+        onDelete: provider.deleteQth,
+        onClear: provider.clearQthDict,
       ),
     ];
     return Column(
@@ -527,9 +689,13 @@ class _LibraryDefinition {
     required this.type,
     required this.items,
     required this.onAdd,
+    required this.onDelete,
+    required this.onClear,
   });
 
   final String type;
   final List<DictionaryItem> items;
   final Future<void> Function(String value) onAdd;
+  final Future<void> Function(String value) onDelete;
+  final Future<void> Function() onClear;
 }

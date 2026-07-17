@@ -409,25 +409,25 @@ abstract class AppLocalizations {
   /// No description provided for @historySessionCloseTitle.
   ///
   /// In zh, this message translates to:
-  /// **'关闭会话'**
+  /// **'仅在本机关闭会话'**
   String get historySessionCloseTitle;
 
   /// No description provided for @historySessionCloseConfirmation.
   ///
   /// In zh, this message translates to:
-  /// **'确定关闭“{title}”吗？关闭后仍可在历史会话中只读查看。'**
+  /// **'仅在本机关闭“{title}”吗？关闭后会作为只读本地历史保留。如果这是协作副本，本机将停止同步并丢弃未同步队列、冲突、离线待复核记录及未提交草稿的本机副本；服务器共享会话、成员及其他设备不受影响。'**
   String historySessionCloseConfirmation(String title);
 
   /// No description provided for @historySessionClosed.
   ///
   /// In zh, this message translates to:
-  /// **'会话已关闭'**
+  /// **'已在本机关闭会话'**
   String get historySessionClosed;
 
   /// No description provided for @historySessionCloseFailed.
   ///
   /// In zh, this message translates to:
-  /// **'关闭会话失败：{error}'**
+  /// **'在本机关闭会话失败：{error}'**
   String historySessionCloseFailed(String error);
 
   /// No description provided for @historySessionCollaborationCloseRequiresOpen.
@@ -883,13 +883,13 @@ abstract class AppLocalizations {
   /// No description provided for @leaveSession.
   ///
   /// In zh, this message translates to:
-  /// **'退出协作会话'**
+  /// **'退出服务器协作'**
   String get leaveSession;
 
   /// No description provided for @leaveSessionConfirmation.
   ///
   /// In zh, this message translates to:
-  /// **'退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。'**
+  /// **'这会向服务器提交退出成员关系的请求。成功后本地副本保持只读；如需再次参与，必须重新获得邀请。服务器不可达时请改用本机数据操作。'**
   String get leaveSessionConfirmation;
 
   /// No description provided for @convertCollaborationToLocal.
@@ -907,14 +907,32 @@ abstract class AppLocalizations {
   /// No description provided for @convertCollaborationToLocalConfirmation.
   ///
   /// In zh, this message translates to:
-  /// **'将停止本机对“{title}”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。'**
+  /// **'将停止本机对“{title}”的协作同步，并替换为可编辑的本地会话。仅复制表格中已经保存的记录；未提交的共享实时草稿仍留在服务器上，不会写入本地会话。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。'**
   String convertCollaborationToLocalConfirmation(String title);
+
+  /// No description provided for @convertCollaborationToLocalUnsyncedConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将停止本机对“{title}”的协作同步，并保留当前表格中已保存的记录。未同步队列、冲突、离线待复核记录及未提交实时草稿会从本机永久丢弃。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。'**
+  String convertCollaborationToLocalUnsyncedConfirmation(String title);
 
   /// No description provided for @convertCollaborationToLocalSucceeded.
   ///
   /// In zh, this message translates to:
   /// **'已停止本机协作并转为本地会话'**
   String get convertCollaborationToLocalSucceeded;
+
+  /// No description provided for @closeCollaborationLocally.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅在本机关闭'**
+  String get closeCollaborationLocally;
+
+  /// No description provided for @moreLocalCollaborationActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多本机操作'**
+  String get moreLocalCollaborationActions;
 
   /// No description provided for @createEditableLocalCopy.
   ///
@@ -1249,14 +1267,20 @@ abstract class AppLocalizations {
   /// No description provided for @closeCollaborationSessionTitle.
   ///
   /// In zh, this message translates to:
-  /// **'关闭协作会话'**
+  /// **'关闭服务器共享会话'**
   String get closeCollaborationSessionTitle;
 
   /// No description provided for @closeCollaborationSessionMessage.
   ///
   /// In zh, this message translates to:
-  /// **'关闭后所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。'**
+  /// **'这会向服务器提交关闭共享会话的请求。服务器确认后，所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。'**
   String get closeCollaborationSessionMessage;
+
+  /// No description provided for @closeSharedSession.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭服务器共享会话'**
+  String get closeSharedSession;
 
   /// No description provided for @closeCollaborationDraftNotEmpty.
   ///
@@ -1297,7 +1321,7 @@ abstract class AppLocalizations {
   /// No description provided for @closeSessionQueued.
   ///
   /// In zh, this message translates to:
-  /// **'会话已在本地关闭，等待同步确认'**
+  /// **'已提交关闭共享会话请求，等待服务器同步确认'**
   String get closeSessionQueued;
 
   /// No description provided for @reopenCollaborationSessionTitle.
@@ -2422,6 +2446,66 @@ abstract class AppLocalizations {
   /// **'添加失败：{error}'**
   String libraryItemAddFailed(String error);
 
+  /// No description provided for @deleteLibraryItemTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除词库条目'**
+  String get deleteLibraryItemTitle;
+
+  /// No description provided for @deleteLibraryItemConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定从{name}中删除“{value}”吗？'**
+  String deleteLibraryItemConfirmation(String value, String name);
+
+  /// No description provided for @deleteLibraryItemAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get deleteLibraryItemAction;
+
+  /// No description provided for @libraryItemDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已删除：{value}'**
+  String libraryItemDeleted(String value);
+
+  /// No description provided for @libraryItemDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除失败：{error}'**
+  String libraryItemDeleteFailed(String error);
+
+  /// No description provided for @clearLibraryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空{name}'**
+  String clearLibraryTitle(String name);
+
+  /// No description provided for @clearLibraryConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将删除{name}中的全部 {count} 条内容。此操作无法撤销，确定继续吗？'**
+  String clearLibraryConfirmation(String name, int count);
+
+  /// No description provided for @clearLibraryAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部清空'**
+  String get clearLibraryAction;
+
+  /// No description provided for @libraryCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'已清空{name}'**
+  String libraryCleared(String name);
+
+  /// No description provided for @libraryClearFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空失败：{error}'**
+  String libraryClearFailed(String error);
+
   /// No description provided for @libraryImportEmpty.
   ///
   /// In zh, this message translates to:
@@ -2680,6 +2764,348 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'恢复默认设置'**
   String get restoreDefaultSettings;
+
+  /// No description provided for @settingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用设置'**
+  String get settingsTitle;
+
+  /// No description provided for @snackbarLogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'底部消息日志'**
+  String get snackbarLogTitle;
+
+  /// No description provided for @snackbarLogHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看本次运行期间显示过的底部消息'**
+  String get snackbarLogHint;
+
+  /// No description provided for @snackbarLogEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次运行尚未记录底部消息'**
+  String get snackbarLogEmpty;
+
+  /// No description provided for @resetSettingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认设置'**
+  String get resetSettingsTitle;
+
+  /// No description provided for @resetSettingsConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将外观、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。'**
+  String get resetSettingsConfirmation;
+
+  /// No description provided for @resetSettingsConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认'**
+  String get resetSettingsConfirmAction;
+
+  /// No description provided for @resetSettingsSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复默认设置'**
+  String get resetSettingsSucceeded;
+
+  /// No description provided for @resetSettingsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认设置失败：{error}'**
+  String resetSettingsFailed(String error);
+
+  /// No description provided for @localDataOperationsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机数据'**
+  String get localDataOperationsTitle;
+
+  /// No description provided for @localDataOperationsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理本机数据库的诊断、备份与重置；这些操作不会直接修改服务器数据。'**
+  String get localDataOperationsHint;
+
+  /// No description provided for @databaseDiagnosticsSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断'**
+  String get databaseDiagnosticsSection;
+
+  /// No description provided for @databaseBackupSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份与恢复'**
+  String get databaseBackupSection;
+
+  /// No description provided for @databaseDangerZoneSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'危险操作'**
+  String get databaseDangerZoneSection;
+
+  /// No description provided for @databaseStatusTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机数据库状态'**
+  String get databaseStatusTitle;
+
+  /// No description provided for @databaseStatusHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看数据库版本和各表行数'**
+  String get databaseStatusHint;
+
+  /// No description provided for @databaseStatusSchemaVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据库结构版本：{version}'**
+  String databaseStatusSchemaVersion(String version);
+
+  /// No description provided for @databaseStatusTableRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}: {count}'**
+  String databaseStatusTableRow(String name, int count);
+
+  /// No description provided for @databaseStatusUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知'**
+  String get databaseStatusUnknown;
+
+  /// No description provided for @databaseStatusLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取本机数据库状态失败：{error}'**
+  String databaseStatusLoadFailed(String error);
+
+  /// No description provided for @databaseExportTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出本机数据库'**
+  String get databaseExportTitle;
+
+  /// No description provided for @databaseExportHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份会话、记录、词库、QTH 历史以及本机协作副本和待同步状态'**
+  String get databaseExportHint;
+
+  /// No description provided for @databaseExportDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存 OpenLogTool 本机数据库备份'**
+  String get databaseExportDialogTitle;
+
+  /// No description provided for @databaseExportSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机数据库备份已导出'**
+  String get databaseExportSucceeded;
+
+  /// No description provided for @databaseExportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出本机数据库失败：{error}'**
+  String databaseExportFailed(String error);
+
+  /// No description provided for @databaseImportTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入本机数据库'**
+  String get databaseImportTitle;
+
+  /// No description provided for @databaseImportHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 JSON 备份并预览后，完整替换当前本机数据库'**
+  String get databaseImportHint;
+
+  /// No description provided for @databaseImportPickerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 OpenLogTool 本机数据库备份'**
+  String get databaseImportPickerTitle;
+
+  /// No description provided for @databaseImportPreviewTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认导入备份'**
+  String get databaseImportPreviewTitle;
+
+  /// No description provided for @databaseImportBackupVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份格式版本'**
+  String get databaseImportBackupVersion;
+
+  /// No description provided for @databaseImportExportedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出时间'**
+  String get databaseImportExportedAt;
+
+  /// No description provided for @databaseImportUnknownTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'未记录'**
+  String get databaseImportUnknownTime;
+
+  /// No description provided for @databaseImportSessionCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话'**
+  String get databaseImportSessionCount;
+
+  /// No description provided for @databaseImportLogCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'点名记录'**
+  String get databaseImportLogCount;
+
+  /// No description provided for @databaseImportDictionaryCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库条目'**
+  String get databaseImportDictionaryCount;
+
+  /// No description provided for @databaseImportCollaborationCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作副本'**
+  String get databaseImportCollaborationCount;
+
+  /// No description provided for @databaseImportPendingSyncCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'待同步/待复核项'**
+  String get databaseImportPendingSyncCount;
+
+  /// No description provided for @databaseImportPreviewWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和外观设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。'**
+  String get databaseImportPreviewWarning;
+
+  /// No description provided for @databaseImportCollaborationWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'此备份包含本机协作副本。当服务器地址和登录账户匹配时，导入后可能继续同步。'**
+  String get databaseImportCollaborationWarning;
+
+  /// No description provided for @databaseImportConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖并导入'**
+  String get databaseImportConfirmAction;
+
+  /// No description provided for @databaseImportSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机数据库已导入，界面数据已刷新'**
+  String get databaseImportSucceeded;
+
+  /// No description provided for @databaseImportInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选文件不是有效的 OpenLogTool 数据库备份（{error}）'**
+  String databaseImportInvalid(String error);
+
+  /// No description provided for @databaseImportReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取所选备份：{error}'**
+  String databaseImportReadFailed(String error);
+
+  /// No description provided for @databaseImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入本机数据库失败：{error}'**
+  String databaseImportFailed(String error);
+
+  /// No description provided for @databaseClearTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空本机数据'**
+  String get databaseClearTitle;
+
+  /// No description provided for @databaseClearHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除本机记录、协作副本和自定义词条，并恢复内置词库默认内容'**
+  String get databaseClearHint;
+
+  /// No description provided for @databaseClearWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'此操作不可撤销。将清除本机的所有会话、点名记录、QTH 历史、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。'**
+  String get databaseClearWarning;
+
+  /// No description provided for @databaseClearConfirmationPhrase.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空全部数据'**
+  String get databaseClearConfirmationPhrase;
+
+  /// No description provided for @databaseClearConfirmationInstruction.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入“{phrase}”以确认：'**
+  String databaseClearConfirmationInstruction(String phrase);
+
+  /// No description provided for @databaseClearConfirmationLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认文本'**
+  String get databaseClearConfirmationLabel;
+
+  /// No description provided for @databaseClearConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久清空本机数据'**
+  String get databaseClearConfirmAction;
+
+  /// No description provided for @databaseClearSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机数据已清空，内置词库已恢复为默认内容'**
+  String get databaseClearSucceeded;
+
+  /// No description provided for @databaseClearFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空本机数据失败：{error}'**
+  String databaseClearFailed(String error);
+
+  /// No description provided for @databaseReplacementRefreshFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作已写入本机数据库，但界面刷新或内置词库恢复失败。请返回会话页后重试；如仍异常再重启应用。'**
+  String get databaseReplacementRefreshFailed;
+
+  /// No description provided for @databaseMaintenanceCollaborationBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前正在发布、加入或处理其他协作操作，请等待操作结束后再管理本机数据库。'**
+  String get databaseMaintenanceCollaborationBusy;
+
+  /// No description provided for @localCollaborationOperationBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'另一项协作操作仍在进行，请等待结束后重试。'**
+  String get localCollaborationOperationBusy;
+
+  /// No description provided for @localCollaborationRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前会话已不是本机协作副本，请刷新页面后重试。'**
+  String get localCollaborationRequired;
 }
 
 class _AppLocalizationsDelegate

@@ -241,6 +241,17 @@ class LogProvider with ChangeNotifier {
     await _loadLogs(propagateErrors: propagateErrors);
   }
 
+  /// Drops all in-memory state tied to the previous database contents, then
+  /// loads the selected session from the newly cleared/imported database.
+  Future<void> reloadAfterDatabaseReplacement(String? sessionId) async {
+    _undoStack.clear();
+    _pendingCanonicalLogs.clear();
+    _collaborationReadOnlySessions.clear();
+    _logs = [];
+    _safeNotify();
+    await reloadForSession(sessionId, propagateErrors: true);
+  }
+
   void _safeNotify() {
     if (_disposed) return;
     notifyListeners();
@@ -524,6 +535,19 @@ class LogProvider with ChangeNotifier {
     } catch (e, st) {
       debugPrint('[LogProvider] hardDeleteSession failed: $e\n$st');
       rethrow;
+    }
+  }
+
+  /// Drops every in-memory reference to a session that has already been
+  /// permanently removed from the local database.
+  Future<void> forgetDeletedSession(String sessionId) async {
+    _collaborationReadOnlySessions.remove(sessionId);
+    _undoStack.removeWhere((log) => log.sessionId == sessionId);
+    _pendingCanonicalLogs.removeWhere((_, log) => log.sessionId == sessionId);
+    if (_currentSessionId == sessionId) {
+      await reloadForSession(null, propagateErrors: true);
+    } else {
+      _safeNotify();
     }
   }
 

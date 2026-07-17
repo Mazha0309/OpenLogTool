@@ -47,7 +47,7 @@ void main() {
 
     expect(collaboration.discardCount, 1);
     expect(collaboration.closeCount, 1);
-    expect(find.text('会话已在本地关闭，等待同步确认'), findsOneWidget);
+    expect(find.text('已提交关闭共享会话请求，等待服务器同步确认'), findsOneWidget);
   });
 
   testWidgets('a complete live draft can be submitted before closing',
@@ -67,7 +67,7 @@ void main() {
 
     expect(collaboration.commitCount, 1);
     expect(collaboration.closeCount, 1);
-    expect(find.text('会话已在本地关闭，等待同步确认'), findsOneWidget);
+    expect(find.text('已提交关闭共享会话请求，等待服务器同步确认'), findsOneWidget);
   });
 
   testWidgets('an offline-queued draft never reports the session as closed',
@@ -89,7 +89,7 @@ void main() {
     expect(collaboration.commitCount, 1);
     expect(collaboration.closeCount, 0);
     expect(find.textContaining('会话没有关闭'), findsOneWidget);
-    expect(find.text('会话已在本地关闭，等待同步确认'), findsNothing);
+    expect(find.text('已提交关闭共享会话请求，等待服务器同步确认'), findsNothing);
   });
 
   testWidgets('active draft locks block every destructive close action',

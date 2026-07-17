@@ -92,11 +92,25 @@ void main() {
     expect(zh.convertCollaborationToLocal, '停止本机协作并转为本地会话');
     expect(
       zh.convertCollaborationToLocalConfirmation('周日晚间点名'),
-      contains('服务器上的共享会话、成员和其他设备不受影响'),
+      contains('服务器共享会话、成员和其他设备不受影响'),
     );
     expect(
       en.convertCollaborationToLocal,
       'Stop collaboration on this device and convert to a local session',
     );
+    expect(
+      zh.deleteLibraryItemConfirmation('FT-991A', '设备词库'),
+      '确定从设备词库中删除“FT-991A”吗？',
+    );
+    expect(
+      en.clearLibraryConfirmation('Radio library', 3),
+      contains('all 3 entries'),
+    );
+    expect(zh.localDataOperationsTitle, '本机数据');
+    expect(en.localDataOperationsTitle, 'On-device data');
+    expect(zh.databaseClearConfirmationPhrase, '清空全部数据');
+    expect(en.databaseClearConfirmationPhrase, 'DELETE ALL DATA');
+    expect(zh.databaseImportPreviewWarning, contains('登录凭据'));
+    expect(en.databaseImportPreviewWarning, contains('Server sessions'));
   });
 }

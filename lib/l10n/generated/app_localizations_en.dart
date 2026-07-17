@@ -188,19 +188,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get historySessionCloseTitle => 'Close session';
+  String get historySessionCloseTitle => 'Close only on this device';
 
   @override
   String historySessionCloseConfirmation(String title) {
-    return 'Close “$title”? It will remain available read-only in Session history.';
+    return 'Close “$title” only on this device? It will remain as read-only local history. If it is a collaboration replica, this device stops synchronizing and discards pending synchronization, conflicts, offline review records, and the local copy of any unsubmitted draft. The shared server session, members, and other devices are not affected.';
   }
 
   @override
-  String get historySessionClosed => 'Session closed';
+  String get historySessionClosed => 'Session closed on this device';
 
   @override
   String historySessionCloseFailed(String error) {
-    return 'Could not close session: $error';
+    return 'Could not close session on this device: $error';
   }
 
   @override
@@ -465,11 +465,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callsignRequired => 'Enter a callsign';
 
   @override
-  String get leaveSession => 'Leave collaboration session';
+  String get leaveSession => 'Leave server collaboration';
 
   @override
   String get leaveSessionConfirmation =>
-      'After leaving, the local replica remains read-only. A new invitation is required to participate again.';
+      'This sends a membership-leave request to the server. After it succeeds, the local replica remains read-only and a new invitation is required to participate again. If the server is unreachable, use a local-device action instead.';
 
   @override
   String get convertCollaborationToLocal =>
@@ -481,12 +481,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String convertCollaborationToLocalConfirmation(String title) {
-    return 'This stops collaboration synchronization for “$title” on this device and internally replaces the current session with an editable local copy. The shared server session, its members, and other devices are not affected. This cannot be undone.';
+    return 'This stops collaboration synchronization for “$title” on this device and replaces it with an editable local session. Only records already saved in the table are copied. An unsubmitted shared live draft stays on the server and is not added to the local session. The shared server session, its members, and other devices are not affected. This cannot be undone.';
+  }
+
+  @override
+  String convertCollaborationToLocalUnsyncedConfirmation(String title) {
+    return 'This stops synchronization for “$title” on this device and keeps records already saved in the table. Pending synchronization, conflicts, offline review records, and an unsubmitted live draft are permanently discarded from this device. The shared server session, members, and other devices are not affected. This cannot be undone.';
   }
 
   @override
   String get convertCollaborationToLocalSucceeded =>
       'Stopped collaboration on this device and converted to a local session';
+
+  @override
+  String get closeCollaborationLocally => 'Close only on this device';
+
+  @override
+  String get moreLocalCollaborationActions => 'More local actions';
 
   @override
   String get createEditableLocalCopy => 'Stop syncing and create local copy';
@@ -689,11 +700,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Title saved locally and awaiting synchronization';
 
   @override
-  String get closeCollaborationSessionTitle => 'Close collaboration session';
+  String get closeCollaborationSessionTitle => 'Close shared server session';
 
   @override
   String get closeCollaborationSessionMessage =>
-      'After closing, no member can add or change records. The owner can reopen the session later.';
+      'This sends a request to close the shared session on the server. After the server confirms it, no member can add or change records. The owner can reopen it later.';
+
+  @override
+  String get closeSharedSession => 'Close shared server session';
 
   @override
   String get closeCollaborationDraftNotEmpty =>
@@ -720,7 +734,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get closeSessionQueued =>
-      'Session closed locally and awaiting synchronization';
+      'Shared-session close requested; awaiting server synchronization';
 
   @override
   String get reopenCollaborationSessionTitle => 'Reopen collaboration session';
@@ -1385,6 +1399,50 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get deleteLibraryItemTitle => 'Delete library entry';
+
+  @override
+  String deleteLibraryItemConfirmation(String value, String name) {
+    return 'Delete “$value” from $name?';
+  }
+
+  @override
+  String get deleteLibraryItemAction => 'Delete';
+
+  @override
+  String libraryItemDeleted(String value) {
+    return 'Deleted: $value';
+  }
+
+  @override
+  String libraryItemDeleteFailed(String error) {
+    return 'Could not delete entry: $error';
+  }
+
+  @override
+  String clearLibraryTitle(String name) {
+    return 'Clear $name';
+  }
+
+  @override
+  String clearLibraryConfirmation(String name, int count) {
+    return 'This will delete all $count entries from $name. This cannot be undone. Continue?';
+  }
+
+  @override
+  String get clearLibraryAction => 'Clear all';
+
+  @override
+  String libraryCleared(String name) {
+    return 'Cleared $name';
+  }
+
+  @override
+  String libraryClearFailed(String error) {
+    return 'Could not clear library: $error';
+  }
+
+  @override
   String get libraryImportEmpty => 'The file has no library entries to import';
 
   @override
@@ -1533,6 +1591,216 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restoreDefaultSettings => 'Restore default settings';
+
+  @override
+  String get settingsTitle => 'App settings';
+
+  @override
+  String get snackbarLogTitle => 'In-app message log';
+
+  @override
+  String get snackbarLogHint =>
+      'Review bottom-of-screen messages shown during this run';
+
+  @override
+  String get snackbarLogEmpty =>
+      'No in-app messages have been recorded during this run';
+
+  @override
+  String get resetSettingsTitle => 'Restore default settings';
+
+  @override
+  String get resetSettingsConfirmation =>
+      'Restore appearance, layout, and export preferences to their defaults. Local records, lookup libraries, server accounts, and sign-in state are not affected.';
+
+  @override
+  String get resetSettingsConfirmAction => 'Restore defaults';
+
+  @override
+  String get resetSettingsSucceeded => 'Default settings restored';
+
+  @override
+  String resetSettingsFailed(String error) {
+    return 'Could not restore default settings: $error';
+  }
+
+  @override
+  String get localDataOperationsTitle => 'On-device data';
+
+  @override
+  String get localDataOperationsHint =>
+      'Diagnose, back up, restore, or reset this device\'s database. These actions do not directly change server data.';
+
+  @override
+  String get databaseDiagnosticsSection => 'Diagnostics';
+
+  @override
+  String get databaseBackupSection => 'Backup & restore';
+
+  @override
+  String get databaseDangerZoneSection => 'Danger zone';
+
+  @override
+  String get databaseStatusTitle => 'On-device database status';
+
+  @override
+  String get databaseStatusHint =>
+      'View the database version and row count for each table';
+
+  @override
+  String databaseStatusSchemaVersion(String version) {
+    return 'Database schema version: $version';
+  }
+
+  @override
+  String databaseStatusTableRow(String name, int count) {
+    return '$name: $count';
+  }
+
+  @override
+  String get databaseStatusUnknown => 'unknown';
+
+  @override
+  String databaseStatusLoadFailed(String error) {
+    return 'Could not read the on-device database status: $error';
+  }
+
+  @override
+  String get databaseExportTitle => 'Export on-device database';
+
+  @override
+  String get databaseExportHint =>
+      'Back up sessions, records, libraries, QTH history, local collaboration replicas, and pending-sync state';
+
+  @override
+  String get databaseExportDialogTitle =>
+      'Save OpenLogTool on-device database backup';
+
+  @override
+  String get databaseExportSucceeded => 'On-device database backup exported';
+
+  @override
+  String databaseExportFailed(String error) {
+    return 'Could not export the on-device database: $error';
+  }
+
+  @override
+  String get databaseImportTitle => 'Import on-device database';
+
+  @override
+  String get databaseImportHint =>
+      'Select and preview a JSON backup, then replace the complete on-device database';
+
+  @override
+  String get databaseImportPickerTitle =>
+      'Select an OpenLogTool on-device database backup';
+
+  @override
+  String get databaseImportPreviewTitle => 'Confirm backup import';
+
+  @override
+  String get databaseImportBackupVersion => 'Backup format version';
+
+  @override
+  String get databaseImportExportedAt => 'Exported';
+
+  @override
+  String get databaseImportUnknownTime => 'Not recorded';
+
+  @override
+  String get databaseImportSessionCount => 'Sessions';
+
+  @override
+  String get databaseImportLogCount => 'Net records';
+
+  @override
+  String get databaseImportDictionaryCount => 'Library entries';
+
+  @override
+  String get databaseImportCollaborationCount => 'Collaboration replicas';
+
+  @override
+  String get databaseImportPendingSyncCount => 'Pending sync/review items';
+
+  @override
+  String get databaseImportPreviewWarning =>
+      'Import completely replaces the current on-device database, including unsynchronized changes. Server sessions, sign-in credentials in secure storage, and appearance settings are not affected. Built-in library content is completed for this app version. This cannot be undone.';
+
+  @override
+  String get databaseImportCollaborationWarning =>
+      'This backup contains local collaboration replicas. Synchronization may resume after import when the configured server and signed-in account match.';
+
+  @override
+  String get databaseImportConfirmAction => 'Replace and import';
+
+  @override
+  String get databaseImportSucceeded =>
+      'On-device database imported and the interface has been refreshed';
+
+  @override
+  String databaseImportInvalid(String error) {
+    return 'The selected file is not a valid OpenLogTool database backup ($error)';
+  }
+
+  @override
+  String databaseImportReadFailed(String error) {
+    return 'Could not read the selected backup: $error';
+  }
+
+  @override
+  String databaseImportFailed(String error) {
+    return 'Could not import the on-device database: $error';
+  }
+
+  @override
+  String get databaseClearTitle => 'Clear on-device data';
+
+  @override
+  String get databaseClearHint =>
+      'Remove local records, collaboration replicas, and custom library entries, then restore built-in library defaults';
+
+  @override
+  String get databaseClearWarning =>
+      'This cannot be undone. It removes every on-device session, net record, QTH history row, collaboration replica, pending-sync queue, and custom library entry. It does not delete or close server sessions, sign you out, or reset appearance. Built-in libraries are restored to their defaults.';
+
+  @override
+  String get databaseClearConfirmationPhrase => 'DELETE ALL DATA';
+
+  @override
+  String databaseClearConfirmationInstruction(String phrase) {
+    return 'Enter “$phrase” to confirm:';
+  }
+
+  @override
+  String get databaseClearConfirmationLabel => 'Confirmation text';
+
+  @override
+  String get databaseClearConfirmAction => 'Permanently clear on-device data';
+
+  @override
+  String get databaseClearSucceeded =>
+      'On-device data cleared and built-in libraries restored to their defaults';
+
+  @override
+  String databaseClearFailed(String error) {
+    return 'Could not clear on-device data: $error';
+  }
+
+  @override
+  String get databaseReplacementRefreshFailed =>
+      'The on-device database was changed, but the interface refresh or built-in library restore failed. Return to Sessions and try again; restart the app only if it remains inconsistent.';
+
+  @override
+  String get databaseMaintenanceCollaborationBusy =>
+      'A collaboration publish, join, or other operation is in progress. Wait for it to end before managing the on-device database.';
+
+  @override
+  String get localCollaborationOperationBusy =>
+      'Another collaboration operation is still in progress. Wait for it to end and try again.';
+
+  @override
+  String get localCollaborationRequired =>
+      'The current session is no longer an on-device collaboration replica. Refresh the page and try again.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -1719,19 +1987,19 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
-  String get historySessionCloseTitle => 'Close session';
+  String get historySessionCloseTitle => 'Close only on this device';
 
   @override
   String historySessionCloseConfirmation(String title) {
-    return 'Close “$title”? It will remain available read-only in Session history.';
+    return 'Close “$title” only on this device? It will remain as read-only local history. If it is a collaboration replica, this device stops synchronizing and discards pending synchronization, conflicts, offline review records, and the local copy of any unsubmitted draft. The shared server session, members, and other devices are not affected.';
   }
 
   @override
-  String get historySessionClosed => 'Session closed';
+  String get historySessionClosed => 'Session closed on this device';
 
   @override
   String historySessionCloseFailed(String error) {
-    return 'Could not close session: $error';
+    return 'Could not close session on this device: $error';
   }
 
   @override
@@ -1976,11 +2244,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get callsignRequired => 'Enter a callsign';
 
   @override
-  String get leaveSession => 'Leave collaboration session';
+  String get leaveSession => 'Leave server collaboration';
 
   @override
   String get leaveSessionConfirmation =>
-      'After leaving, the local replica remains read-only. A new invitation is required to participate again.';
+      'This sends a membership-leave request to the server. After it succeeds, the local replica remains read-only and a new invitation is required to participate again. If the server is unreachable, use a local-device action instead.';
 
   @override
   String get convertCollaborationToLocal =>
@@ -1992,12 +2260,23 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String convertCollaborationToLocalConfirmation(String title) {
-    return 'This stops collaboration synchronization for “$title” on this device and internally replaces the current session with an editable local copy. The shared server session, its members, and other devices are not affected. This cannot be undone.';
+    return 'This stops collaboration synchronization for “$title” on this device and replaces it with an editable local session. Only records already saved in the table are copied. An unsubmitted shared live draft stays on the server and is not added to the local session. The shared server session, its members, and other devices are not affected. This cannot be undone.';
+  }
+
+  @override
+  String convertCollaborationToLocalUnsyncedConfirmation(String title) {
+    return 'This stops synchronization for “$title” on this device and keeps records already saved in the table. Pending synchronization, conflicts, offline review records, and an unsubmitted live draft are permanently discarded from this device. The shared server session, members, and other devices are not affected. This cannot be undone.';
   }
 
   @override
   String get convertCollaborationToLocalSucceeded =>
       'Stopped collaboration on this device and converted to a local session';
+
+  @override
+  String get closeCollaborationLocally => 'Close only on this device';
+
+  @override
+  String get moreLocalCollaborationActions => 'More local actions';
 
   @override
   String get confirm => 'Confirm';
@@ -2487,6 +2766,50 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
+  String get deleteLibraryItemTitle => 'Delete library entry';
+
+  @override
+  String deleteLibraryItemConfirmation(String value, String name) {
+    return 'Delete “$value” from $name?';
+  }
+
+  @override
+  String get deleteLibraryItemAction => 'Delete';
+
+  @override
+  String libraryItemDeleted(String value) {
+    return 'Deleted: $value';
+  }
+
+  @override
+  String libraryItemDeleteFailed(String error) {
+    return 'Could not delete entry: $error';
+  }
+
+  @override
+  String clearLibraryTitle(String name) {
+    return 'Clear $name';
+  }
+
+  @override
+  String clearLibraryConfirmation(String name, int count) {
+    return 'This will delete all $count entries from $name. This cannot be undone. Continue?';
+  }
+
+  @override
+  String get clearLibraryAction => 'Clear all';
+
+  @override
+  String libraryCleared(String name) {
+    return 'Cleared $name';
+  }
+
+  @override
+  String libraryClearFailed(String error) {
+    return 'Could not clear library: $error';
+  }
+
+  @override
   String get libraryImportEmpty => 'The file has no library entries to import';
 
   @override
@@ -2529,4 +2852,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get fontPreviewSample => 'OpenLogTool · CQ CQ · Net log 123';
+
+  @override
+  String get localCollaborationOperationBusy =>
+      'Another collaboration operation is still in progress. Wait for it to end and try again.';
+
+  @override
+  String get localCollaborationRequired =>
+      'The current session is no longer an on-device collaboration replica. Refresh the page and try again.';
 }

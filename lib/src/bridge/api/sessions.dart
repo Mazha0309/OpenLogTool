@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 import '../models/session.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `reopen_local_session_from_pool`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LocalCopyLogRow`, `SessionRow`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from_row`, `from_row`
+// These functions are ignored because they are not marked as `pub`: `close_session_locally_from_pool`, `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `reopen_local_session_from_pool`, `replace_collaboration_session_locally_from_pool`, `replace_collaboration_session_locally_in_tx`, `stop_collaboration_session_locally_from_pool`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LocalCopyLogRow`, `LocalReplacementStatus`, `SessionRow`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `from_row`, `from_row`
 
 Future<Session> createSession({required String title}) =>
     RustLib.instance.api.crateApiSessionsCreateSession(title: title);
@@ -51,11 +51,32 @@ Future<Session> convertCollaborationSessionToLocal(
     RustLib.instance.api.crateApiSessionsConvertCollaborationSessionToLocal(
         sessionId: sessionId);
 
-/// Permanently removes a closed session from this device.
+/// Stops synchronization for one collaboration replica on this device.
+///
+/// The currently materialized, non-deleted logs are preserved in an
+/// independent local session with new identifiers. All replica-only state,
+/// including pending mutations, conflicts, cached live drafts, and offline
+/// records, is discarded. No request or mutation is sent to the server.
+Future<Session> stopCollaborationSessionLocally({required String sessionId}) =>
+    RustLib.instance.api
+        .crateApiSessionsStopCollaborationSessionLocally(sessionId: sessionId);
+
+/// Closes a session only on this device and returns its canonical local row.
+///
+/// A local-only session keeps its identifier. A collaboration replica is
+/// replaced by a closed local-only session with new session and log identifiers
+/// so the server session, membership, and other devices remain untouched.
+Future<Session> closeSessionLocally({required String sessionId}) =>
+    RustLib.instance.api
+        .crateApiSessionsCloseSessionLocally(sessionId: sessionId);
+
+/// Permanently removes a session from this device.
 ///
 /// This is deliberately a local-only operation. Deleting the collaboration
 /// binding also cascades through every local replica table, but no mutation is
-/// sent to the server and the shared server session is left untouched.
+/// sent to the server and the shared server session is left untouched. Callers
+/// that keep a selected-session pointer must clear it before or immediately
+/// after deleting that selected row.
 Future<void> hardDeleteSession({required String sessionId}) =>
     RustLib.instance.api
         .crateApiSessionsHardDeleteSession(sessionId: sessionId);

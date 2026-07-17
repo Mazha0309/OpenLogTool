@@ -27,8 +27,11 @@ pub async fn search_dict(
 pub async fn add_dict_item(item: &DictItem) -> anyhow::Result<()> {
     let pool = get_db()?;
     sqlx::query(
-        "INSERT OR IGNORE INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(dict_type, raw) DO UPDATE SET
+             updated_at = excluded.updated_at,
+             deleted_at = NULL",
     )
     .bind(&item.dict_type)
     .bind(&item.raw)
@@ -50,6 +53,29 @@ pub async fn upsert_dict_item(item: &DictItem) -> anyhow::Result<()> {
          ON CONFLICT(dict_type, raw) DO UPDATE SET
              pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
              abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
+             updated_at = excluded.updated_at,
+             deleted_at = NULL",
+    )
+    .bind(&item.dict_type)
+    .bind(&item.raw)
+    .bind(&item.pinyin)
+    .bind(&item.abbreviation)
+    .bind(&item.sync_id)
+    .bind(&item.created_at)
+    .bind(&item.updated_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn upsert_dict_item_if_active(item: &DictItem) -> anyhow::Result<()> {
+    let pool = get_db()?;
+    sqlx::query(
+        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(dict_type, raw) DO UPDATE SET
+             pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
+             abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
              updated_at = excluded.updated_at
          WHERE deleted_at IS NULL",
     )
@@ -62,6 +88,39 @@ pub async fn upsert_dict_item(item: &DictItem) -> anyhow::Result<()> {
     .bind(&item.updated_at)
     .execute(pool)
     .await?;
+    Ok(())
+}
+
+/// Upserts every item in a single transaction.
+///
+/// This is the explicit user-import path, so conflicts revive tombstoned rows
+/// in the same way as [upsert_dict_item].
+pub async fn bulk_upsert_dict_items(items: &[DictItem]) -> anyhow::Result<()> {
+    let pool = get_db()?;
+    let mut tx = pool.begin().await?;
+
+    for item in items {
+        sqlx::query(
+            "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(dict_type, raw) DO UPDATE SET
+                 pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
+                 abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
+                 updated_at = excluded.updated_at,
+                 deleted_at = NULL",
+        )
+        .bind(&item.dict_type)
+        .bind(&item.raw)
+        .bind(&item.pinyin)
+        .bind(&item.abbreviation)
+        .bind(&item.sync_id)
+        .bind(&item.created_at)
+        .bind(&item.updated_at)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -92,6 +151,22 @@ pub async fn get_dict_item_by_raw(
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|r| r.into_item()))
+}
+
+pub async fn soft_delete_dict_item(dict_type: &str, raw: &str) -> anyhow::Result<bool> {
+    let pool = get_db()?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let result = sqlx::query(
+        "UPDATE dictionary_items SET deleted_at = ?, updated_at = ?
+         WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+    )
+    .bind(&now)
+    .bind(&now)
+    .bind(dict_type)
+    .bind(raw)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() > 0)
 }
 
 pub async fn soft_delete_dict_items(dict_type: &str) -> anyhow::Result<()> {

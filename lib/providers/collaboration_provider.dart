@@ -219,6 +219,16 @@ typedef LiveDraftAtomicLockReleaser = Future<void> Function(
   String field,
   LiveDraftLockDto lock,
 );
+typedef _LiveDraftContext = ({
+  ServerApi api,
+  LocalCollaborationBinding binding,
+  String deviceId,
+  int epoch,
+});
+typedef _LiveDraftGuard = ({
+  LocalCollaborationBinding binding,
+  int epoch,
+});
 
 @visibleForTesting
 final class LiveDraftAtomicPatchExecution {
@@ -621,6 +631,109 @@ bool shouldRefreshLiveDraftAfterTransportTransition(
     current == CollaborationTransportPhase.online &&
     previous != CollaborationTransportPhase.online;
 
+/// Returns whether replacing the synchronized replica can use the guarded,
+/// clean-conversion path. The replacement is an active local recorder even
+/// when the source replica is already closed.
+@visibleForTesting
+bool canSafelyConvertCollaborationSessionToLocal({
+  required bool hasCurrentBinding,
+  required bool operationInProgress,
+  required CollaborationState state,
+  required CollaborationSyncState? syncState,
+  required bool hasOfflineRecords,
+}) {
+  final sync = syncState;
+  return hasCurrentBinding &&
+      !operationInProgress &&
+      state == CollaborationState.ready &&
+      sync != null &&
+      sync.replicaPhase == CollaborationReplicaPhase.ready &&
+      sync.transportPhase == CollaborationTransportPhase.online &&
+      sync.pendingCount == 0 &&
+      sync.conflictCount == 0 &&
+      sync.rejectedCount == 0 &&
+      !hasOfflineRecords &&
+      !sync.remoteCommitPendingLocalApply &&
+      sync.lastAppliedSeq >= sync.serverHeadSeq;
+}
+
+/// Lets device-local destructive actions proceed even if an already-running
+/// HTTP request or WebSocket shutdown never settles. Both inputs must already
+/// have been invalidated/detached before this bounded grace period begins.
+@visibleForTesting
+Future<void> waitForCollaborationLocalQuiescence(
+  Iterable<Future<void>> pending, {
+  Duration timeout = const Duration(milliseconds: 350),
+}) async {
+  try {
+    await Future.wait<void>([
+      for (final future in pending) future.catchError((_) {}),
+    ]).timeout(timeout);
+  } on TimeoutException {
+    // Generation invalidation prevents future network responses from starting
+    // new replica writes. Any SQLite transaction already in progress remains
+    // serialized with the following device-local transaction.
+  }
+}
+
+/// Rejects a late live-draft result after local maintenance or a binding
+/// switch, including when an imported backup restores the same server/session
+/// identifiers in a newer state epoch.
+@visibleForTesting
+bool isLiveDraftResultContextCurrent({
+  required bool disposed,
+  required bool operationInProgress,
+  required int expectedEpoch,
+  required int currentEpoch,
+  required LocalCollaborationBinding expectedBinding,
+  required LocalCollaborationBinding? currentBinding,
+  required String? currentSessionId,
+}) {
+  return !disposed &&
+      !operationInProgress &&
+      expectedEpoch == currentEpoch &&
+      currentBinding != null &&
+      currentBinding.serverInstanceId == expectedBinding.serverInstanceId &&
+      currentBinding.accountId == expectedBinding.accountId &&
+      currentBinding.sessionId == expectedBinding.sessionId &&
+      currentSessionId == expectedBinding.sessionId;
+}
+
+/// A serial executor whose current tail can be detached without waiting for it.
+///
+/// Device-local collaboration escape hatches use [detach] after invalidating
+/// the old request context. A permanently stalled transport can then settle in
+/// the detached chain without blocking draft work for a later collaboration.
+@visibleForTesting
+final class ResettableLiveDraftSerialExecutor {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> run<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    final previous = _tail;
+    _tail = () async {
+      try {
+        await previous;
+      } catch (_) {
+        // Each caller receives its own error; a failed action must not poison
+        // later operations in the same chain.
+      }
+      try {
+        completer.complete(await action());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    }();
+    return completer.future;
+  }
+
+  Future<void> detach() {
+    final detached = _tail;
+    _tail = Future<void>.value();
+    return detached;
+  }
+}
+
 typedef LiveDraftAtomicAttempt<T> = Future<T> Function();
 typedef LiveDraftAtomicConflictRebaser = Future<void> Function();
 
@@ -661,6 +774,7 @@ Future<LiveDraftAtomicPatchExecution> executeLiveDraftAtomicPatch({
   required LiveDraftAtomicPatchSender sendPatch,
   required LiveDraftAtomicLockReleaser releaseLock,
   required void Function(int clientSeq) onClientSeqChanged,
+  void Function()? assertCurrent,
   DateTime? now,
 }) async {
   if (values.isEmpty) {
@@ -689,6 +803,7 @@ Future<LiveDraftAtomicPatchExecution> executeLiveDraftAtomicPatch({
   final currentTime = now ?? DateTime.now();
   try {
     for (final field in orderedFields) {
+      assertCurrent?.call();
       final existing = ownedLocks[field];
       if (existing != null &&
           existing.field == field &&
@@ -697,6 +812,7 @@ Future<LiveDraftAtomicPatchExecution> executeLiveDraftAtomicPatch({
         continue;
       }
       final acquired = await acquireLock(field);
+      assertCurrent?.call();
       leases[field] = acquired;
       acquiredHere[field] = acquired;
     }
@@ -713,18 +829,25 @@ Future<LiveDraftAtomicPatchExecution> executeLiveDraftAtomicPatch({
     var clientSeq = nextClientSeq;
     late LiveDraftPatchResultDto result;
     try {
+      assertCurrent?.call();
       result = await sendPatch(clientSeq, updates);
+      assertCurrent?.call();
     } on ServerApiException catch (error) {
+      assertCurrent?.call();
       if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_GAP') {
         final expected = _expectedLiveDraftClientSeq(error);
         if (expected == null) rethrow;
         onClientSeqChanged(expected - 1);
         clientSeq = expected;
+        assertCurrent?.call();
         result = await sendPatch(clientSeq, updates);
+        assertCurrent?.call();
       } else if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_REUSED') {
         onClientSeqChanged(clientSeq);
         clientSeq += 1;
+        assertCurrent?.call();
         result = await sendPatch(clientSeq, updates);
+        assertCurrent?.call();
       } else {
         rethrow;
       }
@@ -831,7 +954,8 @@ class CollaborationProvider with ChangeNotifier {
   bool _conflictsNeedRefresh = false;
   bool _conflictReloadScheduled = false;
   int _liveDraftGeneration = 0;
-  Future<void> _liveDraftSerial = Future<void>.value();
+  final ResettableLiveDraftSerialExecutor _liveDraftSerial =
+      ResettableLiveDraftSerialExecutor();
   Timer? _liveDraftRenewalTimer;
 
   CollaborationState _state = CollaborationState.localOnly;
@@ -935,20 +1059,14 @@ class CollaborationProvider with ChangeNotifier {
   /// A direct conversion deliberately removes this device's synchronized
   /// replica. Only expose it after the serial synchronizer has caught up and
   /// every recoverable local operation is durably represented by the server.
-  bool get canConvertCurrentSessionDirectly {
-    final sync = _syncState;
-    return hasCurrentSessionBinding &&
-        _state == CollaborationState.ready &&
-        sync != null &&
-        sync.replicaPhase == CollaborationReplicaPhase.ready &&
-        sync.transportPhase == CollaborationTransportPhase.online &&
-        sync.pendingCount == 0 &&
-        sync.conflictCount == 0 &&
-        sync.rejectedCount == 0 &&
-        _offlineRecords.isEmpty &&
-        !sync.remoteCommitPendingLocalApply &&
-        sync.lastAppliedSeq >= sync.serverHeadSeq;
-  }
+  bool get canConvertCurrentSessionDirectly =>
+      canSafelyConvertCollaborationSessionToLocal(
+        hasCurrentBinding: hasCurrentSessionBinding,
+        operationInProgress: _operationInProgress,
+        state: _state,
+        syncState: _syncState,
+        hasOfflineRecords: _offlineRecords.isNotEmpty,
+      );
 
   CollaborationSyncState? get syncState => _syncState;
   CollaborationTransportPhase get transportPhase =>
@@ -970,7 +1088,9 @@ class CollaborationProvider with ChangeNotifier {
   bool get canonicalSessionClosed => _syncState?.sessionClosed ?? false;
   SessionRole? get effectiveRole => _syncState?.role ?? _membership?.role;
   bool get canEditCurrentSession =>
-      _state == CollaborationState.ready && (_syncState?.canEdit ?? false);
+      !_operationInProgress &&
+      _state == CollaborationState.ready &&
+      (_syncState?.canEdit ?? false);
   bool get canResolveConflicts => _currentConflictIdentity() != null;
   bool get hasOpenSessionConflict {
     final sessionId = _binding?.sessionId;
@@ -1040,6 +1160,7 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   bool get canEditLiveDraft =>
+      !_operationInProgress &&
       canViewLiveDraft &&
       _state == CollaborationState.ready &&
       !canonicalSessionClosed &&
@@ -1671,9 +1792,10 @@ class CollaborationProvider with ChangeNotifier {
 
   Future<void> _applyLiveDraftControl(JsonObject message) =>
       _serializeLiveDraft(() async {
-        final binding = _binding;
-        if (binding == null ||
-            !canViewLiveDraft ||
+        final context = _tryLiveDraftContext(requireEdit: false);
+        final binding = context?.binding;
+        if (context == null ||
+            binding == null ||
             message['sessionId'] != binding.sessionId) {
           return;
         }
@@ -1720,7 +1842,9 @@ class CollaborationProvider with ChangeNotifier {
         _reconcileOwnedLiveDraftLocks(projection.snapshot.locks);
         _clearLiveDraftError();
         _safeNotify();
-        if (draftChanged) await _persistLiveDraftState();
+        if (draftChanged) {
+          await _persistLiveDraftState(_guardFor(context));
+        }
       });
 
   Future<LiveDraftLockDto> acquireLiveDraftField(String field) =>
@@ -1738,6 +1862,7 @@ class CollaborationProvider with ChangeNotifier {
           field: field,
           deviceId: context.deviceId,
         );
+        _assertLiveDraftContextCurrent(context);
         _ownedLiveDraftLocks = {..._ownedLiveDraftLocks, field: lock};
         _replaceLiveDraftLock(lock);
         _ensureLiveDraftRenewalTimer();
@@ -1765,7 +1890,9 @@ class CollaborationProvider with ChangeNotifier {
             leaseId: lock.leaseId,
             deviceId: context.deviceId,
           );
+          if (!_isLiveDraftContextCurrent(context)) return;
         } on ServerApiException catch (error) {
+          if (!_isLiveDraftContextCurrent(context)) return;
           if (!{'LIVE_DRAFT_LOCK_NOT_FOUND', 'LIVE_DRAFT_LOCK_EXPIRED'}
               .contains(error.code)) {
             _setLiveDraftError(error.code, error.message);
@@ -1877,7 +2004,13 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   void _scheduleAutomaticLiveDraftTimePersistence() {
-    unawaited(_serializeLiveDraft(_persistLiveDraftState));
+    _runLiveDraftInBackground(
+      _serializeLiveDraft(() async {
+        final guard = _tryLiveDraftGuard();
+        if (guard == null) return;
+        await _persistLiveDraftState(guard);
+      }),
+    );
   }
 
   Future<LiveDraftCommitDisposition> commitCurrentLiveDraft() =>
@@ -1891,7 +2024,9 @@ class CollaborationProvider with ChangeNotifier {
         final mutationId = _uuidV4();
         try {
           await _flushDirtyLiveDraftFields();
+          _assertLiveDraftContextCurrent(context);
         } on ServerApiException catch (error) {
+          _assertLiveDraftContextCurrent(context);
           if (!error.retryable) rethrow;
           final queued = await _queueOfflineRecord(
             context,
@@ -1917,7 +2052,7 @@ class CollaborationProvider with ChangeNotifier {
             'OFFLINE_RECORD_QUEUED',
             '网络不可用，记录已保存到本机，恢复连接后将检查是否可安全提交',
           );
-          await _persistLiveDraftState();
+          await _persistLiveDraftState(_guardFor(context));
           _safeNotify();
           return LiveDraftCommitDisposition.queuedOffline;
         }
@@ -1940,6 +2075,7 @@ class CollaborationProvider with ChangeNotifier {
             syncId: mutationId,
             idempotencyKey: mutationId,
           );
+          _assertLiveDraftContextCurrent(context);
           _liveDraftSnapshot = LiveDraftSnapshotDto(
             draft: committed.nextDraft,
             locks: const [],
@@ -1952,15 +2088,16 @@ class CollaborationProvider with ChangeNotifier {
           _liveDraftBaseRevisions = const {};
           _clearOwnedLiveDraftLocks();
           _clearLiveDraftError();
-          await _persistLiveDraftState();
+          await _persistLiveDraftState(_guardFor(context));
           await _refreshLogsAfterLiveDraftCommit(
-            binding: context.binding,
-            deviceId: context.deviceId,
+            context: context,
             event: committed.event,
           );
+          _assertLiveDraftContextCurrent(context);
           _safeNotify();
           return LiveDraftCommitDisposition.committed;
         } on ServerApiException catch (error) {
+          _assertLiveDraftContextCurrent(context);
           if (!error.retryable) {
             _setLiveDraftError(error.code, error.message);
             if ({
@@ -1968,7 +2105,7 @@ class CollaborationProvider with ChangeNotifier {
               'LIVE_DRAFT_VERSION_CONFLICT',
               'LIVE_DRAFT_BUSY',
             }.contains(error.code)) {
-              unawaited(refreshLiveDraft());
+              _runLiveDraftInBackground(refreshLiveDraft());
             }
             rethrow;
           }
@@ -1995,7 +2132,7 @@ class CollaborationProvider with ChangeNotifier {
             'OFFLINE_RECORD_QUEUED',
             '网络不可用，记录已保存到本机，恢复连接后将检查是否可安全提交',
           );
-          await _persistLiveDraftState();
+          await _persistLiveDraftState(_guardFor(context));
           _safeNotify();
           return LiveDraftCommitDisposition.queuedOffline;
         }
@@ -2013,11 +2150,13 @@ class CollaborationProvider with ChangeNotifier {
             expectedDraftVersion: snapshot.draft.version,
             idempotencyKey: _uuidV4(),
           );
+          _assertLiveDraftContextCurrent(context);
         } on ServerApiException catch (error) {
+          _assertLiveDraftContextCurrent(context);
           _setLiveDraftError(error.code, error.message);
           if ({'LIVE_DRAFT_VERSION_CONFLICT', 'LIVE_DRAFT_BUSY'}
               .contains(error.code)) {
-            unawaited(refreshLiveDraft());
+            _runLiveDraftInBackground(refreshLiveDraft());
           }
           rethrow;
         }
@@ -2033,7 +2172,7 @@ class CollaborationProvider with ChangeNotifier {
         _liveDraftBaseRevisions = const {};
         _clearOwnedLiveDraftLocks();
         _clearLiveDraftError();
-        await _persistLiveDraftState();
+        await _persistLiveDraftState(_guardFor(context));
         _safeNotify();
       });
 
@@ -2050,16 +2189,22 @@ class CollaborationProvider with ChangeNotifier {
           }
         }
         if (record == null) throw StateError('OFFLINE_RECORD_NOT_FOUND');
+        final localGuard = _tryLiveDraftGuard();
+        if (localGuard == null) {
+          throw StateError('LIVE_DRAFT_CONTEXT_CHANGED');
+        }
         if (resolution == OfflineRecordResolution.discard) {
           await _updateOfflineRecord(
             record,
             state: OfflineRecordState.discarded,
             resolution: resolution,
+            guard: localGuard,
           );
           return;
         }
         final context = _requireLiveDraftContext(requireEdit: true);
         await _copyOfflineRecordIntoCurrentDraft(record, context);
+        _assertLiveDraftContextCurrent(context);
         if (resolution == OfflineRecordResolution.submitAsDuplicate) {
           final snapshot = _liveDraftSnapshot!;
           final committed = await context.api.commitLiveDraft(
@@ -2069,6 +2214,7 @@ class CollaborationProvider with ChangeNotifier {
             syncId: record.mutationId,
             idempotencyKey: record.mutationId,
           );
+          _assertLiveDraftContextCurrent(context);
           _liveDraftSnapshot = LiveDraftSnapshotDto(
             draft: committed.nextDraft,
             locks: const [],
@@ -2081,17 +2227,18 @@ class CollaborationProvider with ChangeNotifier {
           _liveDraftBaseRevisions = const {};
           _clearOwnedLiveDraftLocks();
           await _refreshLogsAfterLiveDraftCommit(
-            binding: context.binding,
-            deviceId: context.deviceId,
+            context: context,
             event: committed.event,
           );
+          _assertLiveDraftContextCurrent(context);
         }
         await _updateOfflineRecord(
           record,
           state: OfflineRecordState.resolved,
           resolution: resolution,
+          guard: _guardFor(context),
         );
-        await _persistLiveDraftState();
+        await _persistLiveDraftState(_guardFor(context));
         _safeNotify();
       });
 
@@ -2208,7 +2355,9 @@ class CollaborationProvider with ChangeNotifier {
   /// Session. This is a device-local disaster-recovery action and deliberately
   /// does not require an account, server capabilities, or network access.
   Future<void> createEditableLocalCopy({required String title}) async {
-    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
     final sessions = _requireSessions();
     final logs = _requireLogs();
     final sourceSessionId = sessions.currentSessionId;
@@ -2216,7 +2365,7 @@ class CollaborationProvider with ChangeNotifier {
     if (sourceSessionId == null ||
         sourceBinding == null ||
         sourceBinding.sessionId != sourceSessionId) {
-      throw StateError('当前会话不是协作会话');
+      throw StateError('LOCAL_COLLABORATION_REQUIRED');
     }
 
     _operationInProgress = true;
@@ -2225,18 +2374,22 @@ class CollaborationProvider with ChangeNotifier {
     _clearError();
     _stopSynchronization();
     _safeNotify();
-    var copied = false;
     try {
       final local = await sessions.copyCurrentCollaborationSessionToLocal(
         title: title,
       );
-      copied = true;
       _publishingSessionId = null;
       _clearScopedState();
       // Keep the preserved server replica read-only, while the newly selected
       // local fork must not inherit that session-scoped permission marker.
       logs.setCollaborationReadOnly(sourceSessionId, true);
       logs.setCollaborationReadOnly(local.sessionId, false);
+      if (sessions.currentSessionId != local.sessionId) {
+        // The copy is durable, but a concurrent history action selected
+        // another session. Preserve that selection instead of moving only the
+        // log projection to the new copy.
+        return;
+      }
       await logs.reloadForSession(local.sessionId, propagateErrors: true);
       _state = CollaborationState.localOnly;
     } catch (error) {
@@ -2245,7 +2398,7 @@ class CollaborationProvider with ChangeNotifier {
     } finally {
       _operationInProgress = false;
       _safeNotify();
-      if (!copied) _scheduleRefresh();
+      _scheduleRefresh();
     }
   }
 
@@ -2253,7 +2406,9 @@ class CollaborationProvider with ChangeNotifier {
   /// replica with an independent local Session. The server Session,
   /// membership, and other devices are deliberately left untouched.
   Future<void> convertCurrentSessionToLocal() async {
-    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
     if (!canConvertCurrentSessionDirectly) {
       throw StateError('COLLABORATION_LOCAL_CONVERSION_NOT_READY');
     }
@@ -2264,36 +2419,266 @@ class CollaborationProvider with ChangeNotifier {
     if (sourceSessionId == null ||
         sourceBinding == null ||
         sourceBinding.sessionId != sourceSessionId) {
-      throw StateError('当前会话不是协作会话');
+      throw StateError('LOCAL_COLLABORATION_REQUIRED');
     }
 
     _operationInProgress = true;
     _stateEpoch += 1;
     _refreshGeneration += 1;
     _clearError();
+    final quiescence = _suspendForDeviceLocalMutation();
     _safeNotify();
-    var converted = false;
     try {
-      // Let already queued live-draft writes finish before tearing down their
-      // network context, then wait for the synchronizer itself to stop before
-      // Rust removes its binding and queue tables.
-      await _liveDraftSerial;
-      await _stopSynchronizationAndWait();
+      await waitForCollaborationLocalQuiescence([
+        quiescence.liveDraft,
+        quiescence.synchronization,
+      ]);
       final local = await sessions.convertCurrentCollaborationSessionToLocal();
-      converted = true;
-      _publishingSessionId = null;
-      _clearScopedState();
-      logs.setCollaborationReadOnly(sourceSessionId, false);
-      logs.setCollaborationReadOnly(local.sessionId, false);
-      await logs.reloadForSession(local.sessionId, propagateErrors: true);
-      _state = CollaborationState.localOnly;
+      await _finishCommittedLocalReplacement(
+        sessions: sessions,
+        logs: logs,
+        sourceSessionId: sourceSessionId,
+        localSessionId: local.sessionId,
+      );
     } catch (error) {
       _setError(_localErrorCode(error), error.toString());
       rethrow;
     } finally {
       _operationInProgress = false;
       _safeNotify();
-      if (!converted) _scheduleRefresh();
+      _scheduleRefresh();
+    }
+  }
+
+  /// Stops this device's collaboration replica even when the server cannot be
+  /// reached. Saved, materialized rows become an independent local session;
+  /// pending synchronization metadata and draft-only state are discarded.
+  /// Nothing is sent to or changed on the server.
+  Future<void> stopCurrentSessionLocally() async {
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('LOCAL_COLLABORATION_REQUIRED');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    final quiescence = _suspendForDeviceLocalMutation();
+    _safeNotify();
+    try {
+      await waitForCollaborationLocalQuiescence([
+        quiescence.liveDraft,
+        quiescence.synchronization,
+      ]);
+      final local = await sessions.stopCurrentCollaborationSessionLocally();
+      await _finishCommittedLocalReplacement(
+        sessions: sessions,
+        logs: logs,
+        sourceSessionId: sourceSessionId,
+        localSessionId: local.sessionId,
+      );
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      _scheduleRefresh();
+    }
+  }
+
+  /// Stops synchronization and keeps the materialized replica as a closed,
+  /// read-only local history session. The shared server session is not closed.
+  Future<void> closeCurrentSessionLocally() async {
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('LOCAL_COLLABORATION_REQUIRED');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    final quiescence = _suspendForDeviceLocalMutation();
+    _safeNotify();
+    try {
+      await waitForCollaborationLocalQuiescence([
+        quiescence.liveDraft,
+        quiescence.synchronization,
+      ]);
+      final local = await sessions.closeSessionLocally(sourceSessionId);
+      await _finishCommittedLocalReplacement(
+        sessions: sessions,
+        logs: logs,
+        sourceSessionId: sourceSessionId,
+        localSessionId: local.sessionId,
+      );
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      _scheduleRefresh();
+    }
+  }
+
+  /// Permanently removes the current replica and all of its local data. This is
+  /// a device-only action and never deletes or closes the server session.
+  Future<void> deleteCurrentSessionLocally() async {
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    final sourceSessionId = sessions.currentSessionId;
+    final sourceBinding = binding;
+    if (sourceSessionId == null ||
+        sourceBinding == null ||
+        sourceBinding.sessionId != sourceSessionId) {
+      throw StateError('LOCAL_COLLABORATION_REQUIRED');
+    }
+
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    final quiescence = _suspendForDeviceLocalMutation();
+    _safeNotify();
+    try {
+      await waitForCollaborationLocalQuiescence([
+        quiescence.liveDraft,
+        quiescence.synchronization,
+      ]);
+      await sessions.deleteSessionLocally(sourceSessionId);
+      _publishingSessionId = null;
+      _clearScopedState();
+      logs.setCollaborationReadOnly(sourceSessionId, false);
+      _state = CollaborationState.localOnly;
+      try {
+        await logs.forgetDeletedSession(sourceSessionId);
+      } catch (error, stackTrace) {
+        // The database deletion is already committed. Keep the successful
+        // action successful and expose a recoverable projection warning.
+        debugPrint(
+          '[Collaboration] deleted local replica but failed to refresh logs: '
+          '$error\n$stackTrace',
+        );
+        _setError('LOCAL_SESSION_RELOAD_FAILED', error.toString());
+      }
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      _scheduleRefresh();
+    }
+  }
+
+  /// Suspends all collaboration writers around a destructive local database
+  /// operation. The operation owns the database mutation itself; this wrapper
+  /// serializes it with live-draft and sync work and then rebuilds provider
+  /// state from the resulting database.
+  Future<T> runLocalDatabaseMaintenance<T>(
+    Future<T> Function() operation,
+  ) async {
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
+    final sessions = _requireSessions();
+    final logs = _requireLogs();
+    _operationInProgress = true;
+    _stateEpoch += 1;
+    _refreshGeneration += 1;
+    _clearError();
+    final quiescence = _suspendForDeviceLocalMutation();
+    _safeNotify();
+    try {
+      await waitForCollaborationLocalQuiescence([
+        quiescence.liveDraft,
+        quiescence.synchronization,
+      ]);
+      final result = await operation();
+      _publishingSessionId = null;
+      _clearScopedState();
+      await sessions.reloadAfterDatabaseReplacement();
+      await logs.reloadAfterDatabaseReplacement(sessions.currentSessionId);
+      return result;
+    } catch (error) {
+      _setError(_localErrorCode(error), error.toString());
+      rethrow;
+    } finally {
+      _operationInProgress = false;
+      _safeNotify();
+      // A failed operation normally leaves the old database intact; on
+      // success this reloads an imported collaboration binding, if any.
+      _scheduleRefresh();
+    }
+  }
+
+  Future<void> _finishCommittedLocalReplacement({
+    required SessionProvider sessions,
+    required LogProvider logs,
+    required String sourceSessionId,
+    required String localSessionId,
+  }) async {
+    // Rust and SessionProvider have already committed the replacement and
+    // selected it. From here onward failures are projection-refresh failures,
+    // not operation failures; reporting the conversion as failed would invite
+    // a destructive retry against a source row that no longer exists.
+    _publishingSessionId = null;
+    _clearScopedState();
+    logs.setCollaborationReadOnly(sourceSessionId, false);
+    logs.setCollaborationReadOnly(localSessionId, false);
+    _state = CollaborationState.localOnly;
+    if (sessions.currentSessionId != localSessionId) {
+      // The durable replacement succeeded, but a concurrent history action
+      // selected another session while Rust was committing. Preserve that
+      // newer selection and only retire caches belonging to the removed source.
+      try {
+        await logs.forgetDeletedSession(sourceSessionId);
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[Collaboration] local replacement committed after selection '
+          'changed; source cache cleanup failed: $error\n$stackTrace',
+        );
+      }
+      return;
+    }
+    try {
+      await logs.reloadForSession(localSessionId, propagateErrors: true);
+      await logs.forgetDeletedSession(sourceSessionId);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Collaboration] local replacement committed but log refresh failed: '
+        '$error\n$stackTrace',
+      );
+      _setError('LOCAL_SESSION_RELOAD_FAILED', error.toString());
+      // Keep a recoverable empty projection tied to the committed replacement;
+      // opening history or restarting the app will load the same durable rows.
+      try {
+        await logs.forgetDeletedSession(sourceSessionId);
+      } catch (_) {
+        // Best-effort cache cleanup only; the source row is already gone.
+      }
     }
   }
 
@@ -2557,7 +2942,7 @@ class CollaborationProvider with ChangeNotifier {
 
   Future<void> refreshOpenConflicts() async {
     if (_operationInProgress) {
-      throw StateError('已有协作操作正在进行');
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
     }
     final identity = _currentConflictIdentity();
     if (identity == null) {
@@ -2743,7 +3128,9 @@ class CollaborationProvider with ChangeNotifier {
     Future<void> Function(_OperationContext context) operation, {
     bool refreshAfter = true,
   }) async {
-    if (_operationInProgress) throw StateError('已有协作操作正在进行');
+    if (_operationInProgress) {
+      throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
+    }
     final server = _requireServer();
     final sessions = _requireSessions();
     final logs = _requireLogs();
@@ -3056,29 +3443,33 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<T> _serializeLiveDraft<T>(Future<T> Function() action) {
-    final completer = Completer<T>();
-    final previous = _liveDraftSerial;
-    _liveDraftSerial = () async {
-      try {
-        await previous;
-      } catch (_) {
-        // Each caller receives its own error; a failed action must not poison
-        // later draft operations.
+    if (_operationInProgress) {
+      return Future<T>.error(
+        StateError('COLLABORATION_OPERATION_IN_PROGRESS'),
+      );
+    }
+    final queuedEpoch = _stateEpoch;
+    return _liveDraftSerial.run(() async {
+      if (_operationInProgress || queuedEpoch != _stateEpoch) {
+        throw StateError('COLLABORATION_OPERATION_IN_PROGRESS');
       }
-      try {
-        completer.complete(await action());
-      } catch (error, stackTrace) {
-        completer.completeError(error, stackTrace);
-      }
-    }();
-    return completer.future;
+      return action();
+    });
   }
 
-  ({
-    ServerApi api,
-    LocalCollaborationBinding binding,
-    String deviceId,
-  }) _requireLiveDraftContext({required bool requireEdit}) {
+  void _runLiveDraftInBackground(Future<void> operation) {
+    unawaited(() async {
+      try {
+        await operation;
+      } catch (_) {
+        // Background refresh, persistence, and lease renewal are best effort.
+        // In particular, a device-local destructive action intentionally
+        // rejects work queued after its operation barrier was raised.
+      }
+    }());
+  }
+
+  _LiveDraftContext _requireLiveDraftContext({required bool requireEdit}) {
     final context = _tryLiveDraftContext(requireEdit: requireEdit);
     if (context == null) {
       throw StateError(
@@ -3088,11 +3479,7 @@ class CollaborationProvider with ChangeNotifier {
     return context;
   }
 
-  ({
-    ServerApi api,
-    LocalCollaborationBinding binding,
-    String deviceId,
-  })? _tryLiveDraftContext({required bool requireEdit}) {
+  _LiveDraftContext? _tryLiveDraftContext({required bool requireEdit}) {
     final server = _server;
     final binding = _binding;
     final deviceId = _deviceId;
@@ -3103,23 +3490,62 @@ class CollaborationProvider with ChangeNotifier {
         (requireEdit && !canEditLiveDraft)) {
       return null;
     }
-    return (api: server.api, binding: binding, deviceId: deviceId);
+    return (
+      api: server.api,
+      binding: binding,
+      deviceId: deviceId,
+      epoch: _stateEpoch,
+    );
+  }
+
+  _LiveDraftGuard _guardFor(_LiveDraftContext context) => (
+        binding: context.binding,
+        epoch: context.epoch,
+      );
+
+  _LiveDraftGuard? _tryLiveDraftGuard() {
+    final binding = _binding;
+    if (_operationInProgress ||
+        binding == null ||
+        binding.sessionId != _sessions?.currentSessionId) {
+      return null;
+    }
+    return (binding: binding, epoch: _stateEpoch);
+  }
+
+  bool _isLiveDraftGuardCurrent(_LiveDraftGuard guard) {
+    return isLiveDraftResultContextCurrent(
+      disposed: _disposed,
+      operationInProgress: _operationInProgress,
+      expectedEpoch: guard.epoch,
+      currentEpoch: _stateEpoch,
+      expectedBinding: guard.binding,
+      currentBinding: _binding,
+      currentSessionId: _sessions?.currentSessionId,
+    );
+  }
+
+  void _assertLiveDraftGuardCurrent(_LiveDraftGuard guard) {
+    if (!_isLiveDraftGuardCurrent(guard)) {
+      throw StateError('LIVE_DRAFT_CONTEXT_CHANGED');
+    }
+  }
+
+  bool _isLiveDraftContextCurrent(_LiveDraftContext context) {
+    return _isLiveDraftGuardCurrent(_guardFor(context));
+  }
+
+  void _assertLiveDraftContextCurrent(_LiveDraftContext context) {
+    if (!_isLiveDraftContextCurrent(context)) {
+      throw StateError('LIVE_DRAFT_CONTEXT_CHANGED');
+    }
   }
 
   Future<void> _refreshLogsAfterLiveDraftCommit({
-    required LocalCollaborationBinding binding,
-    required String deviceId,
+    required _LiveDraftContext context,
     required CollaborationEventDto event,
   }) async {
-    bool contextIsCurrent() =>
-        !_disposed &&
-        _binding?.serverInstanceId == binding.serverInstanceId &&
-        _binding?.serverOrigin == binding.serverOrigin &&
-        _binding?.accountId == binding.accountId &&
-        _binding?.sessionId == binding.sessionId &&
-        _deviceId == deviceId &&
-        _server?.accountId == binding.accountId &&
-        _sessions?.currentSessionId == binding.sessionId;
+    bool contextIsCurrent() => _isLiveDraftContextCurrent(context);
 
     if (!contextIsCurrent()) return;
     final canonical = CollaborationLogDto.fromJson(event.payload);
@@ -3158,12 +3584,14 @@ class CollaborationProvider with ChangeNotifier {
         }
         if (!contextIsCurrent()) return;
       } catch (error, stackTrace) {
+        if (!contextIsCurrent()) return;
         debugPrint(
           '[Collaboration] awaited live-draft refresh failed: '
           '$error\n$stackTrace',
         );
       }
     }
+    if (!contextIsCurrent()) return;
     coordinator?.wake();
   }
 
@@ -3172,13 +3600,24 @@ class CollaborationProvider with ChangeNotifier {
     required int requestGeneration,
     required bool hydrateCache,
   }) async {
+    final server = _server;
+    final deviceId = _deviceId;
+    if (server == null || deviceId == null) {
+      if (requestGeneration == _liveDraftGeneration) {
+        _liveDraftLoading = false;
+        _safeNotify();
+      }
+      return;
+    }
+    final context = (
+      api: server.api,
+      binding: binding,
+      deviceId: deviceId,
+      epoch: _stateEpoch,
+    );
     bool isCurrent() =>
-        !_disposed &&
         requestGeneration == _liveDraftGeneration &&
-        _binding?.serverInstanceId == binding.serverInstanceId &&
-        _binding?.accountId == binding.accountId &&
-        _binding?.sessionId == binding.sessionId &&
-        _sessions?.currentSessionId == binding.sessionId;
+        _isLiveDraftContextCurrent(context);
 
     _liveDraftLoading = true;
     _safeNotify();
@@ -3252,10 +3691,10 @@ class CollaborationProvider with ChangeNotifier {
         }
       }
 
-      final server = _server;
-      if (server == null || !isCurrent()) return;
+      if (!isCurrent()) return;
       final previousSnapshot = _liveDraftSnapshot;
-      final incomingSnapshot = await server.api.getLiveDraft(binding.sessionId);
+      final incomingSnapshot =
+          await context.api.getLiveDraft(binding.sessionId);
       if (!isCurrent()) return;
       final snapshot = previousSnapshot == null
           ? incomingSnapshot
@@ -3306,9 +3745,9 @@ class CollaborationProvider with ChangeNotifier {
         offlineValues.map(LocalOfflineRecordDto.fromJson),
       );
       _clearLiveDraftError();
-      await _reconcilePendingOfflineRecords(binding, isCurrent);
+      await _reconcilePendingOfflineRecords(context, isCurrent);
       if (!isCurrent()) return;
-      await _persistLiveDraftState();
+      await _persistLiveDraftState(_guardFor(context));
     } on ServerApiException catch (error) {
       if (isCurrent()) _setLiveDraftError(error.code, error.message);
     } catch (error) {
@@ -3325,11 +3764,7 @@ class CollaborationProvider with ChangeNotifier {
 
   Future<LiveDraftLockDto> _acquireLiveDraftFieldInternal(
     String field,
-    ({
-      ServerApi api,
-      LocalCollaborationBinding binding,
-      String deviceId,
-    }) context,
+    _LiveDraftContext context,
   ) async {
     final current = _ownedLiveDraftLocks[field];
     if (current != null && current.expiresAt.isAfter(DateTime.now())) {
@@ -3340,6 +3775,7 @@ class CollaborationProvider with ChangeNotifier {
       field: field,
       deviceId: context.deviceId,
     );
+    _assertLiveDraftContextCurrent(context);
     _ownedLiveDraftLocks = {..._ownedLiveDraftLocks, field: lock};
     _replaceLiveDraftLock(lock);
     _ensureLiveDraftRenewalTimer();
@@ -3349,11 +3785,7 @@ class CollaborationProvider with ChangeNotifier {
   Future<void> _releaseTemporaryLiveDraftField(
     String field,
     LiveDraftLockDto lock,
-    ({
-      ServerApi api,
-      LocalCollaborationBinding binding,
-      String deviceId,
-    }) context,
+    _LiveDraftContext context,
   ) async {
     final current = _ownedLiveDraftLocks[field];
     if (current?.leaseId == lock.leaseId) {
@@ -3364,6 +3796,7 @@ class CollaborationProvider with ChangeNotifier {
         _liveDraftRenewalTimer = null;
       }
     }
+    if (!_isLiveDraftContextCurrent(context)) return;
     try {
       await context.api.releaseLiveDraftLock(
         sessionId: context.binding.sessionId,
@@ -3371,6 +3804,7 @@ class CollaborationProvider with ChangeNotifier {
         deviceId: context.deviceId,
       );
     } on ServerApiException catch (error) {
+      if (!_isLiveDraftContextCurrent(context)) return;
       if (!{'LIVE_DRAFT_LOCK_NOT_FOUND', 'LIVE_DRAFT_LOCK_EXPIRED'}
           .contains(error.code)) {
         // This operation no longer depends on the temporary lease. A failed
@@ -3411,20 +3845,16 @@ class CollaborationProvider with ChangeNotifier {
         'LIVE_DRAFT_CLIENT_SEQ_GAP',
         'LIVE_DRAFT_CLIENT_SEQ_REUSED',
       }.contains(error.code)) {
-        unawaited(refreshLiveDraft());
+        _runLiveDraftInBackground(refreshLiveDraft());
       }
-      await _persistLiveDraftState();
+      await _persistLiveDraftState(_guardFor(context));
       rethrow;
     }
   }
 
   Future<void> _updateLiveDraftFieldsAtomicAttempt(
     Map<String, String> updates,
-    ({
-      ServerApi api,
-      LocalCollaborationBinding binding,
-      String deviceId,
-    }) context,
+    _LiveDraftContext context,
   ) async {
     final snapshot = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
@@ -3483,7 +3913,9 @@ class CollaborationProvider with ChangeNotifier {
         releaseLock: (field, lock) =>
             _releaseTemporaryLiveDraftField(field, lock, context),
         onClientSeqChanged: (value) => _liveDraftClientSeq = value,
+        assertCurrent: () => _assertLiveDraftContextCurrent(context),
       );
+      _assertLiveDraftContextCurrent(context);
       acceptedDraft = execution.result.draft;
     }
 
@@ -3518,19 +3950,16 @@ class CollaborationProvider with ChangeNotifier {
       );
     }
     _clearLiveDraftError();
-    await _persistLiveDraftState();
+    await _persistLiveDraftState(_guardFor(context));
     _safeNotify();
   }
 
   Future<void> _rebaseLiveDraftForAtomicRetry(
     Set<String> targetFields,
-    ({
-      ServerApi api,
-      LocalCollaborationBinding binding,
-      String deviceId,
-    }) context,
+    _LiveDraftContext context,
   ) async {
     final incoming = await context.api.getLiveDraft(context.binding.sessionId);
+    _assertLiveDraftContextCurrent(context);
     final current = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
     if (current == null || local == null) {
@@ -3584,7 +4013,7 @@ class CollaborationProvider with ChangeNotifier {
     if (local[field] == snapshot.draft.fields[field]) {
       _dirtyLiveDraftFields = Set.of(_dirtyLiveDraftFields)..remove(field);
       _liveDraftBaseRevisions = Map.of(_liveDraftBaseRevisions)..remove(field);
-      await _persistLiveDraftState();
+      await _persistLiveDraftState(_guardFor(context));
       return;
     }
     final beforeDirtyFields = Set<String>.of(_dirtyLiveDraftFields);
@@ -3593,6 +4022,7 @@ class CollaborationProvider with ChangeNotifier {
     final sentRevision =
         beforeBaseRevisions[field] ?? snapshot.draft.fieldRevisions[field] ?? 0;
     final lock = await _acquireLiveDraftFieldInternal(field, context);
+    _assertLiveDraftContextCurrent(context);
     Future<LiveDraftPatchResultDto> send(int clientSeq) =>
         context.api.updateLiveDraft(
           sessionId: context.binding.sessionId,
@@ -3611,14 +4041,19 @@ class CollaborationProvider with ChangeNotifier {
       late LiveDraftPatchResultDto result;
       var clientSeq = _liveDraftClientSeq + 1;
       try {
+        _assertLiveDraftContextCurrent(context);
         result = await send(clientSeq);
+        _assertLiveDraftContextCurrent(context);
       } on ServerApiException catch (error) {
+        _assertLiveDraftContextCurrent(context);
         if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_GAP') {
           final expected = _expectedLiveDraftClientSeq(error);
           if (expected == null) rethrow;
           _liveDraftClientSeq = expected - 1;
           clientSeq = expected;
+          _assertLiveDraftContextCurrent(context);
           result = await send(clientSeq);
+          _assertLiveDraftContextCurrent(context);
         } else if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_REUSED') {
           // A reused response proves this sequence was already accepted for a
           // different payload (typically an earlier response was lost). Move
@@ -3626,7 +4061,9 @@ class CollaborationProvider with ChangeNotifier {
           // the next serial update.
           _liveDraftClientSeq = clientSeq;
           clientSeq += 1;
+          _assertLiveDraftContextCurrent(context);
           result = await send(clientSeq);
+          _assertLiveDraftContextCurrent(context);
         } else {
           rethrow;
         }
@@ -3668,7 +4105,7 @@ class CollaborationProvider with ChangeNotifier {
         );
       }
       _clearLiveDraftError();
-      await _persistLiveDraftState();
+      await _persistLiveDraftState(_guardFor(context));
       _safeNotify();
     } on ServerApiException catch (error) {
       if (retryRevisionConflict &&
@@ -3678,9 +4115,10 @@ class CollaborationProvider with ChangeNotifier {
           }.contains(error.code)) {
         try {
           await _rebaseLiveDraftForAtomicRetry({field}, context);
+          _assertLiveDraftContextCurrent(context);
         } on ServerApiException catch (rebaseError) {
           _setLiveDraftError(rebaseError.code, rebaseError.message);
-          await _persistLiveDraftState();
+          await _persistLiveDraftState(_guardFor(context));
           rethrow;
         }
         await _flushLiveDraftField(
@@ -3703,9 +4141,9 @@ class CollaborationProvider with ChangeNotifier {
         'LIVE_DRAFT_CLIENT_SEQ_GAP',
         'LIVE_DRAFT_CLIENT_SEQ_REUSED',
       }.contains(error.code)) {
-        unawaited(refreshLiveDraft());
+        _runLiveDraftInBackground(refreshLiveDraft());
       }
-      await _persistLiveDraftState();
+      await _persistLiveDraftState(_guardFor(context));
       rethrow;
     }
   }
@@ -3718,11 +4156,7 @@ class CollaborationProvider with ChangeNotifier {
 
   Future<void> _copyOfflineRecordIntoCurrentDraft(
     LocalOfflineRecordDto record,
-    ({
-      ServerApi api,
-      LocalCollaborationBinding binding,
-      String deviceId,
-    }) context,
+    _LiveDraftContext context,
   ) async {
     final snapshot = _liveDraftSnapshot;
     if (snapshot == null) throw StateError('LIVE_DRAFT_NOT_LOADED');
@@ -3741,11 +4175,7 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<LocalOfflineRecordDto> _queueOfflineRecord(
-    ({
-      ServerApi api,
-      LocalCollaborationBinding binding,
-      String deviceId,
-    }) context, {
+    _LiveDraftContext context, {
     required String mutationId,
     required LiveDraftSnapshotDto snapshot,
     required LiveDraftFieldsDto fields,
@@ -3762,6 +4192,7 @@ class CollaborationProvider with ChangeNotifier {
         'record': fields.toJson(),
       }),
     );
+    _assertLiveDraftContextCurrent(context);
     return LocalOfflineRecordDto.fromJson(jsonDecode(encoded));
   }
 
@@ -3769,8 +4200,10 @@ class CollaborationProvider with ChangeNotifier {
     LocalOfflineRecordDto record, {
     required OfflineRecordState state,
     required OfflineRecordResolution? resolution,
+    required _LiveDraftGuard guard,
     String? lastErrorCode,
   }) async {
+    _assertLiveDraftGuardCurrent(guard);
     final encoded = await RustApi.updateCollaborationOfflineRecord(
       requestJson: jsonEncode({
         'mutationId': record.mutationId,
@@ -3779,6 +4212,7 @@ class CollaborationProvider with ChangeNotifier {
         'lastErrorCode': lastErrorCode,
       }),
     );
+    _assertLiveDraftGuardCurrent(guard);
     final updated = LocalOfflineRecordDto.fromJson(jsonDecode(encoded));
     _offlineRecords = List.unmodifiable([
       for (final candidate in _offlineRecords)
@@ -3791,21 +4225,21 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<void> _reconcilePendingOfflineRecords(
-    LocalCollaborationBinding binding,
+    _LiveDraftContext context,
     bool Function() isCurrent,
   ) async {
-    final server = _server;
-    final deviceId = _deviceId;
     final membership = _membership;
-    if (server == null ||
-        deviceId == null ||
-        membership == null ||
+    if (membership == null ||
         membership.removedAt != null ||
         membership.role == SessionRole.viewer) {
       return;
     }
+    final binding = context.binding;
+    final guard = _guardFor(context);
+    bool contextIsCurrent() =>
+        isCurrent() && _isLiveDraftContextCurrent(context);
     for (final record in List<LocalOfflineRecordDto>.from(_offlineRecords)) {
-      if (!isCurrent()) break;
+      if (!contextIsCurrent()) break;
       if (record.state != OfflineRecordState.pending &&
           record.state != OfflineRecordState.submitting) {
         continue;
@@ -3820,7 +4254,9 @@ class CollaborationProvider with ChangeNotifier {
           state: OfflineRecordState.reviewing,
           resolution: null,
           lastErrorCode: 'OFFLINE_RECORD_OVERLAPS_SERVER_PROGRESS',
+          guard: guard,
         );
+        if (!contextIsCurrent()) return;
         continue;
       }
       try {
@@ -3830,21 +4266,24 @@ class CollaborationProvider with ChangeNotifier {
           record,
           state: OfflineRecordState.submitting,
           resolution: null,
+          guard: guard,
         );
+        if (!contextIsCurrent()) return;
         await _copyOfflineRecordIntoCurrentDraft(
           record,
-          (api: server.api, binding: binding, deviceId: deviceId),
+          context,
         );
+        if (!contextIsCurrent()) return;
         final canonical = _liveDraftSnapshot;
         if (canonical == null) throw StateError('LIVE_DRAFT_NOT_LOADED');
-        final committed = await server.api.commitLiveDraft(
+        final committed = await context.api.commitLiveDraft(
           sessionId: binding.sessionId,
-          deviceId: deviceId,
+          deviceId: context.deviceId,
           expectedDraftVersion: canonical.draft.version,
           syncId: record.mutationId,
           idempotencyKey: record.mutationId,
         );
-        if (!isCurrent()) return;
+        if (!contextIsCurrent()) return;
         _liveDraftSnapshot = LiveDraftSnapshotDto(
           draft: committed.nextDraft,
           locks: const [],
@@ -3873,19 +4312,23 @@ class CollaborationProvider with ChangeNotifier {
           record,
           state: OfflineRecordState.resolved,
           resolution: OfflineRecordResolution.submitAsDuplicate,
+          guard: guard,
         );
+        if (!contextIsCurrent()) return;
         await _refreshLogsAfterLiveDraftCommit(
-          binding: binding,
-          deviceId: deviceId,
+          context: context,
           event: committed.event,
         );
+        if (!contextIsCurrent()) return;
       } on ServerApiException catch (error) {
+        if (!contextIsCurrent()) return;
         if (error.retryable) {
           await _updateOfflineRecord(
             record,
             state: OfflineRecordState.pending,
             resolution: null,
             lastErrorCode: error.code,
+            guard: guard,
           );
           return;
         }
@@ -3894,7 +4337,9 @@ class CollaborationProvider with ChangeNotifier {
           state: OfflineRecordState.reviewing,
           resolution: null,
           lastErrorCode: error.code,
+          guard: guard,
         );
+        if (!contextIsCurrent()) return;
       }
     }
   }
@@ -3939,7 +4384,8 @@ class CollaborationProvider with ChangeNotifier {
         hasNonDefaultReport('rstRcvd');
   }
 
-  Future<void> _persistLiveDraftState() async {
+  Future<void> _persistLiveDraftState(_LiveDraftGuard guard) async {
+    _assertLiveDraftGuardCurrent(guard);
     final binding = _binding;
     final snapshot = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
@@ -3977,7 +4423,11 @@ class CollaborationProvider with ChangeNotifier {
               snapshot.draft.lastUpdatedAt.toUtc().toIso8601String(),
         }),
       );
+      _assertLiveDraftGuardCurrent(guard);
     } catch (error) {
+      if (!_isLiveDraftGuardCurrent(guard)) {
+        throw StateError('LIVE_DRAFT_CONTEXT_CHANGED');
+      }
       _setLiveDraftError('LIVE_DRAFT_CACHE_FAILED', error.toString());
     }
   }
@@ -4028,7 +4478,9 @@ class CollaborationProvider with ChangeNotifier {
   void _ensureLiveDraftRenewalTimer() {
     _liveDraftRenewalTimer ??= Timer.periodic(
       const Duration(seconds: 10),
-      (_) => unawaited(_serializeLiveDraft(_renewOwnedLiveDraftLocks)),
+      (_) => _runLiveDraftInBackground(
+        _serializeLiveDraft(_renewOwnedLiveDraftLocks),
+      ),
     );
   }
 
@@ -4047,6 +4499,7 @@ class CollaborationProvider with ChangeNotifier {
           leaseId: entry.value.leaseId,
           deviceId: context.deviceId,
         );
+        _assertLiveDraftContextCurrent(context);
         _ownedLiveDraftLocks = {..._ownedLiveDraftLocks, entry.key: renewed};
         _replaceLiveDraftLock(renewed);
       } on ServerApiException catch (error) {
@@ -4199,7 +4652,7 @@ class CollaborationProvider with ChangeNotifier {
           // Member controls are intentionally not replayed. One canonical GET
           // after each initial connection/reconnection closes that gap without
           // multiplying reads for every keystroke and lock notification.
-          unawaited(refreshLiveDraft());
+          _runLiveDraftInBackground(refreshLiveDraft());
         }
       },
       onEventApplied: (event) async {
@@ -4348,14 +4801,69 @@ class CollaborationProvider with ChangeNotifier {
     return coordinator;
   }
 
+  ({Future<void> liveDraft, Future<void> synchronization})
+      _suspendForDeviceLocalMutation() {
+    // The caller has already raised _operationInProgress and advanced the state
+    // epoch, so queued draft work cannot begin after this snapshot.
+    final liveDraft = _liveDraftSerial.detach();
+    final suspensionEpoch = _stateEpoch;
+    final suspensionBinding = _binding;
+    _liveDraftGeneration += 1;
+    final suspensionGeneration = _liveDraftGeneration;
+    _clearOwnedLiveDraftLocks();
+    final coordinator = _detachSynchronization();
+    final synchronization = coordinator?.dispose() ?? Future<void>.value();
+    _clearStaleLiveDraftAfterSettled(
+      liveDraft,
+      suspensionEpoch: suspensionEpoch,
+      suspensionGeneration: suspensionGeneration,
+      suspensionBinding: suspensionBinding,
+    );
+    return (liveDraft: liveDraft, synchronization: synchronization);
+  }
+
+  void _clearStaleLiveDraftAfterSettled(
+    Future<void> pending, {
+    required int suspensionEpoch,
+    required int suspensionGeneration,
+    required LocalCollaborationBinding? suspensionBinding,
+  }) {
+    unawaited(() async {
+      try {
+        await pending;
+      } catch (_) {
+        // The original caller already owns the operation error.
+      }
+      if (_disposed) return;
+      // A later refresh, rejoin, or draft request owns its own projection.
+      // Never let the detached chain erase that newer state when it eventually
+      // settles.
+      if (_stateEpoch != suspensionEpoch) return;
+      final currentBinding = _binding;
+      // A completed local replacement has no binding, so a late stale
+      // projection can always be cleared even though _clearScopedState already
+      // advanced the generation once. A restored/refreshed collaboration owns
+      // its newer generation and must be left intact.
+      if (currentBinding != null &&
+          (_liveDraftGeneration != suspensionGeneration ||
+              suspensionBinding == null ||
+              currentBinding.serverInstanceId !=
+                  suspensionBinding.serverInstanceId ||
+              currentBinding.accountId != suspensionBinding.accountId ||
+              currentBinding.sessionId != suspensionBinding.sessionId)) {
+        return;
+      }
+      // An in-flight response may have projected stale draft data after the
+      // source replica was removed. Clear that projection a second time once
+      // the pre-detach serial queue has actually settled.
+      _clearLiveDraftProjection();
+      _safeNotify();
+    }());
+  }
+
   void _stopSynchronization() {
     final coordinator = _detachSynchronization();
     if (coordinator != null) unawaited(coordinator.dispose());
-  }
-
-  Future<void> _stopSynchronizationAndWait() async {
-    final coordinator = _detachSynchronization();
-    if (coordinator != null) await coordinator.dispose();
   }
 
   void _adoptLogAuthorship(Iterable<CollaborationLogDto> logs) {
@@ -4389,17 +4897,7 @@ class CollaborationProvider with ChangeNotifier {
 
   void _clearScopedState() {
     _stopSynchronization();
-    _liveDraftGeneration += 1;
-    _clearOwnedLiveDraftLocks();
-    _liveDraftSnapshot = null;
-    _localLiveDraftFields = null;
-    _automaticLiveDraftTime = null;
-    _dirtyLiveDraftFields = const {};
-    _liveDraftBaseRevisions = const {};
-    _offlineRecords = const [];
-    _liveDraftClientSeq = 0;
-    _liveDraftLoading = false;
-    _clearLiveDraftError();
+    _clearLiveDraftProjection();
     _publicShares = const [];
     _lastCreatedPublicShare = null;
     _logCreatedBy.clear();
@@ -4417,6 +4915,20 @@ class CollaborationProvider with ChangeNotifier {
             _publishingSessionId == _sessions?.currentSessionId
         ? CollaborationState.publishing
         : CollaborationState.localOnly;
+  }
+
+  void _clearLiveDraftProjection() {
+    _liveDraftGeneration += 1;
+    _clearOwnedLiveDraftLocks();
+    _liveDraftSnapshot = null;
+    _localLiveDraftFields = null;
+    _automaticLiveDraftTime = null;
+    _dirtyLiveDraftFields = const {};
+    _liveDraftBaseRevisions = const {};
+    _offlineRecords = const [];
+    _liveDraftClientSeq = 0;
+    _liveDraftLoading = false;
+    _clearLiveDraftError();
   }
 
   ServerProvider _requireServer() {

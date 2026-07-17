@@ -899,7 +899,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             ? null
                             : () => _closeSession(collaboration),
                         icon: const Icon(Icons.stop_circle_outlined),
-                        label: Text(context.l10n.closeSession),
+                        label: Text(context.l10n.closeSharedSession),
                       ),
                     ] else if (session.status == 'closed' &&
                         collaboration.canonicalSessionClosed)
@@ -1117,7 +1117,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                 dialogContext,
                 _CloseCollaborationAction.close,
               ),
-              child: Text(context.l10n.closeSession),
+              child: Text(context.l10n.closeSharedSession),
             ),
           if (hasDraft && canResolveDraft)
             OutlinedButton(
