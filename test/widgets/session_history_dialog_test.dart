@@ -20,16 +20,15 @@ void main() {
       currentSessionId: session.sessionId,
       hasCollaborationBinding: (_) async => false,
       closeLocalSession: (_) async => localCloseCount += 1,
-      refreshCurrentCollaboration: () async {},
-      canCloseCurrentCollaboration: () => true,
-      closeCurrentCollaboration: () async => collaborationCloseCount += 1,
+      closeCurrentCollaborationLocally: () async =>
+          collaborationCloseCount += 1,
     );
 
     expect(localCloseCount, 1);
     expect(collaborationCloseCount, 0);
   });
 
-  test('history close requires a collaboration session to be opened first',
+  test('history close handles a non-current collaboration replica locally',
       () async {
     final session = _session(
       id: 'remote-session',
@@ -37,48 +36,41 @@ void main() {
       status: 'active',
     );
 
-    await expectLater(
-      closeSessionFromHistory(
-        session: session,
-        currentSessionId: 'other-session',
-        hasCollaborationBinding: (_) async => true,
-        closeLocalSession: (_) async {},
-        refreshCurrentCollaboration: () async {},
-        canCloseCurrentCollaboration: () => true,
-        closeCurrentCollaboration: () async {},
-      ),
-      throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          contains('HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN'),
-        ),
-      ),
+    var localCloseCount = 0;
+    var currentCloseCount = 0;
+    await closeSessionFromHistory(
+      session: session,
+      currentSessionId: 'other-session',
+      hasCollaborationBinding: (_) async => true,
+      closeLocalSession: (_) async => localCloseCount += 1,
+      closeCurrentCollaborationLocally: () async => currentCloseCount += 1,
     );
+
+    expect(localCloseCount, 1);
+    expect(currentCloseCount, 0);
   });
 
-  test('history close refreshes and uses the current owner collaboration path',
+  test('history close stops the current collaboration only on this device',
       () async {
     final session = _session(
       id: 'remote-session',
       title: 'Remote net',
       status: 'active',
     );
-    var refreshed = false;
-    var collaborationCloseCount = 0;
+    var localCloseCount = 0;
+    var localCollaborationCloseCount = 0;
 
     await closeSessionFromHistory(
       session: session,
       currentSessionId: session.sessionId,
       hasCollaborationBinding: (_) async => true,
-      closeLocalSession: (_) async {},
-      refreshCurrentCollaboration: () async => refreshed = true,
-      canCloseCurrentCollaboration: () => refreshed,
-      closeCurrentCollaboration: () async => collaborationCloseCount += 1,
+      closeLocalSession: (_) async => localCloseCount += 1,
+      closeCurrentCollaborationLocally: () async =>
+          localCollaborationCloseCount += 1,
     );
 
-    expect(refreshed, isTrue);
-    expect(collaborationCloseCount, 1);
+    expect(localCloseCount, 0);
+    expect(localCollaborationCloseCount, 1);
   });
 
   testWidgets('a closed session opens from the whole history row in zh_CN',
@@ -245,7 +237,7 @@ void main() {
     expect(find.byKey(const Key('session-history-dialog')), findsNothing);
   });
 
-  testWidgets('an archived session is not presented as locally reactivatable',
+  testWidgets('an archived session can be deleted but not reactivated',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -279,12 +271,11 @@ void main() {
     );
     expect(
       find.byKey(const Key('delete-history-session-archived-session')),
-      findsNothing,
+      findsOneWidget,
     );
   });
 
-  testWidgets(
-      'only a closed non-current session can be permanently deleted by name',
+  testWidgets('any non-current local row can be permanently deleted by name',
       (tester) async {
     final sessions = <Session>[
       _session(
@@ -336,7 +327,7 @@ void main() {
     );
     expect(
       find.byKey(const Key('delete-history-session-active-session')),
-      findsNothing,
+      findsOneWidget,
     );
     expect(
       find.byKey(const Key('delete-history-session-closed-session')),
@@ -541,8 +532,9 @@ void main() {
     );
   });
 
-  testWidgets('collaboration close rejection shows the open-first guidance',
+  testWidgets('history close explains and completes a device-only close',
       (tester) async {
+    var closeCount = 0;
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('zh', 'CN'),
@@ -560,9 +552,7 @@ void main() {
             ],
             openSession: (_) async {},
             reopenSession: (_) async {},
-            closeSession: (_) async => throw StateError(
-              'HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN',
-            ),
+            closeSession: (_) async => closeCount += 1,
             deleteSession: (_) async {},
           ),
         ),
@@ -576,15 +566,74 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('关闭会话').last);
+    expect(find.textContaining('服务器共享会话、成员及其他设备不受影响'), findsOneWidget);
+    await tester.tap(find.text('仅在本机关闭').last);
+    await tester.pumpAndSettle();
+
+    expect(closeCount, 1);
+    expect(find.text('已在本机关闭会话'), findsOneWidget);
+  });
+
+  testWidgets('replacement id remains marked current after local close',
+      (tester) async {
+    var currentId = 'collaboration-session';
+    var sessions = <Session>[
+      _session(
+        id: 'collaboration-session',
+        title: 'Sunday net',
+        status: 'active',
+      ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SessionHistoryDialog(
+            currentSessionId: currentId,
+            currentSessionIdGetter: () => currentId,
+            canCloseCurrentSession: true,
+            loadSessions: () async => sessions,
+            openSession: (_) async {},
+            reopenSession: (_) async {},
+            closeSession: (_) async {
+              currentId = 'closed-local-session';
+              sessions = [
+                _session(
+                  id: currentId,
+                  title: 'Sunday net',
+                  status: 'closed',
+                ),
+              ];
+            },
+            deleteSession: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(
+        const Key('close-history-session-collaboration-session'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Close only on this device').last);
     await tester.pumpAndSettle();
 
     expect(
-      find.text('这是协作会话。请先打开该会话，再进入“协作与成员”关闭它。'),
+      find.byKey(const Key('session-history-tile-closed-local-session')),
       findsOneWidget,
     );
+    expect(find.text('Current session'), findsOneWidget);
     expect(
-        find.textContaining('COLLABORATION_SESSION_READ_ONLY'), findsNothing);
+      find.byKey(
+        const Key('delete-history-session-closed-local-session'),
+      ),
+      findsNothing,
+    );
   });
 }
 

@@ -116,7 +116,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noCurrentSession => '当前没有点名会话';
 
   @override
-  String get noCurrentSessionHint => '返回点名台创建会话后即可开始记录。';
+  String get noCurrentSessionHint => '创建一个点名会话后即可开始记录。';
 
   @override
   String get sessionActive => '进行中';
@@ -184,19 +184,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get historySessionCloseTitle => '关闭会话';
+  String get historySessionCloseTitle => '仅在本机关闭会话';
 
   @override
   String historySessionCloseConfirmation(String title) {
-    return '确定关闭“$title”吗？关闭后仍可在历史会话中只读查看。';
+    return '仅在本机关闭“$title”吗？关闭后会作为只读本地历史保留。如果这是协作副本，本机将停止同步并丢弃未同步队列、冲突、离线待复核记录及未提交草稿的本机副本；服务器共享会话、成员及其他设备不受影响。';
   }
 
   @override
-  String get historySessionClosed => '会话已关闭';
+  String get historySessionClosed => '已在本机关闭会话';
 
   @override
   String historySessionCloseFailed(String error) {
-    return '关闭会话失败：$error';
+    return '在本机关闭会话失败：$error';
   }
 
   @override
@@ -387,6 +387,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fieldController => '主控';
 
   @override
+  String get fieldControllerCallsign => '主控呼号';
+
+  @override
   String get fieldCallsign => '来台呼号';
 
   @override
@@ -418,6 +421,60 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fieldRemarks => '备注';
+
+  @override
+  String get fieldActions => '操作';
+
+  @override
+  String inputFieldHint(String field) {
+    return '输入$field';
+  }
+
+  @override
+  String optionalFieldHint(String field) {
+    return '$field（可选）';
+  }
+
+  @override
+  String get noSavedRecords => '暂无已保存记录';
+
+  @override
+  String get addFirstRecordHint => '在上方表单中添加第一条记录。';
+
+  @override
+  String get editRecord => '编辑记录';
+
+  @override
+  String get deleteRecord => '删除记录';
+
+  @override
+  String get deleteRecordConfirmation => '确定要删除这条记录吗？';
+
+  @override
+  String get delete => '删除';
+
+  @override
+  String get recordDeleted => '记录已删除';
+
+  @override
+  String get savedRecords => '已保存记录';
+
+  @override
+  String recordCount(int count) {
+    return '$count 条';
+  }
+
+  @override
+  String get restoreLastDeletedRecord => '恢复最近删除';
+
+  @override
+  String get restoreLastDeletedRecordTitle => '恢复最近删除的记录？';
+
+  @override
+  String get restoreLastDeletedRecordConfirmation => '将恢复最近一次删除的点名记录，不会影响其他记录。';
+
+  @override
+  String get recordRestored => '记录已恢复';
 
   @override
   String get saveRecord => '保存记录';
@@ -455,10 +512,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callsignRequired => '请输入点名呼号';
 
   @override
-  String get leaveSession => '退出协作会话';
+  String get leaveSession => '退出服务器协作';
 
   @override
-  String get leaveSessionConfirmation => '退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。';
+  String get leaveSessionConfirmation =>
+      '这会向服务器提交退出成员关系的请求。成功后本地副本保持只读；如需再次参与，必须重新获得邀请。服务器不可达时请改用本机数据操作。';
 
   @override
   String get convertCollaborationToLocal => '停止本机协作并转为本地会话';
@@ -468,11 +526,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String convertCollaborationToLocalConfirmation(String title) {
-    return '将停止本机对“$title”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。';
+    return '将停止本机对“$title”的协作同步，并替换为可编辑的本地会话。仅复制表格中已经保存的记录；未提交的共享实时草稿仍留在服务器上，不会写入本地会话。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
+  }
+
+  @override
+  String convertCollaborationToLocalUnsyncedConfirmation(String title) {
+    return '将停止本机对“$title”的协作同步，并保留当前表格中已保存的记录。未同步队列、冲突、离线待复核记录及未提交实时草稿会从本机永久丢弃。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
   }
 
   @override
   String get convertCollaborationToLocalSucceeded => '已停止本机协作并转为本地会话';
+
+  @override
+  String get closeCollaborationLocally => '仅在本机关闭';
+
+  @override
+  String get moreLocalCollaborationActions => '更多本机操作';
 
   @override
   String get createEditableLocalCopy => '停止协作并创建本地副本';
@@ -656,11 +725,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sessionTitleQueued => '标题已保存到本地，等待同步确认';
 
   @override
-  String get closeCollaborationSessionTitle => '关闭协作会话';
+  String get closeCollaborationSessionTitle => '关闭服务器共享会话';
 
   @override
   String get closeCollaborationSessionMessage =>
-      '关闭后所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。';
+      '这会向服务器提交关闭共享会话的请求。服务器确认后，所有成员都不能继续添加或修改记录；所有者可以稍后重新打开。';
+
+  @override
+  String get closeSharedSession => '关闭服务器共享会话';
 
   @override
   String get closeCollaborationDraftNotEmpty =>
@@ -686,7 +758,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '记录仅保存到离线队列，尚未提交到服务器；会话没有关闭。请恢复网络并处理该记录后重试。';
 
   @override
-  String get closeSessionQueued => '会话已在本地关闭，等待同步确认';
+  String get closeSessionQueued => '已提交关闭共享会话请求，等待服务器同步确认';
 
   @override
   String get reopenCollaborationSessionTitle => '重新打开协作会话';
@@ -1322,6 +1394,50 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get deleteLibraryItemTitle => '删除词库条目';
+
+  @override
+  String deleteLibraryItemConfirmation(String value, String name) {
+    return '确定从$name中删除“$value”吗？';
+  }
+
+  @override
+  String get deleteLibraryItemAction => '删除';
+
+  @override
+  String libraryItemDeleted(String value) {
+    return '已删除：$value';
+  }
+
+  @override
+  String libraryItemDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String clearLibraryTitle(String name) {
+    return '清空$name';
+  }
+
+  @override
+  String clearLibraryConfirmation(String name, int count) {
+    return '将删除$name中的全部 $count 条内容。此操作无法撤销，确定继续吗？';
+  }
+
+  @override
+  String get clearLibraryAction => '全部清空';
+
+  @override
+  String libraryCleared(String name) {
+    return '已清空$name';
+  }
+
+  @override
+  String libraryClearFailed(String error) {
+    return '清空失败：$error';
+  }
+
+  @override
   String get libraryImportEmpty => '文件中没有可导入的词库内容';
 
   @override
@@ -1467,6 +1583,657 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restoreDefaultSettings => '恢复默认设置';
+
+  @override
+  String get settingsTitle => '应用设置';
+
+  @override
+  String get settingsSubtitle => '统一管理应用外观、点名台行为、主控显示、服务器账户和本机数据。';
+
+  @override
+  String get settingsAppearanceTitle => '外观与语言';
+
+  @override
+  String get settingsAppearanceHint => '选择主题、字体和界面语言；修改后立即应用。';
+
+  @override
+  String get themeColorSetting => '主题颜色';
+
+  @override
+  String get themeColorSettingHint => '设置应用按钮、选中状态与强调内容的主色调。';
+
+  @override
+  String get chooseThemeColor => '选择颜色';
+
+  @override
+  String get darkModeSetting => '深色模式';
+
+  @override
+  String get darkModeSettingHint => '切换应用的明暗配色。';
+
+  @override
+  String get appFontSetting => '应用字体';
+
+  @override
+  String get appFontSettingHint => '选择界面显示字体。';
+
+  @override
+  String get appLanguageSetting => '界面语言';
+
+  @override
+  String get appLanguageSettingHint => '可跟随系统，也可固定为简体中文或 English。';
+
+  @override
+  String get languageFollowSystem => '跟随系统';
+
+  @override
+  String get languageSimplifiedChinese => '简体中文';
+
+  @override
+  String get languageEnglish => 'English';
+
+  @override
+  String get layoutSettingsTitle => '点名台与布局';
+
+  @override
+  String get layoutSettingsHint => '调整点名台宽度、分页和录入辅助行为。';
+
+  @override
+  String get paginationSetting => '分页显示记录';
+
+  @override
+  String get paginationSettingHint => '每 5 条记录分为一页显示。';
+
+  @override
+  String get controllerDisplaySettingsHint => '配置主控设备入口、独立窗口和默认显示内容。';
+
+  @override
+  String get serverSettingsHint => '配置协作服务器并管理当前账户和登录设备。';
+
+  @override
+  String get settingsSupportTitle => '应用信息与设置维护';
+
+  @override
+  String get settingsSupportHint => '查看版本与开源信息，或恢复界面和录入偏好。';
+
+  @override
+  String get restoreDefaultSettingsHint => '恢复外观、语言、布局和导出偏好，不影响记录与登录状态。';
+
+  @override
+  String get snackbarLogTitle => '底部消息日志';
+
+  @override
+  String get snackbarLogHint => '查看本次运行期间显示过的底部消息';
+
+  @override
+  String get snackbarLogEmpty => '本次运行尚未记录底部消息';
+
+  @override
+  String get resetSettingsTitle => '恢复默认设置';
+
+  @override
+  String get resetSettingsConfirmation =>
+      '将外观、语言、布局和导出偏好恢复为默认值。本机记录、词库、服务器账户与登录状态不受影响。';
+
+  @override
+  String get resetSettingsConfirmAction => '恢复默认';
+
+  @override
+  String get resetSettingsSucceeded => '已恢复默认设置';
+
+  @override
+  String resetSettingsFailed(String error) {
+    return '恢复默认设置失败：$error';
+  }
+
+  @override
+  String get localDataOperationsTitle => '本机数据';
+
+  @override
+  String get localDataOperationsHint => '管理本机数据库的诊断、备份与重置；这些操作不会直接修改服务器数据。';
+
+  @override
+  String get databaseDiagnosticsSection => '诊断';
+
+  @override
+  String get databaseBackupSection => '备份与恢复';
+
+  @override
+  String get databaseDangerZoneSection => '危险操作';
+
+  @override
+  String get databaseStatusTitle => '本机数据库状态';
+
+  @override
+  String get databaseStatusHint => '查看数据库版本和各表行数';
+
+  @override
+  String databaseStatusSchemaVersion(String version) {
+    return '数据库结构版本：$version';
+  }
+
+  @override
+  String databaseStatusTableRow(String name, int count) {
+    return '$name: $count';
+  }
+
+  @override
+  String get databaseStatusUnknown => '未知';
+
+  @override
+  String databaseStatusLoadFailed(String error) {
+    return '读取本机数据库状态失败：$error';
+  }
+
+  @override
+  String get databaseExportTitle => '导出本机数据库';
+
+  @override
+  String get databaseExportHint => '备份会话、记录、词库、QTH 历史以及本机协作副本和待同步状态';
+
+  @override
+  String get databaseExportDialogTitle => '保存 OpenLogTool 本机数据库备份';
+
+  @override
+  String get databaseExportSucceeded => '本机数据库备份已导出';
+
+  @override
+  String databaseExportFailed(String error) {
+    return '导出本机数据库失败：$error';
+  }
+
+  @override
+  String get databaseImportTitle => '导入本机数据库';
+
+  @override
+  String get databaseImportHint => '选择 JSON 备份并预览后，完整替换当前本机数据库';
+
+  @override
+  String get databaseImportPickerTitle => '选择 OpenLogTool 本机数据库备份';
+
+  @override
+  String get databaseImportPreviewTitle => '确认导入备份';
+
+  @override
+  String get databaseImportBackupVersion => '备份格式版本';
+
+  @override
+  String get databaseImportExportedAt => '导出时间';
+
+  @override
+  String get databaseImportUnknownTime => '未记录';
+
+  @override
+  String get databaseImportSessionCount => '会话';
+
+  @override
+  String get databaseImportLogCount => '点名记录';
+
+  @override
+  String get databaseImportDictionaryCount => '词库条目';
+
+  @override
+  String get databaseImportCollaborationCount => '协作副本';
+
+  @override
+  String get databaseImportPendingSyncCount => '待同步/待复核项';
+
+  @override
+  String get databaseImportPreviewWarning =>
+      '导入会完整覆盖当前本机数据库，包括未同步更改。服务器上的会话、安全存储中的登录凭据和应用设置不受影响。内置词库将按当前版本补齐。此操作不可撤销。';
+
+  @override
+  String get databaseImportCollaborationWarning =>
+      '此备份包含本机协作副本。当服务器地址和登录账户匹配时，导入后可能继续同步。';
+
+  @override
+  String get databaseImportConfirmAction => '覆盖并导入';
+
+  @override
+  String get databaseImportSucceeded => '本机数据库已导入，界面数据已刷新';
+
+  @override
+  String databaseImportInvalid(String error) {
+    return '所选文件不是有效的 OpenLogTool 数据库备份（$error）';
+  }
+
+  @override
+  String databaseImportReadFailed(String error) {
+    return '无法读取所选备份：$error';
+  }
+
+  @override
+  String databaseImportFailed(String error) {
+    return '导入本机数据库失败：$error';
+  }
+
+  @override
+  String get databaseClearTitle => '清空本机数据';
+
+  @override
+  String get databaseClearHint => '清除本机记录、协作副本和自定义词条，并恢复内置词库默认内容';
+
+  @override
+  String get databaseClearWarning =>
+      '此操作不可撤销。将清除本机的所有会话、点名记录、QTH 历史、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。';
+
+  @override
+  String get databaseClearConfirmationPhrase => '清空全部数据';
+
+  @override
+  String databaseClearConfirmationInstruction(String phrase) {
+    return '请输入“$phrase”以确认：';
+  }
+
+  @override
+  String get databaseClearConfirmationLabel => '确认文本';
+
+  @override
+  String get databaseClearConfirmAction => '永久清空本机数据';
+
+  @override
+  String get databaseClearSucceeded => '本机数据已清空，内置词库已恢复为默认内容';
+
+  @override
+  String databaseClearFailed(String error) {
+    return '清空本机数据失败：$error';
+  }
+
+  @override
+  String get databaseReplacementRefreshFailed =>
+      '操作已写入本机数据库，但界面刷新或内置词库恢复失败。请返回会话页后重试；如仍异常再重启应用。';
+
+  @override
+  String get databaseMaintenanceCollaborationBusy =>
+      '当前正在发布、加入或处理其他协作操作，请等待操作结束后再管理本机数据库。';
+
+  @override
+  String get localCollaborationOperationBusy => '另一项协作操作仍在进行，请等待结束后重试。';
+
+  @override
+  String get localCollaborationRequired => '当前会话已不是本机协作副本，请刷新页面后重试。';
+
+  @override
+  String get dataTransferTitle => '数据导入与导出';
+
+  @override
+  String get dataTransferSubtitle => '备份、迁移或分享当前会话的点名记录，并配置 Excel 输出样式。';
+
+  @override
+  String get dataTransferActionsTitle => '记录文件';
+
+  @override
+  String get dataTransferActionsHint => 'JSON 适合完整数据迁移，Excel 适合查看、分享和打印。';
+
+  @override
+  String get exportDataTitle => '导出数据';
+
+  @override
+  String get exportDataHint => '将当前会话中的点名记录导出为文件';
+
+  @override
+  String get exportJson => '导出 JSON';
+
+  @override
+  String get exportExcel => '导出 Excel';
+
+  @override
+  String get importDataTitle => '导入数据';
+
+  @override
+  String get importDataHint => '从文件导入点名记录到当前会话';
+
+  @override
+  String get importJson => '导入 JSON';
+
+  @override
+  String get importExcel => '导入 Excel';
+
+  @override
+  String get excelConfigurationOverview => 'Excel 配置概览';
+
+  @override
+  String get excelConfigurationOverviewHint => '此处展示当前配置；交替行可直接切换，其他选项请打开编辑设置。';
+
+  @override
+  String get editSettings => '编辑设置';
+
+  @override
+  String get fileNameTemplate => '文件名模板';
+
+  @override
+  String get excelHeader => 'Excel 抬头';
+
+  @override
+  String get exportPath => '导出路径';
+
+  @override
+  String get systemDownloadsDirectory => '系统下载目录';
+
+  @override
+  String get headerBackground => '抬头背景';
+
+  @override
+  String get tableHeaderBackground => '表头背景';
+
+  @override
+  String get controllerRow => '主控行';
+
+  @override
+  String get alternatingRows => '交替行';
+
+  @override
+  String get fileFormatInformation => '文件格式说明';
+
+  @override
+  String get jsonFormatDescription => 'JSON：标准 JSON 数组，包含所有字段数据，适合备份与跨应用迁移。';
+
+  @override
+  String get excelFormatDescription =>
+      'Excel：使用 .xlsx 格式，包含分组主控行、颜色样式和底部信息，适合分享与打印。';
+
+  @override
+  String get excelExportSettingsTitle => '编辑 Excel 导出设置';
+
+  @override
+  String get fileTab => '文件';
+
+  @override
+  String get tableStyleTab => '表格样式';
+
+  @override
+  String get templateVariablesTab => '模板变量';
+
+  @override
+  String get exportSettingsSaved => '导出设置已保存';
+
+  @override
+  String get select => '选择';
+
+  @override
+  String get exportPathDefaultHint => '留空时使用系统下载目录';
+
+  @override
+  String fileNameTemplateExample(String MM, String dd, String yyyy) {
+    return '如：点名记录_$yyyy-$MM-$dd';
+  }
+
+  @override
+  String get fileNameTemplateHint => '使用模板变量自动生成文件名';
+
+  @override
+  String get headerTemplate => '抬头模板';
+
+  @override
+  String headerTemplateExample(String MM, String dd, String yyyy) {
+    return '如：$yyyy-$MM-$dd日点名记录';
+  }
+
+  @override
+  String get headerTemplateHint => '未使用会话名或会话名为空时生效；支持模板变量';
+
+  @override
+  String get headerBackgroundColor => '抬头背景色';
+
+  @override
+  String get tableHeaderBackgroundColor => '表头背景色';
+
+  @override
+  String get controllerRowBackgroundColor => '主控栏背景色';
+
+  @override
+  String get tableBackgroundColor => '表格背景色';
+
+  @override
+  String get alternatingRowColor => '交替行颜色';
+
+  @override
+  String get alternatingRowColorHint => '使用交替行背景色';
+
+  @override
+  String get footerInformation => '底部说明';
+
+  @override
+  String get footerInformationHint => '显示 OpenLogTool 项目与许可信息';
+
+  @override
+  String get restoreDefaultColors => '恢复默认颜色';
+
+  @override
+  String get tableFont => '表格字体';
+
+  @override
+  String get templateVariablesTitle => '模板变量说明';
+
+  @override
+  String get templateYearDescription => '四位年份，如：2024';
+
+  @override
+  String get templateMonthDescription => '两位月份，如：01, 12';
+
+  @override
+  String get templateDayDescription => '两位日期，如：01, 31';
+
+  @override
+  String get templateHourDescription => '两位小时（24 小时制），如：14';
+
+  @override
+  String get templateMinuteDescription => '两位分钟，如：30';
+
+  @override
+  String get templateSecondDescription => '两位秒数，如：45';
+
+  @override
+  String get templateExamplesTitle => '使用示例';
+
+  @override
+  String templateFileNameExampleOne(String MM, String dd, String yyyy) {
+    return '文件名：点名记录_$yyyy-$MM-$dd';
+  }
+
+  @override
+  String get templateFileNameExampleOneResult => '点名记录_2024-03-28.xlsx';
+
+  @override
+  String templateFileNameExampleTwo(
+      String HH, String MM, String dd, String mm, String ss, String yyyy) {
+    return '文件名：通联_$yyyy-$MM-${dd}_$HH$mm$ss';
+  }
+
+  @override
+  String get templateFileNameExampleTwoResult => '通联_2024-03-28_143045.xlsx';
+
+  @override
+  String templateHeaderExample(String MM, String dd, String yyyy) {
+    return '抬头：$yyyy年$MM月$dd日点名记录';
+  }
+
+  @override
+  String get templateHeaderExampleResult => '2024年03月28日点名记录';
+
+  @override
+  String get templateVariablesTip => '提示：使用模板变量可以让文件名和抬头自动包含当前日期时间，方便文件管理。';
+
+  @override
+  String chooseColor(String label) {
+    return '选择$label';
+  }
+
+  @override
+  String colorHexValue(String value) {
+    return 'HEX：#$value';
+  }
+
+  @override
+  String get colorOpacity => '透明度';
+
+  @override
+  String get noDataToExport => '没有数据可以导出';
+
+  @override
+  String saveExportFileDialog(String format) {
+    return '保存 $format 导出文件';
+  }
+
+  @override
+  String get downloadsDirectoryUnavailable => '无法访问下载目录';
+
+  @override
+  String exportSavedViaSystemPicker(String format) {
+    return '$format 导出成功，已通过系统文件选择器保存';
+  }
+
+  @override
+  String exportSucceeded(String format) {
+    return '$format 导出成功';
+  }
+
+  @override
+  String fileSavedTo(String path) {
+    return '文件已保存到：\n$path';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get excelGenerationFailed => '导出失败：无法生成 Excel 文件';
+
+  @override
+  String importSucceeded(int count) {
+    return '导入成功：$count 条记录';
+  }
+
+  @override
+  String importFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String get excelImportComingSoon => 'Excel 导入功能开发中';
+
+  @override
+  String get pathCopied => '路径已复制';
+
+  @override
+  String get createSession => '新建会话';
+
+  @override
+  String get createSessionTitle => '新建点名会话';
+
+  @override
+  String get createSessionNameHint => '输入会话名称';
+
+  @override
+  String sessionCreated(String title) {
+    return '已创建会话“$title”';
+  }
+
+  @override
+  String createSessionFailed(String error) {
+    return '创建会话失败：$error';
+  }
+
+  @override
+  String get searchSessions => '搜索会话';
+
+  @override
+  String get allSessionStatuses => '全部状态';
+
+  @override
+  String get sessionArchived => '已归档';
+
+  @override
+  String sessionPage(int page, int total) {
+    return '第 $page / $total 页';
+  }
+
+  @override
+  String get moreSessionActions => '更多会话操作';
+
+  @override
+  String get openAndManageCollaboration => '打开并管理协作';
+
+  @override
+  String get exportLibraryJson => '导出词库 JSON';
+
+  @override
+  String get libraryExportDialogTitle => '导出词库';
+
+  @override
+  String get libraryExportSucceeded => '词库已导出';
+
+  @override
+  String libraryExportFailed(String error) {
+    return '导出词库失败：$error';
+  }
+
+  @override
+  String get editLibraryItem => '编辑';
+
+  @override
+  String editLibraryItemTitle(String name) {
+    return '编辑“$name”';
+  }
+
+  @override
+  String get editLibraryItemLabel => '词库内容';
+
+  @override
+  String libraryItemRenamed(String value) {
+    return '已更新为“$value”';
+  }
+
+  @override
+  String libraryItemRenameFailed(String error) {
+    return '修改失败：$error';
+  }
+
+  @override
+  String libraryPageStatus(int current, int total) {
+    return '第 $current / $total 页';
+  }
+
+  @override
+  String get previousPage => '上一页';
+
+  @override
+  String get nextPage => '下一页';
+
+  @override
+  String get settingsCategoryAppearance => '外观';
+
+  @override
+  String get settingsCategoryWorkbench => '工作台';
+
+  @override
+  String get settingsCategoryController => '主控屏';
+
+  @override
+  String get settingsCategoryServerAccount => '服务器与账户';
+
+  @override
+  String get settingsCategoryApplication => '应用';
+
+  @override
+  String get collaborationOverviewTab => '概览';
+
+  @override
+  String get collaborationSyncConflictsTab => '同步与冲突';
+
+  @override
+  String get collaborationAccessManagementTab => '访问管理';
+
+  @override
+  String get dataRecordsExportTab => '记录与导出';
+
+  @override
+  String get dataLookupLibrariesTab => '查询词库';
+
+  @override
+  String get dataLocalDatabaseTab => '本地数据库';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -1649,19 +2416,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String get historySessionCloseTitle => '关闭会话';
+  String get historySessionCloseTitle => '仅在本机关闭会话';
 
   @override
   String historySessionCloseConfirmation(String title) {
-    return '确定关闭“$title”吗？关闭后仍可在历史会话中只读查看。';
+    return '仅在本机关闭“$title”吗？关闭后会作为只读本地历史保留。如果这是协作副本，本机将停止同步并丢弃未同步队列、冲突、离线待复核记录及未提交草稿的本机副本；服务器共享会话、成员及其他设备不受影响。';
   }
 
   @override
-  String get historySessionClosed => '会话已关闭';
+  String get historySessionClosed => '已在本机关闭会话';
 
   @override
   String historySessionCloseFailed(String error) {
-    return '关闭会话失败：$error';
+    return '在本机关闭会话失败：$error';
   }
 
   @override
@@ -1901,10 +2668,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get callsignRequired => '请输入点名呼号';
 
   @override
-  String get leaveSession => '退出协作会话';
+  String get leaveSession => '退出服务器协作';
 
   @override
-  String get leaveSessionConfirmation => '退出后本地副本将保持只读；如需再次参与，必须重新获得邀请。';
+  String get leaveSessionConfirmation =>
+      '这会向服务器提交退出成员关系的请求。成功后本地副本保持只读；如需再次参与，必须重新获得邀请。服务器不可达时请改用本机数据操作。';
 
   @override
   String get convertCollaborationToLocal => '停止本机协作并转为本地会话';
@@ -1914,11 +2682,22 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String convertCollaborationToLocalConfirmation(String title) {
-    return '将停止本机对“$title”的协作同步，并在内部用可编辑的本地副本替换当前会话。服务器上的共享会话、成员和其他设备不受影响。此操作不可撤销。';
+    return '将停止本机对“$title”的协作同步，并替换为可编辑的本地会话。仅复制表格中已经保存的记录；未提交的共享实时草稿仍留在服务器上，不会写入本地会话。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
+  }
+
+  @override
+  String convertCollaborationToLocalUnsyncedConfirmation(String title) {
+    return '将停止本机对“$title”的协作同步，并保留当前表格中已保存的记录。未同步队列、冲突、离线待复核记录及未提交实时草稿会从本机永久丢弃。服务器共享会话、成员和其他设备不受影响。此操作不可撤销。';
   }
 
   @override
   String get convertCollaborationToLocalSucceeded => '已停止本机协作并转为本地会话';
+
+  @override
+  String get closeCollaborationLocally => '仅在本机关闭';
+
+  @override
+  String get moreLocalCollaborationActions => '更多本机操作';
 
   @override
   String get confirm => '确认';
@@ -2388,6 +3167,50 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String get deleteLibraryItemTitle => '删除词库条目';
+
+  @override
+  String deleteLibraryItemConfirmation(String value, String name) {
+    return '确定从$name中删除“$value”吗？';
+  }
+
+  @override
+  String get deleteLibraryItemAction => '删除';
+
+  @override
+  String libraryItemDeleted(String value) {
+    return '已删除：$value';
+  }
+
+  @override
+  String libraryItemDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String clearLibraryTitle(String name) {
+    return '清空$name';
+  }
+
+  @override
+  String clearLibraryConfirmation(String name, int count) {
+    return '将删除$name中的全部 $count 条内容。此操作无法撤销，确定继续吗？';
+  }
+
+  @override
+  String get clearLibraryAction => '全部清空';
+
+  @override
+  String libraryCleared(String name) {
+    return '已清空$name';
+  }
+
+  @override
+  String libraryClearFailed(String error) {
+    return '清空失败：$error';
+  }
+
+  @override
   String get libraryImportEmpty => '文件中没有可导入的词库内容';
 
   @override
@@ -2430,4 +3253,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get fontPreviewSample => 'OpenLogTool · CQ CQ · 点名记录 123';
+
+  @override
+  String get localCollaborationOperationBusy => '另一项协作操作仍在进行，请等待结束后重试。';
+
+  @override
+  String get localCollaborationRequired => '当前会话已不是本机协作副本，请刷新页面后重试。';
 }

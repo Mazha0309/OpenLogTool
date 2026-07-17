@@ -6,8 +6,10 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/screens/collaboration_screen.dart';
 import 'package:openlogtool/screens/session_hub_page.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +18,148 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('SessionHubPage uses the shared responsive section surfaces',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (_, __, ___) async => [],
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The shell AppBar is the only page-level heading. The body starts with
+    // the current-session card instead of repeating the destination title.
+    expect(find.byType(SettingsPageHeader), findsNothing);
+    expect(find.byKey(const Key('session-hub-page-header')), findsNothing);
+    expect(find.byKey(const Key('current-session-section')), findsOneWidget);
+    expect(find.byKey(const Key('session-history-section')), findsOneWidget);
+    expect(find.byType(SettingsSectionCard), findsAtLeastNWidgets(2));
+    expect(find.byKey(const Key('open-live-share-management')), findsOneWidget);
+    expect(find.byKey(const Key('create-session')), findsOneWidget);
+    expect(find.byKey(const Key('session-history-search')), findsOneWidget);
+    expect(find.text('仅在本机关闭会话'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('creating a session returns directly to the workbench',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (_, __, ___) async => [],
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('create-session')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('create-session-name')),
+      '周五晚间点名',
+    );
+    await tester.tap(find.byKey(const Key('confirm-create-session')));
+    await tester.pumpAndSettle();
+
+    expect(sessionProvider.startedTitles, ['周五晚间点名']);
+    expect(sessionProvider.currentSession.title, '周五晚间点名');
+    expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
+  });
+
+  testWidgets(
+      'closed collaboration history opens management and cannot reopen locally',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+      _session(
+        id: 'shared-session',
+        title: '远程协作点名',
+        status: 'closed',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+      collaborationSessionIds: const {'shared-session'},
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (_, __, ___) async => [],
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('reopen-history-session-shared-session')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('open-history-session-shared-session')),
+      findsOneWidget,
+    );
+    expect(find.text('打开并管理协作'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('open-history-session-shared-session')).first,
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(
+      find.byKey(const Key('open-history-session-shared-session')).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(sessionProvider.currentSessionId, 'shared-session');
+    expect(find.byType(CollaborationScreen), findsOneWidget);
   });
 
   testWidgets(
@@ -94,21 +238,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('open-session-history')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('session-history-dialog')), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('session-history-row-closed-session')).first,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('上周点名'), findsOneWidget);
 
       await tester.tap(
-        find.byKey(const Key('session-history-tile-closed-session')),
+        find.byKey(const Key('session-history-row-closed-session')).first,
       );
       await tester.pumpAndSettle();
 
       expect(sessionProvider.currentSessionId, 'closed-session');
       expect(loadedSessionIds, contains('closed-session'));
       expect(logProvider.currentSessionReadOnly, isTrue);
-      expect(find.byKey(const Key('session-history-dialog')), findsNothing);
       expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
     },
   );
@@ -151,10 +295,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('open-session-history')));
-    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('session-history-row-broken-session')).first,
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(
-      find.byKey(const Key('session-history-tile-broken-session')),
+      find.byKey(const Key('session-history-row-broken-session')).first,
     );
     await tester.pumpAndSettle();
 
@@ -165,7 +312,7 @@ void main() {
           'broken-session',
           'current-session',
         ]));
-    expect(find.byKey(const Key('session-history-dialog')), findsOneWidget);
+    expect(find.byKey(const Key('session-history-section')), findsOneWidget);
     expect(find.textContaining('打开会话失败'), findsOneWidget);
     expect(find.byKey(const Key('workbench-after-history')), findsNothing);
   });
@@ -254,10 +401,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('open-session-history')));
-    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('reopen-history-session-closed-session')).first,
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(
-      find.byKey(const Key('reopen-history-session-closed-session')),
+      find.byKey(const Key('reopen-history-session-closed-session')).first,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -315,10 +465,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('open-session-history')));
-    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('reopen-history-session-broken-session')).first,
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(
-      find.byKey(const Key('reopen-history-session-broken-session')),
+      find.byKey(const Key('reopen-history-session-broken-session')).first,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -330,7 +483,6 @@ void main() {
     expect(sessionProvider.currentSession.status, 'active');
     expect(logProvider.currentSessionId, 'broken-session');
     expect(logProvider.currentSessionReadOnly, isTrue);
-    expect(find.byKey(const Key('session-history-dialog')), findsNothing);
     expect(find.textContaining('已重新激活，但日志暂时加载失败'), findsOneWidget);
     expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
 
@@ -396,13 +548,17 @@ class _FakeSessionProvider extends SessionProvider {
   _FakeSessionProvider({
     required List<Session> sessions,
     required String currentSessionId,
+    Set<String> collaborationSessionIds = const {},
   })  : _sessions = sessions,
+        _collaborationSessionIds = collaborationSessionIds,
         _currentSession = sessions.firstWhere(
           (session) => session.sessionId == currentSessionId,
         );
 
   final List<Session> _sessions;
+  final Set<String> _collaborationSessionIds;
   Session _currentSession;
+  final List<String?> startedTitles = [];
 
   @override
   Future<void> get ready => Future<void>.value();
@@ -415,6 +571,48 @@ class _FakeSessionProvider extends SessionProvider {
 
   @override
   Future<List<Session>> listAvailableSessions() async => [..._sessions];
+
+  @override
+  Future<List<SessionListEntry>> listAvailableSessionEntries() async => [
+        for (final session in _sessions)
+          SessionListEntry(
+            session: session,
+            hasCollaborationBinding:
+                _collaborationSessionIds.contains(session.sessionId),
+          ),
+      ];
+
+  @override
+  Future<void> startNewSession({
+    String? title,
+    bool autoGenerated = false,
+  }) async {
+    startedTitles.add(title);
+    final created = _session(
+      id: 'created-session-${_sessions.length}',
+      title: title ?? '新记录',
+      status: 'active',
+    );
+    for (var index = 0; index < _sessions.length; index += 1) {
+      final existing = _sessions[index];
+      if (existing.status == 'active' &&
+          !_collaborationSessionIds.contains(existing.sessionId)) {
+        _sessions[index] = Session(
+          sessionId: existing.sessionId,
+          title: existing.title,
+          status: 'closed',
+          shareCode: existing.shareCode,
+          createdAt: existing.createdAt,
+          updatedAt: created.createdAt,
+          closedAt: created.createdAt,
+          deletedAt: existing.deletedAt,
+        );
+      }
+    }
+    _sessions.add(created);
+    _currentSession = created;
+    notifyListeners();
+  }
 
   @override
   Future<void> switchToSession(String sessionId) async {

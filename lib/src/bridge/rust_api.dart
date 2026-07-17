@@ -149,6 +149,16 @@ class RustApi {
     );
   }
 
+  static Future<Session> stopCollaborationSessionLocally({
+    required String sessionId,
+  }) {
+    return sessions.stopCollaborationSessionLocally(sessionId: sessionId);
+  }
+
+  static Future<Session> closeSessionLocally({required String sessionId}) {
+    return sessions.closeSessionLocally(sessionId: sessionId);
+  }
+
   static Future<void> hardDeleteSession({required String sessionId}) {
     return sessions.hardDeleteSession(sessionId: sessionId);
   }
@@ -203,6 +213,40 @@ class RustApi {
     );
   }
 
+  static Future<void> upsertDictItemIfActive({
+    required String dictType,
+    required String raw,
+    String? pinyin,
+    String? abbreviation,
+  }) {
+    return dict.upsertDictItemIfActive(
+      dictType: dictType,
+      raw: raw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+    );
+  }
+
+  static Future<DictItem> renameDictItem({
+    required String dictType,
+    required String oldRaw,
+    required String newRaw,
+    String? pinyin,
+    String? abbreviation,
+  }) {
+    return dict.renameDictItem(
+      dictType: dictType,
+      oldRaw: oldRaw,
+      newRaw: newRaw,
+      pinyin: pinyin,
+      abbreviation: abbreviation,
+    );
+  }
+
+  static Future<void> bulkUpsertDictItems({required String requestJson}) {
+    return dict.bulkUpsertDictItems(requestJson: requestJson);
+  }
+
   static Future<List<DictItem>> getDictItems({required String dictType}) {
     return dict.getDictItems(dictType: dictType);
   }
@@ -212,6 +256,13 @@ class RustApi {
     required String raw,
   }) {
     return dict.getDictItemByRaw(dictType: dictType, raw: raw);
+  }
+
+  static Future<bool> softDeleteDictItem({
+    required String dictType,
+    required String raw,
+  }) {
+    return dict.softDeleteDictItem(dictType: dictType, raw: raw);
   }
 
   static Future<void> softDeleteDictItems({required String dictType}) {

@@ -25,6 +25,36 @@ void main() {
     expect(restored.appearance.themeColor, const Color(0xFF9C27B0));
     expect(restored.appearance.isDarkMode, isTrue);
     expect(restored.appearance.fontFamily, 'SarasaGothicSC');
+    expect(restored.appearance.locale, const Locale('en', 'US'));
+    expect(
+      restored.appearance.resolveLocale(const Locale('zh', 'CN')),
+      const Locale('en', 'US'),
+    );
+  });
+
+  test('controller appearance preserves system locale fallback', () {
+    const appearance = ControllerWindowAppearance();
+
+    final restored = ControllerWindowAppearance.fromJson(appearance.toJson());
+
+    expect(restored.locale, isNull);
+    expect(
+      restored.resolveLocale(const Locale('en', 'GB')),
+      const Locale('en', 'US'),
+    );
+    expect(
+      restored.resolveLocale(const Locale('ja', 'JP')),
+      const Locale('zh', 'CN'),
+    );
+  });
+
+  test('controller appearance rejects an unsupported locale snapshot', () {
+    expect(
+      () => ControllerWindowAppearance.fromJson({
+        'locale': 'ja_JP',
+      }),
+      throwsFormatException,
+    );
   });
 
   test('pipe protocol handles split frames and rejects unknown modes', () {
@@ -189,5 +219,6 @@ const _launch = ControllerWindowLaunch(
     themeColor: Color(0xFF9C27B0),
     isDarkMode: true,
     fontFamily: 'SarasaGothicSC',
+    locale: Locale('en', 'US'),
   ),
 );

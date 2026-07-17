@@ -31,7 +31,7 @@ void main() {
     expect(optionText.style?.fontFamily, isNull);
 
     await tester.tap(firstOption);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 130));
     expect(result, isNull);
     final preview = tester.widget<Text>(
       find.byKey(const Key('font-preview-sample')),
@@ -62,12 +62,12 @@ void main() {
       find.byKey(const Key('font-search-field')),
       'robo',
     );
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 130));
     expect(find.text('1 fonts'), findsOneWidget);
     expect(find.text('Roboto'), findsOneWidget);
 
     await tester.tap(find.text('System default'));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 130));
     await tester.tap(find.byKey(const Key('apply-font-selection')));
     await tester.pumpAndSettle();
     expect(result, isNotNull);

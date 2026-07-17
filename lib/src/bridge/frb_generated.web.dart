@@ -38,6 +38,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
   DictItem dco_decode_box_autoadd_dict_item(dynamic raw);
 
   @protected
@@ -74,6 +77,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Session> dco_decode_list_session(dynamic raw);
 
   @protected
+  List<SessionSummary> dco_decode_list_session_summary(dynamic raw);
+
+  @protected
   LogEntry dco_decode_log_entry(dynamic raw);
 
   @protected
@@ -95,6 +101,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Session dco_decode_session(dynamic raw);
 
   @protected
+  SessionSummary dco_decode_session_summary(dynamic raw);
+
+  @protected
   int dco_decode_u_8(dynamic raw);
 
   @protected
@@ -108,6 +117,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   DictItem sse_decode_box_autoadd_dict_item(SseDeserializer deserializer);
@@ -149,6 +161,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Session> sse_decode_list_session(SseDeserializer deserializer);
 
   @protected
+  List<SessionSummary> sse_decode_list_session_summary(
+      SseDeserializer deserializer);
+
+  @protected
   LogEntry sse_decode_log_entry(SseDeserializer deserializer);
 
   @protected
@@ -171,6 +187,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Session sse_decode_session(SseDeserializer deserializer);
 
   @protected
+  SessionSummary sse_decode_session_summary(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_8(SseDeserializer deserializer);
 
   @protected
@@ -183,14 +202,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
-
-  @protected
   void sse_encode_AnyhowException(
       AnyhowException self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_dict_item(
@@ -235,6 +254,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_session(List<Session> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_session_summary(
+      List<SessionSummary> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_log_entry(LogEntry self, SseSerializer serializer);
 
   @protected
@@ -259,6 +282,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_session(Session self, SseSerializer serializer);
 
   @protected
+  void sse_encode_session_summary(
+      SessionSummary self, SseSerializer serializer);
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
 
   @protected
@@ -269,9 +296,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
 }
 
 // Section: wire_class

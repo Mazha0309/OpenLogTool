@@ -454,7 +454,6 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
         decoration: InputDecoration(
           labelText: widget.label,
           hintText: widget.hintText,
-          border: const OutlineInputBorder(),
           isDense: true,
           contentPadding: EdgeInsets.symmetric(
               horizontal: 12, vertical: widget.isCompact ? 10 : 14),

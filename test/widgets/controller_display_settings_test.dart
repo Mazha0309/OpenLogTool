@@ -30,7 +30,14 @@ void main() {
 
     expect(settings.controllerDeviceModeEnabled, isFalse);
     final toggle = find.byKey(const Key('controller-device-mode-switch'));
-    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(
+      tester
+          .widget<Switch>(
+            find.descendant(of: toggle, matching: find.byType(Switch)),
+          )
+          .value,
+      isFalse,
+    );
 
     await tester.tap(toggle);
     await tester.pumpAndSettle();

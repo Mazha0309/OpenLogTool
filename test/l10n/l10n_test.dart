@@ -51,6 +51,16 @@ void main() {
     expect(en.expandSidebar, 'Expand sidebar');
     expect(zh.finishEditing, '结束编辑');
     expect(en.finishEditing, 'Finish editing');
+    expect(zh.inputFieldHint(zh.fieldDevice), '输入设备');
+    expect(en.inputFieldHint(en.fieldDevice), 'Enter Radio');
+    expect(zh.optionalFieldHint(zh.fieldRemarks), '备注（可选）');
+    expect(en.optionalFieldHint(en.fieldRemarks), 'Remarks (optional)');
+    expect(zh.noSavedRecords, '暂无已保存记录');
+    expect(en.noSavedRecords, 'No saved records');
+    expect(zh.deleteRecordConfirmation, '确定要删除这条记录吗？');
+    expect(en.deleteRecordConfirmation, 'Delete this record?');
+    expect(zh.recordDeleted, '记录已删除');
+    expect(en.recordDeleted, 'Record deleted');
     expect(zh.serverSettingsTitle, '服务器与账户');
     expect(en.serverSettingsTitle, 'Server and account');
     expect(zh.tokenStoragePrivateFileWarning, contains('Linux 用户'));
@@ -92,11 +102,31 @@ void main() {
     expect(zh.convertCollaborationToLocal, '停止本机协作并转为本地会话');
     expect(
       zh.convertCollaborationToLocalConfirmation('周日晚间点名'),
-      contains('服务器上的共享会话、成员和其他设备不受影响'),
+      contains('服务器共享会话、成员和其他设备不受影响'),
     );
     expect(
       en.convertCollaborationToLocal,
       'Stop collaboration on this device and convert to a local session',
     );
+    expect(
+      zh.deleteLibraryItemConfirmation('FT-991A', '设备词库'),
+      '确定从设备词库中删除“FT-991A”吗？',
+    );
+    expect(
+      en.clearLibraryConfirmation('Radio library', 3),
+      contains('all 3 entries'),
+    );
+    expect(zh.localDataOperationsTitle, '本机数据');
+    expect(en.localDataOperationsTitle, 'On-device data');
+    expect(zh.settingsAppearanceTitle, '外观与语言');
+    expect(en.settingsAppearanceTitle, 'Appearance & language');
+    expect(zh.appLanguageSetting, '界面语言');
+    expect(en.appLanguageSetting, 'Interface language');
+    expect(zh.languageFollowSystem, '跟随系统');
+    expect(en.languageFollowSystem, 'Follow system');
+    expect(zh.databaseClearConfirmationPhrase, '清空全部数据');
+    expect(en.databaseClearConfirmationPhrase, 'DELETE ALL DATA');
+    expect(zh.databaseImportPreviewWarning, contains('登录凭据'));
+    expect(en.databaseImportPreviewWarning, contains('Server sessions'));
   });
 }

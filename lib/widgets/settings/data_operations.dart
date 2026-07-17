@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
 
-class DataOperations extends StatelessWidget {
+typedef DatabaseOperationCallback = Future<void> Function();
+
+class DataOperations extends StatefulWidget {
   final bool isNarrow;
   final double cardPadding;
-  final VoidCallback onViewDatabaseLog;
-  final VoidCallback onExportDatabase;
-  final VoidCallback onImportDatabase;
-  final VoidCallback onViewSnackbarLog;
-  final VoidCallback onClearAllData;
+  final DatabaseOperationCallback onViewDatabaseLog;
+  final DatabaseOperationCallback onExportDatabase;
+  final DatabaseOperationCallback onImportDatabase;
+  final DatabaseOperationCallback onViewSnackbarLog;
+  final DatabaseOperationCallback onClearAllData;
 
   const DataOperations({
     super.key,
@@ -21,135 +25,125 @@ class DataOperations extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  State<DataOperations> createState() => _DataOperationsState();
+}
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side:
-            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.storage, color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '数据操作',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: isNarrow ? 8 : 12),
-            _buildTile(
-              context,
-              icon: Icons.storage,
-              title: '数据库状态',
-              subtitle: '查看数据库表结构和行数统计',
-              onTap: onViewDatabaseLog,
-            ),
-            _buildTile(
-              context,
-              icon: Icons.message_outlined,
-              title: '查看弹窗日志',
-              subtitle: '查看本次运行期间记录的底部弹窗消息',
-              onTap: onViewSnackbarLog,
-            ),
-            _buildTile(
-              context,
-              icon: Icons.upload,
-              title: '导出数据库',
-              subtitle: '将数据库导出为 JSON 备份文件',
-              onTap: onExportDatabase,
-            ),
-            _buildTile(
-              context,
-              icon: Icons.download,
-              title: '导入数据库',
-              subtitle: '从 JSON 备份文件导入并覆盖现有数据',
-              onTap: onImportDatabase,
-              textColor: Colors.orange,
-            ),
-            const Divider(),
-            _buildTile(
-              context,
-              icon: Icons.delete_forever,
-              title: '清空所有数据',
-              subtitle: '删除所有点名记录和词库数据，不可恢复',
-              onTap: onClearAllData,
-              textColor: theme.colorScheme.error,
-            ),
-          ],
-        ),
+class _DataOperationsState extends State<DataOperations> {
+  String? _activeOperation;
+
+  Future<void> _run(
+    String operation,
+    DatabaseOperationCallback callback,
+  ) async {
+    if (_activeOperation != null) return;
+    setState(() => _activeOperation = operation);
+    try {
+      await callback();
+    } finally {
+      if (mounted) setState(() => _activeOperation = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsSectionCard(
+      icon: Icons.storage_outlined,
+      title: context.l10n.localDataOperationsTitle,
+      description: context.l10n.localDataOperationsHint,
+      padding: widget.cardPadding,
+      contentSpacing: widget.isNarrow ? 10 : 14,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSectionLabel(context.l10n.databaseDiagnosticsSection),
+          SettingsTileGroup(
+            children: [
+              _buildTile(
+                context,
+                operation: 'status',
+                icon: Icons.storage_outlined,
+                title: context.l10n.databaseStatusTitle,
+                subtitle: context.l10n.databaseStatusHint,
+                onTap: widget.onViewDatabaseLog,
+              ),
+              _buildTile(
+                context,
+                operation: 'snackbar-log',
+                icon: Icons.message_outlined,
+                title: context.l10n.snackbarLogTitle,
+                subtitle: context.l10n.snackbarLogHint,
+                onTap: widget.onViewSnackbarLog,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SettingsSectionLabel(context.l10n.databaseBackupSection),
+          SettingsTileGroup(
+            children: [
+              _buildTile(
+                context,
+                operation: 'export',
+                icon: Icons.file_upload_outlined,
+                title: context.l10n.databaseExportTitle,
+                subtitle: context.l10n.databaseExportHint,
+                onTap: widget.onExportDatabase,
+              ),
+              _buildTile(
+                context,
+                operation: 'import',
+                icon: Icons.file_download_outlined,
+                title: context.l10n.databaseImportTitle,
+                subtitle: context.l10n.databaseImportHint,
+                onTap: widget.onImportDatabase,
+                tone: SettingsTone.tertiary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SettingsSectionLabel(
+            context.l10n.databaseDangerZoneSection,
+            tone: SettingsTone.danger,
+          ),
+          SettingsTileGroup(
+            children: [
+              _buildTile(
+                context,
+                operation: 'clear',
+                icon: Icons.delete_forever_outlined,
+                title: context.l10n.databaseClearTitle,
+                subtitle: context.l10n.databaseClearHint,
+                onTap: widget.onClearAllData,
+                tone: SettingsTone.danger,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildTile(
     BuildContext context, {
+    required String operation,
     required IconData icon,
     required String title,
     required String subtitle,
-    required VoidCallback onTap,
-    Color? textColor,
+    required DatabaseOperationCallback onTap,
+    SettingsTone tone = SettingsTone.primary,
   }) {
-    final theme = Theme.of(context);
+    final enabled = _activeOperation == null;
+    final running = _activeOperation == operation;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: (textColor ?? theme.colorScheme.primary).withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: textColor ?? theme.colorScheme.primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: textColor,
-                    ),
-                  ),
-                  if (subtitle.isNotEmpty)
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: textColor != null
-                            ? textColor.withAlpha(180)
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: theme.colorScheme.outline),
-          ],
-        ),
-      ),
+    return SettingsActionTile(
+      key: Key('database-operation-$operation'),
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      tone: tone,
+      enabled: enabled,
+      busy: running,
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _run(operation, onTap),
     );
   }
 }

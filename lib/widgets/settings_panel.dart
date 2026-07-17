@@ -1,186 +1,291 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/l10n/l10n.dart';
-import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
-import 'package:openlogtool/src/bridge/rust_api.dart';
+import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
-import 'package:openlogtool/widgets/settings/theme_settings.dart';
-import 'package:openlogtool/widgets/settings/layout_settings.dart';
-import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
-import 'package:openlogtool/widgets/settings/data_operations.dart';
-import 'package:openlogtool/widgets/settings/server_account_settings.dart';
 import 'package:openlogtool/widgets/about_app_dialog.dart';
 import 'package:openlogtool/widgets/font_picker_dialog.dart';
+import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
+import 'package:openlogtool/widgets/settings/layout_settings.dart';
+import 'package:openlogtool/widgets/settings/server_account_settings.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
+import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/theme_color_picker_dialog.dart';
+import 'package:provider/provider.dart';
 
-class SettingsPanel extends StatelessWidget {
+enum _SettingsCategory {
+  appearance,
+  workbench,
+  controller,
+  serverAccount,
+  application,
+}
+
+extension on _SettingsCategory {
+  IconData get icon => switch (this) {
+        _SettingsCategory.appearance => Icons.palette_outlined,
+        _SettingsCategory.workbench => Icons.dashboard_customize_outlined,
+        _SettingsCategory.controller => Icons.cast_outlined,
+        _SettingsCategory.serverAccount => Icons.cloud_outlined,
+        _SettingsCategory.application => Icons.info_outline,
+      };
+
+  String label(BuildContext context) => switch (this) {
+        _SettingsCategory.appearance => context.l10n.settingsCategoryAppearance,
+        _SettingsCategory.workbench => context.l10n.settingsCategoryWorkbench,
+        _SettingsCategory.controller => context.l10n.settingsCategoryController,
+        _SettingsCategory.serverAccount =>
+          context.l10n.settingsCategoryServerAccount,
+        _SettingsCategory.application =>
+          context.l10n.settingsCategoryApplication,
+      };
+
+  String description(BuildContext context) => switch (this) {
+        _SettingsCategory.appearance => context.l10n.settingsAppearanceHint,
+        _SettingsCategory.workbench => context.l10n.layoutSettingsHint,
+        _SettingsCategory.controller =>
+          context.l10n.controllerDisplaySettingsHint,
+        _SettingsCategory.serverAccount => context.l10n.serverSettingsHint,
+        _SettingsCategory.application => context.l10n.settingsSupportHint,
+      };
+}
+
+/// Categorized application settings.
+///
+/// The app shell owns the only page-level title. This panel presents section
+/// navigation on wide screens and a category index/detail flow on phones.
+class SettingsPanel extends StatefulWidget {
   const SettingsPanel({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final appInfoProvider = Provider.of<AppInfoProvider>(context);
-    return LayoutBuilder(builder: (context, constraints) {
-      final isNarrow = constraints.maxWidth < 860;
-      final cardPadding = constraints.maxWidth < 600 ? 12.0 : 16.0;
+  State<SettingsPanel> createState() => _SettingsPanelState();
+}
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '应用设置',
-            style: TextStyle(
-              fontSize: isNarrow ? 18 : 20,
-              fontWeight: FontWeight.bold,
+class _SettingsPanelState extends State<SettingsPanel> {
+  _SettingsCategory _desktopCategory = _SettingsCategory.appearance;
+  _SettingsCategory? _compactCategory;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= AppBreakpoints.medium;
+          if (!wide) return _buildCompactSettings(context);
+
+          return Row(
+            key: const Key('settings-wide-layout'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 248,
+                child: _buildCategoryNavigation(
+                  context,
+                  selected: _desktopCategory,
+                  onSelected: (category) {
+                    if (_desktopCategory == category) return;
+                    setState(() => _desktopCategory = category);
+                  },
+                ),
+              ),
+              const SizedBox(width: AppSpace.lg),
+              Expanded(
+                child: _buildCategoryStack(
+                  context,
+                  selected: _desktopCategory,
+                  compact: false,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+  Widget _buildCompactSettings(BuildContext context) {
+    final selected = _compactCategory;
+    return Column(
+      key: const Key('settings-compact-layout'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Offstage(
+          offstage: selected != null,
+          child: TickerMode(
+            enabled: selected == null,
+            child: _buildCategoryNavigation(
+              context,
+              selected: null,
+              onSelected: (category) {
+                setState(() => _compactCategory = category);
+              },
             ),
           ),
-          SizedBox(height: isNarrow ? 16 : 24),
-          if (isNarrow) ...[
-            ThemeSettings(
-              isNarrow: constraints.maxWidth < 600,
-              cardPadding: cardPadding,
-              onPickColor: () => _showColorPicker(context),
-              onPickFont: () => _showFontPicker(context),
-            ),
-            const SizedBox(height: 16),
-            LayoutSettings(
-              isNarrow: constraints.maxWidth < 600,
-              cardPadding: cardPadding,
-            ),
-          ] else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        Offstage(
+          offstage: selected == null,
+          child: TickerMode(
+            enabled: selected != null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: ThemeSettings(
-                    isNarrow: false,
-                    cardPadding: cardPadding,
-                    onPickColor: () => _showColorPicker(context),
-                    onPickFont: () => _showFontPicker(context),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: const Key('settings-category-back'),
+                    onPressed: () => setState(() => _compactCategory = null),
+                    icon: const Icon(Icons.arrow_back),
+                    label: Text(
+                      MaterialLocalizations.of(context).backButtonTooltip,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: LayoutSettings(
-                    isNarrow: false,
-                    cardPadding: cardPadding,
-                  ),
+                const SizedBox(height: AppSpace.xs),
+                _buildCategoryStack(
+                  context,
+                  selected: selected ?? _SettingsCategory.appearance,
+                  compact: true,
                 ),
               ],
             ),
-          const SizedBox(height: 16),
-          ControllerDisplaySettings(cardPadding: cardPadding),
-          const SizedBox(height: 16),
-          ServerAccountSettings(cardPadding: cardPadding),
-          const SizedBox(height: 16),
-          DataOperations(
-            isNarrow: isNarrow,
-            cardPadding: cardPadding,
-            onViewDatabaseLog: () => _showDatabaseLogDialog(context),
-            onExportDatabase: () => _exportDatabase(context),
-            onImportDatabase: () => _showImportDatabaseDialog(context),
-            onViewSnackbarLog: () => _showSnackbarLogDialog(context),
-            onClearAllData: () => _showClearDataConfirmation(context),
           ),
-          const SizedBox(height: 16),
-          Card(
-            margin: EdgeInsets.zero,
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            child: ListTile(
-              key: const Key('about-app-entry'),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: cardPadding, vertical: 6),
-              leading: Icon(
-                Icons.info_outline,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: Text(
-                context.l10n.aboutAppTitle,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                '${context.l10n.aboutAppTagline}\n'
-                '${appInfoProvider.fullVersion} · '
-                '${context.l10n.aboutLicenseName}',
-              ),
-              isThreeLine: true,
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showAboutDialog(context),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _showResetConfirmation(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-                side: BorderSide(color: Theme.of(context).colorScheme.error),
-              ),
-              icon: const Icon(Icons.restore_outlined),
-              label: Text(context.l10n.restoreDefaultSettings),
-            ),
-          ),
-        ],
-      );
-    });
+        ),
+      ],
+    );
   }
 
-  void _showSnackbarLogDialog(BuildContext context) {
-    final entries =
-        Provider.of<SnackbarLogProvider>(context, listen: false).entries;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('弹窗日志'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: entries.isEmpty
-              ? const Text('当前没有弹窗日志')
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: entries.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 16),
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    final time =
-                        '${entry.createdAt.hour.toString().padLeft(2, '0')}:${entry.createdAt.minute.toString().padLeft(2, '0')}:${entry.createdAt.second.toString().padLeft(2, '0')}';
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SelectableText(
-                          entry.message,
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$time · ${entry.type} · ${entry.source}',
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    );
-                  },
+  Widget _buildCategoryNavigation(
+    BuildContext context, {
+    required _SettingsCategory? selected,
+    required ValueChanged<_SettingsCategory> onSelected,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('settings-category-navigation'),
+      padding: const EdgeInsets.all(AppSpace.xs),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+      ),
+      child: Column(
+        children: [
+          for (final category in _SettingsCategory.values)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpace.xxs),
+              child: ListTile(
+                key: Key('settings-category-${category.name}'),
+                selected: selected == category,
+                selectedTileColor: colors.primaryContainer,
+                selectedColor: colors.onPrimaryContainer,
+                leading: AppIconBadge(
+                  icon: category.icon,
+                  tone:
+                      selected == category ? AppTone.primary : AppTone.neutral,
+                  size: AppIconBadgeSize.action,
                 ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('关闭'),
+                title: Text(
+                  category.label(context),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  category.description(context),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: selected == null
+                    ? const Icon(Icons.chevron_right, size: 20)
+                    : null,
+                onTap: () => onSelected(category),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Retains each category subtree while it is hidden so an in-progress server
+  /// URL edit is not discarded when the user briefly opens another category.
+  Widget _buildCategoryStack(
+    BuildContext context, {
+    required _SettingsCategory selected,
+    required bool compact,
+  }) {
+    final padding = compact ? AppSpace.sm : AppSpace.md;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final category in _SettingsCategory.values)
+          Offstage(
+            offstage: selected != category,
+            child: TickerMode(
+              enabled: selected == category,
+              child: _buildCategoryContent(
+                context,
+                category: category,
+                compact: compact,
+                cardPadding: padding,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryContent(
+    BuildContext context, {
+    required _SettingsCategory category,
+    required bool compact,
+    required double cardPadding,
+  }) =>
+      switch (category) {
+        _SettingsCategory.appearance => ThemeSettings(
+            isNarrow: compact,
+            cardPadding: cardPadding,
+            onPickColor: () => _showColorPicker(context),
+            onPickFont: () => _showFontPicker(context),
+          ),
+        _SettingsCategory.workbench => LayoutSettings(
+            isNarrow: compact,
+            cardPadding: cardPadding,
+          ),
+        _SettingsCategory.controller =>
+          ControllerDisplaySettings(cardPadding: cardPadding),
+        _SettingsCategory.serverAccount =>
+          ServerAccountSettings(cardPadding: cardPadding),
+        _SettingsCategory.application => _buildApplicationSettings(
+            context,
+            cardPadding: cardPadding,
+          ),
+      };
+
+  Widget _buildApplicationSettings(
+    BuildContext context, {
+    required double cardPadding,
+  }) {
+    final appInfoProvider = context.watch<AppInfoProvider>();
+    return SettingsSectionCard(
+      icon: Icons.info_outline,
+      title: context.l10n.settingsSupportTitle,
+      description: context.l10n.settingsSupportHint,
+      padding: cardPadding,
+      tone: SettingsTone.tertiary,
+      child: SettingsTileGroup(
+        children: [
+          SettingsActionTile(
+            key: const Key('about-app-entry'),
+            icon: Icons.radio_outlined,
+            title: context.l10n.aboutAppTitle,
+            subtitle: '${context.l10n.aboutAppTagline}\n'
+                '${appInfoProvider.fullVersion} · '
+                '${context.l10n.aboutLicenseName}',
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showAboutDialog(context),
+            tone: SettingsTone.tertiary,
+          ),
+          SettingsActionTile(
+            key: const Key('restore-default-settings-entry'),
+            icon: Icons.restore_outlined,
+            title: context.l10n.restoreDefaultSettings,
+            subtitle: context.l10n.restoreDefaultSettingsHint,
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showResetConfirmation(context),
           ),
         ],
       ),
@@ -200,228 +305,51 @@ class SettingsPanel extends StatelessWidget {
     }
   }
 
-  void _showResetConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('恢复默认设置'),
-        content: const Text('确定要恢复所有设置为默认值吗？'),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () {
-              Provider.of<SettingsProvider>(context, listen: false)
-                  .resetToDefaults();
-              Navigator.pop(context);
-              context.showLoggedSnackBar(
-                const SnackBar(
-                  content: Text('已恢复默认设置'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text('确认恢复'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showClearDataConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('清空所有数据'),
-        content: const Text(
-            '⚠️ 警告：此操作不可恢复！\n\n将删除所有点名记录数据，包括：\n• 所有通联记录\n• 呼号、设备、天线词库\n• QTH 历史记录\n\n确定要继续吗？'),
-        actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                await RustApi.clearAllData();
-                if (context.mounted) {
-                  context.showLoggedSnackBar(
-                    const SnackBar(
-                      content: Text('已清空所有数据，请重启应用以重新加载。'),
-                      duration: Duration(seconds: 3),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  context.showLoggedSnackBar(
-                    SnackBar(
-                      content: Text('清空失败: $e'),
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('确认清空'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _exportDatabase(BuildContext context) async {
-    try {
-      final jsonData = await RustApi.exportDatabase();
-
-      final now = DateTime.now();
-      final fileName =
-          'openlogtool_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
-
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: '保存数据库备份',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        bytes: utf8.encode(jsonData),
-      );
-
-      if (result != null) {
-        if (!Platform.isAndroid) {
-          final file = File(result);
-          await file.writeAsString(jsonData);
-        }
-
-        if (context.mounted) {
-          context.showLoggedSnackBar(
-            const SnackBar(
-              content: Text('数据库已导出！'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(
-          SnackBar(
-            content: Text('导出失败: $e'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
-  }
-
-  void _showImportDatabaseDialog(BuildContext context) {
-    showDialog(
+  Future<void> _showResetConfirmation(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('导入数据库'),
-        content:
-            const Text('⚠️ 警告：导入将覆盖所有现有数据！\n\n此操作不可恢复，建议先导出当前数据库。\n\n确定要继续吗？'),
+        insetPadding: _dialogInsetPadding(dialogContext),
+        scrollable: true,
+        title: Text(dialogContext.l10n.resetSettingsTitle),
+        content: Text(dialogContext.l10n.resetSettingsConfirmation),
         actions: [
-          FilledButton(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(dialogContext),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.cancel),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await _importDatabase(context);
-            },
-            child: const Text('继续导入'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.resetSettingsConfirmAction),
           ),
         ],
       ),
     );
-  }
+    if (confirmed != true || !context.mounted) return;
 
-  Future<void> _importDatabase(BuildContext context) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: '选择数据库备份文件',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true,
-      );
-
-      if (result != null && result.files.single.bytes != null) {
-        final jsonData = utf8.decode(result.files.single.bytes!);
-        await RustApi.importDatabase(jsonData: jsonData);
-
-        if (context.mounted) {
-          context.showLoggedSnackBar(
-            const SnackBar(
-              content: Text('数据库导入成功！请重启应用以重新加载数据。'),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        context.showLoggedSnackBar(
-          SnackBar(
-            content: Text('导入失败: $e'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
-  }
-
-  void _showDatabaseLogDialog(BuildContext context) async {
-    final status = await _buildDatabaseStatus(context);
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('数据库状态'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              status,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            ),
-          ),
+      await context.read<SettingsProvider>().resetToDefaults();
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(context.l10n.resetSettingsSucceeded),
+          duration: const Duration(seconds: 2),
         ),
-        actions: [
-          FilledButton(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(dialogContext),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<String> _buildDatabaseStatus(BuildContext ctx) async {
-    try {
-      return await RustApi.getDatabaseStatus();
-    } catch (e) {
-      return '读取数据库状态失败: $e';
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(context.l10n.resetSettingsFailed(error.toString())),
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 
   void _showAboutDialog(BuildContext context) {
-    final appInfoProvider =
-        Provider.of<AppInfoProvider>(context, listen: false);
-
-    showDialog(
+    final appInfoProvider = context.read<AppInfoProvider>();
+    showDialog<void>(
       context: context,
       builder: (dialogContext) => AboutAppDialog(
         appName: appInfoProvider.appName,
@@ -436,9 +364,8 @@ class SettingsPanel extends StatelessWidget {
     final settingsProvider = context.read<SettingsProvider>();
     final result = await showDialog<FontPickerResult>(
       context: context,
-      // A global font change rebuilds the whole app. Keeping this route
-      // transition-free ensures the picker is fully gone before that rebuild
-      // starts, instead of competing with the dialog's exit animation.
+      // Applying a global font rebuilds the app. Remove the picker before that
+      // rebuild starts instead of competing with an exit transition.
       animationStyle: AnimationStyle.noAnimation,
       builder: (_) => FontPickerDialog(
         availableFonts: settingsProvider.availableFonts,
@@ -449,4 +376,15 @@ class SettingsPanel extends StatelessWidget {
     await WidgetsBinding.instance.endOfFrame;
     await settingsProvider.setFontFamily(result.fontFamily);
   }
+
+  static EdgeInsets _dialogInsetPadding(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < AppBreakpoints.compact
+          ? const EdgeInsets.symmetric(
+              horizontal: AppSpace.md,
+              vertical: AppSpace.lg,
+            )
+          : const EdgeInsets.symmetric(
+              horizontal: 40,
+              vertical: AppSpace.lg,
+            );
 }

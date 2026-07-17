@@ -123,11 +123,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appearance = context.select<SettingsProvider,
-        ({Color color, bool dark, String? fontFamily})>(
+        ({Color color, bool dark, String? fontFamily, Locale? locale})>(
       (settings) => (
         color: settings.themeColor,
         dark: settings.isDarkMode,
         fontFamily: settings.fontFamily,
+        locale: settings.locale,
       ),
     );
 
@@ -136,6 +137,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      locale: appearance.locale,
       localeResolutionCallback: resolveAppLocale,
       theme: buildAppTheme(
         brightness: Brightness.light,

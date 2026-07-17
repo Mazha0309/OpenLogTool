@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
+import 'package:provider/provider.dart';
 
 class LayoutSettings extends StatelessWidget {
   final bool isNarrow;
@@ -15,107 +16,57 @@ class LayoutSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-    final theme = Theme.of(context);
+    final settingsProvider = context.watch<SettingsProvider>();
+    final l10n = context.l10n;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side:
-            BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(128)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.view_quilt,
-                    color: theme.colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '布局设置',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: isNarrow ? 12 : 16),
-            _buildSwitchRow(
-              context: context,
-              switchKey: const Key('limit-workbench-width-toggle'),
-              title: context.l10n.limitWorkbenchWidthSetting,
-              subtitle: context.l10n.limitWorkbenchWidthHint,
+    return SettingsSectionCard(
+      icon: Icons.dashboard_customize_outlined,
+      title: l10n.layoutSettingsTitle,
+      description: l10n.layoutSettingsHint,
+      padding: cardPadding,
+      contentSpacing: isNarrow ? 10 : 14,
+      child: SettingsTileGroup(
+        children: [
+          SettingsActionTile(
+            icon: Icons.width_normal_outlined,
+            title: l10n.limitWorkbenchWidthSetting,
+            subtitle: l10n.limitWorkbenchWidthHint,
+            trailing: Switch(
+              key: const Key('limit-workbench-width-toggle'),
               value: settingsProvider.limitWorkbenchWidth,
               onChanged: settingsProvider.setLimitWorkbenchWidth,
             ),
-            const Divider(height: 16),
-            _buildSwitchRow(
-              context: context,
-              title: '分页显示记录',
-              subtitle: '每 5 条记录分为一页显示',
+          ),
+          SettingsActionTile(
+            icon: Icons.view_list_outlined,
+            title: l10n.paginationSetting,
+            subtitle: l10n.paginationSettingHint,
+            trailing: Switch(
+              key: const Key('pagination-enabled-toggle'),
               value: settingsProvider.paginationEnabled,
-              onChanged: (v) => settingsProvider.setPaginationEnabled(v),
+              onChanged: settingsProvider.setPaginationEnabled,
             ),
-            const Divider(height: 16),
-            _buildSwitchRow(
-              context: context,
-              title: context.l10n.callsignHistoryFillSetting,
-              subtitle: context.l10n.callsignHistoryFillHint,
+          ),
+          SettingsActionTile(
+            icon: Icons.manage_search_outlined,
+            title: l10n.callsignHistoryFillSetting,
+            subtitle: l10n.callsignHistoryFillHint,
+            trailing: Switch(
               value: settingsProvider.callSignQthLinkEnabled,
-              onChanged: (v) => settingsProvider.setCallSignQthLink(v),
+              onChanged: settingsProvider.setCallSignQthLink,
             ),
-            const Divider(height: 16),
-            _buildSwitchRow(
-              context: context,
-              title: context.l10n.duplicateCallsignWarningSetting,
-              subtitle: context.l10n.duplicateCallsignWarningHint,
+          ),
+          SettingsActionTile(
+            icon: Icons.content_copy_outlined,
+            title: l10n.duplicateCallsignWarningSetting,
+            subtitle: l10n.duplicateCallsignWarningHint,
+            trailing: Switch(
               value: settingsProvider.duplicateCallsignWarningEnabled,
               onChanged: settingsProvider.setDuplicateCallsignWarningEnabled,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSwitchRow({
-    required BuildContext context,
-    Key? switchKey,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final theme = Theme.of(context);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.bodyLarge
-                    ?.copyWith(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
           ),
-        ),
-        Switch(key: switchKey, value: value, onChanged: onChanged),
-      ],
+        ],
+      ),
     );
   }
 }

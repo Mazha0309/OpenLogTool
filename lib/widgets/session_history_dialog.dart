@@ -11,24 +11,26 @@ import 'package:provider/provider.dart';
 
 typedef SessionHistoryLoader = Future<List<Session>> Function();
 typedef SessionHistoryAction = Future<void> Function(Session session);
+typedef SessionHistoryCurrentIdGetter = String? Function();
 typedef SessionCollaborationBindingChecker = Future<bool> Function(
   String sessionId,
 );
 
-const _historyCollaborationCloseRequiresOpen =
-    'HISTORY_COLLABORATION_CLOSE_REQUIRES_OPEN';
-const _historyCollaborationCloseOwnerRequired =
-    'HISTORY_COLLABORATION_CLOSE_OWNER_REQUIRED';
+enum _SessionStatusFilter { all, active, closed }
+
+enum _SessionRowAction { closeLocally, deleteLocally }
 
 String historySessionCloseErrorText(BuildContext context, Object error) {
   final raw = error.toString();
-  if (raw.contains(_historyCollaborationCloseRequiresOpen)) {
-    return context.l10n.historySessionCollaborationCloseRequiresOpen;
+  if (raw.contains('COLLABORATION_OPERATION_IN_PROGRESS')) {
+    return context.l10n.localCollaborationOperationBusy;
   }
-  if (raw.contains(_historyCollaborationCloseOwnerRequired)) {
-    return context.l10n.historySessionCollaborationCloseOwnerRequired;
+  if (raw.contains('LOCAL_COLLABORATION_REQUIRED')) {
+    return context.l10n.localCollaborationRequired;
   }
-  return context.l10n.historySessionCloseFailed(raw);
+  return context.l10n.historySessionCloseFailed(
+    raw.replaceFirst('Bad state: ', ''),
+  );
 }
 
 Future<void> closeSessionFromHistory({
@@ -36,22 +38,14 @@ Future<void> closeSessionFromHistory({
   required String? currentSessionId,
   required SessionCollaborationBindingChecker hasCollaborationBinding,
   required SessionHistoryAction closeLocalSession,
-  required Future<void> Function() refreshCurrentCollaboration,
-  required bool Function() canCloseCurrentCollaboration,
-  required Future<void> Function() closeCurrentCollaboration,
+  required Future<void> Function() closeCurrentCollaborationLocally,
 }) async {
-  if (!await hasCollaborationBinding(session.sessionId)) {
+  final collaboration = await hasCollaborationBinding(session.sessionId);
+  if (collaboration && session.sessionId == currentSessionId) {
+    await closeCurrentCollaborationLocally();
+  } else {
     await closeLocalSession(session);
-    return;
   }
-  if (session.sessionId != currentSessionId) {
-    throw StateError(_historyCollaborationCloseRequiresOpen);
-  }
-  await refreshCurrentCollaboration();
-  if (!canCloseCurrentCollaboration()) {
-    throw StateError(_historyCollaborationCloseOwnerRequired);
-  }
-  await closeCurrentCollaboration();
 }
 
 String localSessionReopenErrorText(BuildContext context, Object error) {
@@ -145,6 +139,640 @@ Future<void> _retryReopenedSessionLogs(
   );
 }
 
+/// Searchable, paged history embedded directly in the Sessions destination.
+class SessionHistoryPanel extends StatefulWidget {
+  const SessionHistoryPanel({
+    super.key,
+    this.onSessionOpened,
+    this.onCollaborationSessionManage,
+  });
+
+  final VoidCallback? onSessionOpened;
+  final Future<void> Function(Session session)? onCollaborationSessionManage;
+
+  @override
+  State<SessionHistoryPanel> createState() => _SessionHistoryPanelState();
+}
+
+class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
+  final _searchController = TextEditingController();
+  Future<List<SessionListEntry>>? _entries;
+  _SessionStatusFilter _filter = _SessionStatusFilter.all;
+  String _query = '';
+  String? _busySessionId;
+  int _page = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entries ??= context.read<SessionProvider>().listAvailableSessionEntries();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _reload() {
+    setState(() {
+      _entries = context.read<SessionProvider>().listAvailableSessionEntries();
+      _busySessionId = null;
+      _page = 0;
+    });
+  }
+
+  List<SessionListEntry> _filtered(
+    List<SessionListEntry> entries,
+    String? currentSessionId,
+  ) {
+    final query = _query.trim().toLowerCase();
+    return entries.where((entry) {
+      final session = entry.session;
+      if (session.sessionId == currentSessionId) return false;
+      if (_filter != _SessionStatusFilter.all &&
+          session.status != _filter.name) {
+        return false;
+      }
+      return query.isEmpty ||
+          session.title.toLowerCase().contains(query) ||
+          session.sessionId.toLowerCase().contains(query);
+    }).toList(growable: false);
+  }
+
+  Future<void> _open(Session session) async {
+    if (_busySessionId != null) return;
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    final previousSessionId = sessions.currentSessionId;
+    setState(() => _busySessionId = session.sessionId);
+    try {
+      await logs.reloadForSession(session.sessionId, propagateErrors: true);
+      await sessions.switchToSession(session.sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.historySessionSwitched(session.title)),
+        ),
+      );
+      widget.onSessionOpened?.call();
+    } catch (error, stackTrace) {
+      try {
+        await logs.reloadForSession(previousSessionId, propagateErrors: true);
+      } catch (rollbackError, rollbackStackTrace) {
+        debugPrint(
+          '[SessionHistory] log rollback failed: '
+          '$rollbackError\n$rollbackStackTrace',
+        );
+      }
+      debugPrint('[SessionHistory] open failed: $error\n$stackTrace');
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.historySessionOpenFailed('$error')),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openCollaborationManagement(Session session) async {
+    if (_busySessionId != null) return;
+    final manage = widget.onCollaborationSessionManage;
+    if (manage == null) {
+      await _open(session);
+      return;
+    }
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    final previousSessionId = sessions.currentSessionId;
+    setState(() => _busySessionId = session.sessionId);
+    try {
+      await logs.reloadForSession(session.sessionId, propagateErrors: true);
+      await sessions.switchToSession(session.sessionId);
+      if (!mounted) return;
+      await manage(session);
+      if (mounted) setState(() => _busySessionId = null);
+    } catch (error, stackTrace) {
+      try {
+        await logs.reloadForSession(previousSessionId, propagateErrors: true);
+        if (previousSessionId != null) {
+          await sessions.switchToSession(previousSessionId);
+        }
+      } catch (rollbackError, rollbackStackTrace) {
+        debugPrint(
+          '[SessionHistory] collaboration management rollback failed: '
+          '$rollbackError\n$rollbackStackTrace',
+        );
+      }
+      debugPrint(
+        '[SessionHistory] open collaboration management failed: '
+        '$error\n$stackTrace',
+      );
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.historySessionOpenFailed('$error')),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _reopen(Session session) async {
+    if (_busySessionId != null) return;
+    final confirmed = await confirmReopenLocalSession(
+      context,
+      sessionTitle: session.title,
+    );
+    if (!confirmed || !mounted) return;
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    setState(() => _busySessionId = session.sessionId);
+    try {
+      await sessions.reopenLocalSession(session.sessionId);
+      try {
+        await logs.reloadForSession(session.sessionId, propagateErrors: true);
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[SessionHistory] reopened session log load failed: '
+          '$error\n$stackTrace',
+        );
+        if (!mounted) return;
+        setState(() => _busySessionId = null);
+        widget.onSessionOpened?.call();
+        showReopenedSessionLogsUnavailable(
+          context,
+          logs: logs,
+          sessionId: session.sessionId,
+          sessionTitle: session.title,
+        );
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.historySessionReopened(session.title)),
+        ),
+      );
+      widget.onSessionOpened?.call();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(localSessionReopenErrorText(context, error)),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      _reload();
+    }
+  }
+
+  Future<void> _close(Session session) async {
+    if (_busySessionId != null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.historySessionCloseTitle),
+        content: Text(
+          dialogContext.l10n.historySessionCloseConfirmation(session.title),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.historySessionCloseTitle),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busySessionId = session.sessionId);
+    try {
+      await context
+          .read<SessionProvider>()
+          .closeSessionLocally(session.sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.historySessionClosed)),
+      );
+      _reload();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(historySessionCloseErrorText(context, error)),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _delete(Session session) async {
+    if (_busySessionId != null) return;
+    final confirmed = await confirmDeleteLocalSession(
+      context,
+      sessionTitle: session.title,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busySessionId = session.sessionId);
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    try {
+      await sessions.deleteSessionLocally(session.sessionId);
+      await logs.forgetDeletedSession(session.sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.historySessionDeleted)),
+      );
+      _reload();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busySessionId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.historySessionDeleteFailed('$error')),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  String _statusLabel(String status) => switch (status) {
+        'active' => context.l10n.sessionActive,
+        'closed' => context.l10n.sessionClosed,
+        _ => status,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final currentSessionId = context.watch<SessionProvider>().currentSessionId;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        final pageSize = compact ? 5 : 10;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: compact ? constraints.maxWidth : 360,
+                  child: TextField(
+                    key: const Key('session-history-search'),
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: context.l10n.searchSessions,
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: MaterialLocalizations.of(context)
+                                  .cancelButtonLabel,
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _query = '';
+                                  _page = 0;
+                                });
+                              },
+                              icon: const Icon(Icons.clear),
+                            ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (value) => setState(() {
+                      _query = value;
+                      _page = 0;
+                    }),
+                  ),
+                ),
+                SizedBox(
+                  width: compact ? constraints.maxWidth : 220,
+                  child: DropdownButtonFormField<_SessionStatusFilter>(
+                    key: const Key('session-history-status-filter'),
+                    initialValue: _filter,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.filter_list),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: _SessionStatusFilter.all,
+                        child: Text(context.l10n.allSessionStatuses),
+                      ),
+                      DropdownMenuItem(
+                        value: _SessionStatusFilter.active,
+                        child: Text(context.l10n.sessionActive),
+                      ),
+                      DropdownMenuItem(
+                        value: _SessionStatusFilter.closed,
+                        child: Text(context.l10n.sessionClosed),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _filter = value;
+                        _page = 0;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<List<SessionListEntry>>(
+              future: _entries,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            context.l10n.historySessionsLoadFailed(
+                              '${snapshot.error}',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh),
+                            label: Text(context.l10n.retry),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                final filtered = _filtered(
+                  snapshot.data ?? const <SessionListEntry>[],
+                  currentSessionId,
+                );
+                if (filtered.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Text(
+                      context.l10n.historySessionsEmpty,
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                final pageCount = (filtered.length / pageSize).ceil();
+                final effectivePage = _page.clamp(0, pageCount - 1);
+                if (effectivePage != _page) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _page = effectivePage);
+                  });
+                }
+                final start = effectivePage * pageSize;
+                final visible =
+                    filtered.skip(start).take(pageSize).toList(growable: false);
+                return Column(
+                  children: [
+                    for (var index = 0; index < visible.length; index++) ...[
+                      _buildRow(visible[index], compact: compact),
+                      if (index != visible.length - 1)
+                        const SizedBox(height: 8),
+                    ],
+                    if (pageCount > 1) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            context.l10n.sessionPage(
+                              effectivePage + 1,
+                              pageCount,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            key: const Key('session-history-previous-page'),
+                            tooltip: MaterialLocalizations.of(context)
+                                .previousPageTooltip,
+                            onPressed: effectivePage == 0
+                                ? null
+                                : () => setState(() => _page--),
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                          IconButton(
+                            key: const Key('session-history-next-page'),
+                            tooltip: MaterialLocalizations.of(context)
+                                .nextPageTooltip,
+                            onPressed: effectivePage >= pageCount - 1
+                                ? null
+                                : () => setState(() => _page++),
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRow(SessionListEntry entry, {required bool compact}) {
+    final session = entry.session;
+    final busy = _busySessionId == session.sessionId;
+    final createdAt = DateTime.tryParse(session.createdAt)?.toLocal();
+    final createdLabel = createdAt == null
+        ? session.createdAt
+        : '${MaterialLocalizations.of(context).formatMediumDate(createdAt)} '
+            '${TimeOfDay.fromDateTime(createdAt).format(context)}';
+    final canReopenLocally =
+        session.status == 'closed' && !entry.hasCollaborationBinding;
+    final opensCollaborationManagement = entry.hasCollaborationBinding &&
+        session.status == 'closed' &&
+        widget.onCollaborationSessionManage != null;
+    final mainAction = canReopenLocally
+        ? FilledButton.tonalIcon(
+            key: Key('reopen-history-session-${session.sessionId}'),
+            onPressed: busy ? null : () => _reopen(session),
+            icon: const Icon(Icons.play_circle_outline),
+            label: Text(context.l10n.historySessionReopenAction),
+          )
+        : OutlinedButton.icon(
+            key: Key('open-history-session-${session.sessionId}'),
+            onPressed: busy
+                ? null
+                : () => opensCollaborationManagement
+                    ? _openCollaborationManagement(session)
+                    : _open(session),
+            icon: const Icon(Icons.open_in_new),
+            label: Text(
+              opensCollaborationManagement
+                  ? context.l10n.openAndManageCollaboration
+                  : context.l10n.historySessionOpen,
+            ),
+          );
+    final menu = PopupMenuButton<_SessionRowAction>(
+      key: Key('session-history-menu-${session.sessionId}'),
+      tooltip: context.l10n.moreSessionActions,
+      enabled: !busy,
+      onSelected: (action) => switch (action) {
+        _SessionRowAction.closeLocally => _close(session),
+        _SessionRowAction.deleteLocally => _delete(session),
+      },
+      itemBuilder: (context) => [
+        if (session.status == 'active')
+          PopupMenuItem(
+            value: _SessionRowAction.closeLocally,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.inventory_2_outlined),
+              title: Text(context.l10n.historySessionCloseTitle),
+            ),
+          ),
+        PopupMenuItem(
+          value: _SessionRowAction.deleteLocally,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              Icons.delete_forever,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: Text(
+              context.l10n.historySessionDeleteAction,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ),
+      ],
+      icon: const Icon(Icons.more_vert),
+    );
+    final copy = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          entry.hasCollaborationBinding
+              ? Icons.groups_outlined
+              : session.status == 'active'
+                  ? Icons.radio_button_checked
+                  : Icons.lock_clock_outlined,
+          color: session.status == 'active'
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                session.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '$createdLabel · ${_statusLabel(session.status)} · '
+                '${entry.hasCollaborationBinding ? context.l10n.manageCollaboration : context.l10n.localSession}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    return Card(
+      key: Key('session-history-row-${session.sessionId}'),
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      child: InkWell(
+        onTap: busy ? null : () => _open(session),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    copy,
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (busy)
+                          const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        else
+                          Flexible(child: mainAction),
+                        menu,
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: copy),
+                    const SizedBox(width: 12),
+                    if (busy)
+                      const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      mainAction,
+                    menu,
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<bool> confirmDeleteLocalSession(
+  BuildContext context, {
+  required String sessionTitle,
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteSessionConfirmationDialog(
+        sessionTitle: sessionTitle,
+      ),
+    ) ??
+    false;
+
 Future<void> showSessionHistoryDialog(
   BuildContext context, {
   VoidCallback? onSessionOpened,
@@ -183,6 +811,7 @@ Future<void> showSessionHistoryDialog(
     context: context,
     builder: (_) => SessionHistoryDialog(
       currentSessionId: sessionProvider.currentSessionId,
+      currentSessionIdGetter: () => sessionProvider.currentSessionId,
       loadSessions: sessionProvider.listAvailableSessions,
       openSession: loadAndSwitch,
       reopenSession: (session) async {
@@ -216,20 +845,24 @@ Future<void> showSessionHistoryDialog(
               sessionId: sessionId,
             ) !=
             null,
-        closeLocalSession: (target) =>
-            logProvider.closeSession(target.sessionId),
-        refreshCurrentCollaboration:
-            collaborationProvider.refreshCurrentSession,
-        canCloseCurrentCollaboration: () =>
-            collaborationProvider.binding?.sessionId == session.sessionId &&
-            collaborationProvider.isOwner,
-        closeCurrentCollaboration: collaborationProvider.closeCurrentSession,
+        closeLocalSession: (target) async {
+          final closed =
+              await sessionProvider.closeSessionLocally(target.sessionId);
+          if (sessionProvider.currentSessionId == closed.sessionId) {
+            await logProvider.reloadForSession(
+              closed.sessionId,
+              propagateErrors: true,
+            );
+          }
+        },
+        closeCurrentCollaborationLocally:
+            collaborationProvider.closeCurrentSessionLocally,
       ),
-      canCloseCurrentSession: collaborationProvider.binding?.sessionId ==
-              sessionProvider.currentSessionId &&
-          collaborationProvider.isOwner,
-      deleteSession: (session) =>
-          logProvider.hardDeleteSession(session.sessionId),
+      canCloseCurrentSession: sessionProvider.currentSessionId != null,
+      deleteSession: (session) async {
+        await sessionProvider.deleteSessionLocally(session.sessionId);
+        await logProvider.forgetDeletedSession(session.sessionId);
+      },
     ),
   );
   if (selected == null || !context.mounted) return;
@@ -262,9 +895,11 @@ class SessionHistoryDialog extends StatefulWidget {
     required this.closeSession,
     required this.deleteSession,
     this.canCloseCurrentSession = false,
+    this.currentSessionIdGetter,
   });
 
   final String? currentSessionId;
+  final SessionHistoryCurrentIdGetter? currentSessionIdGetter;
   final SessionHistoryLoader loadSessions;
   final SessionHistoryAction openSession;
   final SessionHistoryAction reopenSession;
@@ -327,7 +962,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(context.l10n.closeSession),
+            child: Text(context.l10n.closeCollaborationLocally),
           ),
         ],
       ),
@@ -474,7 +1109,9 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
   }
 
   Widget _sessionTile(Session session) {
-    final isCurrent = widget.currentSessionId == session.sessionId;
+    final currentSessionId =
+        widget.currentSessionIdGetter?.call() ?? widget.currentSessionId;
+    final isCurrent = currentSessionId == session.sessionId;
     final isActive = session.status == 'active';
     final isClosed = session.status == 'closed';
     final busy = _busySessionId == session.sessionId;
@@ -509,7 +1146,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                     if (isActive && widget.canCloseCurrentSession)
                       IconButton(
                         key: Key('close-history-session-${session.sessionId}'),
-                        tooltip: context.l10n.closeSession,
+                        tooltip: context.l10n.closeCollaborationLocally,
                         onPressed: _busySessionId == null
                             ? () => _close(session)
                             : null,
@@ -547,7 +1184,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                     if (isActive)
                       IconButton(
                         key: Key('close-history-session-${session.sessionId}'),
-                        tooltip: context.l10n.closeSession,
+                        tooltip: context.l10n.closeCollaborationLocally,
                         onPressed: _busySessionId == null
                             ? () => _close(session)
                             : null,
@@ -570,20 +1207,19 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
                           color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                    if (isClosed)
-                      IconButton(
-                        key: Key(
-                          'delete-history-session-${session.sessionId}',
-                        ),
-                        tooltip: context.l10n.historySessionDeleteAction,
-                        onPressed: _busySessionId == null
-                            ? () => _delete(session)
-                            : null,
-                        icon: Icon(
-                          Icons.delete_forever,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                    IconButton(
+                      key: Key(
+                        'delete-history-session-${session.sessionId}',
                       ),
+                      tooltip: context.l10n.historySessionDeleteAction,
+                      onPressed: _busySessionId == null
+                          ? () => _delete(session)
+                          : null,
+                      icon: Icon(
+                        Icons.delete_forever,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ],
                 ),
     );

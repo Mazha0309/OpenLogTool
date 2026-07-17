@@ -40,10 +40,7 @@ pub async fn get_history(callsign: &str, limit: i64) -> anyhow::Result<Vec<Calls
     Ok(rows.into_iter().map(|r| r.into_record()).collect())
 }
 
-pub async fn get_last_recorded_time(
-    callsign: &str,
-    qth: &str,
-) -> anyhow::Result<Option<String>> {
+pub async fn get_last_recorded_time(callsign: &str, qth: &str) -> anyhow::Result<Option<String>> {
     if callsign.is_empty() || qth.is_empty() {
         return Ok(None);
     }

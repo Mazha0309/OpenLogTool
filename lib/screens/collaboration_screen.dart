@@ -10,14 +10,22 @@ import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/widgets/collaboration_conflict_center.dart';
 import 'package:openlogtool/widgets/collaboration_local_session_action.dart';
+import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 typedef PublicShareUriOpener = Future<bool> Function(Uri uri);
 
 enum _CloseCollaborationAction { close, discardAndClose, submitAndClose }
+
+enum _CollaborationView { overview, synchronization, access }
+
+enum _SynchronizationView { offlineRecords, conflicts }
+
+enum _AccessView { members, invites, publicShare }
 
 bool _liveDraftHasCloseBlockingContent(LiveDraftFieldsDto fields) {
   bool hasText(String field) => fields[field].trim().isNotEmpty;
@@ -63,11 +71,19 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
   final _inviteCodeController = TextEditingController();
   final _publicShareAnchorKey = GlobalKey();
   InviteRole _inviteRole = InviteRole.editor;
-  String? _focusedPublicShareTarget;
+  late _CollaborationView _selectedView;
+  _SynchronizationView _selectedSynchronizationView =
+      _SynchronizationView.offlineRecords;
+  late _AccessView _selectedAccessView;
 
   @override
   void initState() {
     super.initState();
+    _selectedView = widget.focusPublicShare
+        ? _CollaborationView.access
+        : _CollaborationView.overview;
+    _selectedAccessView =
+        widget.focusPublicShare ? _AccessView.publicShare : _AccessView.members;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final collaboration = context.read<CollaborationProvider>();
@@ -88,151 +104,317 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       appBar: AppBar(title: Text(context.l10n.collaborationScreenTitle)),
       body: Consumer3<CollaborationProvider, ServerProvider, SessionProvider>(
         builder: (context, collaboration, server, sessions, _) {
-          final showSyncSection = collaboration.offlineRecords.isNotEmpty ||
-              (collaboration.binding != null &&
-                  (collaboration.conflictCount > 0 ||
-                      collaboration.conflictsLoading ||
-                      collaboration.openConflicts.isNotEmpty));
           final showOwnerAccess = server.isLoggedIn &&
               collaboration.state == CollaborationState.ready &&
               collaboration.isOwner;
-          final showPublicSharePrerequisite =
-              widget.focusPublicShare && !showOwnerAccess;
           final hasKnownOwnerAccess = server.isLoggedIn &&
               collaboration.binding != null &&
               collaboration.effectiveRole == SessionRole.owner;
-          if (widget.focusPublicShare) {
-            _schedulePublicShareFocus(
-              showOwnerAccess ? 'management' : 'prerequisite',
-            );
-          }
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 960),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _sectionHeader(
-                        Icons.cloud_outlined,
-                        context.l10n.collaborationConnectionSection,
-                        context.l10n.collaborationConnectionSectionHint,
-                      ),
-                      _serverCard(server),
-                      if (collaboration.progressLabel.isNotEmpty ||
-                          collaboration.errorMessage != null ||
-                          collaboration.syncErrorMessage != null)
-                        _statusCard(collaboration),
-                      if (sessions.currentSession != null)
-                        _sessionCard(collaboration, sessions),
-                      if (showPublicSharePrerequisite) ...[
-                        const SizedBox(height: 20),
-                        KeyedSubtree(
-                          key: _publicShareAnchorKey,
-                          child: _publicShareAccessRequiredCard(
-                            preparingOwnerAccess: hasKnownOwnerAccess,
-                          ),
-                        ),
-                      ],
-                      if (server.isLoggedIn && collaboration.canJoinWithInvite)
-                        _joinCard(collaboration),
-                      if (showSyncSection) ...[
-                        const SizedBox(height: 20),
-                        _sectionHeader(
-                          Icons.sync_problem_outlined,
-                          context.l10n.collaborationSyncSection,
-                          context.l10n.collaborationSyncSectionHint,
-                        ),
-                        if (collaboration.offlineRecords.isNotEmpty)
-                          _offlineReviewCard(collaboration),
-                        if (collaboration.binding != null &&
-                            (collaboration.conflictCount > 0 ||
-                                collaboration.conflictsLoading ||
-                                collaboration.openConflicts.isNotEmpty))
-                          CollaborationConflictCenter(
-                            conflicts: collaboration.openConflicts,
-                            loading: collaboration.conflictsLoading,
-                            resolvingConflictId:
-                                collaboration.resolvingConflictId,
-                            enabled: !collaboration.isBusy &&
-                                collaboration.canResolveConflicts,
-                            onRefresh: collaboration.isBusy ||
-                                    !collaboration.canResolveConflicts
-                                ? null
-                                : () => unawaited(
-                                      _run(
-                                        collaboration.refreshOpenConflicts,
-                                      ),
-                                    ),
-                            onAcceptRemote: (conflictId) => unawaited(
-                              _confirmConflictResolution(
-                                collaboration,
-                                conflictId,
-                                CollaborationConflictResolution.useRemote,
-                              ),
-                            ),
-                            onKeepLocal: (conflictId) => unawaited(
-                              _confirmConflictResolution(
-                                collaboration,
-                                conflictId,
-                                CollaborationConflictResolution.keepLocal,
-                              ),
-                            ),
-                            onCopyLocalAsNew: (conflictId) => unawaited(
-                              _confirmConflictResolution(
-                                collaboration,
-                                conflictId,
-                                CollaborationConflictResolution.copyLocalAsNew,
-                              ),
-                            ),
-                          ),
-                      ],
-                      if (showOwnerAccess) ...[
-                        const SizedBox(height: 20),
-                        _sectionHeader(
-                          Icons.group_outlined,
-                          context.l10n.collaborationAccessSection,
-                          context.l10n.collaborationAccessSectionHint,
-                        ),
-                        KeyedSubtree(
-                          key: _publicShareAnchorKey,
-                          child: _publicShareCard(collaboration),
-                        ),
-                        if (collaboration.supportsInvites)
-                          _inviteManagementCard(collaboration),
-                        _memberManagementCard(collaboration, server),
-                      ],
-                    ],
-                  ),
+          final availableViews = <_CollaborationView>[
+            _CollaborationView.overview,
+            if (collaboration.binding != null)
+              _CollaborationView.synchronization,
+            if (showOwnerAccess ||
+                hasKnownOwnerAccess ||
+                widget.focusPublicShare)
+              _CollaborationView.access,
+          ];
+          final selectedView = availableViews.contains(_selectedView)
+              ? _selectedView
+              : _CollaborationView.overview;
+          return AppPageFrame(
+            scrollKey: const PageStorageKey('collaboration-management-page'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildViewSelector(
+                  collaboration,
+                  availableViews,
+                  selectedView,
                 ),
-              ),
-            ],
+                const SizedBox(height: AppSpace.md),
+                switch (selectedView) {
+                  _CollaborationView.overview => _buildOverviewView(
+                      collaboration,
+                      server,
+                      sessions,
+                    ),
+                  _CollaborationView.synchronization =>
+                    _buildSynchronizationView(collaboration),
+                  _CollaborationView.access => _buildAccessView(
+                      collaboration,
+                      server,
+                      showOwnerAccess: showOwnerAccess,
+                      preparingOwnerAccess: hasKnownOwnerAccess,
+                    ),
+                },
+              ],
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _sectionHeader(IconData icon, String title, String hint) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 22, color: colors.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 2),
-                Text(hint, style: Theme.of(context).textTheme.bodySmall),
-              ],
+  Widget _buildViewSelector(
+    CollaborationProvider collaboration,
+    List<_CollaborationView> availableViews,
+    _CollaborationView selectedView,
+  ) {
+    final conflictCount = collaboration.conflictCount;
+    final problemCount = collaboration.offlineRecords.length + conflictCount;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SegmentedButton<_CollaborationView>(
+        key: const Key('collaboration-view-selector'),
+        showSelectedIcon: false,
+        segments: [
+          if (availableViews.contains(_CollaborationView.overview))
+            ButtonSegment(
+              value: _CollaborationView.overview,
+              icon: const Icon(Icons.dashboard_outlined),
+              label: Text(context.l10n.collaborationOverviewTab),
             ),
+          if (availableViews.contains(_CollaborationView.synchronization))
+            ButtonSegment(
+              value: _CollaborationView.synchronization,
+              icon: const Icon(Icons.sync_outlined),
+              label: Text(
+                problemCount == 0
+                    ? context.l10n.collaborationSyncConflictsTab
+                    : '${context.l10n.collaborationSyncConflictsTab} '
+                        '($problemCount)',
+              ),
+            ),
+          if (availableViews.contains(_CollaborationView.access))
+            ButtonSegment(
+              value: _CollaborationView.access,
+              icon: const Icon(Icons.group_outlined),
+              label: Text(context.l10n.collaborationAccessManagementTab),
+            ),
+        ],
+        selected: {selectedView},
+        onSelectionChanged: (selection) {
+          if (selection.isEmpty) return;
+          setState(() => _selectedView = selection.first);
+        },
+      ),
+    );
+  }
+
+  Widget _buildOverviewView(
+    CollaborationProvider collaboration,
+    ServerProvider server,
+    SessionProvider sessions,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _serverCard(server),
+        if (collaboration.progressLabel.isNotEmpty ||
+            collaboration.errorMessage != null ||
+            collaboration.syncErrorMessage != null) ...[
+          const SizedBox(height: 12),
+          _statusCard(collaboration),
+        ],
+        if (sessions.currentSession != null) ...[
+          const SizedBox(height: 12),
+          _sessionCard(collaboration, sessions),
+        ],
+        if (server.isLoggedIn && collaboration.canJoinWithInvite) ...[
+          const SizedBox(height: 12),
+          _joinCard(collaboration),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSynchronizationView(CollaborationProvider collaboration) {
+    final selected = _selectedSynchronizationView;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (collaboration.progressLabel.isNotEmpty ||
+            collaboration.errorMessage != null ||
+            collaboration.syncErrorMessage != null) ...[
+          _statusCard(collaboration),
+          const SizedBox(height: 12),
+        ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SegmentedButton<_SynchronizationView>(
+            key: const Key('collaboration-sync-view-selector'),
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: _SynchronizationView.offlineRecords,
+                icon: const Icon(Icons.cloud_off_outlined),
+                label: Text(
+                  '${context.l10n.offlineReviewTitle} '
+                  '(${collaboration.offlineRecords.length})',
+                ),
+              ),
+              ButtonSegment(
+                value: _SynchronizationView.conflicts,
+                icon: const Icon(Icons.rule_folder_outlined),
+                label: Text(
+                  '${context.l10n.conflictCenterTitle} '
+                  '(${collaboration.conflictCount})',
+                ),
+              ),
+            ],
+            selected: {selected},
+            onSelectionChanged: (selection) {
+              if (selection.isEmpty) return;
+              setState(() => _selectedSynchronizationView = selection.first);
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (selected == _SynchronizationView.offlineRecords)
+          collaboration.offlineRecords.isEmpty
+              ? _emptyState(
+                  Icons.cloud_done_outlined,
+                  context.l10n.offlineReviewTitle,
+                  context.l10n.collaborationSyncSectionHint,
+                )
+              : _offlineReviewCard(collaboration)
+        else
+          CollaborationConflictCenter(
+            conflicts: collaboration.openConflicts,
+            loading: collaboration.conflictsLoading,
+            resolvingConflictId: collaboration.resolvingConflictId,
+            enabled: !collaboration.isBusy && collaboration.canResolveConflicts,
+            onRefresh:
+                collaboration.isBusy || !collaboration.canResolveConflicts
+                    ? null
+                    : () => unawaited(
+                          _run(collaboration.refreshOpenConflicts),
+                        ),
+            onAcceptRemote: (conflictId) => unawaited(
+              _confirmConflictResolution(
+                collaboration,
+                conflictId,
+                CollaborationConflictResolution.useRemote,
+              ),
+            ),
+            onKeepLocal: (conflictId) => unawaited(
+              _confirmConflictResolution(
+                collaboration,
+                conflictId,
+                CollaborationConflictResolution.keepLocal,
+              ),
+            ),
+            onCopyLocalAsNew: (conflictId) => unawaited(
+              _confirmConflictResolution(
+                collaboration,
+                conflictId,
+                CollaborationConflictResolution.copyLocalAsNew,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAccessView(
+    CollaborationProvider collaboration,
+    ServerProvider server, {
+    required bool showOwnerAccess,
+    required bool preparingOwnerAccess,
+  }) {
+    if (!showOwnerAccess) {
+      return KeyedSubtree(
+        key: _publicShareAnchorKey,
+        child: _publicShareAccessRequiredCard(
+          preparingOwnerAccess: preparingOwnerAccess,
+        ),
+      );
+    }
+
+    final availableViews = <_AccessView>[
+      _AccessView.members,
+      if (collaboration.supportsInvites) _AccessView.invites,
+      _AccessView.publicShare,
+    ];
+    final selected = availableViews.contains(_selectedAccessView)
+        ? _selectedAccessView
+        : _AccessView.members;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SegmentedButton<_AccessView>(
+            key: const Key('collaboration-access-view-selector'),
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: _AccessView.members,
+                icon: const Icon(Icons.people_outline),
+                label: Text(
+                  '${context.l10n.membersTitle} '
+                  '(${collaboration.members.length})',
+                ),
+              ),
+              if (collaboration.supportsInvites)
+                ButtonSegment(
+                  value: _AccessView.invites,
+                  icon: const Icon(Icons.mark_email_unread_outlined),
+                  label: Text(
+                    '${context.l10n.memberInvitesTitle} '
+                    '(${collaboration.invites.length})',
+                  ),
+                ),
+              ButtonSegment(
+                value: _AccessView.publicShare,
+                icon: const Icon(Icons.public_outlined),
+                label: Text(
+                  '${context.l10n.publicShareManagement} '
+                  '(${collaboration.publicShares.length})',
+                ),
+              ),
+            ],
+            selected: {selected},
+            onSelectionChanged: (selection) {
+              if (selection.isEmpty) return;
+              setState(() => _selectedAccessView = selection.first);
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        switch (selected) {
+          _AccessView.members => _memberManagementCard(collaboration, server),
+          _AccessView.invites => _inviteManagementCard(collaboration),
+          _AccessView.publicShare => KeyedSubtree(
+              key: _publicShareAnchorKey,
+              child: _publicShareCard(collaboration),
+            ),
+        },
+      ],
+    );
+  }
+
+  Widget _emptyState(IconData icon, String title, String description) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: colors.onSurfaceVariant),
+          const SizedBox(height: 8),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
           ),
         ],
       ),
@@ -244,25 +426,6 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     if (mounted && collaboration.supportsPublicShareManagement) {
       await _run(collaboration.refreshPublicShares);
     }
-  }
-
-  void _schedulePublicShareFocus(String target) {
-    if (_focusedPublicShareTarget == target) return;
-    _focusedPublicShareTarget = target;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      final targetContext = _publicShareAnchorKey.currentContext;
-      if (targetContext == null) {
-        _focusedPublicShareTarget = null;
-        return;
-      }
-      await Scrollable.ensureVisible(
-        targetContext,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: 0.05,
-      );
-    });
   }
 
   Widget _publicShareAccessRequiredCard({
@@ -899,7 +1062,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                             ? null
                             : () => _closeSession(collaboration),
                         icon: const Icon(Icons.stop_circle_outlined),
-                        label: Text(context.l10n.closeSession),
+                        label: Text(context.l10n.closeSharedSession),
                       ),
                     ] else if (session.status == 'closed' &&
                         collaboration.canonicalSessionClosed)
@@ -1117,7 +1280,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                 dialogContext,
                 _CloseCollaborationAction.close,
               ),
-              child: Text(context.l10n.closeSession),
+              child: Text(context.l10n.closeSharedSession),
             ),
           if (hasDraft && canResolveDraft)
             OutlinedButton(

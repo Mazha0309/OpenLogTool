@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/models/collaboration_conflict.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
@@ -210,6 +212,50 @@ void main() {
       expect(acquired, ['qth', 'device']);
       expect(patchCount, 0);
       expect(released, ['qth']);
+    });
+
+    test('local-exit invalidation after a stalled lock prevents PATCH',
+        () async {
+      final acquireStarted = Completer<void>();
+      final acquireResult = Completer<LiveDraftLockDto>();
+      var current = true;
+      var patchCount = 0;
+
+      final operation = executeLiveDraftAtomicPatch(
+        values: const {'callsign': 'BG5CRL'},
+        expectedRevisions: const {'callsign': 1},
+        ownedLocks: const {},
+        nextClientSeq: 1,
+        acquireLock: (_) {
+          acquireStarted.complete();
+          return acquireResult.future;
+        },
+        sendPatch: (_, __) async {
+          patchCount += 1;
+          return _patchResult(1);
+        },
+        releaseLock: (_, __) async {},
+        onClientSeqChanged: (_) {},
+        assertCurrent: () {
+          if (!current) throw StateError('LIVE_DRAFT_CONTEXT_CHANGED');
+        },
+      );
+      await acquireStarted.future;
+
+      current = false;
+      acquireResult.complete(_lock('callsign', 'stale-lock'));
+
+      await expectLater(
+        operation,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'LIVE_DRAFT_CONTEXT_CHANGED',
+          ),
+        ),
+      );
+      expect(patchCount, 0);
     });
 
     test('a PATCH failure releases every lock acquired by the batch', () async {
@@ -509,6 +555,127 @@ void main() {
       expect(attempts, 2);
       expect(rebases, 1);
     });
+  });
+
+  test('device-local quiescence wait is bounded for stuck transports',
+      () async {
+    final never = Completer<void>();
+    final stopwatch = Stopwatch()..start();
+
+    await waitForCollaborationLocalQuiescence(
+      [never.future],
+      timeout: const Duration(milliseconds: 5),
+    );
+
+    stopwatch.stop();
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+  });
+
+  test('detaching a stalled draft chain lets a new collaboration proceed',
+      () async {
+    final executor = ResettableLiveDraftSerialExecutor();
+    final stalled = Completer<void>();
+    final firstStarted = Completer<void>();
+    final first = executor.run(() async {
+      firstStarted.complete();
+      await stalled.future;
+      return 1;
+    });
+    await firstStarted.future;
+
+    var oldQueuedRan = false;
+    final oldQueued = executor.run(() async {
+      oldQueuedRan = true;
+      return 2;
+    });
+    final detached = executor.detach();
+
+    expect(await executor.run(() async => 3), 3);
+    expect(oldQueuedRan, isFalse);
+
+    stalled.complete();
+    expect(await first, 1);
+    expect(await oldQueued, 2);
+    await detached;
+  });
+
+  test('an imported same-identity binding rejects an old draft epoch', () {
+    const binding = LocalCollaborationBinding(
+      serverInstanceId: 'server-1',
+      serverOrigin: 'https://example.test',
+      accountId: 'user-1',
+      sessionId: 'session-1',
+      membershipId: 'membership-1',
+      membershipVersion: 1,
+      role: SessionRole.owner,
+      replicaState: 'ready',
+      lastAppliedSeq: 4,
+      lastSeenHeadSeq: 4,
+      revokedAt: null,
+    );
+
+    expect(
+      isLiveDraftResultContextCurrent(
+        disposed: false,
+        operationInProgress: false,
+        expectedEpoch: 7,
+        currentEpoch: 7,
+        expectedBinding: binding,
+        currentBinding: binding,
+        currentSessionId: binding.sessionId,
+      ),
+      isTrue,
+    );
+    expect(
+      isLiveDraftResultContextCurrent(
+        disposed: false,
+        operationInProgress: false,
+        expectedEpoch: 7,
+        currentEpoch: 8,
+        expectedBinding: binding,
+        currentBinding: binding,
+        currentSessionId: binding.sessionId,
+      ),
+      isFalse,
+    );
+  });
+
+  test('a clean closed replica can still become an active local recorder', () {
+    const sync = CollaborationSyncState(
+      identity: CollaborationSyncIdentity(
+        serverInstanceId: 'server-1',
+        serverOrigin: 'https://example.test',
+        accountId: 'user-1',
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+      ),
+      role: SessionRole.owner,
+      transportPhase: CollaborationTransportPhase.online,
+      replicaPhase: CollaborationReplicaPhase.ready,
+      lastAppliedSeq: 8,
+      serverHeadSeq: 8,
+      pendingCount: 0,
+      conflictCount: 0,
+      rejectedCount: 0,
+      sessionClosed: true,
+      writeSuspended: true,
+      lastSuccessfulSyncAt: null,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      nextRetryAt: null,
+      remoteCommitPendingLocalApply: false,
+    );
+
+    expect(
+      canSafelyConvertCollaborationSessionToLocal(
+        hasCurrentBinding: true,
+        operationInProgress: false,
+        state: CollaborationState.ready,
+        syncState: sync,
+        hasOfflineRecords: false,
+      ),
+      isTrue,
+    );
   });
 
   test('offline commit starts the next record with an empty time', () {

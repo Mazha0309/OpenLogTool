@@ -127,12 +127,14 @@ class _LogTableState extends State<LogTable> {
     patch.remarks = _controllers['remarks']?.text ?? '';
     try {
       await logProvider.updateLogById(logId, patch);
-    } catch (e) {
+    } catch (error) {
+      if (!mounted) return;
       messenger?.showSnackBar(
-        SnackBar(content: Text('保存失败: $e')),
+        SnackBar(content: Text(context.l10n.operationFailed('$error'))),
       );
+      return;
     }
-    if (mounted) _cancelEditing();
+    _cancelEditing();
   }
 
   @override
@@ -162,7 +164,7 @@ class _LogTableState extends State<LogTable> {
             ),
             const SizedBox(height: 16),
             Text(
-              '暂无点名记录',
+              context.l10n.noSavedRecords,
               style: TextStyle(
                 fontSize: 18,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -170,7 +172,7 @@ class _LogTableState extends State<LogTable> {
             ),
             const SizedBox(height: 8),
             Text(
-              '请在上方表单中添加第一条记录',
+              context.l10n.addFirstRecordHint,
               style: TextStyle(
                 color: Theme.of(context)
                     .colorScheme
@@ -187,92 +189,163 @@ class _LogTableState extends State<LogTable> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 如果高度无限，使用一个默认高度
-        final maxHeight =
-            constraints.maxHeight.isFinite ? constraints.maxHeight : 400.0;
+        var effectivePage = _currentPage;
+        if (settingsProvider.paginationEnabled) {
+          final totalPages = (logProvider.logs.length / _itemsPerPage).ceil();
+          if (effectivePage >= totalPages) effectivePage = totalPages - 1;
+          if (effectivePage < 0) effectivePage = 0;
+        }
+        final visibleRows = settingsProvider.paginationEnabled
+            ? (logProvider.logs.length - effectivePage * _itemsPerPage)
+                .clamp(1, _itemsPerPage)
+            : logProvider.logs.length;
+        final contentHeight = (48.0 + visibleRows * 56.0).clamp(104.0, 400.0);
+        final enableInnerVerticalScroll = !settingsProvider.paginationEnabled &&
+            48.0 + logProvider.logs.length * 56.0 > 400.0;
+        final maxHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : contentHeight;
+        final colors = Theme.of(context).colorScheme;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
               height: maxHeight,
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (notification) => true,
-                child: Scrollbar(
-                  controller: horizontalController,
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    controller: horizontalController,
-                    child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(minWidth: constraints.maxWidth),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: DecoratedBox(
+                  key: const Key('log-table-surface'),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    border: Border.all(color: colors.outlineVariant),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) => true,
+                    child: Scrollbar(
+                      controller: horizontalController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
                       child: SingleChildScrollView(
-                        child: DataTable(
-                          columnSpacing: 16,
-                          horizontalMargin: 16,
-                          headingRowHeight: 48,
-                          dataRowMinHeight: 48,
-                          dataRowMaxHeight: 64,
-                          headingTextStyle: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: 14,
+                        scrollDirection: Axis.horizontal,
+                        controller: horizontalController,
+                        child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(minWidth: constraints.maxWidth),
+                          child: SingleChildScrollView(
+                            physics: enableInnerVerticalScroll
+                                ? const ClampingScrollPhysics()
+                                : const NeverScrollableScrollPhysics(),
+                            child: DataTable(
+                              columnSpacing: 16,
+                              horizontalMargin: 16,
+                              headingRowHeight: 48,
+                              dataRowMinHeight: 56,
+                              dataRowMaxHeight: 56,
+                              headingRowColor: WidgetStatePropertyAll(
+                                colors.surfaceContainerHighest,
+                              ),
+                              headingTextStyle: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: colors.onSurface,
+                                fontSize: 13,
+                              ),
+                              dataTextStyle: TextStyle(
+                                color: colors.onSurface,
+                                fontSize: 13,
+                              ),
+                              dividerThickness: 1,
+                              border: TableBorder(
+                                horizontalInside: BorderSide(
+                                  color: colors.outlineVariant,
+                                ),
+                              ),
+                              columns: [
+                                DataColumn(
+                                  label:
+                                      _buildCenteredCell(const Text('#'), 60),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldTime),
+                                    100,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldController),
+                                    120,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldCallsign),
+                                    120,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldRstSent),
+                                    60,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldRstRcvd),
+                                    60,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldQth),
+                                    150,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldDevice),
+                                    150,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldPower),
+                                    80,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldAntenna),
+                                    150,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldHeight),
+                                    80,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldRemarks),
+                                    120,
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: _buildCenteredCell(
+                                    Text(context.l10n.fieldActions),
+                                    120,
+                                  ),
+                                ),
+                              ],
+                              rows: _buildTableRows(
+                                context,
+                                logProvider,
+                                settingsProvider,
+                              ),
+                            ),
                           ),
-                          dataTextStyle: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: 13,
-                          ),
-                          border: TableBorder.all(
-                            color: Theme.of(context).dividerColor,
-                            width: 1,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          columns: [
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('#'), 60),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('时间'), 100),
-                            ),
-                            DataColumn(
-                              label:
-                                  _buildCenteredCell(const Text('点名主控'), 120),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('呼号'), 120),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('RST发'), 60),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('RST收'), 60),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('QTH'), 150),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('设备'), 150),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('功率'), 80),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('天线'), 150),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('高度'), 80),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('备注'), 120),
-                            ),
-                            DataColumn(
-                              label: _buildCenteredCell(const Text('操作'), 120),
-                            ),
-                          ],
-                          rows: _buildTableRows(
-                              context, logProvider, settingsProvider),
                         ),
                       ),
                     ),
@@ -338,6 +411,16 @@ class _LogTableState extends State<LogTable> {
       final reverseIndex = originalIndex + 1;
 
       return DataRow(
+        color: WidgetStatePropertyAll(
+          isEditing
+              ? Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.22)
+              : entry.key.isOdd
+                  ? Theme.of(context).colorScheme.surfaceContainerLowest
+                  : Colors.transparent,
+        ),
         cells: [
           DataCell(
             _buildCenteredCell(Text('$reverseIndex'), 60),
@@ -540,7 +623,8 @@ class _LogTableState extends State<LogTable> {
                         IconButton(
                           icon: const Icon(Icons.check, size: 20),
                           onPressed: !canMutate ? null : _saveEditing,
-                          tooltip: !canMutate ? mutationHint : '保存',
+                          tooltip:
+                              !canMutate ? mutationHint : context.l10n.save,
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -552,7 +636,7 @@ class _LogTableState extends State<LogTable> {
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           onPressed: _cancelEditing,
-                          tooltip: '取消',
+                          tooltip: context.l10n.cancel,
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
                                 .colorScheme
@@ -578,7 +662,7 @@ class _LogTableState extends State<LogTable> {
                               icon: const Icon(Icons.edit, size: 20),
                               onPressed: () =>
                                   _startEditing(originalIndex, log),
-                              tooltip: '编辑记录',
+                              tooltip: context.l10n.editRecord,
                               style: IconButton.styleFrom(
                                 backgroundColor: Theme.of(context)
                                     .colorScheme
@@ -593,7 +677,7 @@ class _LogTableState extends State<LogTable> {
                                 context,
                                 log,
                               ),
-                              tooltip: '删除记录',
+                              tooltip: context.l10n.deleteRecord,
                               style: IconButton.styleFrom(
                                 backgroundColor: Theme.of(context)
                                     .colorScheme
@@ -625,7 +709,13 @@ class _LogTableState extends State<LogTable> {
     final totalPages = (totalItems / _itemsPerPage).ceil();
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      key: const Key('log-pagination'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -648,49 +738,38 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  void _showDeleteConfirmation(
-    BuildContext context,
+  Future<void> _showDeleteConfirmation(
+    BuildContext tableContext,
     LogEntry log,
-  ) {
-    final logProvider = context.read<LogProvider>();
+  ) async {
+    final logProvider = tableContext.read<LogProvider>();
     if (widget.readOnly ||
         widget.conflictedLogIds.contains(log.id) ||
         !logProvider.canMutateLog(log)) {
       return;
     }
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: const Text('确定要删除这条记录吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (widget.readOnly ||
-                  widget.conflictedLogIds.contains(log.id) ||
-                  !logProvider.canMutateLog(log)) {
-                Navigator.pop(context);
-                return;
-              }
-              logProvider.deleteLogById(log.id);
-              Navigator.pop(context);
-              context.showLoggedSnackBar(
-                const SnackBar(
-                  content: Text('记录已删除'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('删除'),
-          ),
-        ],
+    final deleted = await showDialog<bool>(
+      context: tableContext,
+      barrierDismissible: false,
+      builder: (dialogContext) => _DeleteLogDialog(
+        onDelete: () async {
+          if (widget.readOnly ||
+              widget.conflictedLogIds.contains(log.id) ||
+              !logProvider.canMutateLog(log)) {
+            throw StateError(_mutationBlockLabel(
+              dialogContext,
+              logProvider.mutationBlockReason(log),
+            ));
+          }
+          await logProvider.deleteLogById(log.id);
+        },
+      ),
+    );
+    if (deleted != true || !mounted) return;
+    context.showLoggedSnackBar(
+      SnackBar(
+        content: Text(context.l10n.recordDeleted),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -702,4 +781,64 @@ class _LogTableState extends State<LogTable> {
           context.l10n.logAuthorUnknownReadOnlyHint,
         _ => context.l10n.logSessionReadOnlyHint,
       };
+}
+
+class _DeleteLogDialog extends StatefulWidget {
+  const _DeleteLogDialog({required this.onDelete});
+
+  final Future<void> Function() onDelete;
+
+  @override
+  State<_DeleteLogDialog> createState() => _DeleteLogDialogState();
+}
+
+class _DeleteLogDialogState extends State<_DeleteLogDialog> {
+  bool _deleting = false;
+
+  Future<void> _delete() async {
+    if (_deleting) return;
+    setState(() => _deleting = true);
+
+    try {
+      await widget.onDelete();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+      );
+      return;
+    }
+
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_deleting,
+      child: AlertDialog(
+        title: Text(context.l10n.deleteRecord),
+        content: Text(context.l10n.deleteRecordConfirmation),
+        actions: [
+          TextButton(
+            onPressed: _deleting ? null : () => Navigator.pop(context, false),
+            child: Text(context.l10n.cancel),
+          ),
+          ElevatedButton(
+            onPressed: _deleting ? null : _delete,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: _deleting
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(context.l10n.delete),
+          ),
+        ],
+      ),
+    );
+  }
 }

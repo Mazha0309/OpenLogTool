@@ -225,6 +225,113 @@ void main() {
     expect(provider.logs.map((log) => log.id), ['keep']);
     provider.dispose();
   });
+
+  test('undo restores the deleted stack entry without removing the latest log',
+      () async {
+    final restoredIds = <String>[];
+    var rows = [
+      _bridgeLog(
+        id: 'latest',
+        sessionId: 'session-a',
+        time: '2026-07-13T12:00:00Z',
+      ),
+      _bridgeLog(
+        id: 'deleted',
+        sessionId: 'session-a',
+        time: '2026-07-13T11:00:00Z',
+      ),
+    ];
+    final provider = LogProvider(
+      sessionListLoader: () async => [_session('session-a')],
+      sessionLogPageLoader: (_, __, ___) async => rows,
+      logDeleter: (syncId) async {
+        rows = rows.where((row) => row.syncId != syncId).toList();
+      },
+      logRestorer: (syncId) async {
+        restoredIds.add(syncId);
+        final restored = _bridgeLog(
+          id: syncId,
+          sessionId: 'session-a',
+          time: '2026-07-13T11:00:00Z',
+        );
+        rows = [rows.single, restored];
+        return restored;
+      },
+    );
+    await provider.reloadForSession('session-a');
+
+    await provider.deleteLogById('deleted');
+    expect(provider.logs.map((log) => log.id), ['latest']);
+
+    await provider.undoLastLog();
+
+    expect(restoredIds, ['deleted']);
+    expect(provider.logs.map((log) => log.id), ['deleted', 'latest']);
+    provider.dispose();
+  });
+
+  test('failed restore keeps the deleted record available for retry', () async {
+    var rows = [
+      _bridgeLog(
+        id: 'deleted',
+        sessionId: 'session-a',
+        time: '2026-07-13T11:00:00Z',
+      ),
+    ];
+    final provider = LogProvider(
+      sessionListLoader: () async => [_session('session-a')],
+      sessionLogPageLoader: (_, __, ___) async => rows,
+      logDeleter: (syncId) async {
+        rows = rows.where((row) => row.syncId != syncId).toList();
+      },
+      logRestorer: (_) async => throw StateError('restore failed'),
+    );
+    await provider.reloadForSession('session-a');
+    await provider.deleteLogById('deleted');
+
+    await expectLater(
+      provider.undoLastLog(),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(provider.logs, isEmpty);
+    expect(provider.canUndo, isTrue);
+    provider.dispose();
+  });
+
+  test('database replacement drops stale overlays and permission markers',
+      () async {
+    var rows = [
+      _bridgeLog(
+        id: 'before-import',
+        sessionId: 'session-a',
+        time: '2026-07-13T10:00:00Z',
+      ),
+    ];
+    final provider = LogProvider(
+      sessionListLoader: () async => [_session('session-a')],
+      sessionLogPageLoader: (_, __, ___) async => rows,
+    );
+    await provider.reloadForSession('session-a');
+    provider.setCollaborationReadOnly('session-a', true);
+    provider.stageCanonicalLog(
+      _modelLog(id: 'stale-overlay', sessionId: 'session-a'),
+    );
+
+    rows = [
+      _bridgeLog(
+        id: 'after-import',
+        sessionId: 'session-a',
+        time: '2026-07-13T12:00:00Z',
+      ),
+    ];
+    await provider.reloadAfterDatabaseReplacement('session-a');
+
+    expect(provider.logs.map((log) => log.id), ['after-import']);
+    expect(provider.currentSessionReadOnly, isFalse);
+    expect(provider.mutationBlockReason(provider.logs.single), isNull);
+    provider.dispose();
+  });
 }
 
 Session _session(String sessionId) => Session(
