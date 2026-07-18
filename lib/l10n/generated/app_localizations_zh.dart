@@ -1699,6 +1699,94 @@ class AppLocalizationsZh extends AppLocalizations {
   String get databaseBackupSection => '备份与恢复';
 
   @override
+  String get personalCloudTitle => '个人云同步';
+
+  @override
+  String get personalCloudHint => '登录后同步全部个人会话与点名记录；协作会话继续使用独立的实时同步';
+
+  @override
+  String get personalCloudSignedOut => '登录服务器后可使用个人云同步';
+
+  @override
+  String get personalCloudUnsupported => '当前服务器版本不支持个人云同步，请先升级服务器';
+
+  @override
+  String get personalCloudChecking => '正在检查本机与云端记录…';
+
+  @override
+  String get personalCloudSyncing => '正在同步个人记录…';
+
+  @override
+  String get personalCloudUpToDate => '个人记录已同步';
+
+  @override
+  String get personalCloudDecisionRequired => '本机和云端已有不同数据，请选择保留哪一侧；不会自动覆盖';
+
+  @override
+  String personalCloudError(String error) {
+    return '个人云同步失败：$error';
+  }
+
+  @override
+  String personalCloudLocalSummary(int sessionCount, int logCount) {
+    return '本机：$sessionCount 场、$logCount 条记录';
+  }
+
+  @override
+  String personalCloudRemoteSummary(
+      int sessionCount, int logCount, int revision) {
+    return '云端：$sessionCount 场、$logCount 条记录 · 修订 $revision';
+  }
+
+  @override
+  String get personalCloudRemoteEmpty => '云端还没有个人记录';
+
+  @override
+  String get personalCloudSyncNow => '立即同步';
+
+  @override
+  String get personalCloudReplaceRemote => '以本机替换云端';
+
+  @override
+  String get personalCloudRestoreLocal => '从云端恢复本机';
+
+  @override
+  String get personalCloudReplaceTitle => '替换个人云端记录';
+
+  @override
+  String personalCloudReplaceWarning(
+      int localSessions, int localLogs, int remoteSessions, int remoteLogs) {
+    return '将以本机 $localSessions 场、$localLogs 条记录完整替换云端的 $remoteSessions 场、$remoteLogs 条记录。协作会话不受影响。此操作会在其他已登录设备上同步。';
+  }
+
+  @override
+  String get personalCloudReplacePhrase => '用本机记录替换云端';
+
+  @override
+  String get personalCloudReplaceAction => '确认替换云端';
+
+  @override
+  String get personalCloudRestoreTitle => '从个人云端恢复';
+
+  @override
+  String personalCloudRestoreWarning(
+      int remoteSessions, int remoteLogs, int localSessions, int localLogs) {
+    return '将以云端 $remoteSessions 场、$remoteLogs 条记录替换本机的 $localSessions 场、$localLogs 条个人记录。词库、设置和协作会话不受影响。';
+  }
+
+  @override
+  String get personalCloudRestorePhrase => '用云端记录替换本机';
+
+  @override
+  String get personalCloudRestoreAction => '确认恢复本机';
+
+  @override
+  String get personalCloudReplaceSucceeded => '个人云端已替换为本机记录';
+
+  @override
+  String get personalCloudRestoreSucceeded => '个人记录已从云端恢复到本机';
+
+  @override
   String get databaseDangerZoneSection => '危险操作';
 
   @override
@@ -1752,6 +1840,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get databaseImportPickerTitle => '选择 OpenLogTool 本机数据库备份';
 
   @override
+  String get databaseImportNoFileSelected => '未选择备份文件，未执行导入';
+
+  @override
   String get databaseImportPreviewTitle => '确认导入备份';
 
   @override
@@ -1791,6 +1882,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get databaseImportSucceeded => '本机数据库已导入，界面数据已刷新';
+
+  @override
+  String databaseImportSucceededSummary(int sessionCount, int logCount) {
+    return '本机数据库已导入：$sessionCount 场会话、$logCount 条记录；可在会话页查看历史会话';
+  }
 
   @override
   String databaseImportInvalid(String error) {

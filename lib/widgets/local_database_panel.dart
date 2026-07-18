@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/database_backup_summary.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
@@ -12,6 +13,7 @@ import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
+import 'package:openlogtool/widgets/personal_cloud_panel.dart';
 import 'package:openlogtool/widgets/settings/data_operations.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +24,10 @@ import 'package:provider/provider.dart';
 /// maintenance workflow here prevents settings and data pages from each
 /// growing a subtly different set of import, backup and reset dialogs.
 class LocalDatabasePanel extends StatelessWidget {
+  static const _nativeFileDialog = MethodChannel(
+    'com.mazha0309.openlogtool/native_file_dialog',
+  );
+
   const LocalDatabasePanel({
     super.key,
     this.isNarrow = false,
@@ -32,14 +38,24 @@ class LocalDatabasePanel extends StatelessWidget {
   final double cardPadding;
 
   @override
-  Widget build(BuildContext context) => DataOperations(
-        isNarrow: isNarrow,
-        cardPadding: cardPadding,
-        onViewDatabaseLog: () => _showDatabaseLogDialog(context),
-        onExportDatabase: () => _exportDatabase(context),
-        onImportDatabase: () => _importDatabase(context),
-        onViewSnackbarLog: () => _showSnackbarLogDialog(context),
-        onClearAllData: () => _showClearDataConfirmation(context),
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PersonalCloudPanel(
+            isNarrow: isNarrow,
+            cardPadding: cardPadding,
+          ),
+          const SizedBox(height: AppSpace.md),
+          DataOperations(
+            isNarrow: isNarrow,
+            cardPadding: cardPadding,
+            onViewDatabaseLog: () => _showDatabaseLogDialog(context),
+            onExportDatabase: () => _exportDatabase(context),
+            onImportDatabase: () => _importDatabase(context),
+            onViewSnackbarLog: () => _showSnackbarLogDialog(context),
+            onClearAllData: () => _showClearDataConfirmation(context),
+          ),
+        ],
       );
 
   Future<void> _showSnackbarLogDialog(BuildContext context) async {
@@ -171,15 +187,18 @@ class LocalDatabasePanel extends StatelessWidget {
     final String jsonData;
     final DatabaseBackupSummary summary;
     try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: context.l10n.databaseImportPickerTitle,
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
-        withData: false,
-        withReadStream: kIsWeb,
-      );
-      if (result == null || result.files.isEmpty) return;
-      selectedFile = result.files.single;
+      final pickedFile = await _pickDatabaseBackup(context);
+      if (pickedFile == null) {
+        if (!context.mounted) return;
+        context.showLoggedSnackBar(
+          SnackBar(
+            content: Text(context.l10n.databaseImportNoFileSelected),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+      selectedFile = pickedFile;
       jsonData = await _readSelectedBackup(selectedFile);
       summary = DatabaseBackupSummary.parse(jsonData);
     } on FormatException catch (error) {
@@ -215,10 +234,52 @@ class LocalDatabasePanel extends StatelessWidget {
     await _replaceLocalDatabase(
       context,
       replacement: () => RustApi.importDatabase(jsonData: jsonData),
-      successMessage: (l10n) => l10n.databaseImportSucceeded,
+      successMessage: (l10n) => l10n.databaseImportSucceededSummary(
+        summary.sessionCount,
+        summary.logCount,
+      ),
       failureMessage: (l10n, error) =>
           l10n.databaseImportFailed(_friendlyDatabaseError(l10n, error)),
     );
+  }
+
+  Future<PlatformFile?> _pickDatabaseBackup(BuildContext context) async {
+    final dialogTitle = context.l10n.databaseImportPickerTitle;
+    // file_picker shells out to zenity on Linux. That path can lose its result
+    // under Wayland compositors when the portal cannot associate the external
+    // dialog with the Flutter window. The runner owns a GTK chooser so Linux
+    // keeps the dialog and its parent inside this process.
+    if (!kIsWeb && Platform.isLinux) {
+      try {
+        final path = await _nativeFileDialog.invokeMethod<String>(
+          'pickJsonBackup',
+          {'title': dialogTitle},
+        );
+        if (path == null || path.trim().isEmpty) return null;
+        final normalizedPath = path.trim();
+        final file = File(normalizedPath);
+        return PlatformFile(
+          name: normalizedPath
+              .split(Platform.pathSeparator)
+              .where((segment) => segment.isNotEmpty)
+              .last,
+          path: normalizedPath,
+          size: await file.length(),
+        );
+      } on MissingPluginException {
+        // Keep debug/test runners and older custom Linux embeddings usable.
+      }
+    }
+
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: dialogTitle,
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      withData: false,
+      withReadStream: kIsWeb,
+    );
+    if (result == null || result.files.isEmpty) return null;
+    return result.files.single;
   }
 
   Future<bool?> _showImportConfirmation(

@@ -1779,6 +1779,101 @@ class AppLocalizationsEn extends AppLocalizations {
   String get databaseBackupSection => 'Backup & restore';
 
   @override
+  String get personalCloudTitle => 'Personal cloud sync';
+
+  @override
+  String get personalCloudHint =>
+      'Sync every personal session and net record after sign-in; collaboration sessions continue using their separate realtime sync';
+
+  @override
+  String get personalCloudSignedOut =>
+      'Sign in to the server to use personal cloud sync';
+
+  @override
+  String get personalCloudUnsupported =>
+      'This server version does not support personal cloud sync; upgrade the server first';
+
+  @override
+  String get personalCloudChecking => 'Checking on-device and cloud records…';
+
+  @override
+  String get personalCloudSyncing => 'Syncing personal records…';
+
+  @override
+  String get personalCloudUpToDate => 'Personal records are synchronized';
+
+  @override
+  String get personalCloudDecisionRequired =>
+      'This device and the cloud contain different data. Choose which side to keep; nothing will be overwritten automatically';
+
+  @override
+  String personalCloudError(String error) {
+    return 'Personal cloud sync failed: $error';
+  }
+
+  @override
+  String personalCloudLocalSummary(int sessionCount, int logCount) {
+    return 'On device: $sessionCount sessions and $logCount records';
+  }
+
+  @override
+  String personalCloudRemoteSummary(
+      int sessionCount, int logCount, int revision) {
+    return 'Cloud: $sessionCount sessions and $logCount records · revision $revision';
+  }
+
+  @override
+  String get personalCloudRemoteEmpty =>
+      'No personal records are stored in the cloud yet';
+
+  @override
+  String get personalCloudSyncNow => 'Sync now';
+
+  @override
+  String get personalCloudReplaceRemote => 'Replace cloud with device';
+
+  @override
+  String get personalCloudRestoreLocal => 'Restore device from cloud';
+
+  @override
+  String get personalCloudReplaceTitle => 'Replace personal cloud records';
+
+  @override
+  String personalCloudReplaceWarning(
+      int localSessions, int localLogs, int remoteSessions, int remoteLogs) {
+    return 'The $localSessions sessions and $localLogs records on this device will completely replace the $remoteSessions sessions and $remoteLogs records in the cloud. Collaboration sessions are unaffected. The change will synchronize to other signed-in devices.';
+  }
+
+  @override
+  String get personalCloudReplacePhrase => 'REPLACE CLOUD WITH DEVICE';
+
+  @override
+  String get personalCloudReplaceAction => 'Replace cloud';
+
+  @override
+  String get personalCloudRestoreTitle => 'Restore from personal cloud';
+
+  @override
+  String personalCloudRestoreWarning(
+      int remoteSessions, int remoteLogs, int localSessions, int localLogs) {
+    return 'The $remoteSessions sessions and $remoteLogs cloud records will replace the $localSessions sessions and $localLogs personal records on this device. Libraries, settings, and collaboration sessions are unaffected.';
+  }
+
+  @override
+  String get personalCloudRestorePhrase => 'RESTORE DEVICE FROM CLOUD';
+
+  @override
+  String get personalCloudRestoreAction => 'Restore this device';
+
+  @override
+  String get personalCloudReplaceSucceeded =>
+      'Personal cloud records were replaced with this device\'s records';
+
+  @override
+  String get personalCloudRestoreSucceeded =>
+      'Personal records were restored from the cloud';
+
+  @override
   String get databaseDangerZoneSection => 'Danger zone';
 
   @override
@@ -1837,6 +1932,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Select an OpenLogTool on-device database backup';
 
   @override
+  String get databaseImportNoFileSelected =>
+      'No backup file was selected; nothing was imported';
+
+  @override
   String get databaseImportPreviewTitle => 'Confirm backup import';
 
   @override
@@ -1877,6 +1976,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get databaseImportSucceeded =>
       'On-device database imported and the interface has been refreshed';
+
+  @override
+  String databaseImportSucceededSummary(int sessionCount, int logCount) {
+    return 'On-device database imported: $sessionCount sessions and $logCount records. Historical sessions are available on the Sessions page';
+  }
 
   @override
   String databaseImportInvalid(String error) {

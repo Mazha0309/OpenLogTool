@@ -130,15 +130,27 @@ void main() {
     logs.setCollaborationReadOnly(source.sessionId, true);
     collaboration.updateDependencies(server, sessions, logs);
     var operationCalls = 0;
+    var sentinelWasDurableBeforeOperation = false;
 
     final result = await collaboration.runLocalDatabaseMaintenance(() async {
       operationCalls += 1;
+      sentinelWasDurableBeforeOperation =
+          (await SharedPreferences.getInstance())
+                  .getBool('local_database_replacement_pending') ==
+              true;
       return 7;
     });
 
     expect(result, 7);
     expect(operationCalls, 1);
+    expect(sentinelWasDurableBeforeOperation, isTrue);
     expect(sessions.databaseReloadCalls, 1);
+    expect(sessions.databaseReplacementPending, isFalse);
+    expect(
+      (await SharedPreferences.getInstance())
+          .containsKey('local_database_replacement_pending'),
+      isFalse,
+    );
     expect(logs.currentSessionId, source.sessionId);
     expect(logs.mutationBlockReason(pending), isNull);
   });
@@ -182,6 +194,63 @@ void main() {
     gate.complete();
     await first;
   });
+
+  test('rolled-back database maintenance safely clears its sentinel', () async {
+    final sessions = _ManagedSessions(_Mode.stop);
+    final logs = _logs(sessions);
+    final server = _OfflineServer();
+    final collaboration = _ManagedCollaboration();
+    addTearDown(sessions.dispose);
+    addTearDown(logs.dispose);
+    addTearDown(server.dispose);
+    addTearDown(collaboration.dispose);
+    collaboration.updateDependencies(server, sessions, logs);
+
+    await expectLater(
+      collaboration.runLocalDatabaseMaintenance<void>(
+        () async => throw StateError('transaction rolled back'),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(sessions.databaseReloadCalls, 0);
+    expect(sessions.databaseReplacementPending, isFalse);
+    expect(
+      (await SharedPreferences.getInstance())
+          .containsKey('local_database_replacement_pending'),
+      isFalse,
+    );
+  });
+
+  test('failed retry never clears a sentinel left by an earlier crash',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'local_database_replacement_pending': true,
+    });
+    final sessions = _ManagedSessions(_Mode.stop);
+    final logs = _logs(sessions);
+    final server = _OfflineServer();
+    final collaboration = _ManagedCollaboration();
+    addTearDown(sessions.dispose);
+    addTearDown(logs.dispose);
+    addTearDown(server.dispose);
+    addTearDown(collaboration.dispose);
+    collaboration.updateDependencies(server, sessions, logs);
+
+    await expectLater(
+      collaboration.runLocalDatabaseMaintenance<void>(
+        () async => throw StateError('retry transaction rolled back'),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(sessions.databaseReplacementPending, isTrue);
+    expect(
+      (await SharedPreferences.getInstance())
+          .getBool('local_database_replacement_pending'),
+      isTrue,
+    );
+  });
 }
 
 LogProvider _logs(_ManagedSessions sessions) => LogProvider(
@@ -220,9 +289,6 @@ class _ManagedSessions extends SessionProvider {
   int closeCalls = 0;
   int deleteCalls = 0;
   int databaseReloadCalls = 0;
-
-  @override
-  Future<void> get ready => Future<void>.value();
 
   @override
   String? get currentSessionId => _current?.sessionId;

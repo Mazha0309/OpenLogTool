@@ -5,6 +5,7 @@ import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
@@ -200,6 +201,11 @@ class _TestProviders extends StatelessWidget {
         ),
       ),
       ChangeNotifierProvider(create: (_) => CollaborationProvider()),
+      ChangeNotifierProvider(
+        create: (_) => PersonalCloudProvider(
+          exporter: () async => '{"version":1,"sessions":[],"logs":[]}',
+        ),
+      ),
       ChangeNotifierProvider(
         create: (_) => DictionaryProvider(autoload: false),
       ),

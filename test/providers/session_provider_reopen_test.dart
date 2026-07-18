@@ -63,6 +63,7 @@ void main() {
     await provider.reloadAfterDatabaseReplacement();
 
     expect(provider.currentSessionId, 'newer-import');
+    expect(provider.databaseRevision, 1);
     expect(
       (await SharedPreferences.getInstance()).getString('current_session_id'),
       'newer-import',
@@ -83,10 +84,52 @@ void main() {
 
     expect(provider.currentSessionId, isNull);
     expect(provider.currentSession, isNull);
+    expect(provider.databaseRevision, 1);
     expect(
       (await SharedPreferences.getInstance()).getString('current_session_id'),
       isNull,
     );
+
+    final restarted = SessionProvider(sessionListLoader: () async => const []);
+    addTearDown(restarted.dispose);
+    await restarted.ready;
+    expect(restarted.databaseRevision, 1);
+  });
+
+  test('replacement sentinel survives a crash and restart until acknowledged',
+      () async {
+    final beforeCrash = SessionProvider(
+      sessionListLoader: () async => const [],
+    );
+    await beforeCrash.ready;
+
+    await beforeCrash.prepareForDatabaseReplacement();
+    expect(beforeCrash.databaseReplacementPending, isTrue);
+    expect(
+      (await SharedPreferences.getInstance())
+          .getBool('local_database_replacement_pending'),
+      isTrue,
+    );
+    // Simulate process termination after the durable transaction was allowed
+    // to begin, but before reload/revision persistence could acknowledge it.
+    beforeCrash.dispose();
+
+    final afterRestart = SessionProvider(
+      sessionListLoader: () async => const [],
+    );
+    addTearDown(afterRestart.dispose);
+    await afterRestart.ready;
+    expect(afterRestart.databaseReplacementPending, isTrue);
+
+    await afterRestart.acknowledgeDatabaseReplacement();
+    expect(afterRestart.databaseReplacementPending, isFalse);
+
+    final afterAcknowledgement = SessionProvider(
+      sessionListLoader: () async => const [],
+    );
+    addTearDown(afterAcknowledgement.dispose);
+    await afterAcknowledgement.ready;
+    expect(afterAcknowledgement.databaseReplacementPending, isFalse);
   });
 }
 

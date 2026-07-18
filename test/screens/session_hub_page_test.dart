@@ -65,6 +65,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('database replacement and clear refresh cached history entries',
+      (tester) async {
+    final sessions = [
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+    ];
+    final sessionProvider = _FakeSessionProvider(
+      sessions: sessions,
+      currentSessionId: 'current-session',
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => sessions,
+      sessionLogPageLoader: (_, __, ___) async => [],
+    );
+
+    await tester.pumpWidget(
+      _SessionHubTestApp(
+        sessionProvider: sessionProvider,
+        logProvider: logProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('导入的历史点名'), findsNothing);
+
+    sessionProvider.simulateDatabaseReplacement([
+      _session(
+        id: 'current-session',
+        title: '本周点名',
+        status: 'active',
+      ),
+      _session(
+        id: 'imported-session',
+        title: '导入的历史点名',
+        status: 'closed',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入的历史点名'), findsOneWidget);
+
+    sessionProvider.simulateDatabaseReplacement(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入的历史点名'), findsNothing);
+    expect(find.text('暂无历史会话'), findsOneWidget);
+  });
+
   testWidgets('creating a session returns directly to the workbench',
       (tester) async {
     final sessions = [
@@ -101,7 +151,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(sessionProvider.startedTitles, ['周五晚间点名']);
-    expect(sessionProvider.currentSession.title, '周五晚间点名');
+    expect(sessionProvider.currentSession!.title, '周五晚间点名');
     expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
   });
 
@@ -363,7 +413,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(sessionProvider.currentSession.status, 'active');
+    expect(sessionProvider.currentSession!.status, 'active');
     expect(sessionProvider.currentSessionId, 'closed-session');
     expect(loadedSessionIds, contains('closed-session'));
     expect(logProvider.currentSessionReadOnly, isFalse);
@@ -416,7 +466,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(sessionProvider.currentSessionId, 'closed-session');
-    expect(sessionProvider.currentSession.status, 'active');
+    expect(sessionProvider.currentSession!.status, 'active');
     expect(logProvider.currentSessionReadOnly, isFalse);
     expect(find.byKey(const Key('workbench-after-history')), findsOneWidget);
     final refreshedSessions = await sessionProvider.listAvailableSessions();
@@ -480,7 +530,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(sessionProvider.currentSessionId, 'broken-session');
-    expect(sessionProvider.currentSession.status, 'active');
+    expect(sessionProvider.currentSession!.status, 'active');
     expect(logProvider.currentSessionId, 'broken-session');
     expect(logProvider.currentSessionReadOnly, isTrue);
     expect(find.textContaining('已重新激活，但日志暂时加载失败'), findsOneWidget);
@@ -557,17 +607,35 @@ class _FakeSessionProvider extends SessionProvider {
 
   final List<Session> _sessions;
   final Set<String> _collaborationSessionIds;
-  Session _currentSession;
+  Session? _currentSession;
+  int _databaseRevision = 0;
   final List<String?> startedTitles = [];
 
   @override
   Future<void> get ready => Future<void>.value();
 
   @override
-  String get currentSessionId => _currentSession.sessionId;
+  String? get currentSessionId => _currentSession?.sessionId;
 
   @override
-  Session get currentSession => _currentSession;
+  Session? get currentSession => _currentSession;
+
+  @override
+  int get databaseRevision => _databaseRevision;
+
+  void simulateDatabaseReplacement(List<Session> sessions) {
+    final previousSessionId = _currentSession?.sessionId;
+    _sessions
+      ..clear()
+      ..addAll(sessions);
+    _currentSession = previousSessionId == null
+        ? null
+        : sessions
+            .where((session) => session.sessionId == previousSessionId)
+            .firstOrNull;
+    _databaseRevision++;
+    notifyListeners();
+  }
 
   @override
   Future<List<Session>> listAvailableSessions() async => [..._sessions];
@@ -624,8 +692,10 @@ class _FakeSessionProvider extends SessionProvider {
 
   @override
   Future<void> reloadCurrentSession() async {
+    final currentSessionId = _currentSession?.sessionId;
+    if (currentSessionId == null) return;
     _currentSession = _sessions.firstWhere(
-      (session) => session.sessionId == _currentSession.sessionId,
+      (session) => session.sessionId == currentSessionId,
     );
     notifyListeners();
   }

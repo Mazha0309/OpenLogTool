@@ -6,6 +6,7 @@ import 'api/settings.dart' as settings;
 import 'api/callsign_qth.dart' as callsign_qth;
 import 'api/collaboration.dart' as collaboration;
 import 'api/database.dart' as database;
+import 'api/personal_records.dart' as personal_records;
 import 'models/log_entry.dart';
 import 'models/session.dart';
 import 'models/dict_item.dart';
@@ -599,5 +600,29 @@ class RustApi {
 
   static Future<void> clearAllData() {
     return database.clearAllData();
+  }
+
+  // Account-scoped personal record snapshots. Collaboration replicas and all
+  // non-record tables are deliberately excluded by the Rust transaction.
+  static Future<String> exportPersonalRecords() {
+    return personal_records.exportPersonalRecords();
+  }
+
+  static Future<String> replacePersonalRecords({required String jsonData}) {
+    return personal_records.replacePersonalRecords(jsonData: jsonData);
+  }
+
+  static Future<String> replacePersonalRecordsIfUnchanged({
+    required String jsonData,
+    required String expectedLocalJsonData,
+  }) {
+    return personal_records.replacePersonalRecordsIfUnchanged(
+      jsonData: jsonData,
+      expectedLocalJsonData: expectedLocalJsonData,
+    );
+  }
+
+  static Future<String> mergePersonalRecords({required String jsonData}) {
+    return personal_records.mergePersonalRecords(jsonData: jsonData);
   }
 }

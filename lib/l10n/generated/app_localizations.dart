@@ -3089,6 +3089,159 @@ abstract class AppLocalizations {
   /// **'备份与恢复'**
   String get databaseBackupSection;
 
+  /// No description provided for @personalCloudTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人云同步'**
+  String get personalCloudTitle;
+
+  /// No description provided for @personalCloudHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录后同步全部个人会话与点名记录；协作会话继续使用独立的实时同步'**
+  String get personalCloudHint;
+
+  /// No description provided for @personalCloudSignedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录服务器后可使用个人云同步'**
+  String get personalCloudSignedOut;
+
+  /// No description provided for @personalCloudUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前服务器版本不支持个人云同步，请先升级服务器'**
+  String get personalCloudUnsupported;
+
+  /// No description provided for @personalCloudChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查本机与云端记录…'**
+  String get personalCloudChecking;
+
+  /// No description provided for @personalCloudSyncing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在同步个人记录…'**
+  String get personalCloudSyncing;
+
+  /// No description provided for @personalCloudUpToDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人记录已同步'**
+  String get personalCloudUpToDate;
+
+  /// No description provided for @personalCloudDecisionRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机和云端已有不同数据，请选择保留哪一侧；不会自动覆盖'**
+  String get personalCloudDecisionRequired;
+
+  /// No description provided for @personalCloudError.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人云同步失败：{error}'**
+  String personalCloudError(String error);
+
+  /// No description provided for @personalCloudLocalSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机：{sessionCount} 场、{logCount} 条记录'**
+  String personalCloudLocalSummary(int sessionCount, int logCount);
+
+  /// No description provided for @personalCloudRemoteSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端：{sessionCount} 场、{logCount} 条记录 · 修订 {revision}'**
+  String personalCloudRemoteSummary(
+      int sessionCount, int logCount, int revision);
+
+  /// No description provided for @personalCloudRemoteEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端还没有个人记录'**
+  String get personalCloudRemoteEmpty;
+
+  /// No description provided for @personalCloudSyncNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即同步'**
+  String get personalCloudSyncNow;
+
+  /// No description provided for @personalCloudReplaceRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'以本机替换云端'**
+  String get personalCloudReplaceRemote;
+
+  /// No description provided for @personalCloudRestoreLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'从云端恢复本机'**
+  String get personalCloudRestoreLocal;
+
+  /// No description provided for @personalCloudReplaceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换个人云端记录'**
+  String get personalCloudReplaceTitle;
+
+  /// No description provided for @personalCloudReplaceWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'将以本机 {localSessions} 场、{localLogs} 条记录完整替换云端的 {remoteSessions} 场、{remoteLogs} 条记录。协作会话不受影响。此操作会在其他已登录设备上同步。'**
+  String personalCloudReplaceWarning(
+      int localSessions, int localLogs, int remoteSessions, int remoteLogs);
+
+  /// No description provided for @personalCloudReplacePhrase.
+  ///
+  /// In zh, this message translates to:
+  /// **'用本机记录替换云端'**
+  String get personalCloudReplacePhrase;
+
+  /// No description provided for @personalCloudReplaceAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认替换云端'**
+  String get personalCloudReplaceAction;
+
+  /// No description provided for @personalCloudRestoreTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'从个人云端恢复'**
+  String get personalCloudRestoreTitle;
+
+  /// No description provided for @personalCloudRestoreWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'将以云端 {remoteSessions} 场、{remoteLogs} 条记录替换本机的 {localSessions} 场、{localLogs} 条个人记录。词库、设置和协作会话不受影响。'**
+  String personalCloudRestoreWarning(
+      int remoteSessions, int remoteLogs, int localSessions, int localLogs);
+
+  /// No description provided for @personalCloudRestorePhrase.
+  ///
+  /// In zh, this message translates to:
+  /// **'用云端记录替换本机'**
+  String get personalCloudRestorePhrase;
+
+  /// No description provided for @personalCloudRestoreAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认恢复本机'**
+  String get personalCloudRestoreAction;
+
+  /// No description provided for @personalCloudReplaceSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人云端已替换为本机记录'**
+  String get personalCloudReplaceSucceeded;
+
+  /// No description provided for @personalCloudRestoreSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人记录已从云端恢复到本机'**
+  String get personalCloudRestoreSucceeded;
+
   /// No description provided for @databaseDangerZoneSection.
   ///
   /// In zh, this message translates to:
@@ -3179,6 +3332,12 @@ abstract class AppLocalizations {
   /// **'选择 OpenLogTool 本机数据库备份'**
   String get databaseImportPickerTitle;
 
+  /// No description provided for @databaseImportNoFileSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未选择备份文件，未执行导入'**
+  String get databaseImportNoFileSelected;
+
   /// No description provided for @databaseImportPreviewTitle.
   ///
   /// In zh, this message translates to:
@@ -3256,6 +3415,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本机数据库已导入，界面数据已刷新'**
   String get databaseImportSucceeded;
+
+  /// No description provided for @databaseImportSucceededSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机数据库已导入：{sessionCount} 场会话、{logCount} 条记录；可在会话页查看历史会话'**
+  String databaseImportSucceededSummary(int sessionCount, int logCount);
 
   /// No description provided for @databaseImportInvalid.
   ///

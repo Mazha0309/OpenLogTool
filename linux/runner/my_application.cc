@@ -14,6 +14,57 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Uses the application's own GTK window for JSON backup selection. Keeping
+// the chooser in-process avoids the zenity/portal parent-window failure seen
+// on some Wayland compositors.
+static void native_file_dialog_method_call_cb(FlMethodChannel* channel,
+                                              FlMethodCall* method_call,
+                                              gpointer user_data) {
+  GtkWindow* parent = GTK_WINDOW(user_data);
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (g_strcmp0(method, "pickJsonBackup") != 0) {
+    fl_method_call_respond_not_implemented(method_call, nullptr);
+    return;
+  }
+
+  const gchar* title = "Select an OpenLogTool database backup";
+  FlValue* args = fl_method_call_get_args(method_call);
+  if (args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+    FlValue* title_value = fl_value_lookup_string(args, "title");
+    if (title_value != nullptr &&
+        fl_value_get_type(title_value) == FL_VALUE_TYPE_STRING) {
+      title = fl_value_get_string(title_value);
+    }
+  }
+
+  GtkWidget* dialog = gtk_file_chooser_dialog_new(
+      title, parent, GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel",
+      GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, nullptr);
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+
+  GtkFileFilter* json_filter = gtk_file_filter_new();
+  gtk_file_filter_set_name(json_filter, "JSON (*.json)");
+  gtk_file_filter_add_pattern(json_filter, "*.json");
+  gtk_file_filter_add_pattern(json_filter, "*.JSON");
+  gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), json_filter);
+
+  gchar* selected_path = nullptr;
+  if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+    selected_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+  }
+  gtk_widget_destroy(dialog);
+
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (selected_path == nullptr) {
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else {
+    g_autoptr(FlValue) result = fl_value_new_string(selected_path);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+    g_free(selected_path);
+  }
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -74,6 +125,16 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+
+  FlEngine* engine = fl_view_get_engine(view);
+  FlBinaryMessenger* messenger = fl_engine_get_binary_messenger(engine);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) file_dialog_channel = fl_method_channel_new(
+      messenger, "com.mazha0309.openlogtool/native_file_dialog",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      file_dialog_channel, native_file_dialog_method_call_cb,
+      g_object_ref(window), g_object_unref);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
