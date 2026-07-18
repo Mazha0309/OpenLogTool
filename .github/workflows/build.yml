@@ -101,6 +101,7 @@ jobs:
         run: |
           flutter gen-l10n
           flutter_rust_bridge_codegen generate
+          sed -i 's/[[:space:]]\+$//' rust/src/frb_generated.rs
           git diff --exit-code -- \
             lib/l10n/generated \
             lib/src/bridge \
