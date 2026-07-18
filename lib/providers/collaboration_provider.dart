@@ -193,6 +193,7 @@ bool collaborationEventMayAffectOpenConflicts({
 String? collaborationLogMutationBlockReason({
   required bool collaborationBound,
   required bool canEditSession,
+  required bool sharedEditingSupported,
   required String? accountId,
   required bool authorshipKnown,
   required String? createdBy,
@@ -201,6 +202,7 @@ String? collaborationLogMutationBlockReason({
   if (!canEditSession || accountId == null) {
     return 'COLLABORATION_SESSION_READ_ONLY';
   }
+  if (sharedEditingSupported) return null;
   if (!authorshipKnown || createdBy == null) {
     return 'COLLABORATION_LOG_AUTHOR_UNKNOWN';
   }
@@ -964,6 +966,7 @@ class CollaborationProvider with ChangeNotifier {
     'sessionSnapshotTombstones',
   };
   static const _liveDraftFeature = 'collaborationLiveDraft';
+  static const _sharedLogEditingFeature = 'collaborationSharedLogEditing';
   static const _publicShareFeatures = {
     'publicLiveshare',
     'publicLivesharePage',
@@ -977,6 +980,7 @@ class CollaborationProvider with ChangeNotifier {
   SessionProvider? _sessions;
   LogProvider? _logs;
   String? _dependencyKey;
+  bool _sharedLogEditingSupported = false;
   bool _refreshScheduled = false;
   bool _disposed = false;
   bool _operationInProgress = false;
@@ -1185,6 +1189,8 @@ class CollaborationProvider with ChangeNotifier {
   bool get supportsLiveDraft =>
       _server?.serverInfo?.features.contains(_liveDraftFeature) ?? false;
 
+  bool get supportsSharedLogEditing => _sharedLogEditingSupported;
+
   bool get canViewLiveDraft {
     final binding = _binding;
     final membership = _membership;
@@ -1244,6 +1250,7 @@ class CollaborationProvider with ChangeNotifier {
     return collaborationLogMutationBlockReason(
       collaborationBound: boundLog,
       canEditSession: canEditCurrentSession,
+      sharedEditingSupported: supportsSharedLogEditing,
       accountId: _server?.accountId,
       authorshipKnown: _logCreatedBy.containsKey(log.id),
       createdBy: _logCreatedBy[log.id],
@@ -1255,12 +1262,20 @@ class CollaborationProvider with ChangeNotifier {
     SessionProvider sessions,
     LogProvider logs,
   ) {
+    final sharedLogEditingSupported =
+        server.serverInfo?.features.contains(_sharedLogEditingFeature) ?? false;
+    final mutationPermissionsChanged =
+        _sharedLogEditingSupported != sharedLogEditingSupported;
+    _sharedLogEditingSupported = sharedLogEditingSupported;
     _server = server;
     _sessions = sessions;
     if (!identical(_logs, logs)) {
       _logs?.setLogMutationGuard(null);
       _logs = logs;
       logs.setLogMutationGuard(_logMutationBlockReason);
+    }
+    if (mutationPermissionsChanged) {
+      logs.refreshMutationPermissions();
     }
     final key = '${server.contextRevision}|${server.serverUrl}|'
         '${server.accountId ?? ''}|'

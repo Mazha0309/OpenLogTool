@@ -756,6 +756,7 @@ class SessionHubPage extends StatelessWidget {
         data: data,
         preferences: settings.controllerDisplayPreferences,
         appearance: appearance,
+        onPreferencesChanged: settings.setControllerDisplayPreferences,
       );
     } catch (error) {
       if (!context.mounted) return;

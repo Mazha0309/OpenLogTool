@@ -337,6 +337,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get previousSavedRecord => '上一位已保存记录';
 
   @override
+  String recordOrdinal(int ordinal) {
+    return '第 $ordinal 位';
+  }
+
+  @override
   String get noPreviousRecord => '暂无上一位记录';
 
   @override
@@ -358,6 +363,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get informationDetail => '信息详细程度';
+
+  @override
+  String get controllerDisplayScale => '主控屏缩放';
+
+  @override
+  String get controllerDisplayScaleHint => '仅调整主控屏的显示比例，不影响主应用界面。';
 
   @override
   String get currentFields => '当前项字段';
@@ -1702,89 +1713,117 @@ class AppLocalizationsZh extends AppLocalizations {
   String get personalCloudTitle => '个人云同步';
 
   @override
-  String get personalCloudHint => '登录后同步全部个人会话与点名记录；协作会话继续使用独立的实时同步';
+  String get personalCloudHint =>
+      '个人会话、点名记录和词库改动会在已登录设备间自动双向同步；协作会话仍使用独立的实时协作流程。';
 
   @override
-  String get personalCloudSignedOut => '登录服务器后可使用个人云同步';
+  String get personalCloudSignedOut => '登录服务器后自动同步个人记录和词库改动';
 
   @override
-  String get personalCloudUnsupported => '当前服务器版本不支持个人云同步，请先升级服务器';
+  String get personalCloudUnsupported => '当前服务器版本不支持账户个人云快照，请先升级服务器';
 
   @override
-  String get personalCloudChecking => '正在检查本机与云端记录…';
+  String get personalCloudChecking => '正在核对本机记录、词库与账户云快照…';
 
   @override
-  String get personalCloudSyncing => '正在同步个人记录…';
+  String get personalCloudSyncing => '正在同步个人记录和词库改动…';
 
   @override
-  String get personalCloudUpToDate => '个人记录已同步';
+  String get personalCloudUpToDate => '个人记录和词库改动均已同步';
 
   @override
-  String get personalCloudDecisionRequired => '本机和云端已有不同数据，请选择保留哪一侧；不会自动覆盖';
+  String get personalCloudDecisionRequired => '首次配对或真实编辑冲突需要确认；互不冲突的改动已安全合并。';
 
   @override
   String personalCloudError(String error) {
-    return '个人云同步失败：$error';
+    return '账户个人云快照同步失败：$error';
   }
 
   @override
   String personalCloudLocalSummary(int sessionCount, int logCount) {
-    return '本机：$sessionCount 场、$logCount 条记录';
+    return '本机个人记录：$sessionCount 场、$logCount 条';
   }
 
   @override
   String personalCloudRemoteSummary(
       int sessionCount, int logCount, int revision) {
-    return '云端：$sessionCount 场、$logCount 条记录 · 修订 $revision';
+    return '账户云快照：$sessionCount 场、$logCount 条 · 修订 $revision';
   }
 
   @override
-  String get personalCloudRemoteEmpty => '云端还没有个人记录';
+  String get personalCloudRemoteEmpty => '当前账户还没有个人云快照';
 
   @override
-  String get personalCloudSyncNow => '立即同步';
+  String personalCloudDictionaryLocalSummary(int itemCount) {
+    return '本机词库改动：$itemCount 项';
+  }
 
   @override
-  String get personalCloudReplaceRemote => '以本机替换云端';
+  String personalCloudDictionaryRemoteSummary(int itemCount, int revision) {
+    return '账户词库快照：$itemCount 项改动 · 修订 $revision';
+  }
 
   @override
-  String get personalCloudRestoreLocal => '从云端恢复本机';
+  String get personalCloudDictionaryRemoteEmpty => '当前账户还没有词库快照';
 
   @override
-  String get personalCloudReplaceTitle => '替换个人云端记录';
+  String personalCloudConflictSummary(int count) {
+    return '有 $count 个冲突字段需要选择';
+  }
+
+  @override
+  String get personalCloudConfirmMerge => '确认安全合并';
+
+  @override
+  String get personalCloudKeepLocalConflicts => '冲突项保留本机值';
+
+  @override
+  String get personalCloudKeepRemoteConflicts => '冲突项保留云端值';
+
+  @override
+  String get personalCloudSyncNow => '同步个人快照';
+
+  @override
+  String get personalCloudReplaceRemote => '以本机替换云快照';
+
+  @override
+  String get personalCloudRestoreLocal => '从云快照恢复本机';
+
+  @override
+  String get personalCloudReplaceTitle => '替换账户个人云快照';
 
   @override
   String personalCloudReplaceWarning(
       int localSessions, int localLogs, int remoteSessions, int remoteLogs) {
-    return '将以本机 $localSessions 场、$localLogs 条记录完整替换云端的 $remoteSessions 场、$remoteLogs 条记录。协作会话不受影响。此操作会在其他已登录设备上同步。';
+    return '将以本机 $localSessions 场、$localLogs 条个人记录完整替换账户云快照中的 $remoteSessions 场、$remoteLogs 条记录。不会写入或修改协作会话；此操作会同步到其他已登录设备。';
   }
 
   @override
-  String get personalCloudReplacePhrase => '用本机记录替换云端';
+  String get personalCloudReplacePhrase => '用本机记录替换账户云快照';
 
   @override
-  String get personalCloudReplaceAction => '确认替换云端';
+  String get personalCloudReplaceAction => '确认替换云快照';
 
   @override
-  String get personalCloudRestoreTitle => '从个人云端恢复';
+  String get personalCloudRestoreTitle => '从账户个人云快照恢复';
 
   @override
   String personalCloudRestoreWarning(
       int remoteSessions, int remoteLogs, int localSessions, int localLogs) {
-    return '将以云端 $remoteSessions 场、$remoteLogs 条记录替换本机的 $localSessions 场、$localLogs 条个人记录。词库、设置和协作会话不受影响。';
+    return '将以账户云快照中的 $remoteSessions 场、$remoteLogs 条记录替换本机的 $localSessions 场、$localLogs 条个人记录。词库、设置和协作会话不受影响。';
   }
 
   @override
-  String get personalCloudRestorePhrase => '用云端记录替换本机';
+  String get personalCloudRestorePhrase => '用账户云快照替换本机记录';
 
   @override
   String get personalCloudRestoreAction => '确认恢复本机';
 
   @override
-  String get personalCloudReplaceSucceeded => '个人云端已替换为本机记录';
+  String get personalCloudReplaceSucceeded => '账户云快照已保存本机个人记录';
 
   @override
-  String get personalCloudRestoreSucceeded => '个人记录已从云端恢复到本机';
+  String get personalCloudRestoreSucceeded => '已从账户云快照恢复本机个人记录';
 
   @override
   String get databaseDangerZoneSection => '危险操作';
@@ -1793,7 +1832,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get databaseStatusTitle => '本机数据库状态';
 
   @override
-  String get databaseStatusHint => '查看数据库版本和各表行数';
+  String get databaseStatusHint => '查看本机内容、协作待办和高级数据库诊断';
 
   @override
   String databaseStatusSchemaVersion(String version) {
@@ -1801,9 +1840,86 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String databaseStatusTableRow(String name, int count) {
-    return '$name: $count';
+  String databaseStatusBackupFormatVersion(String version) {
+    return '备份格式版本：$version';
   }
+
+  @override
+  String get databaseStatusLocalContentSection => '本机内容';
+
+  @override
+  String get databaseStatusLocalContentHint => '仅统计本机数据库中的会话、点名记录和词库内容';
+
+  @override
+  String get databaseStatusSessionsLabel => '会话';
+
+  @override
+  String databaseStatusSessionsSummary(
+      int active, int closed, int archived, int deleted) {
+    return '进行中 $active · 已关闭 $closed · 已归档 $archived · 已删除 $deleted';
+  }
+
+  @override
+  String get databaseStatusLogsLabel => '点名记录';
+
+  @override
+  String get databaseStatusDictionariesLabel => '词库条目';
+
+  @override
+  String databaseStatusLifecycleSummary(int active, int deleted) {
+    return '可用 $active · 已删除 $deleted';
+  }
+
+  @override
+  String databaseStatusDictionarySummary(
+      String label, int active, int deleted) {
+    return '$label $active（已删除 $deleted）';
+  }
+
+  @override
+  String get databaseStatusDictionaryDevice => '设备';
+
+  @override
+  String get databaseStatusDictionaryAntenna => '天线';
+
+  @override
+  String get databaseStatusDictionaryQth => 'QTH';
+
+  @override
+  String get databaseStatusDictionaryCallsign => '呼号';
+
+  @override
+  String get databaseStatusCollaborationSection => '协作状态';
+
+  @override
+  String get databaseStatusCollaborationHint => '这些数字是本机协作副本和同步队列，不代表云端全部数据';
+
+  @override
+  String get databaseStatusCollaborationHealthy => '当前没有待上传记录、未解决冲突或离线记录';
+
+  @override
+  String get databaseStatusCollaborationPending => '本机仍有协作内容需要同步或处理';
+
+  @override
+  String get databaseStatusBindingsLabel => '协作会话副本';
+
+  @override
+  String get databaseStatusPendingOutboxLabel => '待上传操作';
+
+  @override
+  String get databaseStatusOpenConflictsLabel => '未解决冲突';
+
+  @override
+  String get databaseStatusOfflineRecordsLabel => '待处理离线记录';
+
+  @override
+  String get databaseStatusDraftCachesLabel => '点名草稿缓存';
+
+  @override
+  String get databaseStatusAdvancedTitle => '高级：原始表计数';
+
+  @override
+  String get databaseStatusAdvancedHint => '仅用于故障诊断；基础设施表为 0 通常是正常状态';
 
   @override
   String get databaseStatusUnknown => '未知';
@@ -1817,7 +1933,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get databaseExportTitle => '导出本机数据库';
 
   @override
-  String get databaseExportHint => '备份会话、记录、词库、QTH 历史以及本机协作副本和待同步状态';
+  String get databaseExportHint => '备份会话、记录、词库以及本机协作副本和待同步状态';
 
   @override
   String get databaseExportDialogTitle => '保存 OpenLogTool 本机数据库备份';
@@ -1911,7 +2027,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get databaseClearWarning =>
-      '此操作不可撤销。将清除本机的所有会话、点名记录、QTH 历史、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。';
+      '此操作不可撤销。将清除本机的所有会话、点名记录、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。';
 
   @override
   String get databaseClearConfirmationPhrase => '清空全部数据';

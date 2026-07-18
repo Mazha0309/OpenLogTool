@@ -117,6 +117,54 @@ void main() {
     expect(find.byIcon(Icons.search), findsOneWidget);
   });
 
+  testWidgets('history lookup waits for callsign IME composition to finish',
+      (tester) async {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    final queries = <String>[];
+    addTearDown(() {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CallsignHistoryField(
+            callsignController: controllers[0],
+            deviceController: controllers[1],
+            antennaController: controllers[2],
+            qthController: controllers[3],
+            powerController: controllers[4],
+            heightController: controllers[5],
+            label: 'Callsign',
+            hintText: 'BA4AAA',
+            historyLoader: (callsign, _) async {
+              queries.add(callsign);
+              return [];
+            },
+          ),
+        ),
+      ),
+    );
+
+    controllers[0].value = const TextEditingValue(
+      text: 'bg5crl',
+      selection: TextSelection.collapsed(offset: 6),
+      composing: TextRange(start: 0, end: 6),
+    );
+    await tester.pump();
+    expect(queries, isEmpty);
+
+    controllers[0].value = const TextEditingValue(
+      text: 'bg5crl',
+      selection: TextSelection.collapsed(offset: 6),
+      composing: TextRange.empty,
+    );
+    await tester.pumpAndSettle();
+    expect(queries, ['BG5CRL']);
+  });
+
   testWidgets('reuses station details without changing operator fields',
       (tester) async {
     final callsign = TextEditingController();

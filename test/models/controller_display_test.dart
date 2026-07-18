@@ -90,6 +90,23 @@ void main() {
     );
   });
 
+  test('display scale is backward compatible, bounded and serialized', () {
+    final legacy = ControllerDisplayPreferences.fromJson({
+      'detail': 'standard',
+    });
+    final tooSmall = ControllerDisplayPreferences.fromJson({'scale': 0.25});
+    final tooLarge = ControllerDisplayPreferences.fromJson({'scale': 3});
+    final invalid = ControllerDisplayPreferences.fromJson({'scale': 'NaN'});
+    final custom = legacy.copyWith(scale: 1.35);
+
+    expect(legacy.scale, ControllerDisplayPreferences.defaultScale);
+    expect(tooSmall.scale, ControllerDisplayPreferences.minScale);
+    expect(tooLarge.scale, ControllerDisplayPreferences.maxScale);
+    expect(invalid.scale, ControllerDisplayPreferences.defaultScale);
+    expect(custom.scale, 1.35);
+    expect(custom.toJson()['scale'], 1.35);
+  });
+
   test('controller display renders canonical timestamps locally', () {
     final localTime = DateTime(2026, 7, 13, 20, 15);
     final record = ControllerRecordDisplay.fromJson({

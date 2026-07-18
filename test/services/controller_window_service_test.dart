@@ -22,6 +22,7 @@ void main() {
       restored.preferences.detail,
       ControllerDisplayDetail.standard,
     );
+    expect(restored.preferences.scale, 1.25);
     expect(restored.appearance.themeColor, const Color(0xFF9C27B0));
     expect(restored.appearance.isDarkMode, isTrue);
     expect(restored.appearance.fontFamily, 'SarasaGothicSC');
@@ -140,6 +141,20 @@ void main() {
     );
   });
 
+  test('child preference events are bounded and preserve display scale', () {
+    final encoded = ControllerWindowChildEventProtocol.encodePreferencesChanged(
+      const ControllerDisplayPreferences(scale: 1.6),
+    );
+    final decoded = ControllerWindowChildEventProtocol.tryDecode(encoded);
+
+    expect(decoded?.type, ControllerWindowChildEventType.preferencesChanged);
+    expect(decoded?.preferences.scale, 1.6);
+    expect(
+      ControllerWindowChildEventProtocol.tryDecode('ordinary diagnostic'),
+      isNull,
+    );
+  });
+
   test('snapshot cache refreshes a window while its process is opening', () {
     final cache = ControllerWindowSnapshotCache()..remember(_launch);
     const updatedData = ControllerDisplayDto(
@@ -169,6 +184,16 @@ void main() {
       cache[ControllerWindowMode.secondDisplay]?.appearance.themeColor,
       const Color(0xFFFF9800),
     );
+
+    cache.updatePreferences(
+      modes: const [ControllerWindowMode.secondDisplay],
+      preferences: const ControllerDisplayPreferences(scale: 1.75),
+    );
+    expect(
+      cache[ControllerWindowMode.secondDisplay]?.preferences.scale,
+      1.75,
+    );
+    expect(cache[ControllerWindowMode.secondDisplay]?.data.currentOrdinal, 13);
   });
 
   test('child session rejects a non-initialize first message', () async {
@@ -214,6 +239,7 @@ const _launch = ControllerWindowLaunch(
   ),
   preferences: ControllerDisplayPreferences(
     detail: ControllerDisplayDetail.standard,
+    scale: 1.25,
   ),
   appearance: ControllerWindowAppearance(
     themeColor: Color(0xFF9C27B0),

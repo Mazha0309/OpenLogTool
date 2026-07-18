@@ -32,7 +32,13 @@ void main() {
     expect(find.byKey(const Key('personal-cloud-panel')), findsOneWidget);
     expect(find.text('Personal cloud sync'), findsOneWidget);
     expect(
-      find.text('Sign in to the server to use personal cloud sync'),
+      find.text(
+        'Sign in to automatically synchronize personal records and dictionary changes',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('separate realtime workflow'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('personal-cloud-sync-now')), findsNothing);

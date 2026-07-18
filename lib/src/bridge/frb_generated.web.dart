@@ -7,18 +7,18 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api.dart';
-import 'api/callsign_qth.dart';
 import 'api/collaboration.dart';
 import 'api/database.dart';
 import 'api/dictionaries.dart';
 import 'api/logs.dart';
+import 'api/personal_cloud.dart';
+import 'api/personal_dictionary.dart';
 import 'api/personal_records.dart';
 import 'api/sessions.dart';
 import 'api/settings.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
-import 'models/callsign_qth_record.dart';
 import 'models/dict_item.dart';
 import 'models/log_entry.dart';
 import 'models/session.dart';
@@ -48,9 +48,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
-  CallsignQthRecord dco_decode_callsign_qth_record(dynamic raw);
-
-  @protected
   DictItem dco_decode_dict_item(dynamic raw);
 
   @protected
@@ -58,9 +55,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
-
-  @protected
-  List<CallsignQthRecord> dco_decode_list_callsign_qth_record(dynamic raw);
 
   @protected
   List<DictItem> dco_decode_list_dict_item(dynamic raw);
@@ -129,10 +123,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
-  CallsignQthRecord sse_decode_callsign_qth_record(
-      SseDeserializer deserializer);
-
-  @protected
   DictItem sse_decode_dict_item(SseDeserializer deserializer);
 
   @protected
@@ -140,10 +130,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
-
-  @protected
-  List<CallsignQthRecord> sse_decode_list_callsign_qth_record(
-      SseDeserializer deserializer);
 
   @protected
   List<DictItem> sse_decode_list_dict_item(SseDeserializer deserializer);
@@ -221,10 +207,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       PlatformInt64 self, SseSerializer serializer);
 
   @protected
-  void sse_encode_callsign_qth_record(
-      CallsignQthRecord self, SseSerializer serializer);
-
-  @protected
   void sse_encode_dict_item(DictItem self, SseSerializer serializer);
 
   @protected
@@ -232,10 +214,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_callsign_qth_record(
-      List<CallsignQthRecord> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_dict_item(List<DictItem> self, SseSerializer serializer);

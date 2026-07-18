@@ -10,7 +10,10 @@ pub async fn search_dict(
     let pattern = format!("%{}%", query.trim());
     let limit = limit.clamp(1, 200);
     let rows = sqlx::query_as::<_, DictItemRow>(
-        "SELECT * FROM dictionary_items
+        "SELECT
+            id, dict_type, raw, pinyin, abbreviation, sync_id,
+            created_at, updated_at, deleted_at, origin
+         FROM dictionary_items
          WHERE dict_type = ? AND deleted_at IS NULL
          AND (
              LOWER(raw) LIKE LOWER(?) OR
@@ -29,13 +32,10 @@ pub async fn search_dict(
     Ok(rows.into_iter().map(|r| r.into_item()).collect())
 }
 
-/// Renames one active dictionary row in a single transaction.
+/// Renames one active dictionary row as a tombstone plus a new user row.
 ///
-/// The existing row keeps its stable sync id and creation timestamp. A
-/// tombstoned row with the target value is removed inside the same transaction
-/// so a deliberate rename may reuse a previously deleted value. An active
-/// target is treated as a conflict. Any error rolls the complete transaction
-/// back, leaving both the source and target rows unchanged.
+/// Treating rename as delete + create gives cloud synchronization a stable,
+/// unambiguous representation and preserves deletion overrides for built-ins.
 pub async fn rename_dict_item(
     dict_type: &str,
     old_raw: &str,
@@ -51,7 +51,7 @@ pub async fn rename_dict_item(
 
     let pool = get_db()?;
     let mut tx = pool.begin().await?;
-    let source_exists: Option<(i64,)> = sqlx::query_as(
+    let source: Option<(i64,)> = sqlx::query_as(
         "SELECT id FROM dictionary_items
          WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
     )
@@ -59,7 +59,7 @@ pub async fn rename_dict_item(
     .bind(old_raw)
     .fetch_optional(&mut *tx)
     .await?;
-    if source_exists.is_none() {
+    if source.is_none() {
         anyhow::bail!("DICTIONARY_RENAME_SOURCE_NOT_FOUND");
     }
 
@@ -75,37 +75,71 @@ pub async fn rename_dict_item(
         if active_target.is_some() {
             anyhow::bail!("DICTIONARY_RENAME_TARGET_EXISTS");
         }
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    if old_raw == new_raw {
+        let result = sqlx::query(
+            "UPDATE dictionary_items
+             SET pinyin = ?, abbreviation = ?, origin = 'user', updated_at = ?
+             WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+        )
+        .bind(pinyin)
+        .bind(abbreviation)
+        .bind(&now)
+        .bind(dict_type)
+        .bind(old_raw)
+        .execute(&mut *tx)
+        .await?;
+        if result.rows_affected() != 1 {
+            anyhow::bail!("DICTIONARY_RENAME_WRITE_FAILED");
+        }
+    } else {
+        let deleted = sqlx::query(
+            "UPDATE dictionary_items
+             SET deleted_at = ?, updated_at = ?
+             WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
+        )
+        .bind(&now)
+        .bind(&now)
+        .bind(dict_type)
+        .bind(old_raw)
+        .execute(&mut *tx)
+        .await?;
+        if deleted.rows_affected() != 1 {
+            anyhow::bail!("DICTIONARY_RENAME_WRITE_FAILED");
+        }
 
         sqlx::query(
-            "DELETE FROM dictionary_items
-             WHERE dict_type = ? AND raw = ? AND deleted_at IS NOT NULL",
+            "INSERT INTO dictionary_items (
+                dict_type, raw, pinyin, abbreviation, sync_id,
+                created_at, updated_at, deleted_at, origin
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'user')
+             ON CONFLICT(dict_type, raw) DO UPDATE SET
+                pinyin = excluded.pinyin,
+                abbreviation = excluded.abbreviation,
+                sync_id = excluded.sync_id,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL,
+                origin = 'user'",
         )
         .bind(dict_type)
         .bind(new_raw)
+        .bind(pinyin)
+        .bind(abbreviation)
+        .bind(format!("dict-{}", uuid::Uuid::new_v4()))
+        .bind(&now)
+        .bind(&now)
         .execute(&mut *tx)
         .await?;
     }
 
-    let now = chrono::Utc::now().to_rfc3339();
-    let result = sqlx::query(
-        "UPDATE dictionary_items
-         SET raw = ?, pinyin = ?, abbreviation = ?, updated_at = ?
-         WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
-    )
-    .bind(new_raw)
-    .bind(pinyin)
-    .bind(abbreviation)
-    .bind(&now)
-    .bind(dict_type)
-    .bind(old_raw)
-    .execute(&mut *tx)
-    .await?;
-    if result.rows_affected() != 1 {
-        anyhow::bail!("DICTIONARY_RENAME_WRITE_FAILED");
-    }
-
     let renamed = sqlx::query_as::<_, DictItemRow>(
-        "SELECT * FROM dictionary_items
+        "SELECT
+            id, dict_type, raw, pinyin, abbreviation, sync_id,
+            created_at, updated_at, deleted_at, origin
+         FROM dictionary_items
          WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
     )
     .bind(dict_type)
@@ -120,11 +154,14 @@ pub async fn rename_dict_item(
 pub async fn add_dict_item(item: &DictItem) -> anyhow::Result<()> {
     let pool = get_db()?;
     sqlx::query(
-        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at, origin)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'user')
          ON CONFLICT(dict_type, raw) DO UPDATE SET
+             pinyin = excluded.pinyin,
+             abbreviation = excluded.abbreviation,
              updated_at = excluded.updated_at,
-             deleted_at = NULL",
+             deleted_at = NULL,
+             origin = 'user'",
     )
     .bind(&item.dict_type)
     .bind(&item.raw)
@@ -141,13 +178,14 @@ pub async fn add_dict_item(item: &DictItem) -> anyhow::Result<()> {
 pub async fn upsert_dict_item(item: &DictItem) -> anyhow::Result<()> {
     let pool = get_db()?;
     sqlx::query(
-        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at, origin)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'user')
          ON CONFLICT(dict_type, raw) DO UPDATE SET
-             pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
-             abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
+             pinyin = excluded.pinyin,
+             abbreviation = excluded.abbreviation,
              updated_at = excluded.updated_at,
-             deleted_at = NULL",
+             deleted_at = NULL,
+             origin = 'user'",
     )
     .bind(&item.dict_type)
     .bind(&item.raw)
@@ -164,12 +202,15 @@ pub async fn upsert_dict_item(item: &DictItem) -> anyhow::Result<()> {
 pub async fn upsert_dict_item_if_active(item: &DictItem) -> anyhow::Result<()> {
     let pool = get_db()?;
     sqlx::query(
-        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at, origin)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'builtin')
          ON CONFLICT(dict_type, raw) DO UPDATE SET
-             pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
-             abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
-             updated_at = excluded.updated_at
+             pinyin = CASE WHEN origin = 'user' THEN pinyin
+                           ELSE COALESCE(NULLIF(pinyin, ''), excluded.pinyin) END,
+             abbreviation = CASE WHEN origin = 'user' THEN abbreviation
+                                  ELSE COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation) END,
+             updated_at = CASE WHEN origin = 'user' THEN updated_at ELSE excluded.updated_at END,
+             origin = CASE WHEN origin = 'unknown' THEN 'builtin' ELSE origin END
          WHERE deleted_at IS NULL",
     )
     .bind(&item.dict_type)
@@ -194,13 +235,14 @@ pub async fn bulk_upsert_dict_items(items: &[DictItem]) -> anyhow::Result<()> {
 
     for item in items {
         sqlx::query(
-            "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
+            "INSERT INTO dictionary_items (dict_type, raw, pinyin, abbreviation, sync_id, created_at, updated_at, origin)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'user')
              ON CONFLICT(dict_type, raw) DO UPDATE SET
-                 pinyin = COALESCE(NULLIF(pinyin, ''), excluded.pinyin),
-                 abbreviation = COALESCE(NULLIF(abbreviation, ''), excluded.abbreviation),
+                 pinyin = excluded.pinyin,
+                 abbreviation = excluded.abbreviation,
                  updated_at = excluded.updated_at,
-                 deleted_at = NULL",
+                 deleted_at = NULL,
+                 origin = 'user'",
         )
         .bind(&item.dict_type)
         .bind(&item.raw)
@@ -220,7 +262,10 @@ pub async fn bulk_upsert_dict_items(items: &[DictItem]) -> anyhow::Result<()> {
 pub async fn get_dict_items(dict_type: &str) -> anyhow::Result<Vec<DictItem>> {
     let pool = get_db()?;
     let rows = sqlx::query_as::<_, DictItemRow>(
-        "SELECT * FROM dictionary_items
+        "SELECT
+            id, dict_type, raw, pinyin, abbreviation, sync_id,
+            created_at, updated_at, deleted_at, origin
+         FROM dictionary_items
          WHERE dict_type = ? AND deleted_at IS NULL
          ORDER BY raw ASC",
     )
@@ -233,7 +278,10 @@ pub async fn get_dict_items(dict_type: &str) -> anyhow::Result<Vec<DictItem>> {
 pub async fn get_dict_item_by_raw(dict_type: &str, raw: &str) -> anyhow::Result<Option<DictItem>> {
     let pool = get_db()?;
     let row = sqlx::query_as::<_, DictItemRow>(
-        "SELECT * FROM dictionary_items
+        "SELECT
+            id, dict_type, raw, pinyin, abbreviation, sync_id,
+            created_at, updated_at, deleted_at, origin
+         FROM dictionary_items
          WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
     )
     .bind(dict_type)
@@ -284,32 +332,43 @@ pub async fn reset_dictionaries() -> anyhow::Result<()> {
 
 pub async fn seed_dict(dict_type: &str, items: Vec<String>) -> anyhow::Result<usize> {
     let pool = get_db()?;
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dictionary_items WHERE dict_type = ?")
-        .bind(dict_type)
-        .fetch_one(pool)
-        .await?;
-    if count.0 > 0 {
-        return Ok(count.0 as usize);
-    }
+    let mut tx = pool.begin().await?;
     let now = chrono::Utc::now().to_rfc3339();
     for raw in items {
         let sync_id = format!("dict-{}", uuid::Uuid::new_v4());
         sqlx::query(
-            "INSERT OR IGNORE INTO dictionary_items (dict_type, raw, sync_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO dictionary_items (
+                dict_type, raw, sync_id, created_at, updated_at, origin
+             ) VALUES (?, ?, ?, ?, ?, 'builtin')",
         )
         .bind(dict_type)
         .bind(&raw)
         .bind(&sync_id)
         .bind(&now)
         .bind(&now)
-        .execute(pool)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE dictionary_items SET origin = 'builtin'
+             WHERE dict_type = ? AND raw = ? AND origin = 'unknown'",
+        )
+        .bind(dict_type)
+        .bind(&raw)
+        .execute(&mut *tx)
         .await?;
     }
+    sqlx::query(
+        "UPDATE dictionary_items SET origin = 'user'
+         WHERE dict_type = ? AND origin = 'unknown'",
+    )
+    .bind(dict_type)
+    .execute(&mut *tx)
+    .await?;
     let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dictionary_items WHERE dict_type = ?")
         .bind(dict_type)
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(total.0 as usize)
 }
 
@@ -324,6 +383,7 @@ struct DictItemRow {
     created_at: String,
     updated_at: String,
     deleted_at: Option<String>,
+    origin: String,
 }
 
 impl DictItemRow {
@@ -338,6 +398,7 @@ impl DictItemRow {
             created_at: self.created_at,
             updated_at: self.updated_at,
             deleted_at: self.deleted_at,
+            origin: self.origin,
         }
     }
 }

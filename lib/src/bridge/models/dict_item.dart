@@ -16,6 +16,7 @@ class DictItem {
   final String createdAt;
   final String updatedAt;
   final String? deletedAt;
+  final String origin;
 
   const DictItem({
     this.id,
@@ -27,6 +28,7 @@ class DictItem {
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
+    required this.origin,
   });
 
   @override
@@ -39,7 +41,8 @@ class DictItem {
       syncId.hashCode ^
       createdAt.hashCode ^
       updatedAt.hashCode ^
-      deletedAt.hashCode;
+      deletedAt.hashCode ^
+      origin.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -54,5 +57,6 @@ class DictItem {
           syncId == other.syncId &&
           createdAt == other.createdAt &&
           updatedAt == other.updatedAt &&
-          deletedAt == other.deletedAt;
+          deletedAt == other.deletedAt &&
+          origin == other.origin;
 }

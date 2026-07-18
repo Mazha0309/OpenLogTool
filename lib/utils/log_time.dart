@@ -1,3 +1,17 @@
+/// Resolves the value captured by one save operation.
+///
+/// A manual clock value remains editable as `HH:mm`. An empty field is
+/// represented by one canonical UTC timestamp so local, online collaboration,
+/// and offline-queue paths all retain the same second-precision instant.
+String resolveLogTimeForSubmission(
+  String value, {
+  DateTime? capturedAt,
+}) {
+  final normalized = value.trim();
+  if (normalized.isNotEmpty) return normalized;
+  return (capturedAt ?? DateTime.now()).toUtc().toIso8601String();
+}
+
 String normalizeLogTimeForStorage(
   String value, {
   DateTime? reference,

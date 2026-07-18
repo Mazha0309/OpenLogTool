@@ -19,7 +19,6 @@ class DatabaseHelper {
   static const String _logsTable = 'logs';
   static const String _historyTable = 'history';
   static const String _sessionsTable = 'sessions';
-  static const String _callsignQthHistoryTable = 'callsign_qth_history';
   static const List<String> _dictionaryTables = <String>[
     'device_dictionary',
     'antenna_dictionary',
@@ -34,7 +33,6 @@ class DatabaseHelper {
     _logsTable,
     _historyTable,
     _sessionsTable,
-    _callsignQthHistoryTable,
     'device_dictionary',
     'antenna_dictionary',
     'qth_dictionary',
@@ -92,7 +90,6 @@ class DatabaseHelper {
     await _ensureDictionaryTablesExist(db);
     await _ensureHistoryTableExists(db);
     await _ensureLogsTableExists(db);
-    await _ensureCallsignQthHistoryTableExists(db);
     await _ensureSessionsTableExists(db);
     await _migrateSyncSchema(db);
     await _migrateHistoryToSessions(db);
@@ -112,7 +109,6 @@ class DatabaseHelper {
     await _createDictionaryTable(db, 'qth_dictionary');
     await _createDictionaryTable(db, 'callsign_dictionary');
     await _createHistoryTable(db);
-    await _createCallsignQthHistoryTable(db);
     await _createSessionsTable(db);
     await _loadInitialDictionaries(db);
   }
@@ -129,10 +125,6 @@ class DatabaseHelper {
 
   Future<void> _ensureHistoryTableExists(Database db) async {
     await _createHistoryTable(db, ifNotExists: true);
-  }
-
-  Future<void> _ensureCallsignQthHistoryTableExists(Database db) async {
-    await _createCallsignQthHistoryTable(db, ifNotExists: true);
   }
 
   Future<void> _ensureSessionsTableExists(Database db) async {
@@ -231,44 +223,12 @@ class DatabaseHelper {
     }
   }
 
-  Future<void> _createCallsignQthHistoryTable(
-    Database db, {
-    bool ifNotExists = false,
-  }) async {
-    await db.execute('''
-      CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}$_callsignQthHistoryTable (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sync_id TEXT UNIQUE,
-        callsign TEXT NOT NULL,
-        qth TEXT NOT NULL,
-        recorded_at TEXT NOT NULL,
-        created_at TEXT,
-        updated_at TEXT,
-        deleted_at TEXT,
-        source_device_id TEXT
-      )
-    ''');
-    if (!ifNotExists) {
-      await _ensureUniqueIndex(
-        db,
-        'idx_callsign_qth_history_sync_id',
-        _callsignQthHistoryTable,
-        'sync_id',
-      );
-    }
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_callsign_qth_callsign
-      ON $_callsignQthHistoryTable(callsign)
-    ''');
-  }
-
   Future<void> _migrateSyncSchema(Database db) async {
     await _migrateLogsTable(db);
     for (final tableName in _dictionaryTables) {
       await _migrateDictionaryTable(db, tableName);
     }
     await _migrateHistoryTable(db);
-    await _migrateCallsignQthHistoryTable(db);
   }
 
   Future<void> _migrateLogsTable(Database db) async {
@@ -405,64 +365,6 @@ class DatabaseHelper {
     await batch.commit(noResult: true);
   }
 
-  Future<void> _migrateCallsignQthHistoryTable(Database db) async {
-    await _ensureColumn(db, _callsignQthHistoryTable, 'sync_id', 'TEXT');
-    await _ensureColumn(db, _callsignQthHistoryTable, 'created_at', 'TEXT');
-    await _ensureColumn(db, _callsignQthHistoryTable, 'updated_at', 'TEXT');
-    await _ensureColumn(db, _callsignQthHistoryTable, 'deleted_at', 'TEXT');
-    await _ensureColumn(
-        db, _callsignQthHistoryTable, 'source_device_id', 'TEXT');
-    await _repairDuplicateSyncIds(db, _callsignQthHistoryTable, 'callsign-qth');
-    await _ensureUniqueIndex(
-      db,
-      'idx_callsign_qth_history_sync_id',
-      _callsignQthHistoryTable,
-      'sync_id',
-    );
-
-    final rows = await db.query(
-      _callsignQthHistoryTable,
-      columns: <String>[
-        'id',
-        'recorded_at',
-        'sync_id',
-        'created_at',
-        'updated_at'
-      ],
-    );
-    final batch = db.batch();
-    for (final row in rows) {
-      final localId = row['id'];
-      if (localId == null) {
-        continue;
-      }
-      final recordedAt = _stringOrNull(row['recorded_at']);
-      final createdAt =
-          _stringOrNull(row['created_at']) ?? _legacyTimestamp(recordedAt);
-      final updates = <String, Object?>{};
-
-      if (_isBlank(row['sync_id'])) {
-        updates['sync_id'] = _generateSyncId('callsign-qth');
-      }
-      if (_isBlank(row['created_at'])) {
-        updates['created_at'] = createdAt;
-      }
-      if (_isBlank(row['updated_at'])) {
-        updates['updated_at'] = _stringOrNull(row['updated_at']) ?? createdAt;
-      }
-
-      if (updates.isNotEmpty) {
-        batch.update(
-          _callsignQthHistoryTable,
-          updates,
-          where: 'id = ?',
-          whereArgs: <Object?>[localId],
-        );
-      }
-    }
-    await batch.commit(noResult: true);
-  }
-
   Future<void> _migrateHistoryToSessions(Database db) async {
     final count = Sqflite.firstIntValue(
       await db.rawQuery("SELECT COUNT(*) FROM $_sessionsTable"),
@@ -484,8 +386,9 @@ class DatabaseHelper {
         'status': 'closed',
         'created_at':
             h['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
-        'updated_at':
-            h['updated_at'] ?? h['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
+        'updated_at': h['updated_at'] ??
+            h['created_at'] ??
+            DateTime.now().toUtc().toIso8601String(),
         'closed_at':
             h['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
       });
@@ -773,31 +676,6 @@ class DatabaseHelper {
       'logs_data':
           item['logs_data']?.toString() ?? item['logsData']?.toString() ?? '[]',
       'log_count': _intOrNull(item['log_count'] ?? item['logCount']) ?? 0,
-      'created_at': createdAt,
-      'updated_at': updatedAt,
-      'deleted_at': _stringOrNull(item['deleted_at'] ?? item['deletedAt']),
-      'source_device_id':
-          _stringOrNull(item['source_device_id'] ?? item['sourceDeviceId']),
-    };
-  }
-
-  Map<String, dynamic> _buildCallsignQthHistoryRow(Map<String, dynamic> item) {
-    final createdAtInput =
-        _stringOrNull(item['created_at'] ?? item['createdAt']);
-    final recordedAt = _legacyTimestamp(
-      _stringOrNull(item['recorded_at'] ?? item['recordedAt']) ??
-          createdAtInput,
-    );
-    final createdAt = _legacyTimestamp(createdAtInput ?? recordedAt);
-    final updatedAt = _legacyTimestamp(
-      _stringOrNull(item['updated_at'] ?? item['updatedAt']) ?? createdAt,
-    );
-    return <String, dynamic>{
-      'sync_id': _stringOrNull(item['sync_id'] ?? item['syncId']) ??
-          _generateSyncId('callsign-qth'),
-      'callsign': item['callsign']?.toString().toUpperCase() ?? '',
-      'qth': item['qth']?.toString() ?? '',
-      'recorded_at': recordedAt,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'deleted_at': _stringOrNull(item['deleted_at'] ?? item['deletedAt']),
@@ -1400,13 +1278,11 @@ class DatabaseHelper {
     count += await db.delete(_logsTable, where: 'deleted_at IS NOT NULL');
     count += await db.delete(_sessionsTable, where: 'deleted_at IS NOT NULL');
     count += await db.delete(_historyTable, where: 'deleted_at IS NOT NULL');
-    count += await db.delete(_callsignQthHistoryTable, where: 'deleted_at IS NOT NULL');
     for (final table in _dictionaryTables) {
       count += await db.delete(table, where: 'deleted_at IS NOT NULL');
     }
     return count;
   }
-
 
   Future<void> insertSession(Session session) async {
     final db = await database;
@@ -1432,8 +1308,9 @@ class DatabaseHelper {
       String since) async {
     final db = await database;
     final count = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM $_sessionsTable'),
-    ) ?? 0;
+          await db.rawQuery('SELECT COUNT(*) FROM $_sessionsTable'),
+        ) ??
+        0;
     debugPrint('[DB] sessions table has $count rows, querying since=$since');
     final result = await db.query(
       _sessionsTable,
@@ -1520,7 +1397,6 @@ class DatabaseHelper {
     final qthDict = await db.query('qth_dictionary');
     final callsignDict = await db.query('callsign_dictionary');
     final history = await db.query(_historyTable);
-    final callsignQthHistory = await db.query(_callsignQthHistoryTable);
     final sessions = await db.query(_sessionsTable);
 
     final exportData = <String, dynamic>{
@@ -1532,7 +1408,6 @@ class DatabaseHelper {
       'qth_dictionary': qthDict,
       'callsign_dictionary': callsignDict,
       'history': history,
-      'callsign_qth_history': callsignQthHistory,
       'sessions': sessions,
     };
 
@@ -1572,10 +1447,9 @@ class DatabaseHelper {
       (data['history'] as List<dynamic>?) ?? <dynamic>[],
       'history',
     );
-    final importedCallsignQthHistory = _sanitizeImportedRows(
-      (data['callsign_qth_history'] as List<dynamic>?) ?? <dynamic>[],
-      'callsign-qth',
-    );
+    // v2 backups may contain the retired `callsign_qth_history` cache. It was
+    // derived from logs, so accepting but ignoring it preserves recovery from
+    // old backups without reviving the removed table.
     final importedSessions = ((data['sessions'] as List<dynamic>?) ?? const [])
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
@@ -1589,7 +1463,6 @@ class DatabaseHelper {
       await txn.delete('qth_dictionary');
       await txn.delete('callsign_dictionary');
       await txn.delete(_historyTable);
-      await txn.delete(_callsignQthHistoryTable);
       await txn.delete(_sessionsTable);
 
       // Use a Batch to avoid awaiting once per row inside the transaction,
@@ -1613,9 +1486,6 @@ class DatabaseHelper {
       }
       for (final item in importedHistory) {
         batch.insert(_historyTable, item);
-      }
-      for (final item in importedCallsignQthHistory) {
-        batch.insert(_callsignQthHistoryTable, item);
       }
       for (final item in importedSessions) {
         batch.insert(_sessionsTable, item,
@@ -1671,9 +1541,6 @@ class DatabaseHelper {
     final historyCount = Sqflite.firstIntValue(
             await db.rawQuery('SELECT COUNT(*) FROM $_historyTable')) ??
         0;
-    final callsignQthHistoryCount = Sqflite.firstIntValue(await db
-            .rawQuery('SELECT COUNT(*) FROM $_callsignQthHistoryTable')) ??
-        0;
 
     return <String, dynamic>{
       'logs': logsCount,
@@ -1682,7 +1549,6 @@ class DatabaseHelper {
       'qth_dictionary': qthCount,
       'callsign_dictionary': callsignCount,
       'history': historyCount,
-      'callsign_qth_history': callsignQthHistoryCount,
     };
   }
 
@@ -1700,7 +1566,8 @@ class DatabaseHelper {
     return LogEntry.fromMap(rows.first);
   }
 
-  Future<List<LogEntry>> getLogsByCallsign(String callsign, {int limit = 5}) async {
+  Future<List<LogEntry>> getLogsByCallsign(String callsign,
+      {int limit = 5}) async {
     if (callsign.isEmpty) return [];
     final db = await database;
     final rows = await db.query(
@@ -1711,105 +1578,5 @@ class DatabaseHelper {
       limit: limit,
     );
     return rows.map((m) => LogEntry.fromMap(m)).toList();
-  }
-
-  Future<void> addCallsignQthRecord(String callsign, String qth) async {
-    if (callsign.isEmpty || qth.isEmpty) {
-      return;
-    }
-    final db = await database;
-    final recordedAt = _now();
-    await db.insert(_callsignQthHistoryTable, <String, dynamic>{
-      'sync_id': _generateSyncId('callsign-qth'),
-      'callsign': callsign.toUpperCase(),
-      'qth': qth,
-      'recorded_at': recordedAt,
-      'created_at': recordedAt,
-      'updated_at': recordedAt,
-      'deleted_at': null,
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getCallsignQthHistory(String callsign,
-      {int limit = 3}) async {
-    if (callsign.isEmpty) {
-      return <Map<String, dynamic>>[];
-    }
-    final db = await database;
-    return db.query(
-      _callsignQthHistoryTable,
-      where: 'callsign = ? AND deleted_at IS NULL',
-      whereArgs: <Object?>[callsign.toUpperCase()],
-      orderBy: 'recorded_at DESC',
-      limit: limit,
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getAllCallsignQthHistory() async {
-    final db = await database;
-    return db.query(
-      _callsignQthHistoryTable,
-      where: 'deleted_at IS NULL',
-      orderBy: 'recorded_at DESC',
-    );
-  }
-
-  Future<String?> getLastRecordedTime(String callsign, String qth) async {
-    if (callsign.isEmpty || qth.isEmpty) {
-      return null;
-    }
-    final db = await database;
-    final results = await db.query(
-      _callsignQthHistoryTable,
-      where: 'callsign = ? AND qth = ? AND deleted_at IS NULL',
-      whereArgs: <Object?>[callsign.toUpperCase(), qth],
-      orderBy: 'recorded_at DESC',
-      limit: 1,
-    );
-    if (results.isEmpty) {
-      return null;
-    }
-    return _stringOrNull(results.first['recorded_at']);
-  }
-
-  Future<void> clearCallsignQthHistory() async {
-    final db = await database;
-    await db.update(
-      _callsignQthHistoryTable,
-      <String, dynamic>{'deleted_at': _now()},
-      where: 'deleted_at IS NULL',
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getCallsignQthHistoryChangedSince(
-      String since) async {
-    final db = await database;
-    return db.query(
-      _callsignQthHistoryTable,
-      where: 'updated_at > ? OR deleted_at > ?',
-      whereArgs: <Object?>[since, since],
-      orderBy: 'updated_at ASC, deleted_at ASC',
-    );
-  }
-
-  Future<void> upsertCallsignQthHistoryFromSync(
-      Map<String, dynamic> item) async {
-    final row = _buildCallsignQthHistoryRow(item);
-    final syncId =
-        _stringOrNull(item['sync_id'] ?? item['syncId'] ?? row['sync_id']);
-    if (syncId == null) {
-      return;
-    }
-
-    await _upsertSyncRow(
-      tableName: _callsignQthHistoryTable,
-      syncId: syncId,
-      incomingRow: <String, dynamic>{...row, 'sync_id': syncId},
-    );
-  }
-
-  Future<void> softDeleteCallsignQthHistory(
-      String syncId, String deletedAt) async {
-    await _softDeleteBySyncId(_callsignQthHistoryTable, syncId, deletedAt);
   }
 }

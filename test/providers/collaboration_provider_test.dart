@@ -15,6 +15,7 @@ void main() {
         collaborationLogMutationBlockReason(
           collaborationBound: false,
           canEditSession: true,
+          sharedEditingSupported: false,
           accountId: 'user-1',
           authorshipKnown: false,
           createdBy: null,
@@ -28,6 +29,7 @@ void main() {
         collaborationLogMutationBlockReason(
           collaborationBound: true,
           canEditSession: false,
+          sharedEditingSupported: false,
           accountId: 'user-1',
           authorshipKnown: true,
           createdBy: 'user-1',
@@ -38,6 +40,7 @@ void main() {
         collaborationLogMutationBlockReason(
           collaborationBound: true,
           canEditSession: true,
+          sharedEditingSupported: false,
           accountId: 'user-1',
           authorshipKnown: true,
           createdBy: null,
@@ -48,6 +51,7 @@ void main() {
         collaborationLogMutationBlockReason(
           collaborationBound: true,
           canEditSession: true,
+          sharedEditingSupported: false,
           accountId: 'user-1',
           authorshipKnown: true,
           createdBy: 'user-2',
@@ -61,11 +65,46 @@ void main() {
         collaborationLogMutationBlockReason(
           collaborationBound: true,
           canEditSession: true,
+          sharedEditingSupported: false,
           accountId: 'user-1',
           authorshipKnown: true,
           createdBy: 'user-1',
         ),
         isNull,
+      );
+    });
+
+    test('shared editing lets owners and editors mutate every session log', () {
+      for (final authorship in <({bool known, String? createdBy})>[
+        (known: false, createdBy: null),
+        (known: true, createdBy: null),
+        (known: true, createdBy: 'user-2'),
+      ]) {
+        expect(
+          collaborationLogMutationBlockReason(
+            collaborationBound: true,
+            canEditSession: true,
+            sharedEditingSupported: true,
+            accountId: 'user-1',
+            authorshipKnown: authorship.known,
+            createdBy: authorship.createdBy,
+          ),
+          isNull,
+        );
+      }
+    });
+
+    test('shared editing does not grant write access to read-only members', () {
+      expect(
+        collaborationLogMutationBlockReason(
+          collaborationBound: true,
+          canEditSession: false,
+          sharedEditingSupported: true,
+          accountId: 'user-1',
+          authorshipKnown: true,
+          createdBy: 'user-1',
+        ),
+        'COLLABORATION_SESSION_READ_ONLY',
       );
     });
   });

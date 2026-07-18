@@ -6,6 +6,7 @@ import 'package:openlogtool/models/account_dto.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/models/personal_cloud_dto.dart';
+import 'package:openlogtool/models/personal_dictionary_snapshot_dto.dart';
 
 /// Persistence boundary for authentication state.
 ///
@@ -212,6 +213,63 @@ final class ServerApi {
     return _parseResponse(
       response,
       PersonalCloudSnapshotReplaceResult.fromJson,
+    );
+  }
+
+  Future<PersonalDictionarySnapshotMeta>
+      getPersonalDictionarySnapshotMeta() async {
+    final response = await _authorizedRequest(
+      'GET',
+      '/account/personal-dictionary-snapshot',
+    );
+    return _parseResponse(response, (json) {
+      final envelope = _jsonObject(
+        json,
+        'personalDictionarySnapshotMetaResult',
+      );
+      return PersonalDictionarySnapshotMeta.fromJson(
+        envelope['personalDictionarySnapshot'],
+      );
+    });
+  }
+
+  Future<PersonalDictionarySnapshotDownload>
+      downloadPersonalDictionarySnapshot() async {
+    final response = await _authorizedRequest(
+      'GET',
+      '/account/personal-dictionary-snapshot/download',
+    );
+    return _parseResponse(
+      response,
+      PersonalDictionarySnapshotDownload.fromJson,
+    );
+  }
+
+  Future<PersonalDictionarySnapshotReplaceResult>
+      replacePersonalDictionarySnapshot({
+    required int expectedRevision,
+    required PersonalDictionarySnapshotJson snapshot,
+  }) async {
+    if (expectedRevision < 0) {
+      throw ArgumentError.value(
+        expectedRevision,
+        'expectedRevision',
+        'must not be negative',
+      );
+    }
+    final response = await _authorizedRequest(
+      'PUT',
+      '/account/personal-dictionary-snapshot',
+      body: {
+        'expectedRevision': expectedRevision,
+        'confirmation': 'REPLACE_PERSONAL_DICTIONARY_SNAPSHOT',
+        'snapshot': snapshot,
+      },
+      headers: {'If-Match': '"$expectedRevision"'},
+    );
+    return _parseResponse(
+      response,
+      PersonalDictionarySnapshotReplaceResult.fromJson,
     );
   }
 

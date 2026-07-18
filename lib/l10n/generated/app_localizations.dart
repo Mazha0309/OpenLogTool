@@ -652,6 +652,12 @@ abstract class AppLocalizations {
   /// **'上一位已保存记录'**
   String get previousSavedRecord;
 
+  /// No description provided for @recordOrdinal.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {ordinal} 位'**
+  String recordOrdinal(int ordinal);
+
   /// No description provided for @noPreviousRecord.
   ///
   /// In zh, this message translates to:
@@ -693,6 +699,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'信息详细程度'**
   String get informationDetail;
+
+  /// No description provided for @controllerDisplayScale.
+  ///
+  /// In zh, this message translates to:
+  /// **'主控屏缩放'**
+  String get controllerDisplayScale;
+
+  /// No description provided for @controllerDisplayScaleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅调整主控屏的显示比例，不影响主应用界面。'**
+  String get controllerDisplayScaleHint;
 
   /// No description provided for @currentFields.
   ///
@@ -3098,130 +3116,172 @@ abstract class AppLocalizations {
   /// No description provided for @personalCloudHint.
   ///
   /// In zh, this message translates to:
-  /// **'登录后同步全部个人会话与点名记录；协作会话继续使用独立的实时同步'**
+  /// **'个人会话、点名记录和词库改动会在已登录设备间自动双向同步；协作会话仍使用独立的实时协作流程。'**
   String get personalCloudHint;
 
   /// No description provided for @personalCloudSignedOut.
   ///
   /// In zh, this message translates to:
-  /// **'登录服务器后可使用个人云同步'**
+  /// **'登录服务器后自动同步个人记录和词库改动'**
   String get personalCloudSignedOut;
 
   /// No description provided for @personalCloudUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'当前服务器版本不支持个人云同步，请先升级服务器'**
+  /// **'当前服务器版本不支持账户个人云快照，请先升级服务器'**
   String get personalCloudUnsupported;
 
   /// No description provided for @personalCloudChecking.
   ///
   /// In zh, this message translates to:
-  /// **'正在检查本机与云端记录…'**
+  /// **'正在核对本机记录、词库与账户云快照…'**
   String get personalCloudChecking;
 
   /// No description provided for @personalCloudSyncing.
   ///
   /// In zh, this message translates to:
-  /// **'正在同步个人记录…'**
+  /// **'正在同步个人记录和词库改动…'**
   String get personalCloudSyncing;
 
   /// No description provided for @personalCloudUpToDate.
   ///
   /// In zh, this message translates to:
-  /// **'个人记录已同步'**
+  /// **'个人记录和词库改动均已同步'**
   String get personalCloudUpToDate;
 
   /// No description provided for @personalCloudDecisionRequired.
   ///
   /// In zh, this message translates to:
-  /// **'本机和云端已有不同数据，请选择保留哪一侧；不会自动覆盖'**
+  /// **'首次配对或真实编辑冲突需要确认；互不冲突的改动已安全合并。'**
   String get personalCloudDecisionRequired;
 
   /// No description provided for @personalCloudError.
   ///
   /// In zh, this message translates to:
-  /// **'个人云同步失败：{error}'**
+  /// **'账户个人云快照同步失败：{error}'**
   String personalCloudError(String error);
 
   /// No description provided for @personalCloudLocalSummary.
   ///
   /// In zh, this message translates to:
-  /// **'本机：{sessionCount} 场、{logCount} 条记录'**
+  /// **'本机个人记录：{sessionCount} 场、{logCount} 条'**
   String personalCloudLocalSummary(int sessionCount, int logCount);
 
   /// No description provided for @personalCloudRemoteSummary.
   ///
   /// In zh, this message translates to:
-  /// **'云端：{sessionCount} 场、{logCount} 条记录 · 修订 {revision}'**
+  /// **'账户云快照：{sessionCount} 场、{logCount} 条 · 修订 {revision}'**
   String personalCloudRemoteSummary(
       int sessionCount, int logCount, int revision);
 
   /// No description provided for @personalCloudRemoteEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'云端还没有个人记录'**
+  /// **'当前账户还没有个人云快照'**
   String get personalCloudRemoteEmpty;
+
+  /// No description provided for @personalCloudDictionaryLocalSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机词库改动：{itemCount} 项'**
+  String personalCloudDictionaryLocalSummary(int itemCount);
+
+  /// No description provided for @personalCloudDictionaryRemoteSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户词库快照：{itemCount} 项改动 · 修订 {revision}'**
+  String personalCloudDictionaryRemoteSummary(int itemCount, int revision);
+
+  /// No description provided for @personalCloudDictionaryRemoteEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账户还没有词库快照'**
+  String get personalCloudDictionaryRemoteEmpty;
+
+  /// No description provided for @personalCloudConflictSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'有 {count} 个冲突字段需要选择'**
+  String personalCloudConflictSummary(int count);
+
+  /// No description provided for @personalCloudConfirmMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认安全合并'**
+  String get personalCloudConfirmMerge;
+
+  /// No description provided for @personalCloudKeepLocalConflicts.
+  ///
+  /// In zh, this message translates to:
+  /// **'冲突项保留本机值'**
+  String get personalCloudKeepLocalConflicts;
+
+  /// No description provided for @personalCloudKeepRemoteConflicts.
+  ///
+  /// In zh, this message translates to:
+  /// **'冲突项保留云端值'**
+  String get personalCloudKeepRemoteConflicts;
 
   /// No description provided for @personalCloudSyncNow.
   ///
   /// In zh, this message translates to:
-  /// **'立即同步'**
+  /// **'同步个人快照'**
   String get personalCloudSyncNow;
 
   /// No description provided for @personalCloudReplaceRemote.
   ///
   /// In zh, this message translates to:
-  /// **'以本机替换云端'**
+  /// **'以本机替换云快照'**
   String get personalCloudReplaceRemote;
 
   /// No description provided for @personalCloudRestoreLocal.
   ///
   /// In zh, this message translates to:
-  /// **'从云端恢复本机'**
+  /// **'从云快照恢复本机'**
   String get personalCloudRestoreLocal;
 
   /// No description provided for @personalCloudReplaceTitle.
   ///
   /// In zh, this message translates to:
-  /// **'替换个人云端记录'**
+  /// **'替换账户个人云快照'**
   String get personalCloudReplaceTitle;
 
   /// No description provided for @personalCloudReplaceWarning.
   ///
   /// In zh, this message translates to:
-  /// **'将以本机 {localSessions} 场、{localLogs} 条记录完整替换云端的 {remoteSessions} 场、{remoteLogs} 条记录。协作会话不受影响。此操作会在其他已登录设备上同步。'**
+  /// **'将以本机 {localSessions} 场、{localLogs} 条个人记录完整替换账户云快照中的 {remoteSessions} 场、{remoteLogs} 条记录。不会写入或修改协作会话；此操作会同步到其他已登录设备。'**
   String personalCloudReplaceWarning(
       int localSessions, int localLogs, int remoteSessions, int remoteLogs);
 
   /// No description provided for @personalCloudReplacePhrase.
   ///
   /// In zh, this message translates to:
-  /// **'用本机记录替换云端'**
+  /// **'用本机记录替换账户云快照'**
   String get personalCloudReplacePhrase;
 
   /// No description provided for @personalCloudReplaceAction.
   ///
   /// In zh, this message translates to:
-  /// **'确认替换云端'**
+  /// **'确认替换云快照'**
   String get personalCloudReplaceAction;
 
   /// No description provided for @personalCloudRestoreTitle.
   ///
   /// In zh, this message translates to:
-  /// **'从个人云端恢复'**
+  /// **'从账户个人云快照恢复'**
   String get personalCloudRestoreTitle;
 
   /// No description provided for @personalCloudRestoreWarning.
   ///
   /// In zh, this message translates to:
-  /// **'将以云端 {remoteSessions} 场、{remoteLogs} 条记录替换本机的 {localSessions} 场、{localLogs} 条个人记录。词库、设置和协作会话不受影响。'**
+  /// **'将以账户云快照中的 {remoteSessions} 场、{remoteLogs} 条记录替换本机的 {localSessions} 场、{localLogs} 条个人记录。词库、设置和协作会话不受影响。'**
   String personalCloudRestoreWarning(
       int remoteSessions, int remoteLogs, int localSessions, int localLogs);
 
   /// No description provided for @personalCloudRestorePhrase.
   ///
   /// In zh, this message translates to:
-  /// **'用云端记录替换本机'**
+  /// **'用账户云快照替换本机记录'**
   String get personalCloudRestorePhrase;
 
   /// No description provided for @personalCloudRestoreAction.
@@ -3233,13 +3293,13 @@ abstract class AppLocalizations {
   /// No description provided for @personalCloudReplaceSucceeded.
   ///
   /// In zh, this message translates to:
-  /// **'个人云端已替换为本机记录'**
+  /// **'账户云快照已保存本机个人记录'**
   String get personalCloudReplaceSucceeded;
 
   /// No description provided for @personalCloudRestoreSucceeded.
   ///
   /// In zh, this message translates to:
-  /// **'个人记录已从云端恢复到本机'**
+  /// **'已从账户云快照恢复本机个人记录'**
   String get personalCloudRestoreSucceeded;
 
   /// No description provided for @databaseDangerZoneSection.
@@ -3257,7 +3317,7 @@ abstract class AppLocalizations {
   /// No description provided for @databaseStatusHint.
   ///
   /// In zh, this message translates to:
-  /// **'查看数据库版本和各表行数'**
+  /// **'查看本机内容、协作待办和高级数据库诊断'**
   String get databaseStatusHint;
 
   /// No description provided for @databaseStatusSchemaVersion.
@@ -3266,11 +3326,150 @@ abstract class AppLocalizations {
   /// **'数据库结构版本：{version}'**
   String databaseStatusSchemaVersion(String version);
 
-  /// No description provided for @databaseStatusTableRow.
+  /// No description provided for @databaseStatusBackupFormatVersion.
   ///
   /// In zh, this message translates to:
-  /// **'{name}: {count}'**
-  String databaseStatusTableRow(String name, int count);
+  /// **'备份格式版本：{version}'**
+  String databaseStatusBackupFormatVersion(String version);
+
+  /// No description provided for @databaseStatusLocalContentSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机内容'**
+  String get databaseStatusLocalContentSection;
+
+  /// No description provided for @databaseStatusLocalContentHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅统计本机数据库中的会话、点名记录和词库内容'**
+  String get databaseStatusLocalContentHint;
+
+  /// No description provided for @databaseStatusSessionsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话'**
+  String get databaseStatusSessionsLabel;
+
+  /// No description provided for @databaseStatusSessionsSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'进行中 {active} · 已关闭 {closed} · 已归档 {archived} · 已删除 {deleted}'**
+  String databaseStatusSessionsSummary(
+      int active, int closed, int archived, int deleted);
+
+  /// No description provided for @databaseStatusLogsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'点名记录'**
+  String get databaseStatusLogsLabel;
+
+  /// No description provided for @databaseStatusDictionariesLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库条目'**
+  String get databaseStatusDictionariesLabel;
+
+  /// No description provided for @databaseStatusLifecycleSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用 {active} · 已删除 {deleted}'**
+  String databaseStatusLifecycleSummary(int active, int deleted);
+
+  /// No description provided for @databaseStatusDictionarySummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{label} {active}（已删除 {deleted}）'**
+  String databaseStatusDictionarySummary(String label, int active, int deleted);
+
+  /// No description provided for @databaseStatusDictionaryDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备'**
+  String get databaseStatusDictionaryDevice;
+
+  /// No description provided for @databaseStatusDictionaryAntenna.
+  ///
+  /// In zh, this message translates to:
+  /// **'天线'**
+  String get databaseStatusDictionaryAntenna;
+
+  /// No description provided for @databaseStatusDictionaryQth.
+  ///
+  /// In zh, this message translates to:
+  /// **'QTH'**
+  String get databaseStatusDictionaryQth;
+
+  /// No description provided for @databaseStatusDictionaryCallsign.
+  ///
+  /// In zh, this message translates to:
+  /// **'呼号'**
+  String get databaseStatusDictionaryCallsign;
+
+  /// No description provided for @databaseStatusCollaborationSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作状态'**
+  String get databaseStatusCollaborationSection;
+
+  /// No description provided for @databaseStatusCollaborationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'这些数字是本机协作副本和同步队列，不代表云端全部数据'**
+  String get databaseStatusCollaborationHint;
+
+  /// No description provided for @databaseStatusCollaborationHealthy.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有待上传记录、未解决冲突或离线记录'**
+  String get databaseStatusCollaborationHealthy;
+
+  /// No description provided for @databaseStatusCollaborationPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机仍有协作内容需要同步或处理'**
+  String get databaseStatusCollaborationPending;
+
+  /// No description provided for @databaseStatusBindingsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'协作会话副本'**
+  String get databaseStatusBindingsLabel;
+
+  /// No description provided for @databaseStatusPendingOutboxLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'待上传操作'**
+  String get databaseStatusPendingOutboxLabel;
+
+  /// No description provided for @databaseStatusOpenConflictsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'未解决冲突'**
+  String get databaseStatusOpenConflictsLabel;
+
+  /// No description provided for @databaseStatusOfflineRecordsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'待处理离线记录'**
+  String get databaseStatusOfflineRecordsLabel;
+
+  /// No description provided for @databaseStatusDraftCachesLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'点名草稿缓存'**
+  String get databaseStatusDraftCachesLabel;
+
+  /// No description provided for @databaseStatusAdvancedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级：原始表计数'**
+  String get databaseStatusAdvancedTitle;
+
+  /// No description provided for @databaseStatusAdvancedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅用于故障诊断；基础设施表为 0 通常是正常状态'**
+  String get databaseStatusAdvancedHint;
 
   /// No description provided for @databaseStatusUnknown.
   ///
@@ -3293,7 +3492,7 @@ abstract class AppLocalizations {
   /// No description provided for @databaseExportHint.
   ///
   /// In zh, this message translates to:
-  /// **'备份会话、记录、词库、QTH 历史以及本机协作副本和待同步状态'**
+  /// **'备份会话、记录、词库以及本机协作副本和待同步状态'**
   String get databaseExportHint;
 
   /// No description provided for @databaseExportDialogTitle.
@@ -3455,7 +3654,7 @@ abstract class AppLocalizations {
   /// No description provided for @databaseClearWarning.
   ///
   /// In zh, this message translates to:
-  /// **'此操作不可撤销。将清除本机的所有会话、点名记录、QTH 历史、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。'**
+  /// **'此操作不可撤销。将清除本机的所有会话、点名记录、协作副本、待同步队列和自定义词条；不会删除或关闭服务器会话，也不会退出登录或重置外观。内置词库会恢复为默认内容。'**
   String get databaseClearWarning;
 
   /// No description provided for @databaseClearConfirmationPhrase.

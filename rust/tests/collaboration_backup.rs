@@ -113,7 +113,7 @@ async fn backup_replacement_is_atomic_offline_capable_and_preserves_device_ident
         .unwrap();
     let status: serde_json::Value =
         serde_json::from_str(&get_database_status().await.unwrap()).unwrap();
-    assert_eq!(status["schemaVersion"], 6);
+    assert_eq!(status["schemaVersion"], 7);
     assert!(status["tables"]
         .as_array()
         .unwrap()
@@ -235,7 +235,7 @@ async fn backup_replacement_is_atomic_offline_capable_and_preserves_device_ident
 
     let mut exported: serde_json::Value =
         serde_json::from_str(&export_database().await.unwrap()).unwrap();
-    assert_eq!(exported["version"], 6);
+    assert_eq!(exported["version"], 7);
     assert_eq!(
         exported["collaboration_bindings"].as_array().unwrap().len(),
         1
@@ -290,7 +290,7 @@ async fn backup_replacement_is_atomic_offline_capable_and_preserves_device_ident
         .unwrap_err()
         .to_string();
     assert!(invalid_error.contains("DATABASE_BACKUP_INVALID_TABLE"));
-    let future_error = import_database(r#"{"version":7}"#.to_string())
+    let future_error = import_database(r#"{"version":8}"#.to_string())
         .await
         .unwrap_err()
         .to_string();
@@ -394,25 +394,6 @@ async fn backup_replacement_is_atomic_offline_capable_and_preserves_device_ident
         pool,
         invalid_dictionary_type,
         "DATABASE_BACKUP_INVALID_DICTIONARY_TYPE",
-    )
-    .await;
-
-    let mut empty_qth_history_value = exported.clone();
-    empty_qth_history_value["callsign_qth_history"] = json!([{
-        "id": 9001,
-        "sync_id": "qth-empty-value",
-        "callsign": "BG5CRL",
-        "qth": "\t",
-        "recorded_at": NOW,
-        "created_at": NOW,
-        "updated_at": NOW,
-        "deleted_at": null,
-        "source_device_id": null
-    }]);
-    assert_import_failure_preserves_collaboration_replica(
-        pool,
-        empty_qth_history_value,
-        "DATABASE_BACKUP_EMPTY_REQUIRED_VALUE:callsign_qth_history.qth",
     )
     .await;
 

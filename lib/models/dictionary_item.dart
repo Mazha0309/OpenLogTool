@@ -12,6 +12,7 @@ class DictionaryItem {
   final String updatedAt;
   final String? deletedAt;
   final String? sourceDeviceId;
+  final String origin;
 
   factory DictionaryItem({
     int? id,
@@ -24,6 +25,7 @@ class DictionaryItem {
     String? updatedAt,
     String? deletedAt,
     String? sourceDeviceId,
+    String origin = 'user',
   }) {
     final normalizedCreatedAt = _normalizeTimestamp(createdAt);
     return DictionaryItem._internal(
@@ -38,6 +40,7 @@ class DictionaryItem {
       updatedAt: _normalizeTimestamp(updatedAt, fallback: normalizedCreatedAt),
       deletedAt: deletedAt,
       sourceDeviceId: sourceDeviceId,
+      origin: origin,
     );
   }
 
@@ -53,6 +56,7 @@ class DictionaryItem {
     required this.updatedAt,
     required this.deletedAt,
     required this.sourceDeviceId,
+    required this.origin,
   });
 
   static bool _hasText(String? value) =>
@@ -126,6 +130,7 @@ class DictionaryItem {
           _normalizeNullableString(map['deleted_at'] ?? map['deletedAt']),
       sourceDeviceId: _normalizeNullableString(
           map['source_device_id'] ?? map['sourceDeviceId']),
+      origin: map['origin']?.toString() ?? 'user',
     );
   }
 
@@ -145,6 +150,7 @@ class DictionaryItem {
           _normalizeNullableString(json['deletedAt'] ?? json['deleted_at']),
       sourceDeviceId: _normalizeNullableString(
           json['sourceDeviceId'] ?? json['source_device_id']),
+      origin: json['origin']?.toString() ?? 'user',
     );
   }
 
@@ -160,6 +166,7 @@ class DictionaryItem {
       'updated_at': updatedAt,
       'deleted_at': deletedAt,
       'source_device_id': sourceDeviceId,
+      'origin': origin,
     };
   }
 
@@ -175,6 +182,7 @@ class DictionaryItem {
       'updatedAt': updatedAt,
       'deletedAt': deletedAt,
       'sourceDeviceId': sourceDeviceId,
+      'origin': origin,
     };
   }
 
@@ -189,6 +197,7 @@ class DictionaryItem {
     String? updatedAt,
     Object? deletedAt = _dictionaryCopyWithSentinel,
     Object? sourceDeviceId = _dictionaryCopyWithSentinel,
+    String? origin,
   }) {
     return DictionaryItem(
       id: id ?? this.id,
@@ -205,6 +214,7 @@ class DictionaryItem {
       sourceDeviceId: identical(sourceDeviceId, _dictionaryCopyWithSentinel)
           ? this.sourceDeviceId
           : sourceDeviceId as String?,
+      origin: origin ?? this.origin,
     );
   }
 

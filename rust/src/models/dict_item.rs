@@ -11,6 +11,7 @@ pub struct DictItem {
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+    pub origin: String,
 }
 
 impl DictItem {
@@ -26,6 +27,7 @@ impl DictItem {
             created_at: now.clone(),
             updated_at: now,
             deleted_at: None,
+            origin: "user".to_string(),
         }
     }
 

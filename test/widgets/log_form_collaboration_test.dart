@@ -338,7 +338,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(collaboration.committedFields, isNotNull);
-      expect(collaboration.committedFields!['time'], matches(r'^\d{2}:\d{2}$'));
+      _expectCanonicalUtcTimestamp(collaboration.committedFields!['time']!);
       expect(collaboration.liveDraftFields['time'], isEmpty);
       expect(timeController().text, isEmpty);
     },
@@ -521,7 +521,7 @@ void main() {
       await tester.tap(find.byKey(const Key('save-log-record')));
       await tester.pumpAndSettle();
 
-      expect(collaboration.committedFields!['time'], matches(r'^\d{2}:\d{2}$'));
+      _expectCanonicalUtcTimestamp(collaboration.committedFields!['time']!);
       expect(collaboration.liveDraftSnapshot.draft.draftId, 'draft-1');
       expect(collaboration.liveDraftFields['time'], isEmpty);
       expect(time.text, isEmpty);
@@ -557,6 +557,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(collaboration.commitCalls, 1);
   });
+
+  testWidgets(
+    'IME composition is neither synchronized nor remotely overwritten and save commits uppercase',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'REMOTE-CONTROLLER',
+          'callsign': 'REMOTE-CALLSIGN',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final controller = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .singleWhere(
+            (field) => field.decoration?.labelText == 'Controller callsign *',
+          )
+          .controller!;
+      final callsign = tester
+          .widget<CallsignHistoryField>(find.byType(CallsignHistoryField))
+          .callsignController;
+      controller.value = const TextEditingValue(
+        text: 'bg5crl',
+        selection: TextSelection.collapsed(offset: 6),
+        composing: TextRange(start: 0, end: 6),
+      );
+      callsign.value = const TextEditingValue(
+        text: 'ba4aaa',
+        selection: TextSelection.collapsed(offset: 6),
+        composing: TextRange(start: 0, end: 6),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(collaboration.liveDraftFields['controller'], 'REMOTE-CONTROLLER');
+      expect(collaboration.liveDraftFields['callsign'], 'REMOTE-CALLSIGN');
+
+      collaboration.replaceDraft(
+        draftId: 'remote-draft',
+        fields: const {
+          'time': '',
+          'controller': 'NEW-REMOTE-CONTROLLER',
+          'callsign': 'NEW-REMOTE-CALLSIGN',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      await tester.pump();
+      expect(controller.text, 'bg5crl');
+      expect(callsign.text, 'ba4aaa');
+
+      await tester.tap(find.byKey(const Key('save-log-record')));
+      await tester.pumpAndSettle();
+
+      expect(collaboration.committedFields!['controller'], 'BG5CRL');
+      expect(collaboration.committedFields!['callsign'], 'BA4AAA');
+      _expectCanonicalUtcTimestamp(collaboration.committedFields!['time']!);
+    },
+  );
 
   testWidgets(
     'a new remote draft replaces generated time while save is pending',
@@ -682,6 +746,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
     },
   );
+}
+
+void _expectCanonicalUtcTimestamp(String value) {
+  expect(
+    value,
+    matches(
+      r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$',
+    ),
+  );
+  expect(DateTime.parse(value).isUtc, isTrue);
 }
 
 const _historyRecord = bridge.LogEntry(

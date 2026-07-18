@@ -120,6 +120,22 @@ void main() {
     provider.dispose();
   });
 
+  test('dictionary change notification exposes the incremented data revision',
+      () async {
+    final store = _DictionaryStore();
+    final provider = _providerForStore(store);
+    final observedRevisions = <int>[];
+    provider.addListener(() {
+      observedRevisions.add(provider.dataRevision);
+    });
+
+    await provider.addDevice('IC-705');
+
+    expect(provider.dataRevision, 1);
+    expect(observedRevisions, <int>[1]);
+    provider.dispose();
+  });
+
   test('single delete updates memory only after persistent deletion', () async {
     final store = _DictionaryStore();
     final provider = _providerForStore(store);
@@ -544,6 +560,7 @@ class _DictionaryStore {
       createdAt: existing.createdAt,
       updatedAt: '2026-07-17T00:00:00Z',
       deletedAt: null,
+      origin: existing.origin,
     );
     items
       ..remove(oldKey)
@@ -567,5 +584,6 @@ bridge.DictItem _persistedItem(
     syncId: 'persisted-$raw',
     createdAt: timestamp,
     updatedAt: timestamp,
+    origin: 'user',
   );
 }

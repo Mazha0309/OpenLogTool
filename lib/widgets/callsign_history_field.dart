@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
+import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
 import 'package:openlogtool/utils/log_time.dart';
 
 typedef CallsignHistoryLoader = Future<List<bridge.LogEntry>> Function(
@@ -119,6 +119,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
       _invalidateHistory();
       return;
     }
+    if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
+      widget.callsignController.value,
+    )) {
+      _invalidateHistory();
+      return;
+    }
     _loadHistory();
     if (_overlayEntry != null) _hideOverlay();
   }
@@ -126,6 +132,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   void _onFocusChanged() {
     if (!_canUseHistory) {
       _hideOverlay();
+      return;
+    }
+    if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
+      widget.callsignController.value,
+    )) {
+      _invalidateHistory();
       return;
     }
     final callsign = widget.callsignController.text.trim().toUpperCase();
@@ -149,6 +161,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   Future<void> _loadHistory() async {
     final requestGeneration = ++_historyRequestGeneration;
     if (!_canUseHistory) return;
+    if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
+      widget.callsignController.value,
+    )) {
+      _invalidateHistory();
+      return;
+    }
     final callsign = widget.callsignController.text.trim().toUpperCase();
     if (callsign.length < 2) {
       if (mounted) setState(() => _history = []);
@@ -160,6 +178,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
       final rows = await loader(callsign, 3);
       if (!mounted || !_canUseHistory) return;
       if (requestGeneration != _historyRequestGeneration) return;
+      if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
+        widget.callsignController.value,
+      )) {
+        _invalidateHistory();
+        return;
+      }
       final current = widget.callsignController.text.trim().toUpperCase();
       if (current != callsign) {
         // Controller listener already started the request for the latest text.
@@ -455,7 +479,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
         ),
         textInputAction: widget.textInputAction ?? TextInputAction.next,
         textCapitalization: TextCapitalization.characters,
-        inputFormatters: [UpperCaseTextFormatter()],
+        inputFormatters: const [ImeSafeUpperCaseTextFormatter()],
         onTapOutside: (_) => _effFocus.unfocus(),
       ),
     );
@@ -464,13 +488,4 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
 
 String _formatTime(String time) {
   return formatLogTimeForDisplay(time, includeDate: true);
-}
-
-class UpperCaseTextFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    return TextEditingValue(
-        text: newValue.text.toUpperCase(), selection: newValue.selection);
-  }
 }

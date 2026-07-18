@@ -25,7 +25,6 @@ void main() {
       ],
       'settings': [],
       'oplog': [],
-      'callsign_qth_history': [],
       'collaboration_bindings': [
         {'session_id': 'one'},
       ],
@@ -70,7 +69,7 @@ void main() {
 
   test('rejects a newer backup format before destructive confirmation', () {
     expect(
-      () => DatabaseBackupSummary.parse('{"version":7}'),
+      () => DatabaseBackupSummary.parse('{"version":8}'),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -79,5 +78,21 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('ignores a damaged retired QTH cache in a legacy backup', () {
+    final summary = DatabaseBackupSummary.parse(jsonEncode({
+      'version': 1,
+      'sessions': [],
+      'logs': [],
+      'dictionary_items': [],
+      'settings': [],
+      'oplog': [],
+      'callsign_qth_history': 'retired cache is not user data',
+    }));
+
+    expect(summary.formatVersion, 1);
+    expect(summary.sessionCount, 0);
+    expect(summary.logCount, 0);
   });
 }

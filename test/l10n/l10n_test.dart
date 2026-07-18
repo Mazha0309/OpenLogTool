@@ -118,6 +118,12 @@ void main() {
     );
     expect(zh.localDataOperationsTitle, '本机数据');
     expect(en.localDataOperationsTitle, 'On-device data');
+    expect(zh.personalCloudTitle, '个人云同步');
+    expect(zh.personalCloudUpToDate, '个人记录和词库改动均已同步');
+    expect(zh.personalCloudHint, contains('自动双向同步'));
+    expect(en.personalCloudTitle, 'Personal cloud sync');
+    expect(en.personalCloudUpToDate, contains('up to date'));
+    expect(en.personalCloudHint, contains('synchronize automatically'));
     expect(zh.settingsAppearanceTitle, '外观与语言');
     expect(en.settingsAppearanceTitle, 'Appearance & language');
     expect(zh.appLanguageSetting, '界面语言');
@@ -128,5 +134,9 @@ void main() {
     expect(en.databaseClearConfirmationPhrase, 'DELETE ALL DATA');
     expect(zh.databaseImportPreviewWarning, contains('登录凭据'));
     expect(en.databaseImportPreviewWarning, contains('Server sessions'));
+    expect(zh.databaseStatusLocalContentSection, '本机内容');
+    expect(en.databaseStatusLocalContentSection, 'On-device content');
+    expect(zh.databaseStatusAdvancedTitle, contains('原始表计数'));
+    expect(en.databaseStatusAdvancedTitle, contains('raw table counts'));
   });
 }
