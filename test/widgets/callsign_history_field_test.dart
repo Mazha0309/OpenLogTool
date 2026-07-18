@@ -117,7 +117,7 @@ void main() {
     expect(find.byIcon(Icons.search), findsOneWidget);
   });
 
-  testWidgets('reuses related fields without changing the current time',
+  testWidgets('reuses station details without changing operator fields',
       (tester) async {
     final callsign = TextEditingController();
     final device = TextEditingController();
@@ -182,9 +182,9 @@ void main() {
     expect(qth.text, '上海');
     expect(power.text, '100W');
     expect(height.text, '12m');
-    expect(rstSent.text, '58');
-    expect(rstRcvd.text, '47');
-    expect(controller.text, 'BG5CRL');
+    expect(rstSent.text, isEmpty);
+    expect(rstRcvd.text, isEmpty);
+    expect(controller.text, isEmpty);
     expect(currentTime.text, '20:42');
   });
 

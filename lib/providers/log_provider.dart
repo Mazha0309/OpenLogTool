@@ -375,9 +375,33 @@ class LogProvider with ChangeNotifier {
 
   Future<void> addLog(old.LogEntry log, {String? sessionId}) async {
     final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
+    if (effectiveSessionId.isEmpty) {
+      throw StateError('SESSION_CONTEXT_MISSING: 当前没有可写会话');
+    }
+
+    // The form follows SessionProvider, while this provider owns the table
+    // projection. During startup or a session switch those two providers can
+    // briefly point at different sessions. Align before writing so a
+    // successful insert cannot be followed by a reload of the old session.
+    if (_currentSessionId != effectiveSessionId) {
+      await reloadForSession(effectiveSessionId, propagateErrors: true);
+    }
+    if (_currentSessionId != effectiveSessionId) {
+      throw StateError(
+        'SESSION_CONTEXT_CHANGED: 会话已切换，请重新保存当前记录',
+      );
+    }
     _ensureWritable(effectiveSessionId);
     try {
       final canonical = await _logCreator(effectiveSessionId, log);
+      if (canonical.sessionId != effectiveSessionId) {
+        throw StateError(
+          'LOG_SESSION_MISMATCH: 保存结果与当前会话不匹配',
+        );
+      }
+      // The user may switch sessions while the durable insert is in flight.
+      // The row is already saved, but it must never leak into the newly opened
+      // session's in-memory table.
       if (_currentSessionId == effectiveSessionId) {
         _mergeCanonicalLog(canonical);
       }

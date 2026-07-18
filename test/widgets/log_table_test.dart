@@ -7,11 +7,69 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
+import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge_log;
+import 'package:openlogtool/src/bridge/models/session.dart' as bridge_session;
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('a successful provider add replaces the empty table immediately',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'paginationEnabled': false},
+    );
+    final logProvider = LogProvider(
+      sessionListLoader: () async => [
+        const bridge_session.Session(
+          sessionId: 'table-session',
+          title: 'Table session',
+          status: 'active',
+          createdAt: '2026-07-13T10:00:00Z',
+          updatedAt: '2026-07-13T10:00:00Z',
+        ),
+      ],
+      sessionLogPageLoader: (_, __, ___) async => [],
+      logCreator: (_, __) async => const bridge_log.LogEntry(
+        syncId: 'fresh-row',
+        sessionId: 'table-session',
+        time: '2026-07-13T12:00:00Z',
+        controller: 'BG5CTRL',
+        callsign: 'BG5FRESH',
+        rstSent: '59',
+        rstRcvd: '59',
+        createdAt: '2026-07-13T12:00:00Z',
+        updatedAt: '2026-07-13T12:00:00Z',
+      ),
+    );
+    addTearDown(logProvider.dispose);
+    await logProvider.reloadForSession('table-session');
+    await _pumpLogTable(tester, logProvider);
+    expect(find.text('暂无已保存记录'), findsOneWidget);
+
+    await logProvider.addLog(
+      LogEntry(
+        sessionId: 'table-session',
+        time: '2026-07-13T12:00:00Z',
+        controller: 'BG5CTRL',
+        callsign: 'BG5FRESH',
+        report: '59',
+        rstRcvd: '59',
+        qth: '',
+        device: '',
+        power: '',
+        antenna: '',
+        height: '',
+      ),
+      sessionId: 'table-session',
+    );
+    await tester.pump();
+
+    expect(find.byType(DataTable), findsOneWidget);
+    expect(find.text('BG5FRESH'), findsOneWidget);
+    expect(find.text('暂无已保存记录'), findsNothing);
+  });
+
   testWidgets('keeps RST sent and received aligned with the newest row',
       (tester) async {
     SharedPreferences.setMockInitialValues(

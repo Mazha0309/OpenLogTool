@@ -37,6 +37,92 @@ void main() {
     provider.dispose();
   });
 
+  test('add aligns a stale table projection to the requested session',
+      () async {
+    final provider = LogProvider(
+      sessionListLoader: () async => [
+        _session('old-session'),
+        _session('new-session'),
+      ],
+      sessionLogPageLoader: (sessionId, _, __) async =>
+          sessionId == 'old-session'
+              ? [
+                  _bridgeLog(
+                    id: 'old-row',
+                    sessionId: 'old-session',
+                    time: '2026-07-13T10:00:00Z',
+                  ),
+                ]
+              : [],
+      logCreator: (sessionId, _) async {
+        expect(sessionId, 'new-session');
+        return _bridgeLog(
+          id: 'new-row',
+          sessionId: 'new-session',
+          time: '2026-07-13T11:00:00Z',
+          callsign: 'BG5FRESH',
+        );
+      },
+    );
+    await provider.reloadForSession('old-session');
+    expect(provider.logs.single.id, 'old-row');
+
+    await provider.addLog(
+      _modelLog(id: 'temporary', sessionId: 'new-session'),
+      sessionId: 'new-session',
+    );
+
+    expect(provider.currentSessionId, 'new-session');
+    expect(provider.logs.map((log) => log.id), ['new-row']);
+    expect(provider.logs.single.callsign, 'BG5FRESH');
+    provider.dispose();
+  });
+
+  test('an add finishing after a session switch cannot pollute the new table',
+      () async {
+    final createStarted = Completer<void>();
+    final releaseCreate = Completer<void>();
+    final provider = LogProvider(
+      sessionListLoader: () async => [
+        _session('session-a'),
+        _session('session-b'),
+      ],
+      sessionLogPageLoader: (sessionId, _, __) async => sessionId == 'session-b'
+          ? [
+              _bridgeLog(
+                id: 'session-b-row',
+                sessionId: 'session-b',
+                time: '2026-07-13T12:00:00Z',
+              ),
+            ]
+          : [],
+      logCreator: (sessionId, _) async {
+        expect(sessionId, 'session-a');
+        createStarted.complete();
+        await releaseCreate.future;
+        return _bridgeLog(
+          id: 'late-session-a-row',
+          sessionId: 'session-a',
+          time: '2026-07-13T11:00:00Z',
+        );
+      },
+    );
+    await provider.reloadForSession('session-a');
+
+    final add = provider.addLog(
+      _modelLog(id: 'temporary', sessionId: 'session-a'),
+      sessionId: 'session-a',
+    );
+    await createStarted.future;
+    await provider.reloadForSession('session-b');
+    releaseCreate.complete();
+    await add;
+
+    expect(provider.currentSessionId, 'session-b');
+    expect(provider.logs.map((log) => log.id), ['session-b-row']);
+    provider.dispose();
+  });
+
   test('a stale reload cannot overwrite a canonical add', () async {
     final staleReadStarted = Completer<void>();
     final releaseStaleRead = Completer<void>();

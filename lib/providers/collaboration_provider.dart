@@ -2068,6 +2068,18 @@ class CollaborationProvider with ChangeNotifier {
           throw StateError('LIVE_DRAFT_INCOMPLETE:${required.join(',')}');
         }
         try {
+          final logs = _logs;
+          if (logs != null &&
+              logs.currentSessionId != context.binding.sessionId) {
+            await logs.reloadForSession(
+              context.binding.sessionId,
+              propagateErrors: true,
+            );
+            _assertLiveDraftContextCurrent(context);
+            if (logs.currentSessionId != context.binding.sessionId) {
+              throw StateError('LIVE_DRAFT_LOG_CONTEXT_CHANGED');
+            }
+          }
           final committed = await context.api.commitLiveDraft(
             sessionId: context.binding.sessionId,
             deviceId: context.deviceId,
@@ -2076,6 +2088,10 @@ class CollaborationProvider with ChangeNotifier {
             idempotencyKey: mutationId,
           );
           _assertLiveDraftContextCurrent(context);
+          // The server has durably accepted the record. Publish it to the
+          // table before waiting on draft-cache persistence or event catch-up;
+          // either of those can be slow or fail independently of the commit.
+          _stageCommittedLiveDraftLog(committed.record, committed.event);
           _liveDraftSnapshot = LiveDraftSnapshotDto(
             draft: committed.nextDraft,
             locks: const [],
@@ -2092,6 +2108,7 @@ class CollaborationProvider with ChangeNotifier {
           await _refreshLogsAfterLiveDraftCommit(
             context: context,
             event: committed.event,
+            syncId: committed.record.syncId,
           );
           _assertLiveDraftContextCurrent(context);
           _safeNotify();
@@ -2215,6 +2232,7 @@ class CollaborationProvider with ChangeNotifier {
             idempotencyKey: record.mutationId,
           );
           _assertLiveDraftContextCurrent(context);
+          _stageCommittedLiveDraftLog(committed.record, committed.event);
           _liveDraftSnapshot = LiveDraftSnapshotDto(
             draft: committed.nextDraft,
             locks: const [],
@@ -2229,6 +2247,7 @@ class CollaborationProvider with ChangeNotifier {
           await _refreshLogsAfterLiveDraftCommit(
             context: context,
             event: committed.event,
+            syncId: committed.record.syncId,
           );
           _assertLiveDraftContextCurrent(context);
         }
@@ -3544,11 +3563,39 @@ class CollaborationProvider with ChangeNotifier {
   Future<void> _refreshLogsAfterLiveDraftCommit({
     required _LiveDraftContext context,
     required CollaborationEventDto event,
+    required String syncId,
   }) async {
     bool contextIsCurrent() => _isLiveDraftContextCurrent(context);
 
     if (!contextIsCurrent()) return;
-    final canonical = CollaborationLogDto.fromJson(event.payload);
+    final coordinator = _syncCoordinator;
+    if (coordinator != null) {
+      try {
+        final synchronized = await coordinator.synchronizeNow(
+          targetSeq: event.seq,
+          timeout: const Duration(seconds: 1),
+        );
+        if (synchronized && contextIsCurrent()) {
+          await _logs?.reconcileStagedCanonicalLog(syncId);
+          return;
+        }
+        if (!contextIsCurrent()) return;
+      } catch (error, stackTrace) {
+        if (!contextIsCurrent()) return;
+        debugPrint(
+          '[Collaboration] awaited live-draft refresh failed: '
+          '$error\n$stackTrace',
+        );
+      }
+    }
+    if (!contextIsCurrent()) return;
+    coordinator?.wake();
+  }
+
+  void _stageCommittedLiveDraftLog(
+    CollaborationLogDto canonical,
+    CollaborationEventDto event,
+  ) {
     _recordLogAuthorshipFromEvent(event);
     _logs?.stageCanonicalLog(
       LogEntry(
@@ -3570,29 +3617,6 @@ class CollaborationProvider with ChangeNotifier {
         deletedAt: canonical.deletedAt?.toUtc().toIso8601String(),
       ),
     );
-
-    final coordinator = _syncCoordinator;
-    if (coordinator != null) {
-      try {
-        final synchronized = await coordinator.synchronizeNow(
-          targetSeq: event.seq,
-          timeout: const Duration(seconds: 1),
-        );
-        if (synchronized && contextIsCurrent()) {
-          await _logs?.reconcileStagedCanonicalLog(canonical.syncId);
-          return;
-        }
-        if (!contextIsCurrent()) return;
-      } catch (error, stackTrace) {
-        if (!contextIsCurrent()) return;
-        debugPrint(
-          '[Collaboration] awaited live-draft refresh failed: '
-          '$error\n$stackTrace',
-        );
-      }
-    }
-    if (!contextIsCurrent()) return;
-    coordinator?.wake();
   }
 
   Future<void> _refreshLiveDraftForBinding(
@@ -4284,6 +4308,7 @@ class CollaborationProvider with ChangeNotifier {
           idempotencyKey: record.mutationId,
         );
         if (!contextIsCurrent()) return;
+        _stageCommittedLiveDraftLog(committed.record, committed.event);
         _liveDraftSnapshot = LiveDraftSnapshotDto(
           draft: committed.nextDraft,
           locks: const [],
@@ -4318,6 +4343,7 @@ class CollaborationProvider with ChangeNotifier {
         await _refreshLogsAfterLiveDraftCommit(
           context: context,
           event: committed.event,
+          syncId: committed.record.syncId,
         );
         if (!contextIsCurrent()) return;
       } on ServerApiException catch (error) {
