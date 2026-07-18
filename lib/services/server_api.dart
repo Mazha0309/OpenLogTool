@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:openlogtool/models/account_dto.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
+import 'package:openlogtool/models/personal_cloud_dto.dart';
 
 /// Persistence boundary for authentication state.
 ///
@@ -166,6 +167,52 @@ final class ServerApi {
   Future<AccountDto> getAccount() async {
     final response = await _authorizedRequest('GET', '/account');
     return _parseResponse(response, AccountDto.fromJson);
+  }
+
+  Future<PersonalCloudSnapshotMeta> getPersonalCloudSnapshotMeta() async {
+    final response = await _authorizedRequest(
+      'GET',
+      '/account/personal-snapshot',
+    );
+    return _parseResponse(response, (json) {
+      final envelope = _jsonObject(json, 'personalSnapshotMetaResult');
+      return PersonalCloudSnapshotMeta.fromJson(envelope['personalSnapshot']);
+    });
+  }
+
+  Future<PersonalCloudSnapshotDownload> downloadPersonalCloudSnapshot() async {
+    final response = await _authorizedRequest(
+      'GET',
+      '/account/personal-snapshot/download',
+    );
+    return _parseResponse(response, PersonalCloudSnapshotDownload.fromJson);
+  }
+
+  Future<PersonalCloudSnapshotReplaceResult> replacePersonalCloudSnapshot({
+    required int expectedRevision,
+    required PersonalCloudJsonObject snapshot,
+  }) async {
+    if (expectedRevision < 0) {
+      throw ArgumentError.value(
+        expectedRevision,
+        'expectedRevision',
+        'must not be negative',
+      );
+    }
+    final response = await _authorizedRequest(
+      'PUT',
+      '/account/personal-snapshot',
+      body: {
+        'expectedRevision': expectedRevision,
+        'confirmation': 'REPLACE_PERSONAL_CLOUD_SNAPSHOT',
+        'snapshot': snapshot,
+      },
+      headers: {'If-Match': '"$expectedRevision"'},
+    );
+    return _parseResponse(
+      response,
+      PersonalCloudSnapshotReplaceResult.fromJson,
+    );
   }
 
   Future<AccountDto> changeUsername({

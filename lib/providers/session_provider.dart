@@ -39,6 +39,9 @@ class SessionListEntry {
 
 class SessionProvider with ChangeNotifier {
   static const _key = 'current_session_id';
+  static const _databaseRevisionKey = 'local_database_replacement_revision';
+  static const _databaseReplacementPendingKey =
+      'local_database_replacement_pending';
 
   final LocalSessionReopener _localSessionReopener;
   final LocalSessionStarter _localSessionStarter;
@@ -54,10 +57,19 @@ class SessionProvider with ChangeNotifier {
   bool _disposed = false;
   String? _currentSessionId;
   Session? _currentSession;
+  int _databaseRevision = 0;
+  int _dataRevision = 0;
+  // Fail closed until SharedPreferences has proved that no replacement was
+  // interrupted. Personal-cloud synchronization awaits [ready], so a
+  // preference read failure cannot accidentally expose a stale baseline.
+  bool _databaseReplacementPending = true;
   Completer<void>? _initCompleter;
 
   String? get currentSessionId => _currentSessionId;
   Session? get currentSession => _currentSession;
+  int get databaseRevision => _databaseRevision;
+  int get dataRevision => _dataRevision;
+  bool get databaseReplacementPending => _databaseReplacementPending;
 
   Future<void> get ready => _initCompleter?.future ?? Future.value();
 
@@ -133,6 +145,9 @@ class SessionProvider with ChangeNotifier {
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
+    _databaseRevision = prefs.getInt(_databaseRevisionKey) ?? 0;
+    _databaseReplacementPending =
+        prefs.getBool(_databaseReplacementPendingKey) ?? false;
     final storedId = prefs.getString(_key);
 
     if (storedId != null && storedId.isNotEmpty) {
@@ -195,6 +210,7 @@ class SessionProvider with ChangeNotifier {
       // canonical result even if preference storage is temporarily broken.
       _currentSession = session;
       _currentSessionId = session.sessionId;
+      _markPersonalDataChanged();
       _safeNotify();
       try {
         await _persistCurrentSessionId(session.sessionId);
@@ -283,6 +299,7 @@ class SessionProvider with ChangeNotifier {
     // in-memory provider pointing at a session Rust just closed.
     _currentSession = reopened;
     _currentSessionId = reopened.sessionId;
+    _markPersonalDataChanged();
     _safeNotify();
     try {
       await _persistCurrentSessionId(reopened.sessionId);
@@ -328,6 +345,7 @@ class SessionProvider with ChangeNotifier {
 
     _currentSession = local;
     _currentSessionId = local.sessionId;
+    _markPersonalDataChanged();
     _safeNotify();
     try {
       await _persistCurrentSessionId(local.sessionId);
@@ -364,6 +382,7 @@ class SessionProvider with ChangeNotifier {
 
     _currentSession = local;
     _currentSessionId = local.sessionId;
+    _markPersonalDataChanged();
     _safeNotify();
     try {
       await _persistCurrentSessionId(local.sessionId);
@@ -399,6 +418,7 @@ class SessionProvider with ChangeNotifier {
     }
 
     await _adoptCurrentSession(local, operation: 'stopped collaboration');
+    _markPersonalDataChanged();
     return local;
   }
 
@@ -409,6 +429,7 @@ class SessionProvider with ChangeNotifier {
     await ready;
     final wasCurrent = _currentSessionId == sessionId;
     final closed = await _localSessionCloser(sessionId);
+    _markPersonalDataChanged();
     if (wasCurrent && _currentSessionId == sessionId) {
       await _adoptCurrentSession(closed, operation: 'closed local session');
     }
@@ -420,6 +441,7 @@ class SessionProvider with ChangeNotifier {
   Future<void> deleteSessionLocally(String sessionId) async {
     await ready;
     await _localSessionDeleter(sessionId);
+    _markPersonalDataChanged();
     if (_currentSessionId != sessionId) return;
     _currentSession = null;
     _currentSessionId = null;
@@ -496,10 +518,17 @@ class SessionProvider with ChangeNotifier {
 
     _currentSession = selected;
     _currentSessionId = selected?.sessionId;
+    final nextDatabaseRevision = _databaseRevision + 1;
+    _databaseRevision = nextDatabaseRevision;
     _safeNotify();
 
+    final prefs = await SharedPreferences.getInstance();
+    final revisionSaved =
+        await prefs.setInt(_databaseRevisionKey, nextDatabaseRevision);
+    if (!revisionSaved) {
+      throw StateError('LOCAL_DATABASE_REVISION_PERSIST_FAILED');
+    }
     try {
-      final prefs = await SharedPreferences.getInstance();
       if (selected == null) {
         await prefs.remove(_key);
       } else {
@@ -509,9 +538,64 @@ class SessionProvider with ChangeNotifier {
       // The database replacement has already committed. A preference failure
       // must not put the in-memory providers back on stale database rows.
       debugPrint(
-        '[Session] failed to persist database replacement selection: '
+        '[Session] failed to persist database replacement selection after '
+        'the safety revision was saved: '
         '$error\n$stackTrace',
       );
+    }
+  }
+
+  /// Persists a crash-recovery sentinel before any whole-database mutation.
+  ///
+  /// Callers must await this method before invoking the transaction. A write
+  /// failure prevents the mutation and safely restores the prior in-memory
+  /// state; a sentinel inherited from an earlier crash remains raised.
+  Future<bool> prepareForDatabaseReplacement() async {
+    await ready;
+    final wasPending = _databaseReplacementPending;
+    if (!_databaseReplacementPending) {
+      _databaseReplacementPending = true;
+      _safeNotify();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = await prefs.setBool(_databaseReplacementPendingKey, true);
+      if (!saved) {
+        throw StateError(
+          'LOCAL_DATABASE_REPLACEMENT_SENTINEL_PERSIST_FAILED',
+        );
+      }
+      return !wasPending;
+    } catch (_) {
+      // The database operation has not started, so restoring the previous
+      // in-memory state is safe and lets the user retry once storage recovers.
+      if (_databaseReplacementPending != wasPending) {
+        _databaseReplacementPending = wasPending;
+        _safeNotify();
+      }
+      rethrow;
+    }
+  }
+
+  /// Clears a prepared sentinel only when the database transaction explicitly
+  /// failed and therefore rolled back without changing durable rows.
+  Future<void> rollbackFailedDatabaseReplacement() =>
+      _clearDatabaseReplacementSentinel();
+
+  /// Acknowledges a committed replacement after provider reload and database
+  /// revision persistence have both completed successfully.
+  Future<void> acknowledgeDatabaseReplacement() =>
+      _clearDatabaseReplacementSentinel();
+
+  Future<void> _clearDatabaseReplacementSentinel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final removed = await prefs.remove(_databaseReplacementPendingKey);
+    if (!removed && prefs.containsKey(_databaseReplacementPendingKey)) {
+      throw StateError('LOCAL_DATABASE_REPLACEMENT_SENTINEL_CLEAR_FAILED');
+    }
+    if (_databaseReplacementPending) {
+      _databaseReplacementPending = false;
+      _safeNotify();
     }
   }
 
@@ -534,6 +618,7 @@ class SessionProvider with ChangeNotifier {
       sessionId: sessionId,
       title: normalized,
     );
+    _markPersonalDataChanged();
     if (_currentSessionId == sessionId) {
       await reloadCurrentSession();
     }
@@ -565,5 +650,10 @@ class SessionProvider with ChangeNotifier {
     if (!saved) {
       throw StateError('Failed to persist current session: $sessionId');
     }
+  }
+
+  void _markPersonalDataChanged() {
+    _dataRevision += 1;
+    _safeNotify();
   }
 }

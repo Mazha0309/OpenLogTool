@@ -161,11 +161,18 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
   String _query = '';
   String? _busySessionId;
   int _page = 0;
+  int? _databaseRevision;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _entries ??= context.read<SessionProvider>().listAvailableSessionEntries();
+    final sessions = context.watch<SessionProvider>();
+    if (_entries == null || _databaseRevision != sessions.databaseRevision) {
+      _databaseRevision = sessions.databaseRevision;
+      _entries = sessions.listAvailableSessionEntries();
+      _busySessionId = null;
+      _page = 0;
+    }
   }
 
   @override

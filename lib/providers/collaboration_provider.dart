@@ -396,6 +396,7 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
     CollaborationLogDto? previousRecord,
     bool replacePreviousRecord = false,
     bool allowGenerationChange = false,
+    bool discardLocalState = false,
   }) {
     if (incoming.sessionId != currentSnapshot.draft.sessionId) {
       throw const FormatException(
@@ -409,7 +410,9 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
         'Live-draft control cannot prove a draft generation change',
       );
     }
-    if (sameGeneration && incoming.version <= currentDraft.version) {
+    if (sameGeneration &&
+        incoming.version <= currentDraft.version &&
+        !discardLocalState) {
       return LiveDraftControlProjection(
         snapshot: currentSnapshot,
         localFields: currentLocalFields,
@@ -419,10 +422,11 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
       );
     }
 
-    final dirtyFields = sameGeneration
+    final preserveLocalState = sameGeneration && !discardLocalState;
+    final dirtyFields = preserveLocalState
         ? Set<String>.unmodifiable(currentDirtyFields)
         : const <String>{};
-    final baseRevisions = sameGeneration
+    final baseRevisions = preserveLocalState
         ? Map<String, int>.unmodifiable({
             for (final field in dirtyFields)
               field: currentBaseRevisions[field] ??
@@ -432,7 +436,7 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
         : const <String, int>{};
     final localFields = LiveDraftFieldsDto({
       for (final field in liveDraftFieldNames)
-        field: sameGeneration && dirtyFields.contains(field)
+        field: preserveLocalState && dirtyFields.contains(field)
             ? currentLocalFields[field]
             : incoming.fields[field],
     });
@@ -461,13 +465,21 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
       return adoptDraft(LiveDraftDto.fromJson(message['draft']));
     case 'liveDraft.cleared':
       final nextDraft = LiveDraftDto.fromJson(message['nextDraft']);
+      final terminalValue = message['terminal'];
+      if (terminalValue != null && terminalValue is! bool) {
+        throw const FormatException(
+          'Live-draft clear control terminal marker is invalid',
+        );
+      }
+      final terminal = terminalValue == true;
       final discardedDraftId = _liveDraftControlId(
         message,
         'discardedDraftId',
       );
       final currentDraftId = currentSnapshot.draft.draftId;
       if (currentDraftId != discardedDraftId &&
-          currentDraftId != nextDraft.draftId) {
+          currentDraftId != nextDraft.draftId &&
+          !terminal) {
         throw const FormatException(
           'Live-draft clear control has an unknown predecessor',
         );
@@ -475,7 +487,8 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
       return adoptDraft(
         nextDraft,
         locks: const [],
-        allowGenerationChange: currentDraftId == discardedDraftId,
+        allowGenerationChange: terminal || currentDraftId == discardedDraftId,
+        discardLocalState: terminal,
       );
     case 'liveDraft.committed':
       final nextDraft = LiveDraftDto.fromJson(message['nextDraft']);
@@ -553,6 +566,30 @@ LiveDraftControlProjection applyLiveDraftControlMessage({
     default:
       throw FormatException('Unknown live-draft control type: $type');
   }
+}
+
+/// Projects the durable marker attached to an administrative forced-close
+/// event into the same complete control shape used by the realtime channel.
+/// Ordinary close events and non-terminal markers intentionally do not reset
+/// draft generations.
+@visibleForTesting
+JsonObject? terminalLiveDraftClearControlFromEvent(
+  CollaborationEventDto event,
+) {
+  if (event.type != 'session.closed' ||
+      event.entityType != 'session' ||
+      event.entityId != event.sessionId) {
+    return null;
+  }
+  final marker = event.payload['liveDraftCleared'];
+  if (marker is! Map || marker['terminal'] != true) return null;
+  return {
+    ...Map<String, Object?>.from(marker),
+    'type': 'liveDraft.cleared',
+    'sessionId': event.sessionId,
+    'occurredAt': event.occurredAt.toUtc().toIso8601String(),
+    'terminal': true,
+  };
 }
 
 String _liveDraftControlId(JsonObject message, String field) {
@@ -1807,9 +1844,49 @@ class CollaborationProvider with ChangeNotifier {
               hydrateCache: false,
             );
 
+        final terminalClear = message['type'] == 'liveDraft.cleared' &&
+            message['terminal'] == true;
         final snapshot = _liveDraftSnapshot;
         final localFields = _localLiveDraftFields;
         if (snapshot == null || localFields == null) {
+          if (terminalClear) {
+            final nextDraft = LiveDraftDto.fromJson(message['nextDraft']);
+            _liveDraftControlId(message, 'discardedDraftId');
+            if (nextDraft.sessionId != binding.sessionId) {
+              throw const FormatException(
+                'Live-draft terminal clear contains another Session',
+              );
+            }
+            Object? cacheError;
+            try {
+              await RustApi.clearCollaborationLiveDraftCache(
+                serverInstanceId: binding.serverInstanceId,
+                accountId: binding.accountId,
+                sessionId: binding.sessionId,
+              );
+            } catch (error) {
+              cacheError = error;
+            }
+            if (!_isLiveDraftContextCurrent(context)) return;
+            _liveDraftGeneration += 1;
+            _clearOwnedLiveDraftLocks();
+            _liveDraftSnapshot = null;
+            _localLiveDraftFields = null;
+            _automaticLiveDraftTime = null;
+            _dirtyLiveDraftFields = const {};
+            _liveDraftBaseRevisions = const {};
+            _liveDraftClientSeq = 0;
+            _liveDraftLoading = false;
+            _clearLiveDraftError();
+            if (cacheError != null) {
+              _setLiveDraftError(
+                'LIVE_DRAFT_CACHE_CLEAR_FAILED',
+                cacheError.toString(),
+              );
+            }
+            _safeNotify();
+            return;
+          }
           await recoverFromCanonicalSnapshot();
           return;
         }
@@ -1839,6 +1916,7 @@ class CollaborationProvider with ChangeNotifier {
         _localLiveDraftFields = projection.localFields;
         _dirtyLiveDraftFields = projection.dirtyFields;
         _liveDraftBaseRevisions = projection.baseRevisions;
+        if (terminalClear) _automaticLiveDraftTime = null;
         _reconcileOwnedLiveDraftLocks(projection.snapshot.locks);
         _clearLiveDraftError();
         _safeNotify();
@@ -2630,19 +2708,44 @@ class CollaborationProvider with ChangeNotifier {
     _clearError();
     final quiescence = _suspendForDeviceLocalMutation();
     _safeNotify();
+    var replacementPreparedByThisRun = false;
+    var operationCommitted = false;
     try {
       await waitForCollaborationLocalQuiescence([
         quiescence.liveDraft,
         quiescence.synchronization,
       ]);
+      replacementPreparedByThisRun =
+          await sessions.prepareForDatabaseReplacement();
       final result = await operation();
+      operationCommitted = true;
       _publishingSessionId = null;
       _clearScopedState();
       await sessions.reloadAfterDatabaseReplacement();
       await logs.reloadAfterDatabaseReplacement(sessions.currentSessionId);
+      // The crash sentinel is removed strictly after the replacement revision
+      // and both provider projections have been rebuilt successfully.
+      await sessions.acknowledgeDatabaseReplacement();
       return result;
-    } catch (error) {
+    } catch (error, stackTrace) {
+      if (replacementPreparedByThisRun && !operationCommitted) {
+        try {
+          // A throwing database transaction is required to have rolled back,
+          // so this is the only failure path where clearing the sentinel is
+          // safe. Reload/persistence failures after a commit keep it raised.
+          await sessions.rollbackFailedDatabaseReplacement();
+        } catch (sentinelError, sentinelStackTrace) {
+          debugPrint(
+            '[Collaboration] failed to clear rolled-back database '
+            'replacement sentinel: $sentinelError\n$sentinelStackTrace',
+          );
+        }
+      }
       _setError(_localErrorCode(error), error.toString());
+      debugPrint(
+        '[Collaboration] local database maintenance failed: '
+        '$error\n$stackTrace',
+      );
       rethrow;
     } finally {
       _operationInProgress = false;
@@ -4683,6 +4786,11 @@ class CollaborationProvider with ChangeNotifier {
       },
       onEventApplied: (event) async {
         if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        final terminalClear = terminalLiveDraftClearControlFromEvent(event);
+        if (terminalClear != null) {
+          await _applyLiveDraftControl(terminalClear);
+          if (!_isSyncCurrent(generation, identity, coordinator)) return;
+        }
         _recordLogAuthorshipFromEvent(event);
         if (collaborationEventMayAffectOpenConflicts(
           event: event,

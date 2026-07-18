@@ -96,9 +96,11 @@ class LogProvider with ChangeNotifier {
   int _sessionStateGeneration = 0;
   int _loadGeneration = 0;
   final Set<String> _collaborationReadOnlySessions = <String>{};
+  int _dataRevision = 0;
 
   List<old.LogEntry> get logs => _logs;
   int get logCount => _logs.length;
+  int get dataRevision => _dataRevision;
   String? get currentSessionId => _currentSessionId;
   bool get canUndo =>
       _undoStack.isNotEmpty &&
@@ -394,6 +396,7 @@ class LogProvider with ChangeNotifier {
     _ensureWritable(effectiveSessionId);
     try {
       final canonical = await _logCreator(effectiveSessionId, log);
+      _markPersonalDataChanged();
       if (canonical.sessionId != effectiveSessionId) {
         throw StateError(
           'LOG_SESSION_MISMATCH: 保存结果与当前会话不匹配',
@@ -424,6 +427,7 @@ class LogProvider with ChangeNotifier {
     if (syncId.isEmpty) return;
     try {
       final canonical = await _logUpdater(syncId, original, log);
+      _markPersonalDataChanged();
       if (_currentSessionId == sessionId) {
         _mergeCanonicalLog(canonical);
       }
@@ -449,6 +453,7 @@ class LogProvider with ChangeNotifier {
     if (syncId.isEmpty) return;
     try {
       await _logDeleter(syncId);
+      _markPersonalDataChanged();
       if (_currentSessionId == sessionId) {
         _pushUndo(log);
         _loadGeneration += 1;
@@ -483,6 +488,7 @@ class LogProvider with ChangeNotifier {
     _safeNotify();
     try {
       final restored = await _logRestorer(log.id);
+      _markPersonalDataChanged();
       if (_currentSessionId == restored.sessionId) {
         _mergeCanonicalLog(restored);
       }
@@ -512,11 +518,18 @@ class LogProvider with ChangeNotifier {
     for (final log in snapshot) {
       _ensureLogWritable(log);
     }
+    var durableRowsChanged = false;
+    var revisionMarked = false;
     try {
       for (final log in snapshot) {
         if (log.id.isNotEmpty) {
           await RustApi.deleteLog(syncId: log.id);
+          durableRowsChanged = true;
         }
+      }
+      if (durableRowsChanged) {
+        _markPersonalDataChanged();
+        revisionMarked = true;
       }
       for (final log in snapshot) {
         _pushUndo(log);
@@ -525,6 +538,9 @@ class LogProvider with ChangeNotifier {
       _safeNotify();
       await _notifyDataChanged();
     } catch (e, st) {
+      if (durableRowsChanged && !revisionMarked) {
+        _markPersonalDataChanged();
+      }
       debugPrint('[LogProvider] clearAllLogs failed: $e\n$st');
       await _loadLogs();
       rethrow;
@@ -539,6 +555,7 @@ class LogProvider with ChangeNotifier {
     _ensureWritable(sessionId);
     try {
       await RustApi.closeSession(sessionId: sessionId);
+      _markPersonalDataChanged();
       if (_currentSessionId == sessionId) {
         await reloadForSession(sessionId, propagateErrors: true);
       } else {
@@ -556,6 +573,7 @@ class LogProvider with ChangeNotifier {
     }
     try {
       await RustApi.hardDeleteSession(sessionId: sessionId);
+      _markPersonalDataChanged();
       _collaborationReadOnlySessions.remove(sessionId);
       _undoStack.removeWhere((log) => log.sessionId == sessionId);
       _pendingCanonicalLogs.removeWhere((_, log) => log.sessionId == sessionId);
@@ -585,6 +603,8 @@ class LogProvider with ChangeNotifier {
       {String? sessionId}) async {
     final effectiveSessionId = sessionId ?? _currentSessionId ?? '';
     _ensureWritable(effectiveSessionId);
+    var durableRowsChanged = false;
+    var revisionMarked = false;
     try {
       for (final log in importedLogs) {
         await RustApi.addLog(
@@ -604,11 +624,19 @@ class LogProvider with ChangeNotifier {
           height: log.height,
           remarks: log.remarks.isNotEmpty ? log.remarks : null,
         );
+        durableRowsChanged = true;
+      }
+      if (durableRowsChanged) {
+        _markPersonalDataChanged();
+        revisionMarked = true;
       }
       await _loadLogs();
       _safeNotify();
       await _notifyDataChanged();
     } catch (e, st) {
+      if (durableRowsChanged && !revisionMarked) {
+        _markPersonalDataChanged();
+      }
       debugPrint('[LogProvider] importLogs failed: $e\n$st');
       await _loadLogs();
       rethrow;
@@ -637,6 +665,11 @@ class LogProvider with ChangeNotifier {
         if (candidate.id != converted.id) candidate,
       converted,
     ]..sort(_compareChronologically);
+    _safeNotify();
+  }
+
+  void _markPersonalDataChanged() {
+    _dataRevision += 1;
     _safeNotify();
   }
 

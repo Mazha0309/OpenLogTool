@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
@@ -110,6 +111,18 @@ Future<void> main(List<String> args) async {
           update: (_, server, sessions, logs, previous) =>
               (previous ?? CollaborationProvider())
                 ..updateDependencies(server, sessions, logs),
+        ),
+        ChangeNotifierProxyProvider4<ServerProvider, SessionProvider,
+            LogProvider, CollaborationProvider, PersonalCloudProvider>(
+          create: (_) => PersonalCloudProvider(),
+          update: (_, server, sessions, logs, collaboration, previous) =>
+              (previous ?? PersonalCloudProvider())
+                ..updateDependencies(
+                  server,
+                  sessions,
+                  logs,
+                  collaboration,
+                ),
         ),
       ],
       child: const MyApp(),

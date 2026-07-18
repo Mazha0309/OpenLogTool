@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
+import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/screens/data_workspace_page.dart';
@@ -27,10 +28,14 @@ void main() {
       sessionLogPageLoader: (_, __, ___) async => [],
     );
     final dictionaries = DictionaryProvider(autoload: false);
+    final personalCloud = PersonalCloudProvider(
+      exporter: () async => '{"version":1,"sessions":[],"logs":[]}',
+    );
     addTearDown(settings.dispose);
     addTearDown(sessions.dispose);
     addTearDown(logs.dispose);
     addTearDown(dictionaries.dispose);
+    addTearDown(personalCloud.dispose);
 
     await tester.pumpWidget(
       MultiProvider(
@@ -39,6 +44,7 @@ void main() {
           ChangeNotifierProvider.value(value: sessions),
           ChangeNotifierProvider.value(value: logs),
           ChangeNotifierProvider.value(value: dictionaries),
+          ChangeNotifierProvider.value(value: personalCloud),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),

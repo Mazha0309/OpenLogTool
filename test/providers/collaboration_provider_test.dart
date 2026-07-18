@@ -955,7 +955,50 @@ void main() {
       expect(repeated.snapshot, same(committed.snapshot));
     });
 
-    test('reset controls reject an unrelated predecessor', () {
+    test(
+        'terminal clear adopts a complete cross-generation draft and drops local state',
+        () {
+      final current = _snapshot(
+        draft: _draft(
+          draftId: 'draft-current',
+          version: 7,
+          values: const {'callsign': 'BG5LOCAL', 'qth': 'local-qth'},
+          revisions: const {'callsign': 5, 'qth': 3},
+        ),
+        locks: [_lock('callsign', 'callsign-lock')],
+      );
+      final terminalDraft = _draft(
+        draftId: 'draft-terminal',
+        version: 4,
+        values: const {'controller': 'BG5CRL'},
+      );
+
+      final projection = applyLiveDraftControlMessage(
+        currentSnapshot: current,
+        currentLocalFields:
+            current.draft.fields.withField('callsign', 'BG5DIRTY'),
+        currentDirtyFields: const {'callsign'},
+        currentBaseRevisions: const {'callsign': 5},
+        message: {
+          'type': 'liveDraft.cleared',
+          'sessionId': 'session-1',
+          'terminal': true,
+          'discardedDraftId': 'draft-predecessor-missed-by-this-client',
+          'nextDraft': terminalDraft.toJson(),
+        },
+      );
+
+      expect(projection.changed, isTrue);
+      expect(projection.snapshot.draft.draftId, 'draft-terminal');
+      expect(projection.snapshot.draft.version, 4);
+      expect(projection.snapshot.locks, isEmpty);
+      expect(projection.localFields['controller'], 'BG5CRL');
+      expect(projection.localFields['callsign'], isEmpty);
+      expect(projection.dirtyFields, isEmpty);
+      expect(projection.baseRevisions, isEmpty);
+    });
+
+    test('non-terminal reset controls reject an unrelated predecessor', () {
       final current = _snapshot(
         draft: _draft(draftId: 'draft-current', version: 2),
       );
@@ -994,6 +1037,71 @@ void main() {
         ),
         throwsFormatException,
       );
+    });
+
+    test('a durable forced-close marker reuses the terminal clear projection',
+        () {
+      final nextDraft = _draft(
+        draftId: 'draft-after-forced-close',
+        version: 8,
+      );
+      final event = CollaborationEventDto(
+        protocolVersion: 1,
+        eventId: 'event-forced-close',
+        sessionId: 'session-1',
+        seq: 9,
+        type: 'session.closed',
+        entityType: 'session',
+        entityId: 'session-1',
+        entityVersion: 3,
+        occurredAt: DateTime.utc(2026, 7, 18),
+        payload: {
+          'sessionId': 'session-1',
+          'status': 'closed',
+          'liveDraftCleared': {
+            'terminal': true,
+            'discardedDraftId': 'draft-before-forced-close',
+            'discardedDraftVersion': 7,
+            'discardedDeviceStateCount': 2,
+            'nextDraft': nextDraft.toJson(),
+          },
+        },
+      );
+
+      final control = terminalLiveDraftClearControlFromEvent(event);
+      expect(control, isNotNull);
+      expect(control!['type'], 'liveDraft.cleared');
+      expect(control['sessionId'], 'session-1');
+      expect(control['terminal'], isTrue);
+
+      final current = _snapshot(
+        draft: _draft(draftId: 'unrelated-cached-draft', version: 2),
+        locks: [_lock('qth', 'stale-lock')],
+      );
+      final projection = applyLiveDraftControlMessage(
+        currentSnapshot: current,
+        currentLocalFields: current.draft.fields.withField('qth', 'dirty'),
+        currentDirtyFields: const {'qth'},
+        currentBaseRevisions: const {'qth': 0},
+        message: control,
+      );
+      expect(projection.snapshot.draft.draftId, 'draft-after-forced-close');
+      expect(projection.snapshot.locks, isEmpty);
+      expect(projection.dirtyFields, isEmpty);
+
+      final ordinaryClose = CollaborationEventDto(
+        protocolVersion: 1,
+        eventId: 'event-ordinary-close',
+        sessionId: 'session-1',
+        seq: 10,
+        type: 'session.closed',
+        entityType: 'session',
+        entityId: 'session-1',
+        entityVersion: 4,
+        occurredAt: DateTime.utc(2026, 7, 18),
+        payload: const {'sessionId': 'session-1', 'status': 'closed'},
+      );
+      expect(terminalLiveDraftClearControlFromEvent(ordinaryClose), isNull);
     });
 
     test('lock controls update, release, and replace the canonical lock list',

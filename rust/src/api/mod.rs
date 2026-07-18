@@ -3,6 +3,7 @@ pub mod collaboration;
 pub mod database;
 pub mod dictionaries;
 pub mod logs;
+pub mod personal_records;
 pub mod sessions;
 pub mod settings;
 
