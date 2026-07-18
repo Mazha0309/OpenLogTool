@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/log_entry.dart' as model;
 import 'package:openlogtool/providers/collaboration_provider.dart';
+import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
@@ -14,6 +15,7 @@ import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/src/bridge/models/session.dart';
+import 'package:openlogtool/utils/personal_cloud_merge.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -25,6 +27,373 @@ void main() {
       'b00518f22d8b76988bdc3c7c0228e5ef8b3b5fd13755da5881f3406d07d6d510',
     );
   });
+
+  test('matches the server personal dictionary checksum vector', () {
+    expect(
+      personalDictionaryContentChecksum(const {
+        'version': 1,
+        'exportedAt': '2026-07-18T12:00:00.000Z',
+        'items': [
+          {
+            'dictType': 'device',
+            'raw': 'IC-705',
+            'origin': 'user',
+            'state': 'active',
+            'pinyin': null,
+            'abbreviation': null,
+          },
+          {
+            'dictType': 'qth',
+            'raw': '杭州',
+            'origin': 'user',
+            'state': 'active',
+            'pinyin': 'hang zhou',
+            'abbreviation': 'hz',
+          },
+        ],
+      }),
+      'e5ce36589c0cfa6163fbdf3bd6d0baf6e0c5b52f5cf1f09ba4bd211a40bac364',
+    );
+  });
+
+  test('durable full baseline three-way merges independent device edits',
+      () async {
+    SharedPreferences.setMockInitialValues({'server_url': _serverUrl});
+    final base = _mergeSnapshot(title: 'Original', remarks: null);
+    final local = _mergeSnapshot(title: 'Local title', remarks: null);
+    final remote = _mergeSnapshot(title: 'Original', remarks: 'Remote note');
+    Map<String, Object?>? installed;
+    Map<String, Object?>? uploaded;
+    Map<String, Object?>? savedBaseline;
+    final client = MockClient((request) async {
+      if (_isServerInfoRequest(request)) {
+        return _jsonResponse(_serverInfoJson());
+      }
+      switch ('${request.method} ${request.url.path}') {
+        case 'GET /api/v1/account/personal-snapshot':
+          return _jsonResponse({
+            'personalSnapshot': _metadataFor(
+              revision: 2,
+              snapshot: remote,
+            ),
+          });
+        case 'GET /api/v1/account/personal-snapshot/download':
+          return _downloadResponse(revision: 2, snapshot: remote);
+        case 'PUT /api/v1/account/personal-snapshot':
+          final body = Map<String, Object?>.from(
+            jsonDecode(request.body) as Map,
+          );
+          uploaded = Map<String, Object?>.from(body['snapshot']! as Map);
+          return _jsonResponse({
+            'replaced': true,
+            'personalSnapshot': _metadataFor(
+              revision: 3,
+              snapshot: uploaded!,
+            ),
+          });
+        default:
+          fail('Unexpected request: ${request.method} ${request.url}');
+      }
+    });
+    final harness = await _createHarness(
+      client: client,
+      exporter: () async => jsonEncode(local),
+      replacer: (jsonData, expectedLocalJsonData) async {
+        expect(jsonDecode(expectedLocalJsonData), local);
+        installed = Map<String, Object?>.from(jsonDecode(jsonData) as Map);
+        return '{"sessionCount":1,"logCount":1}';
+      },
+      stateLoader: (scopeHash, dataset) async => jsonEncode({
+        'ownerScopeHash': scopeHash,
+        'pairingRequiredReason': null,
+        'baseline': {
+          'remoteRevision': 1,
+          'snapshot': base,
+          'checksum': _snapshotChecksum(base),
+          'updatedAt': '2026-07-18T12:00:00.000Z',
+        },
+      }),
+      baselineSaver: ({
+        required scopeHash,
+        required dataset,
+        required remoteRevision,
+        required snapshotJson,
+        required checksum,
+        required claimOwner,
+        required clearPairingRequirement,
+      }) async {
+        expect(dataset, 'records');
+        expect(remoteRevision, 3);
+        savedBaseline =
+            Map<String, Object?>.from(jsonDecode(snapshotJson) as Map);
+      },
+    );
+
+    await _waitFor(
+      () => harness.cloud.state == PersonalCloudSyncState.upToDate,
+    );
+
+    expect((installed!['sessions'] as List).single['title'], 'Local title');
+    expect((installed!['logs'] as List).single['remarks'], 'Remote note');
+    expect(uploaded, installed);
+    expect(savedBaseline, installed);
+    expect(harness.cloud.conflicts, isEmpty);
+  });
+
+  test('automatically uploads personal dictionary changes independently',
+      () async {
+    SharedPreferences.setMockInitialValues({'server_url': _serverUrl});
+    const dictionarySnapshot = <String, Object?>{
+      'version': 1,
+      'exportedAt': '2026-07-18T12:00:00.000Z',
+      'items': [
+        {
+          'dictType': 'device',
+          'raw': 'IC-705',
+          'origin': 'user',
+          'state': 'active',
+          'pinyin': null,
+          'abbreviation': null,
+        },
+      ],
+    };
+    var dictionaryUploads = 0;
+    final client = MockClient((request) async {
+      if (_isServerInfoRequest(request)) {
+        return _jsonResponse(_serverInfoJson(features: const [
+          'personalCloudSnapshots',
+          'personalDictionarySnapshots',
+        ]));
+      }
+      switch ('${request.method} ${request.url.path}') {
+        case 'GET /api/v1/account/personal-snapshot':
+          return _jsonResponse({'personalSnapshot': _emptyMetadata});
+        case 'GET /api/v1/account/personal-dictionary-snapshot':
+          return _jsonResponse({
+            'personalDictionarySnapshot': _emptyDictionaryMetadata,
+          });
+        case 'PUT /api/v1/account/personal-dictionary-snapshot':
+          dictionaryUploads += 1;
+          final body = Map<String, Object?>.from(
+            jsonDecode(request.body) as Map,
+          );
+          expect(body['snapshot'], dictionarySnapshot);
+          return _jsonResponse({
+            'replaced': true,
+            'personalDictionarySnapshot': {
+              ..._emptyDictionaryMetadata,
+              'exists': true,
+              'revision': 1,
+              'itemCount': 1,
+              'activeCount': 1,
+              'byteSize': utf8.encode(jsonEncode(dictionarySnapshot)).length,
+              'checksum': personalDictionaryContentChecksum(dictionarySnapshot),
+              'createdAt': '2026-07-18T12:00:00.000Z',
+              'updatedAt': '2026-07-18T12:00:00.000Z',
+            },
+          });
+        default:
+          fail('Unexpected request: ${request.method} ${request.url}');
+      }
+    });
+    final dictionaries = DictionaryProvider(autoload: false);
+    addTearDown(dictionaries.dispose);
+    final harness = await _createHarness(
+      client: client,
+      exporter: () async => jsonEncode(_emptyRecordsSnapshotForTest),
+      dictionaryExporter: () async => jsonEncode(dictionarySnapshot),
+      dictionaries: dictionaries,
+      stateLoader: (scopeHash, dataset) async => jsonEncode({
+        'ownerScopeHash': dataset == 'records' ? null : scopeHash,
+        'pairingRequiredReason': null,
+        'baseline': null,
+      }),
+      baselineSaver: ({
+        required scopeHash,
+        required dataset,
+        required remoteRevision,
+        required snapshotJson,
+        required checksum,
+        required claimOwner,
+        required clearPairingRequirement,
+      }) async {},
+    );
+
+    await _waitFor(
+      () =>
+          harness.cloud.state == PersonalCloudSyncState.upToDate &&
+          harness.cloud.dictionaryCloudMeta?.revision == 1,
+    );
+    expect(dictionaryUploads, 1);
+    expect(harness.cloud.localDictionaryItemCount, 1);
+  });
+
+  test(
+    'database pairing stays raised until records and dictionaries are accepted',
+    () async {
+      SharedPreferences.setMockInitialValues({'server_url': _serverUrl});
+      const localDictionary = <String, Object?>{
+        'version': 1,
+        'exportedAt': '2026-07-18T12:00:00.000Z',
+        'items': [
+          {
+            'dictType': 'device',
+            'raw': 'IC-705',
+            'origin': 'user',
+            'state': 'active',
+            'pinyin': null,
+            'abbreviation': null,
+          },
+        ],
+      };
+      const remoteDictionary = <String, Object?>{
+        'version': 1,
+        'exportedAt': '2026-07-18T12:01:00.000Z',
+        'items': [
+          {
+            'dictType': 'antenna',
+            'raw': 'X520',
+            'origin': 'user',
+            'state': 'active',
+            'pinyin': null,
+            'abbreviation': null,
+          },
+        ],
+      };
+      var recordsRevision = 1;
+      var recordsSnapshot = _remoteSnapshot;
+      var dictionaryRevision = 1;
+      var dictionarySnapshot = remoteDictionary;
+      final recordsClearPairing = <bool>[];
+      final dictionaryClearPairing = <bool>[];
+      final client = MockClient((request) async {
+        if (_isServerInfoRequest(request)) {
+          return _jsonResponse(_serverInfoJson(features: const [
+            'personalCloudSnapshots',
+            'personalDictionarySnapshots',
+          ]));
+        }
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /api/v1/account/personal-snapshot':
+            return _jsonResponse({
+              'personalSnapshot': _metadataFor(
+                revision: recordsRevision,
+                snapshot: recordsSnapshot,
+              ),
+            });
+          case 'PUT /api/v1/account/personal-snapshot':
+            recordsSnapshot = Map<String, Object?>.from(
+              (jsonDecode(request.body) as Map)['snapshot'] as Map,
+            );
+            recordsRevision += 1;
+            return _jsonResponse({
+              'replaced': true,
+              'personalSnapshot': _metadataFor(
+                revision: recordsRevision,
+                snapshot: recordsSnapshot,
+              ),
+            });
+          case 'GET /api/v1/account/personal-dictionary-snapshot':
+            return _jsonResponse({
+              'personalDictionarySnapshot': _dictionaryMetadataFor(
+                revision: dictionaryRevision,
+                snapshot: dictionarySnapshot,
+              ),
+            });
+          case 'GET /api/v1/account/personal-dictionary-snapshot/download':
+            return _jsonResponse({
+              'personalDictionarySnapshot': {
+                ..._dictionaryMetadataFor(
+                  revision: dictionaryRevision,
+                  snapshot: dictionarySnapshot,
+                ),
+                'snapshot': dictionarySnapshot,
+              },
+            });
+          case 'PUT /api/v1/account/personal-dictionary-snapshot':
+            dictionarySnapshot = Map<String, Object?>.from(
+              (jsonDecode(request.body) as Map)['snapshot'] as Map,
+            );
+            dictionaryRevision += 1;
+            return _jsonResponse({
+              'replaced': true,
+              'personalDictionarySnapshot': _dictionaryMetadataFor(
+                revision: dictionaryRevision,
+                snapshot: dictionarySnapshot,
+              ),
+            });
+          default:
+            fail('Unexpected request: ${request.method} ${request.url}');
+        }
+      });
+      final dictionaries = DictionaryProvider(
+        autoload: false,
+        getItems: ({required dictType}) async => const [],
+        loadAssetString: (_) async => '[]',
+        seedItems: ({required dictType, required items}) async => BigInt.zero,
+      );
+      addTearDown(dictionaries.dispose);
+      final harness = await _createHarness(
+        client: client,
+        exporter: () async => jsonEncode(_localSnapshot),
+        dictionaryExporter: () async => jsonEncode(localDictionary),
+        dictionaryReplacer: (jsonData, expectedLocalJsonData) async =>
+            '{"itemCount":2,"activeCount":2,"deletedCount":0}',
+        dictionaries: dictionaries,
+        automaticChangeDebounce: Duration.zero,
+        stateLoader: (scopeHash, dataset) async => jsonEncode({
+          'ownerScopeHash': scopeHash,
+          'pairingRequiredReason': 'database_replaced',
+          'baseline': null,
+        }),
+        baselineSaver: ({
+          required scopeHash,
+          required dataset,
+          required remoteRevision,
+          required snapshotJson,
+          required checksum,
+          required claimOwner,
+          required clearPairingRequirement,
+        }) async {
+          if (dataset == 'records') {
+            recordsClearPairing.add(clearPairingRequirement);
+          } else {
+            dictionaryClearPairing.add(clearPairingRequirement);
+          }
+        },
+      );
+
+      await _waitFor(
+        () => harness.cloud.state == PersonalCloudSyncState.decisionRequired,
+      );
+      expect(harness.cloud.pendingDataset, isNull);
+
+      await harness.cloud.replaceCloudWithLocal(
+        expectedCloudRevision: recordsRevision,
+        expectedLocalSnapshotToken: harness.cloud.localSnapshotToken!,
+      );
+      await _waitFor(
+        () =>
+            harness.cloud.state == PersonalCloudSyncState.decisionRequired &&
+            harness.cloud.pendingDataset == PersonalCloudDataset.dictionaries,
+      );
+
+      expect(recordsClearPairing, isNotEmpty);
+      expect(recordsClearPairing, everyElement(isFalse));
+      expect(dictionaryClearPairing, isEmpty);
+
+      await harness.cloud.resolveAllPendingConflicts(
+        PersonalCloudConflictChoice.local,
+      );
+      await _waitFor(
+        () => harness.cloud.state == PersonalCloudSyncState.upToDate,
+      );
+
+      expect(dictionaryClearPairing, isNotEmpty);
+      expect(dictionaryClearPairing.last, isTrue);
+      expect((dictionarySnapshot['items'] as List), hasLength(2));
+    },
+  );
 
   test(
     'established baseline automatically uploads an ordinary local record change',
@@ -169,7 +538,7 @@ void main() {
   );
 
   test(
-    'new account with local data and empty cloud waits for explicit replace',
+    'new account with local data and empty cloud uploads automatically',
     () async {
       SharedPreferences.setMockInitialValues({
         'server_url': _serverUrl,
@@ -212,29 +581,18 @@ void main() {
       final harness = await _createHarness(client: client);
 
       await _waitFor(
-        () => harness.cloud.state == PersonalCloudSyncState.decisionRequired,
+        () => harness.cloud.state == PersonalCloudSyncState.upToDate,
       );
-      expect(
-        harness.cloud.decisionReason,
-        PersonalCloudDecisionReason.differentAccountData,
-      );
+      expect(harness.cloud.decisionReason, isNull);
       expect(harness.cloud.localSessionCount, 1);
       expect(
         harness.cloud.localSnapshotToken,
         _snapshotChecksum(_localSnapshot),
       );
-      expect(harness.cloud.cloudMeta?.exists, isFalse);
+      expect(harness.cloud.cloudMeta?.exists, isTrue);
       expect(metadataReads, 1);
-      expect(replacements, 0, reason: 'first login must never upload silently');
-
-      await harness.cloud.replaceCloudWithLocal(
-        expectedCloudRevision: harness.cloud.cloudMeta!.revision,
-        expectedLocalSnapshotToken: harness.cloud.localSnapshotToken!,
-      );
-
-      expect(harness.cloud.state, PersonalCloudSyncState.upToDate);
-      expect(harness.cloud.cloudMeta?.revision, 1);
       expect(replacements, 1);
+      expect(harness.cloud.cloudMeta?.revision, 1);
     },
   );
 
@@ -841,6 +1199,11 @@ Future<_Harness> _createHarness({
   Duration automaticChangeDebounce = const Duration(seconds: 10),
   List<Session> sessionRows = const [],
   LogCreator? logCreator,
+  PersonalCloudStateLoader? stateLoader,
+  PersonalCloudBaselineSaver? baselineSaver,
+  PersonalDictionaryExporter? dictionaryExporter,
+  PersonalDictionaryCompareReplacer? dictionaryReplacer,
+  DictionaryProvider? dictionaries,
 }) async {
   final session = _authSession(accountId: accountId);
   final server = ServerProvider(
@@ -870,7 +1233,12 @@ Future<_Harness> _createHarness({
   final cloud = PersonalCloudProvider(
     exporter: exporter ?? () async => jsonEncode(_localSnapshot),
     replacer: replacer,
+    stateLoader: stateLoader,
+    baselineSaver: baselineSaver,
+    dictionaryExporter: dictionaryExporter,
+    dictionaryReplacer: dictionaryReplacer,
     automaticChangeDebounce: automaticChangeDebounce,
+    minimumPutInterval: Duration.zero,
   );
   addTearDown(cloud.dispose);
   addTearDown(collaboration.dispose);
@@ -882,7 +1250,13 @@ Future<_Harness> _createHarness({
   await sessions.ready;
   await server.checkServer();
   expect(server.isLoggedIn, isTrue);
-  cloud.updateDependencies(server, sessions, logs, collaboration);
+  cloud.updateDependencies(
+    server,
+    sessions,
+    logs,
+    collaboration,
+    dictionaries,
+  );
   return _Harness(
     server: server,
     sessions: sessions,
@@ -969,6 +1343,27 @@ Map<String, Object?> _metadataFor({
       'createdAt': '2026-07-18T11:00:00.000Z',
       'updatedAt': '2026-07-18T12:00:00.000Z',
     };
+
+Map<String, Object?> _dictionaryMetadataFor({
+  required int revision,
+  required Map<String, Object?> snapshot,
+}) {
+  final items = snapshot['items']! as List;
+  final deletedCount =
+      items.where((item) => (item as Map)['state'] == 'deleted').length;
+  return {
+    'exists': true,
+    'revision': revision,
+    'formatVersion': 1,
+    'itemCount': items.length,
+    'activeCount': items.length - deletedCount,
+    'deletedCount': deletedCount,
+    'byteSize': utf8.encode(jsonEncode(snapshot)).length,
+    'checksum': personalDictionaryContentChecksum(snapshot),
+    'createdAt': '2026-07-18T11:00:00.000Z',
+    'updatedAt': '2026-07-18T12:00:00.000Z',
+  };
+}
 
 http.Response _downloadResponse({
   required int revision,
@@ -1072,6 +1467,67 @@ const Map<String, Object?> _emptyMetadata = {
   'createdAt': null,
   'updatedAt': null,
 };
+
+const Map<String, Object?> _emptyRecordsSnapshotForTest = {
+  'version': 1,
+  'exportedAt': '2026-07-18T12:00:00.000Z',
+  'sessions': <Object?>[],
+  'logs': <Object?>[],
+};
+
+const Map<String, Object?> _emptyDictionaryMetadata = {
+  'exists': false,
+  'revision': 0,
+  'formatVersion': 1,
+  'itemCount': 0,
+  'activeCount': 0,
+  'deletedCount': 0,
+  'byteSize': 0,
+  'checksum': null,
+  'createdAt': null,
+  'updatedAt': null,
+};
+
+Map<String, Object?> _mergeSnapshot({
+  required String title,
+  required String? remarks,
+}) =>
+    {
+      'version': 1,
+      'exportedAt': '2026-07-18T12:00:00.000Z',
+      'sessions': [
+        {
+          'session_id': 'merge-session',
+          'title': title,
+          'status': 'active',
+          'created_at': '2026-07-18T10:00:00.000Z',
+          'updated_at': '2026-07-18T12:00:00.000Z',
+          'closed_at': null,
+          'deleted_at': null,
+        },
+      ],
+      'logs': [
+        {
+          'sync_id': 'merge-log',
+          'session_id': 'merge-session',
+          'time': '2026-07-18T10:30:45.000Z',
+          'controller': 'BG5CRL',
+          'callsign': 'BG5AAA',
+          'rst_sent': '59',
+          'rst_rcvd': '59',
+          'qth': null,
+          'device': null,
+          'power': null,
+          'antenna': null,
+          'height': null,
+          'remarks': remarks,
+          'created_at': '2026-07-18T10:30:45.000Z',
+          'updated_at': '2026-07-18T12:00:00.000Z',
+          'deleted_at': null,
+          'source_device_id': 'test-device',
+        },
+      ],
+    };
 
 Map<String, Object?> _serverInfoJson({
   List<String> features = const ['personalCloudSnapshots'],

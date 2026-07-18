@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/database_backup_summary.dart';
+import 'package:openlogtool/models/database_status.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
@@ -412,7 +413,13 @@ class LocalDatabasePanel extends StatelessWidget {
   }
 
   Future<void> _showDatabaseLogDialog(BuildContext context) async {
-    final status = await _buildDatabaseStatus(context);
+    DatabaseStatus? status;
+    Object? loadError;
+    try {
+      status = DatabaseStatus.parse(await RustApi.getDatabaseStatus());
+    } catch (error) {
+      loadError = error;
+    }
     if (!context.mounted) return;
     await showDialog<void>(
       context: context,
@@ -420,14 +427,19 @@ class LocalDatabasePanel extends StatelessWidget {
         insetPadding: _dialogInsetPadding(dialogContext),
         title: Text(dialogContext.l10n.databaseStatusTitle),
         content: SizedBox(
-          width: AppDimensions.dialogWidth,
+          width: 640,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 520),
+            constraints: const BoxConstraints(maxHeight: 600),
             child: SingleChildScrollView(
-              child: SelectableText(
-                status,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
+              child: status != null
+                  ? DatabaseStatusView(status: status)
+                  : AppNotice(
+                      message: dialogContext.l10n.databaseStatusLoadFailed(
+                        loadError.toString(),
+                      ),
+                      icon: Icons.error_outline,
+                      tone: AppTone.danger,
+                    ),
             ),
           ),
         ),
@@ -439,35 +451,6 @@ class LocalDatabasePanel extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Future<String> _buildDatabaseStatus(BuildContext context) async {
-    final l10n = context.l10n;
-    try {
-      final raw = await RustApi.getDatabaseStatus();
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic> || decoded['tables'] is! List) {
-        return raw;
-      }
-      final buffer = StringBuffer();
-      final schemaVersion = decoded['schemaVersion'];
-      buffer.writeln(
-        l10n.databaseStatusSchemaVersion(
-          schemaVersion?.toString() ?? l10n.databaseStatusUnknown,
-        ),
-      );
-      buffer.writeln();
-      for (final table in decoded['tables'] as List) {
-        if (table is! Map) continue;
-        final name = table['name']?.toString();
-        final count = table['rowCount'];
-        if (name == null || count is! num) continue;
-        buffer.writeln(l10n.databaseStatusTableRow(name, count.toInt()));
-      }
-      return buffer.toString().trimRight();
-    } catch (error) {
-      return l10n.databaseStatusLoadFailed(error.toString());
-    }
   }
 
   static Future<String> _readSelectedBackup(PlatformFile file) async {
@@ -515,6 +498,331 @@ class LocalDatabasePanel extends StatelessWidget {
     }
     return raw;
   }
+}
+
+/// Human-readable database health/content summary.
+///
+/// The raw SQLite table list deliberately lives behind the advanced expander:
+/// zero-row infrastructure tables are normal and should not look like broken
+/// synchronization to users.
+class DatabaseStatusView extends StatelessWidget {
+  const DatabaseStatusView({super.key, required this.status});
+
+  final DatabaseStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final content = status.localContent;
+    final collaboration = status.collaboration;
+    final dictionaries = content.dictionaries.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: AppSpace.xs,
+          runSpacing: AppSpace.xs,
+          children: [
+            AppStatusPill(
+              icon: Icons.schema_outlined,
+              label: l10n.databaseStatusSchemaVersion(
+                status.schemaVersion?.toString() ?? l10n.databaseStatusUnknown,
+              ),
+            ),
+            AppStatusPill(
+              icon: Icons.inventory_2_outlined,
+              label: l10n.databaseStatusBackupFormatVersion(
+                status.backupFormatVersion?.toString() ??
+                    l10n.databaseStatusUnknown,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.md),
+        AppSectionCard(
+          key: const Key('database-status-content-section'),
+          icon: Icons.folder_copy_outlined,
+          title: l10n.databaseStatusLocalContentSection,
+          description: l10n.databaseStatusLocalContentHint,
+          padding: AppSpace.sm,
+          style: AppSurfaceStyle.outlined,
+          child: Column(
+            children: [
+              _DatabaseStatusMetric(
+                icon: Icons.event_note_outlined,
+                label: l10n.databaseStatusSessionsLabel,
+                value: content.sessions.available,
+                detail: l10n.databaseStatusSessionsSummary(
+                  content.sessions.active,
+                  content.sessions.closed,
+                  content.sessions.archived,
+                  content.sessions.deleted,
+                ),
+              ),
+              const Divider(height: AppSpace.md),
+              _DatabaseStatusMetric(
+                icon: Icons.format_list_numbered,
+                label: l10n.databaseStatusLogsLabel,
+                value: content.logs.active,
+                detail: l10n.databaseStatusLifecycleSummary(
+                  content.logs.active,
+                  content.logs.deleted,
+                ),
+              ),
+              const Divider(height: AppSpace.md),
+              _DatabaseStatusMetric(
+                icon: Icons.library_books_outlined,
+                label: l10n.databaseStatusDictionariesLabel,
+                value: content.activeDictionaryItems,
+                detail: l10n.databaseStatusLifecycleSummary(
+                  content.activeDictionaryItems,
+                  content.deletedDictionaryItems,
+                ),
+              ),
+              if (dictionaries.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.sm),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Wrap(
+                    spacing: AppSpace.xs,
+                    runSpacing: AppSpace.xs,
+                    children: [
+                      for (final dictionary in dictionaries)
+                        AppStatusPill(
+                          key: Key(
+                            'database-status-dictionary-${dictionary.key}',
+                          ),
+                          label: l10n.databaseStatusDictionarySummary(
+                            _dictionaryLabel(l10n, dictionary.key),
+                            dictionary.value.active,
+                            dictionary.value.deleted,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        AppSectionCard(
+          key: const Key('database-status-collaboration-section'),
+          icon: Icons.groups_outlined,
+          title: l10n.databaseStatusCollaborationSection,
+          description: l10n.databaseStatusCollaborationHint,
+          padding: AppSpace.sm,
+          tone:
+              collaboration.hasPendingWork ? AppTone.warning : AppTone.success,
+          style: AppSurfaceStyle.outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppNotice(
+                key: const Key('database-status-collaboration-summary'),
+                message: collaboration.hasPendingWork
+                    ? l10n.databaseStatusCollaborationPending
+                    : l10n.databaseStatusCollaborationHealthy,
+                icon: collaboration.hasPendingWork
+                    ? Icons.sync_problem_outlined
+                    : Icons.check_circle_outline,
+                tone: collaboration.hasPendingWork
+                    ? AppTone.warning
+                    : AppTone.success,
+              ),
+              const SizedBox(height: AppSpace.sm),
+              _DatabaseCountGrid(
+                entries: [
+                  (
+                    l10n.databaseStatusBindingsLabel,
+                    collaboration.bindings,
+                  ),
+                  (
+                    l10n.databaseStatusPendingOutboxLabel,
+                    collaboration.pendingOutbox,
+                  ),
+                  (
+                    l10n.databaseStatusOpenConflictsLabel,
+                    collaboration.openConflicts,
+                  ),
+                  (
+                    l10n.databaseStatusOfflineRecordsLabel,
+                    collaboration.offlineRecords,
+                  ),
+                  (
+                    l10n.databaseStatusDraftCachesLabel,
+                    collaboration.draftCaches,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        Card(
+          margin: EdgeInsets.zero,
+          elevation: 0,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.surface),
+            side:
+                BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+          ),
+          child: ExpansionTile(
+            key: const Key('database-status-advanced'),
+            leading: const Icon(Icons.table_rows_outlined),
+            title: Text(l10n.databaseStatusAdvancedTitle),
+            subtitle: Text(l10n.databaseStatusAdvancedHint),
+            childrenPadding: const EdgeInsets.fromLTRB(
+              AppSpace.md,
+              0,
+              AppSpace.md,
+              AppSpace.md,
+            ),
+            children: [
+              for (final table in status.tables)
+                _DatabaseRawTableRow(table: table),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _dictionaryLabel(AppLocalizations l10n, String type) =>
+      switch (type) {
+        'device' => l10n.databaseStatusDictionaryDevice,
+        'antenna' => l10n.databaseStatusDictionaryAntenna,
+        'qth' => l10n.databaseStatusDictionaryQth,
+        'callsign' => l10n.databaseStatusDictionaryCallsign,
+        _ => type,
+      };
+}
+
+class _DatabaseStatusMetric extends StatelessWidget {
+  const _DatabaseStatusMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String label;
+  final int value;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpace.xxs),
+                Text(
+                  detail,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Text(
+            value.toString(),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      );
+}
+
+class _DatabaseCountGrid extends StatelessWidget {
+  const _DatabaseCountGrid({required this.entries});
+
+  final List<(String, int)> entries;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final itemWidth = constraints.maxWidth < 420
+              ? constraints.maxWidth
+              : (constraints.maxWidth - AppSpace.xs) / 2;
+          return Wrap(
+            spacing: AppSpace.xs,
+            runSpacing: AppSpace.xs,
+            children: [
+              for (final (label, count) in entries)
+                Container(
+                  width: itemWidth,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.sm,
+                    vertical: AppSpace.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(label)),
+                      const SizedBox(width: AppSpace.xs),
+                      Text(
+                        count.toString(),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+}
+
+class _DatabaseRawTableRow extends StatelessWidget {
+  const _DatabaseRawTableRow({required this.table});
+
+  final DatabaseTableStatus table;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        key: Key('database-status-table-${table.name}'),
+        padding: const EdgeInsets.symmetric(vertical: AppSpace.xxs),
+        child: Row(
+          children: [
+            Expanded(
+              child: SelectableText(
+                table.name,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: AppSpace.md),
+            Text(
+              table.rowCount.toString(),
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _BackupSummaryRow extends StatelessWidget {

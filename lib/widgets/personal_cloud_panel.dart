@@ -3,6 +3,7 @@ import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
+import 'package:openlogtool/utils/personal_cloud_merge.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -57,8 +58,80 @@ class PersonalCloudPanel extends StatelessWidget {
                           meta.revision,
                         ),
                 ),
+                if (cloud.isDictionarySupported)
+                  Text(
+                    context.l10n.personalCloudDictionaryLocalSummary(
+                      cloud.localDictionaryItemCount,
+                    ),
+                  ),
+                if (cloud.isDictionarySupported)
+                  Text(
+                    cloud.dictionaryCloudMeta?.exists != true
+                        ? context.l10n.personalCloudDictionaryRemoteEmpty
+                        : context.l10n.personalCloudDictionaryRemoteSummary(
+                            cloud.dictionaryCloudMeta!.itemCount,
+                            cloud.dictionaryCloudMeta!.revision,
+                          ),
+                  ),
               ],
             ),
+            if (decision && cloud.hasPendingMerge) ...[
+              const SizedBox(height: AppSpace.sm),
+              if (cloud.conflicts.isNotEmpty)
+                Text(
+                  context.l10n.personalCloudConflictSummary(
+                    cloud.conflicts.length,
+                  ),
+                ),
+              const SizedBox(height: AppSpace.sm),
+              Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.sm,
+                children: [
+                  if (cloud.pendingMergeNeedsConfirmation &&
+                      cloud.conflicts.isEmpty)
+                    FilledButton.tonalIcon(
+                      key: const Key('personal-cloud-confirm-merge'),
+                      onPressed: cloud.isBusy
+                          ? null
+                          : () => _resolveConflicts(
+                                context,
+                                cloud,
+                                PersonalCloudConflictChoice.local,
+                              ),
+                      icon: const Icon(Icons.merge_type),
+                      label: Text(context.l10n.personalCloudConfirmMerge),
+                    )
+                  else ...[
+                    FilledButton.tonalIcon(
+                      key: const Key('personal-cloud-conflicts-local'),
+                      onPressed: cloud.isBusy
+                          ? null
+                          : () => _resolveConflicts(
+                                context,
+                                cloud,
+                                PersonalCloudConflictChoice.local,
+                              ),
+                      icon: const Icon(Icons.laptop_outlined),
+                      label: Text(context.l10n.personalCloudKeepLocalConflicts),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('personal-cloud-conflicts-remote'),
+                      onPressed: cloud.isBusy
+                          ? null
+                          : () => _resolveConflicts(
+                                context,
+                                cloud,
+                                PersonalCloudConflictChoice.remote,
+                              ),
+                      icon: const Icon(Icons.cloud_outlined),
+                      label:
+                          Text(context.l10n.personalCloudKeepRemoteConflicts),
+                    ),
+                  ],
+                ],
+              ),
+            ],
             const SizedBox(height: AppSpace.md),
             Wrap(
               spacing: AppSpace.sm,
@@ -150,6 +223,21 @@ class PersonalCloudPanel extends StatelessWidget {
   ) async {
     try {
       await cloud.syncNow();
+    } catch (error) {
+      if (!context.mounted) return;
+      context.showLoggedSnackBar(
+        SnackBar(content: Text(context.l10n.personalCloudError('$error'))),
+      );
+    }
+  }
+
+  static Future<void> _resolveConflicts(
+    BuildContext context,
+    PersonalCloudProvider cloud,
+    PersonalCloudConflictChoice choice,
+  ) async {
+    try {
+      await cloud.resolveAllPendingConflicts(choice);
     } catch (error) {
       if (!context.mounted) return;
       context.showLoggedSnackBar(

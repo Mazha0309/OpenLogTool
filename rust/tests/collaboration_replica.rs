@@ -843,7 +843,7 @@ async fn stage2_outbox_event_cursor_conflict_and_write_policy_are_atomic() {
         .fetch_one(pool)
         .await
         .unwrap();
-    assert_eq!(schema.0, 6);
+    assert_eq!(schema.0, 7);
 
     // Ensure serde payload remains real JSON rather than double encoded strings.
     let _: Value = serde_json::from_str(

@@ -3,28 +3,93 @@ use chrono::DateTime;
 use serde_json::{json, Value};
 use sqlx::{sqlite::SqliteRow, Column, Row, TypeInfo};
 
-const EXPORT_VERSION: i32 = 6;
+const EXPORT_VERSION: i32 = 7;
 
 pub async fn get_database_status() -> anyhow::Result<String> {
     let pool = get_db()?;
+    let mut tx = pool.begin().await?;
     let tables = sqlx::query_as::<_, (String,)>(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *tx)
     .await?;
     let schema_version: (Option<i64>,) = sqlx::query_as("SELECT MAX(version) FROM schema_version")
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await?;
     let mut table_status = Vec::with_capacity(tables.len());
     for (name,) in tables {
         let quoted_name = format!("\"{}\"", name.replace('"', "\"\""));
         let count: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM {quoted_name}"))
-            .fetch_one(pool)
+            .fetch_one(&mut *tx)
             .await?;
         table_status.push(json!({"name": name, "rowCount": count.0}));
     }
+
+    let sessions: (i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT
+            COALESCE(SUM(CASE WHEN deleted_at IS NULL AND status = 'active' THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN deleted_at IS NULL AND status = 'closed' THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN deleted_at IS NULL AND status = 'archived' THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+         FROM sessions",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let logs: (i64, i64) = sqlx::query_as(
+        "SELECT
+            COALESCE(SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+         FROM logs",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let dictionary_rows = sqlx::query_as::<_, (String, i64, i64)>(
+        "SELECT dict_type,
+            COALESCE(SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+         FROM dictionary_items GROUP BY dict_type ORDER BY dict_type",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut dictionaries = serde_json::Map::new();
+    for (dict_type, active, deleted) in dictionary_rows {
+        dictionaries.insert(dict_type, json!({"active": active, "deleted": deleted}));
+    }
+    let collaboration: (i64, i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT
+            (SELECT COUNT(*) FROM collaboration_bindings),
+            (SELECT COUNT(*) FROM sync_outbox WHERE state IN ('pending', 'sending', 'retrying')),
+            (SELECT COUNT(*) FROM sync_conflicts WHERE state != 'resolved'),
+            (SELECT COUNT(*) FROM collaboration_offline_records
+                WHERE state NOT IN ('resolved', 'discarded')),
+            (SELECT COUNT(*) FROM collaboration_live_drafts)",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
     Ok(json!({
+        "statusVersion": 2,
         "schemaVersion": schema_version.0,
+        "backupFormatVersion": EXPORT_VERSION,
+        "collectedAt": chrono::Utc::now().to_rfc3339(),
+        "localContent": {
+            "sessions": {
+                "active": sessions.0,
+                "closed": sessions.1,
+                "archived": sessions.2,
+                "deleted": sessions.3,
+            },
+            "logs": {"active": logs.0, "deleted": logs.1},
+            "dictionaries": dictionaries,
+        },
+        "collaboration": {
+            "bindings": collaboration.0,
+            "pendingOutbox": collaboration.1,
+            "openConflicts": collaboration.2,
+            "offlineRecords": collaboration.3,
+            "draftCaches": collaboration.4,
+        },
         "tables": table_status,
     })
     .to_string())
@@ -39,7 +104,6 @@ pub async fn export_database() -> anyhow::Result<String> {
     let dictionary_items = query_table(&mut tx, "dictionary_items").await?;
     let settings = query_table(&mut tx, "settings").await?;
     let oplog = query_table(&mut tx, "oplog").await?;
-    let callsign_qth_history = query_table(&mut tx, "callsign_qth_history").await?;
     let collaboration_bindings = query_table(&mut tx, "collaboration_bindings").await?;
     let entity_shadows = query_table(&mut tx, "entity_shadows").await?;
     let sync_outbox = query_table(&mut tx, "sync_outbox").await?;
@@ -57,7 +121,6 @@ pub async fn export_database() -> anyhow::Result<String> {
         "dictionary_items": dictionary_items,
         "settings": settings,
         "oplog": oplog,
-        "callsign_qth_history": callsign_qth_history,
         "collaboration_bindings": collaboration_bindings,
         "entity_shadows": entity_shadows,
         "sync_outbox": sync_outbox,
@@ -90,18 +153,13 @@ pub async fn import_database(json_data: String) -> anyhow::Result<()> {
     // installation-level device_state is intentionally not imported/exported:
     // restoring a backup on another device must not clone its device identity.
     clear_database_tables(&mut tx).await?;
+    reset_personal_cloud_pairing(&mut tx, "database_replaced").await?;
 
     insert_from_json(&mut tx, "sessions", data.get("sessions")).await?;
     insert_from_json(&mut tx, "logs", data.get("logs")).await?;
     insert_from_json(&mut tx, "dictionary_items", data.get("dictionary_items")).await?;
     insert_from_json(&mut tx, "settings", data.get("settings")).await?;
     insert_from_json(&mut tx, "oplog", data.get("oplog")).await?;
-    insert_from_json(
-        &mut tx,
-        "callsign_qth_history",
-        data.get("callsign_qth_history"),
-    )
-    .await?;
     if version >= 4 {
         insert_from_json(
             &mut tx,
@@ -148,14 +206,7 @@ fn validate_backup(data: &Value) -> anyhow::Result<()> {
         anyhow::bail!("DATABASE_BACKUP_UNSUPPORTED_VERSION:{version}");
     }
 
-    let mut required_tables = vec![
-        "logs",
-        "sessions",
-        "dictionary_items",
-        "settings",
-        "oplog",
-        "callsign_qth_history",
-    ];
+    let mut required_tables = vec!["logs", "sessions", "dictionary_items", "settings", "oplog"];
     if version >= 4 {
         required_tables.extend(["collaboration_bindings", "entity_shadows"]);
     }
@@ -189,6 +240,7 @@ pub async fn clear_all_data() -> anyhow::Result<()> {
     let pool = get_db()?;
     let mut tx = pool.begin().await?;
     clear_database_tables(&mut tx).await?;
+    reset_personal_cloud_pairing(&mut tx, "local_cleared").await?;
 
     tx.commit().await?;
     Ok(())
@@ -210,12 +262,30 @@ async fn clear_database_tables(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> 
         "dictionary_items",
         "settings",
         "oplog",
-        "callsign_qth_history",
     ] {
         sqlx::query(&format!("DELETE FROM \"{table}\""))
             .execute(&mut **tx)
             .await?;
     }
+    Ok(())
+}
+
+async fn reset_personal_cloud_pairing(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    reason: &str,
+) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM personal_cloud_baselines")
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(
+        "UPDATE personal_cloud_state
+         SET pairing_required_reason = ?, updated_at = ?
+         WHERE id = 1",
+    )
+    .bind(reason)
+    .bind(chrono::Utc::now().to_rfc3339())
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -261,6 +331,7 @@ fn allowed_columns(table: &str) -> &'static [&'static str] {
             "created_at",
             "updated_at",
             "deleted_at",
+            "origin",
         ],
         "settings" => &["key", "value"],
         "oplog" => &[
@@ -273,17 +344,6 @@ fn allowed_columns(table: &str) -> &'static [&'static str] {
             "device_id",
             "created_at",
             "applied",
-        ],
-        "callsign_qth_history" => &[
-            "id",
-            "sync_id",
-            "callsign",
-            "qth",
-            "recorded_at",
-            "created_at",
-            "updated_at",
-            "deleted_at",
-            "source_device_id",
         ],
         "collaboration_bindings" => &[
             "server_instance_id",
@@ -621,6 +681,15 @@ async fn ensure_dictionary_types(
     if invalid.0 != 0 {
         anyhow::bail!("DATABASE_BACKUP_INVALID_DICTIONARY_TYPE");
     }
+    let invalid_origin: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM dictionary_items
+         WHERE origin NOT IN ('unknown', 'builtin', 'user')",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if invalid_origin.0 != 0 {
+        anyhow::bail!("DATABASE_BACKUP_INVALID_DICTIONARY_ORIGIN");
+    }
     Ok(())
 }
 
@@ -703,7 +772,6 @@ fn backup_tables() -> &'static [&'static str] {
         "dictionary_items",
         "settings",
         "oplog",
-        "callsign_qth_history",
         "collaboration_bindings",
         "entity_shadows",
         "sync_outbox",
@@ -726,7 +794,14 @@ fn required_text_columns(table: &str) -> &'static [&'static str] {
             "updated_at",
         ],
         "sessions" => &["session_id", "title", "status", "created_at", "updated_at"],
-        "dictionary_items" => &["dict_type", "raw", "sync_id", "created_at", "updated_at"],
+        "dictionary_items" => &[
+            "dict_type",
+            "raw",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "origin",
+        ],
         "settings" => &["key", "value"],
         "oplog" => &[
             "session_id",
@@ -735,14 +810,6 @@ fn required_text_columns(table: &str) -> &'static [&'static str] {
             "entity_id",
             "data",
             "created_at",
-        ],
-        "callsign_qth_history" => &[
-            "sync_id",
-            "callsign",
-            "qth",
-            "recorded_at",
-            "created_at",
-            "updated_at",
         ],
         "collaboration_bindings" => &[
             "server_instance_id",
@@ -840,7 +907,6 @@ fn optional_text_columns(table: &str) -> &'static [&'static str] {
         "sessions" => &["share_code", "closed_at", "deleted_at"],
         "dictionary_items" => &["pinyin", "abbreviation", "deleted_at"],
         "oplog" => &["device_id"],
-        "callsign_qth_history" => &["deleted_at", "source_device_id"],
         "collaboration_bindings" => &["revoked_at"],
         "sync_outbox" => &[
             "base_json",
@@ -860,7 +926,7 @@ fn optional_text_columns(table: &str) -> &'static [&'static str] {
 
 fn required_integer_columns(table: &str) -> &'static [&'static str] {
     match table {
-        "logs" | "dictionary_items" | "callsign_qth_history" => &["id"],
+        "logs" | "dictionary_items" => &["id"],
         "oplog" => &["id", "applied"],
         "collaboration_bindings" => &[
             "membership_version",
@@ -920,7 +986,6 @@ fn required_identifier_columns() -> &'static [(&'static str, &'static [&'static 
         ("dictionary_items", &["sync_id"]),
         ("settings", &["key"]),
         ("oplog", &["session_id", "entity_id"]),
-        ("callsign_qth_history", &["sync_id"]),
         (
             "collaboration_bindings",
             &[
@@ -986,7 +1051,6 @@ fn optional_identifier_columns() -> &'static [(&'static str, &'static [&'static 
     &[
         ("logs", &["source_device_id"]),
         ("oplog", &["device_id"]),
-        ("callsign_qth_history", &["source_device_id"]),
         ("sync_outbox", &["depends_on_mutation_id"]),
         ("applied_events", &["mutation_id"]),
         ("sync_conflicts", &["resolution_mutation_id"]),
@@ -998,7 +1062,6 @@ fn required_value_columns() -> &'static [(&'static str, &'static [&'static str])
         ("logs", &["controller", "callsign"]),
         ("sessions", &["title"]),
         ("dictionary_items", &["dict_type", "raw"]),
-        ("callsign_qth_history", &["callsign", "qth"]),
     ]
 }
 

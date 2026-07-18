@@ -346,6 +346,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get previousSavedRecord => 'Previous saved record';
 
   @override
+  String recordOrdinal(int ordinal) {
+    return 'Position #$ordinal';
+  }
+
+  @override
   String get noPreviousRecord => 'No previous record';
 
   @override
@@ -367,6 +372,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get informationDetail => 'Information detail';
+
+  @override
+  String get controllerDisplayScale => 'Controller display zoom';
+
+  @override
+  String get controllerDisplayScaleHint =>
+      'Adjusts only the controller display, not the main application interface.';
 
   @override
   String get currentFields => 'Current fields';
@@ -1783,95 +1795,129 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get personalCloudHint =>
-      'Sync every personal session and net record after sign-in; collaboration sessions continue using their separate realtime sync';
+      'Personal sessions, net records, and your dictionary changes synchronize automatically between signed-in devices. Collaboration sessions keep using their separate realtime workflow.';
 
   @override
   String get personalCloudSignedOut =>
-      'Sign in to the server to use personal cloud sync';
+      'Sign in to automatically synchronize personal records and dictionary changes';
 
   @override
   String get personalCloudUnsupported =>
-      'This server version does not support personal cloud sync; upgrade the server first';
+      'This server version does not support account personal snapshots; upgrade the server first';
 
   @override
-  String get personalCloudChecking => 'Checking on-device and cloud records…';
+  String get personalCloudChecking =>
+      'Comparing on-device records and dictionaries with the account snapshots…';
 
   @override
-  String get personalCloudSyncing => 'Syncing personal records…';
+  String get personalCloudSyncing =>
+      'Synchronizing personal records and dictionary changes…';
 
   @override
-  String get personalCloudUpToDate => 'Personal records are synchronized';
+  String get personalCloudUpToDate =>
+      'Personal records and dictionary changes are up to date';
 
   @override
   String get personalCloudDecisionRequired =>
-      'This device and the cloud contain different data. Choose which side to keep; nothing will be overwritten automatically';
+      'A first-time pairing or real edit conflict needs your confirmation. Unrelated changes have already been merged safely.';
 
   @override
   String personalCloudError(String error) {
-    return 'Personal cloud sync failed: $error';
+    return 'Account personal snapshot sync failed: $error';
   }
 
   @override
   String personalCloudLocalSummary(int sessionCount, int logCount) {
-    return 'On device: $sessionCount sessions and $logCount records';
+    return 'Personal records on device: $sessionCount sessions and $logCount records';
   }
 
   @override
   String personalCloudRemoteSummary(
       int sessionCount, int logCount, int revision) {
-    return 'Cloud: $sessionCount sessions and $logCount records · revision $revision';
+    return 'Account snapshot: $sessionCount sessions and $logCount records · revision $revision';
   }
 
   @override
   String get personalCloudRemoteEmpty =>
-      'No personal records are stored in the cloud yet';
+      'This account does not have a personal records snapshot yet';
 
   @override
-  String get personalCloudSyncNow => 'Sync now';
+  String personalCloudDictionaryLocalSummary(int itemCount) {
+    return 'Dictionary changes on device: $itemCount';
+  }
 
   @override
-  String get personalCloudReplaceRemote => 'Replace cloud with device';
+  String personalCloudDictionaryRemoteSummary(int itemCount, int revision) {
+    return 'Account dictionary snapshot: $itemCount changes · revision $revision';
+  }
 
   @override
-  String get personalCloudRestoreLocal => 'Restore device from cloud';
+  String get personalCloudDictionaryRemoteEmpty =>
+      'This account does not have a dictionary snapshot yet';
 
   @override
-  String get personalCloudReplaceTitle => 'Replace personal cloud records';
+  String personalCloudConflictSummary(int count) {
+    return '$count conflicting field(s) need a choice';
+  }
+
+  @override
+  String get personalCloudConfirmMerge => 'Confirm safe merge';
+
+  @override
+  String get personalCloudKeepLocalConflicts => 'Keep device values';
+
+  @override
+  String get personalCloudKeepRemoteConflicts => 'Keep cloud values';
+
+  @override
+  String get personalCloudSyncNow => 'Sync personal snapshot';
+
+  @override
+  String get personalCloudReplaceRemote => 'Replace snapshot with device';
+
+  @override
+  String get personalCloudRestoreLocal => 'Restore device from snapshot';
+
+  @override
+  String get personalCloudReplaceTitle => 'Replace account personal snapshot';
 
   @override
   String personalCloudReplaceWarning(
       int localSessions, int localLogs, int remoteSessions, int remoteLogs) {
-    return 'The $localSessions sessions and $localLogs records on this device will completely replace the $remoteSessions sessions and $remoteLogs records in the cloud. Collaboration sessions are unaffected. The change will synchronize to other signed-in devices.';
+    return 'The $localSessions personal sessions and $localLogs records on this device will completely replace the $remoteSessions sessions and $remoteLogs records in the account snapshot. This does not create or modify collaboration sessions. The change will synchronize to other signed-in devices.';
   }
 
   @override
-  String get personalCloudReplacePhrase => 'REPLACE CLOUD WITH DEVICE';
+  String get personalCloudReplacePhrase =>
+      'REPLACE ACCOUNT SNAPSHOT WITH DEVICE';
 
   @override
-  String get personalCloudReplaceAction => 'Replace cloud';
+  String get personalCloudReplaceAction => 'Replace snapshot';
 
   @override
-  String get personalCloudRestoreTitle => 'Restore from personal cloud';
+  String get personalCloudRestoreTitle =>
+      'Restore from account personal snapshot';
 
   @override
   String personalCloudRestoreWarning(
       int remoteSessions, int remoteLogs, int localSessions, int localLogs) {
-    return 'The $remoteSessions sessions and $remoteLogs cloud records will replace the $localSessions sessions and $localLogs personal records on this device. Libraries, settings, and collaboration sessions are unaffected.';
+    return 'The $remoteSessions sessions and $remoteLogs records in the account snapshot will replace the $localSessions sessions and $localLogs personal records on this device. Libraries, settings, and collaboration sessions are unaffected.';
   }
 
   @override
-  String get personalCloudRestorePhrase => 'RESTORE DEVICE FROM CLOUD';
+  String get personalCloudRestorePhrase =>
+      'RESTORE DEVICE FROM ACCOUNT SNAPSHOT';
 
   @override
   String get personalCloudRestoreAction => 'Restore this device';
 
   @override
   String get personalCloudReplaceSucceeded =>
-      'Personal cloud records were replaced with this device\'s records';
+      'The account snapshot now contains this device\'s personal records';
 
   @override
   String get personalCloudRestoreSucceeded =>
-      'Personal records were restored from the cloud';
+      'Personal records were restored from the account snapshot';
 
   @override
   String get databaseDangerZoneSection => 'Danger zone';
@@ -1881,7 +1927,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get databaseStatusHint =>
-      'View the database version and row count for each table';
+      'Review local content, collaboration work, and advanced diagnostics';
 
   @override
   String databaseStatusSchemaVersion(String version) {
@@ -1889,9 +1935,91 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String databaseStatusTableRow(String name, int count) {
-    return '$name: $count';
+  String databaseStatusBackupFormatVersion(String version) {
+    return 'Backup format version: $version';
   }
+
+  @override
+  String get databaseStatusLocalContentSection => 'On-device content';
+
+  @override
+  String get databaseStatusLocalContentHint =>
+      'Sessions, net-control records, and library items stored in this device database';
+
+  @override
+  String get databaseStatusSessionsLabel => 'Sessions';
+
+  @override
+  String databaseStatusSessionsSummary(
+      int active, int closed, int archived, int deleted) {
+    return '$active active · $closed closed · $archived archived · $deleted deleted';
+  }
+
+  @override
+  String get databaseStatusLogsLabel => 'Net-control records';
+
+  @override
+  String get databaseStatusDictionariesLabel => 'Library items';
+
+  @override
+  String databaseStatusLifecycleSummary(int active, int deleted) {
+    return '$active available · $deleted deleted';
+  }
+
+  @override
+  String databaseStatusDictionarySummary(
+      String label, int active, int deleted) {
+    return '$label $active ($deleted deleted)';
+  }
+
+  @override
+  String get databaseStatusDictionaryDevice => 'Devices';
+
+  @override
+  String get databaseStatusDictionaryAntenna => 'Antennas';
+
+  @override
+  String get databaseStatusDictionaryQth => 'QTH';
+
+  @override
+  String get databaseStatusDictionaryCallsign => 'Call signs';
+
+  @override
+  String get databaseStatusCollaborationSection => 'Collaboration state';
+
+  @override
+  String get databaseStatusCollaborationHint =>
+      'These are local replicas and sync queues, not a count of all server data';
+
+  @override
+  String get databaseStatusCollaborationHealthy =>
+      'There are no pending uploads, unresolved conflicts, or offline records';
+
+  @override
+  String get databaseStatusCollaborationPending =>
+      'This device still has collaboration work to synchronize or resolve';
+
+  @override
+  String get databaseStatusBindingsLabel => 'Session replicas';
+
+  @override
+  String get databaseStatusPendingOutboxLabel => 'Pending uploads';
+
+  @override
+  String get databaseStatusOpenConflictsLabel => 'Open conflicts';
+
+  @override
+  String get databaseStatusOfflineRecordsLabel => 'Offline records';
+
+  @override
+  String get databaseStatusDraftCachesLabel => 'Live-draft caches';
+
+  @override
+  String get databaseStatusAdvancedTitle => 'Advanced: raw table counts';
+
+  @override
+  String get databaseStatusAdvancedHint =>
+      'For troubleshooting only; an infrastructure table at zero is usually healthy';
 
   @override
   String get databaseStatusUnknown => 'unknown';
@@ -1906,7 +2034,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get databaseExportHint =>
-      'Back up sessions, records, libraries, QTH history, local collaboration replicas, and pending-sync state';
+      'Back up sessions, records, libraries, local collaboration replicas, and pending-sync state';
 
   @override
   String get databaseExportDialogTitle =>
@@ -2006,7 +2134,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get databaseClearWarning =>
-      'This cannot be undone. It removes every on-device session, net record, QTH history row, collaboration replica, pending-sync queue, and custom library entry. It does not delete or close server sessions, sign you out, or reset appearance. Built-in libraries are restored to their defaults.';
+      'This cannot be undone. It removes every on-device session, net record, collaboration replica, pending-sync queue, and custom library entry. It does not delete or close server sessions, sign you out, or reset appearance. Built-in libraries are restored to their defaults.';
 
   @override
   String get databaseClearConfirmationPhrase => 'DELETE ALL DATA';

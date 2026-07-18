@@ -1,6 +1,6 @@
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-const CURRENT_SCHEMA_VERSION: i32 = 6;
+const CURRENT_SCHEMA_VERSION: i32 = 7;
 
 pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::query(
@@ -44,6 +44,12 @@ pub async fn run(pool: &SqlitePool) -> anyhow::Result<()> {
     if version < 6 {
         migrate_v6(pool).await?;
     }
+    // v7 was developed across builds that could already have written schema
+    // version 7 before every v7 object was present. Keep this migration
+    // idempotent and re-assert its shape for version-7 databases so those
+    // installations cannot expose a nine-column dictionary row to the
+    // ten-column Rust model.
+    migrate_v7(pool).await?;
 
     let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM schema_version")
@@ -487,6 +493,80 @@ async fn migrate_v6(pool: &SqlitePool) -> anyhow::Result<()> {
             server_instance_id, account_id, session_id, state, created_at, mutation_id
          )",
     )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_v7(pool: &SqlitePool) -> anyhow::Result<()> {
+    let mut tx = pool.begin().await?;
+
+    let columns = sqlx::query_as::<_, (i64, String, String, i64, Option<String>, i64)>(
+        "PRAGMA table_info(dictionary_items)",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    if !columns.iter().any(|column| column.1 == "origin") {
+        sqlx::query(
+            "ALTER TABLE dictionary_items
+             ADD COLUMN origin TEXT NOT NULL DEFAULT 'unknown'
+             CHECK (origin IN ('unknown', 'builtin', 'user'))",
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    sqlx::query("DROP INDEX IF EXISTS idx_callsign_qth_callsign")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DROP TABLE IF EXISTS callsign_qth_history")
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS personal_cloud_baselines (
+            scope_hash TEXT NOT NULL CHECK (
+                length(scope_hash) = 64 AND scope_hash NOT GLOB '*[^0-9a-f]*'
+            ),
+            dataset TEXT NOT NULL CHECK (dataset IN ('records', 'dictionaries')),
+            remote_revision INTEGER NOT NULL CHECK (remote_revision >= 0),
+            snapshot_json TEXT NOT NULL CHECK (
+                json_valid(snapshot_json) AND json_type(snapshot_json) = 'object'
+            ),
+            checksum TEXT NOT NULL CHECK (
+                length(checksum) = 64 AND checksum NOT GLOB '*[^0-9a-f]*'
+            ),
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (scope_hash, dataset)
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS personal_cloud_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            owner_scope_hash TEXT CHECK (
+                owner_scope_hash IS NULL OR
+                (length(owner_scope_hash) = 64 AND owner_scope_hash NOT GLOB '*[^0-9a-f]*')
+            ),
+            pairing_required_reason TEXT CHECK (
+                pairing_required_reason IS NULL OR
+                pairing_required_reason IN ('database_replaced', 'local_cleared', 'account_changed')
+            ),
+            updated_at TEXT NOT NULL
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO personal_cloud_state (
+            id, owner_scope_hash, pairing_required_reason, updated_at
+         ) VALUES (1, NULL, NULL, ?)",
+    )
+    .bind(chrono::Utc::now().to_rfc3339())
     .execute(&mut *tx)
     .await?;
 

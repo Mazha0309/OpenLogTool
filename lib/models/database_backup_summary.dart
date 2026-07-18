@@ -6,7 +6,7 @@ import 'dart:convert';
 /// import atomically. This preview lets the user verify the selected file
 /// before authorizing replacement of the local database.
 class DatabaseBackupSummary {
-  static const int currentFormatVersion = 6;
+  static const int currentFormatVersion = 7;
 
   const DatabaseBackupSummary({
     required this.formatVersion,
@@ -72,7 +72,8 @@ class DatabaseBackupSummary {
     final dictionaryItems = rows('dictionary_items');
     rows('settings');
     rows('oplog');
-    rows('callsign_qth_history');
+    // v1-v6 carried a now-unused callsign/QTH cache. Its contents are ignored
+    // so a damaged legacy cache cannot block recovery of actual user data.
 
     final exportedAtValue = object['exportedAt'];
     final exportedAt = exportedAtValue is String

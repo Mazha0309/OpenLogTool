@@ -120,20 +120,9 @@ async fn install_protected_fixture() {
         .execute(pool)
         .await
         .unwrap();
-    sqlx::query(
-        "INSERT INTO callsign_qth_history (
-            sync_id, callsign, qth, recorded_at, created_at, updated_at
-         ) VALUES ('qth-1', 'BA4AAA', '杭州', ?, ?, ?)",
-    )
-    .bind(CREATED)
-    .bind(CREATED)
-    .bind(UPDATED)
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
-async fn protected_state() -> (i64, i64, i64, i64, i64, i64, String) {
+async fn protected_state() -> (i64, i64, i64, i64, i64, String) {
     sqlx::query_as(
         "SELECT
             (SELECT COUNT(*) FROM collaboration_bindings),
@@ -141,7 +130,6 @@ async fn protected_state() -> (i64, i64, i64, i64, i64, i64, String) {
             (SELECT COUNT(*) FROM sync_conflicts),
             (SELECT COUNT(*) FROM dictionary_items),
             (SELECT COUNT(*) FROM settings),
-            (SELECT COUNT(*) FROM callsign_qth_history),
             (SELECT remarks FROM logs WHERE sync_id = 'collaboration-log')",
     )
     .fetch_one(get_db().unwrap())

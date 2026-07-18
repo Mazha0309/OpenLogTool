@@ -112,16 +112,23 @@ Future<void> main(List<String> args) async {
               (previous ?? CollaborationProvider())
                 ..updateDependencies(server, sessions, logs),
         ),
-        ChangeNotifierProxyProvider4<ServerProvider, SessionProvider,
-            LogProvider, CollaborationProvider, PersonalCloudProvider>(
+        ChangeNotifierProxyProvider5<
+            ServerProvider,
+            SessionProvider,
+            LogProvider,
+            CollaborationProvider,
+            DictionaryProvider,
+            PersonalCloudProvider>(
           create: (_) => PersonalCloudProvider(),
-          update: (_, server, sessions, logs, collaboration, previous) =>
+          update: (_, server, sessions, logs, collaboration, dictionaries,
+                  previous) =>
               (previous ?? PersonalCloudProvider())
                 ..updateDependencies(
                   server,
                   sessions,
                   logs,
                   collaboration,
+                  dictionaries,
                 ),
         ),
       ],

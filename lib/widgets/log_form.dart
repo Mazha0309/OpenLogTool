@@ -11,6 +11,7 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
 import 'package:openlogtool/utils/log_time.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
@@ -27,6 +28,8 @@ class LogForm extends StatefulWidget {
 }
 
 class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
+  static const _upperCaseDraftFields = {'controller', 'callsign'};
+
   final _formKey = GlobalKey<FormState>();
   final _controllerController = TextEditingController();
   final _callsignController = TextEditingController();
@@ -148,6 +151,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         final rawValue = fields[entry.key];
         final value =
             entry.key == 'time' ? _displayLiveDraftTime(rawValue) : rawValue;
+        if (_hasActiveUpperCaseComposition(entry.key)) {
+          if (entry.value.text != value) {
+            _deferredSharedDraftFields.add(entry.key);
+          } else {
+            _deferredSharedDraftFields.remove(entry.key);
+          }
+          continue;
+        }
         if (!draftChanged && _focusedDraftFields.contains(entry.key)) {
           if (entry.value.text != value) {
             _deferredSharedDraftFields.add(entry.key);
@@ -170,6 +181,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _onDraftFieldChanged(String field) {
     if (_applyingSharedDraft || !mounted) return;
+    if (_hasActiveUpperCaseComposition(field)) {
+      _draftDebounce.remove(field)?.cancel();
+      return;
+    }
     final collaboration = context.read<CollaborationProvider>();
     if (field == 'time') collaboration.cancelAutomaticLiveDraftTime();
     if (collaboration.liveDraftSnapshot == null ||
@@ -222,6 +237,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     String field,
     CollaborationProvider collaboration,
   ) async {
+    _commitUpperCaseDraftField(field);
     _draftDebounce.remove(field)?.cancel();
     if (collaboration.canEditLiveDraft) {
       try {
@@ -239,9 +255,25 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
   }
 
-  String _getCurrentTime() {
-    final now = DateTime.now();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  bool _hasActiveUpperCaseComposition(String field) {
+    final controller = _draftControllers[field];
+    return _upperCaseDraftFields.contains(field) &&
+        controller != null &&
+        ImeSafeUpperCaseTextFormatter.hasActiveComposition(controller.value);
+  }
+
+  void _commitUpperCaseDraftField(String field) {
+    if (!_upperCaseDraftFields.contains(field)) return;
+    final controller = _draftControllers[field];
+    if (controller == null) return;
+    final committed = ImeSafeUpperCaseTextFormatter.commit(controller.value);
+    if (committed != controller.value) controller.value = committed;
+  }
+
+  void _commitUpperCaseIdentifiers() {
+    for (final field in _upperCaseDraftFields) {
+      _commitUpperCaseDraftField(field);
+    }
   }
 
   String _displayLiveDraftTime(String value) {
@@ -322,6 +354,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   Future<void> _submitForm() async {
     if (_submissionInProgress) return;
+    _commitUpperCaseIdentifiers();
     final collaboration = context.read<CollaborationProvider>();
     if (widget.readOnly ||
         (collaboration.binding != null &&
@@ -358,8 +391,16 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         Provider.of<SettingsProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
+    final enteredTime = _timeController.text.trim();
+    final usesAutomaticTime = enteredTime.isEmpty;
+    final submittedTime = resolveLogTimeForSubmission(enteredTime);
+    final submittedFields = <String, String>{
+      for (final entry in _draftControllers.entries)
+        entry.key: entry.key == 'time' ? submittedTime : entry.value.text,
+    };
 
-    final normalizedCallsign = _callsignController.text.trim().toUpperCase();
+    final normalizedCallsign =
+        submittedFields['callsign']!.trim().toUpperCase();
     final duplicate = normalizedCallsign.isNotEmpty &&
         logProvider.logs.any(
           (log) => log.callsign.trim().toUpperCase() == normalizedCallsign,
@@ -388,26 +429,22 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       if (!proceed || !mounted) return;
     }
 
-    if (_deviceController.text.isNotEmpty) {
-      await dictionaryProvider.addDevice(_deviceController.text);
+    if (submittedFields['device']!.isNotEmpty) {
+      await dictionaryProvider.addDevice(submittedFields['device']!);
     }
-    if (_antennaController.text.isNotEmpty) {
-      await dictionaryProvider.addAntenna(_antennaController.text);
+    if (submittedFields['antenna']!.isNotEmpty) {
+      await dictionaryProvider.addAntenna(submittedFields['antenna']!);
     }
-    if (_callsignController.text.isNotEmpty) {
-      await dictionaryProvider.addCallsign(_callsignController.text);
+    if (submittedFields['callsign']!.isNotEmpty) {
+      await dictionaryProvider.addCallsign(submittedFields['callsign']!);
     }
-    if (_qthController.text.isNotEmpty) {
-      await dictionaryProvider.addQth(_qthController.text);
+    if (submittedFields['qth']!.isNotEmpty) {
+      await dictionaryProvider.addQth(submittedFields['qth']!);
     }
     if (!mounted) return;
 
     if (collaboration.binding != null &&
         collaboration.liveDraftSnapshot != null) {
-      final enteredTime = _timeController.text.trim();
-      final submittedTime =
-          enteredTime.isNotEmpty ? enteredTime : _getCurrentTime();
-      final usesAutomaticTime = enteredTime.isEmpty;
       if (usesAutomaticTime) {
         collaboration.beginAutomaticLiveDraftTime(submittedTime);
       } else {
@@ -417,11 +454,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         timer.cancel();
       }
       _draftDebounce.clear();
-      for (final entry in _draftControllers.entries) {
+      for (final entry in submittedFields.entries) {
         try {
           await collaboration.updateLiveDraftField(
             entry.key,
-            entry.key == 'time' ? submittedTime : entry.value.text,
+            entry.value,
           );
           if (usesAutomaticTime && entry.key == 'time') {
             collaboration.confirmAutomaticLiveDraftTime();
@@ -452,20 +489,18 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
 
     final log = LogEntry(
-      time: _timeController.text.isNotEmpty
-          ? _timeController.text
-          : _getCurrentTime(),
-      controller: _controllerController.text.toUpperCase(),
-      callsign: _callsignController.text.toUpperCase(),
-      report: _reportController.text,
-      rstRcvd: _rstRcvdController.text,
-      qth: _qthController.text,
-      device: _deviceController.text,
-      power: _powerController.text,
-      antenna: _antennaController.text,
-      height: _heightController.text,
+      time: submittedTime,
+      controller: submittedFields['controller']!,
+      callsign: submittedFields['callsign']!,
+      report: submittedFields['rstSent']!,
+      rstRcvd: submittedFields['rstRcvd']!,
+      qth: submittedFields['qth']!,
+      device: submittedFields['device']!,
+      power: submittedFields['power']!,
+      antenna: submittedFields['antenna']!,
+      height: submittedFields['height']!,
     );
-    log.remarks = _remarksController.text;
+    log.remarks = submittedFields['remarks']!;
 
     await logProvider.addLog(log, sessionId: sessionProvider.currentSessionId);
     if (!mounted) return;
@@ -873,7 +908,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       textInputAction: textInputAction ?? TextInputAction.next,
       textCapitalization:
           upperCase ? TextCapitalization.characters : TextCapitalization.none,
-      inputFormatters: upperCase ? [UpperCaseTextFormatter()] : [],
+      inputFormatters:
+          upperCase ? const [ImeSafeUpperCaseTextFormatter()] : const [],
       onTapOutside: (_) => focusNode?.unfocus(),
     );
   }
@@ -892,8 +928,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }) {
     final textCapitalization =
         upperCase ? TextCapitalization.characters : TextCapitalization.none;
-    final inputFormatters =
-        upperCase ? [UpperCaseTextFormatter()] : <TextInputFormatter>[];
+    final List<TextInputFormatter> inputFormatters = upperCase
+        ? const [ImeSafeUpperCaseTextFormatter()]
+        : const <TextInputFormatter>[];
 
     final draftFocusNode = _draftFocusNodes[draftField]!;
     final autocomplete = Autocomplete<DictionaryItem>(
@@ -1037,17 +1074,4 @@ class _ScoredOption {
   final int score;
 
   _ScoredOption(this.option, this.score);
-}
-
-class UpperCaseTextFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    return TextEditingValue(
-      text: newValue.text.toUpperCase(),
-      selection: newValue.selection,
-    );
-  }
 }

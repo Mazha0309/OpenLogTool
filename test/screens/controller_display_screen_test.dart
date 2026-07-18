@@ -37,7 +37,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('BA4AAA'), findsWidgets);
-    expect(find.text('上一位已保存记录'), findsOneWidget);
+    expect(find.text('第 7 位'), findsOneWidget);
     expect(find.text('BH4BBB'), findsOneWidget);
     expect(find.text('书记员甲'), findsOneWidget);
     expect(find.byKey(const Key('controller-stale-banner')), findsNothing);
@@ -152,6 +152,151 @@ void main() {
     expect(find.byKey(const Key('controller-field-qth')), findsNothing);
   });
 
+  testWidgets('applies a custom controller zoom from the configuration dialog',
+      (tester) async {
+    ControllerDisplayPreferences? changed;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(),
+          onPreferencesChanged: (value) => changed = value,
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('configure-controller-display')));
+    await tester.pumpAndSettle();
+    final slider = tester.widget<Slider>(
+      find.byKey(const Key('controller-scale-slider')),
+    );
+    slider.onChanged!(1.5);
+    await tester.pump();
+    expect(find.text('150%'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('save-controller-display-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(changed?.scale, 1.5);
+    final transform = tester.widget<Transform>(
+      find.byKey(const Key('controller-display-scale-transform')),
+    );
+    expect(transform.transform.getMaxScaleOnAxis(), closeTo(1.5, 0.001));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('long remarks stay the same height and expose a tooltip',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const longRemarks = '这是一段足以超出主控屏字段卡片宽度的很长备注内容';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(currentRemarks: longRemarks),
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    final remarks = find.byKey(const Key('controller-field-remarks')).first;
+    final qth = find.byKey(const Key('controller-field-qth')).first;
+    expect(tester.getSize(remarks).height, tester.getSize(qth).height);
+    final tooltip = find.descendant(
+      of: remarks,
+      matching: find.byType(Tooltip),
+    );
+    expect(tester.widget<Tooltip>(tooltip).message, longRemarks);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      '200 percent zoom uses a smaller logical viewport without overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(),
+          preferences: const ControllerDisplayPreferences(scale: 2),
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    final transform = tester.widget<Transform>(
+      find.byKey(const Key('controller-display-scale-transform')),
+    );
+    expect(transform.transform.getMaxScaleOnAxis(), closeTo(2, 0.001));
+    expect(
+      find.byKey(const Key('controller-portrait-layout')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('current header uses an accessible solid theme color',
+      (tester) async {
+    final theme = ThemeData(
+      brightness: Brightness.dark,
+      colorSchemeSeed: Colors.deepPurple,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(),
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    final header = tester.widget<Container>(
+      find.byKey(const Key('controller-current-panel-header')),
+    );
+    expect(header.color, theme.colorScheme.primary);
+    final title = tester.widget<Text>(find.text('当前第 8 位'));
+    expect(title.style?.color, theme.colorScheme.onPrimary);
+  });
+
+  testWidgets('empty history keeps the generic previous-record heading',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(includePrevious: false),
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    expect(find.text('上一位已保存记录'), findsOneWidget);
+    expect(find.text('暂无上一位记录'), findsOneWidget);
+  });
+
   testWidgets('renders the controller display in en_US', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -170,7 +315,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Current #8'), findsOneWidget);
-    expect(find.text('Previous saved record'), findsOneWidget);
+    expect(find.text('Position #7'), findsOneWidget);
     expect(find.text('Offline'), findsOneWidget);
     expect(find.textContaining('may be out of date'), findsOneWidget);
     expect(find.text('Controller'), findsWidgets);
@@ -182,6 +327,8 @@ ControllerDisplayDto _data({
       ControllerConnectionState.connected,
   String currentTime = '20:15',
   String previousTime = '20:12',
+  String currentRemarks = '移动设台',
+  bool includePrevious = true,
 }) =>
     ControllerDisplayDto(
       sessionTitle: '周日晚间点名',
@@ -198,21 +345,23 @@ ControllerDisplayDto _data({
         power: '100W',
         antenna: 'DP',
         height: '12m',
-        remarks: '移动设台',
+        remarks: currentRemarks,
       ),
-      previous: ControllerRecordDisplay(
-        controller: 'BG5CRL',
-        callsign: 'BH4BBB',
-        time: previousTime,
-        rstSent: '59',
-        rstRcvd: '59',
-        qth: '苏州',
-        device: 'FT-991A',
-        power: '50W',
-        antenna: 'GP',
-        height: '20m',
-        remarks: '固定台',
-      ),
+      previous: includePrevious
+          ? ControllerRecordDisplay(
+              controller: 'BG5CRL',
+              callsign: 'BH4BBB',
+              time: previousTime,
+              rstSent: '59',
+              rstRcvd: '59',
+              qth: '苏州',
+              device: 'FT-991A',
+              power: '50W',
+              antenna: 'GP',
+              height: '20m',
+              remarks: '固定台',
+            )
+          : null,
       connectionState: connectionState,
       lastUpdatedBy: '书记员乙',
       lastUpdatedAt: DateTime.utc(2026, 7, 13, 12),

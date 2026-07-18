@@ -290,7 +290,14 @@ class ControllerDisplayPreferences {
     this.detail = ControllerDisplayDetail.full,
     this.currentFields = _allFields,
     this.previousFields = _allFields,
-  });
+    this.scale = defaultScale,
+  }) : assert(scale >= minScale && scale <= maxScale);
+
+  static const double minScale = 0.75;
+  static const double maxScale = 2;
+  static const double defaultScale = 1;
+  static const double scaleStep = 0.05;
+  static const int scaleDivisions = 25;
 
   static const Set<ControllerDisplayField> _allFields = {
     ...ControllerDisplayField.values,
@@ -331,12 +338,20 @@ class ControllerDisplayPreferences {
       detail: detail,
       currentFields: fields('currentFields'),
       previousFields: fields('previousFields'),
+      scale: normalizeScale(map['scale']),
     );
   }
 
   final ControllerDisplayDetail detail;
   final Set<ControllerDisplayField> currentFields;
   final Set<ControllerDisplayField> previousFields;
+  final double scale;
+
+  static double normalizeScale(Object? value) {
+    final parsed = value is num ? value.toDouble() : double.tryParse('$value');
+    if (parsed == null || !parsed.isFinite) return defaultScale;
+    return parsed.clamp(minScale, maxScale).toDouble();
+  }
 
   Set<ControllerDisplayField> fieldsFor({required bool previous}) {
     if (detail == ControllerDisplayDetail.minimal) return minimalFields;
@@ -349,11 +364,13 @@ class ControllerDisplayPreferences {
     ControllerDisplayDetail? detail,
     Set<ControllerDisplayField>? currentFields,
     Set<ControllerDisplayField>? previousFields,
+    double? scale,
   }) =>
       ControllerDisplayPreferences(
         detail: detail ?? this.detail,
         currentFields: currentFields ?? this.currentFields,
         previousFields: previousFields ?? this.previousFields,
+        scale: normalizeScale(scale ?? this.scale),
       );
 
   Map<String, Object?> toJson() => {
@@ -364,5 +381,6 @@ class ControllerDisplayPreferences {
         'previousFields': previousFields
             .map((field) => field.wireName)
             .toList(growable: false),
+        'scale': scale,
       };
 }

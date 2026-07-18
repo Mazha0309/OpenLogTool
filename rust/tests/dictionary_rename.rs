@@ -65,7 +65,7 @@ async fn rename_is_atomic_and_searches_raw_pinyin_and_abbreviation() {
     .await
     .unwrap();
     assert_eq!(renamed.raw, "Existing radio");
-    assert_eq!(renamed.sync_id, source_sync_id);
+    assert_ne!(renamed.sync_id, source_sync_id);
     assert_eq!(renamed.pinyin.as_deref(), Some("xin she bei"));
     assert_eq!(renamed.abbreviation.as_deref(), Some("XSB"));
     assert!(
@@ -74,6 +74,15 @@ async fn rename_is_atomic_and_searches_raw_pinyin_and_abbreviation() {
             .unwrap()
             .is_none()
     );
+    let source_tombstone: (String, Option<String>) = sqlx::query_as(
+        "SELECT sync_id, deleted_at FROM dictionary_items
+         WHERE dict_type = 'device_dictionary' AND raw = 'Old radio'",
+    )
+    .fetch_one(get_db().unwrap())
+    .await
+    .unwrap();
+    assert_eq!(source_tombstone.0, source_sync_id);
+    assert!(source_tombstone.1.is_some());
 
     assert_eq!(
         search::search_dict("device_dictionary", "existing", 20)

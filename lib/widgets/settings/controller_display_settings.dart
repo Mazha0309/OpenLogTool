@@ -72,6 +72,42 @@ class ControllerDisplaySettings extends StatelessWidget {
               }
             },
           ),
+          const SizedBox(height: AppSpace.md),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  context.l10n.controllerDisplayScale,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                '${(settings.controllerDisplayPreferences.scale * 100).round()}%',
+                key: const Key('default-controller-scale-value'),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
+          ),
+          Slider(
+            key: const Key('default-controller-scale-slider'),
+            value: settings.controllerDisplayPreferences.scale,
+            min: ControllerDisplayPreferences.minScale,
+            max: ControllerDisplayPreferences.maxScale,
+            divisions: ControllerDisplayPreferences.scaleDivisions,
+            label:
+                '${(settings.controllerDisplayPreferences.scale * 100).round()}%',
+            onChanged: (scale) {
+              settings.setControllerDisplayPreferences(
+                settings.controllerDisplayPreferences.copyWith(scale: scale),
+              );
+            },
+          ),
+          Text(
+            context.l10n.controllerDisplayScaleHint,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
           const SizedBox(height: AppSpace.sm),
           AppNotice(
             message: supportsControllerDesktopWindows

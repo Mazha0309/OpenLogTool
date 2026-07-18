@@ -12,6 +12,10 @@ import 'package:window_manager/window_manager.dart';
 
 enum ControllerWindowMode { floating, secondDisplay }
 
+typedef ControllerWindowPreferencesChanged = FutureOr<void> Function(
+  ControllerDisplayPreferences preferences,
+);
+
 bool get supportsControllerDesktopWindows =>
     !kIsWeb &&
     const {
@@ -231,6 +235,65 @@ class ControllerWindowProtocol {
   }
 }
 
+enum ControllerWindowChildEventType { preferencesChanged }
+
+class ControllerWindowChildEvent {
+  const ControllerWindowChildEvent({
+    required this.type,
+    required this.preferences,
+  });
+
+  final ControllerWindowChildEventType type;
+  final ControllerDisplayPreferences preferences;
+}
+
+/// Child-to-parent messages share stdout with the process-ready marker and
+/// diagnostics, so protocol lines use an explicit prefix and bounded payload.
+class ControllerWindowChildEventProtocol {
+  const ControllerWindowChildEventProtocol._();
+
+  static const String prefix = '__OPENLOGTOOL_CONTROLLER_EVENT_V1__';
+
+  static String encodePreferencesChanged(
+    ControllerDisplayPreferences preferences,
+  ) {
+    final encoded = '$prefix${jsonEncode({
+          'protocolVersion': ControllerWindowProtocol.version,
+          'type': ControllerWindowChildEventType.preferencesChanged.name,
+          'preferences': preferences.toJson(),
+        })}';
+    if (utf8.encode(encoded).length >
+        ControllerWindowProtocol.maxMessageBytes) {
+      throw const FormatException('Controller window event is too large');
+    }
+    return encoded;
+  }
+
+  static ControllerWindowChildEvent? tryDecode(String encoded) {
+    if (!encoded.startsWith(prefix)) return null;
+    if (utf8.encode(encoded).length >
+        ControllerWindowProtocol.maxMessageBytes) {
+      throw const FormatException('Controller window event is too large');
+    }
+    final map = _objectMap(
+      jsonDecode(encoded.substring(prefix.length)),
+      'controllerWindowChildEvent',
+    );
+    if (map['protocolVersion'] != ControllerWindowProtocol.version) {
+      throw const FormatException('Unsupported controller window event');
+    }
+    if (map['type'] != ControllerWindowChildEventType.preferencesChanged.name) {
+      throw FormatException(
+        'Unknown controller window event type: ${map['type']}',
+      );
+    }
+    return ControllerWindowChildEvent(
+      type: ControllerWindowChildEventType.preferencesChanged,
+      preferences: ControllerDisplayPreferences.fromJson(map['preferences']),
+    );
+  }
+}
+
 /// Splits pipe input without allowing an unbounded unterminated JSON line.
 class ControllerWindowPipeDecoder {
   final List<int> _pending = <int>[];
@@ -415,6 +478,22 @@ class ControllerWindowSnapshotCache {
     }
   }
 
+  void updatePreferences({
+    required Iterable<ControllerWindowMode> modes,
+    required ControllerDisplayPreferences preferences,
+  }) {
+    for (final mode in modes) {
+      final current = _latest[mode];
+      if (current == null) continue;
+      _latest[mode] = ControllerWindowLaunch(
+        mode: mode,
+        data: current.data,
+        preferences: preferences,
+        appearance: current.appearance,
+      );
+    }
+  }
+
   void clear() => _latest.clear();
 }
 
@@ -429,6 +508,8 @@ class ControllerWindowService {
       _opening = <ControllerWindowMode, Future<_ControllerChildProcess>>{};
   static final ControllerWindowSnapshotCache _snapshots =
       ControllerWindowSnapshotCache();
+  static final Map<ControllerWindowMode, ControllerWindowPreferencesChanged>
+      _preferencesChangedCallbacks = {};
   static int _generation = 0;
 
   static bool isControllerChildArguments(List<String> arguments) =>
@@ -450,6 +531,7 @@ class ControllerWindowService {
     required ControllerDisplayDto data,
     required ControllerDisplayPreferences preferences,
     required ControllerWindowAppearance appearance,
+    required ControllerWindowPreferencesChanged onPreferencesChanged,
   }) async {
     if (!supportsControllerDesktopWindows) {
       throw UnsupportedError('CONTROLLER_WINDOWS_UNSUPPORTED');
@@ -460,6 +542,7 @@ class ControllerWindowService {
       preferences: preferences,
       appearance: appearance,
     );
+    _preferencesChangedCallbacks[mode] = onPreferencesChanged;
     _snapshots.remember(launch);
 
     final existing = _children[mode];
@@ -505,6 +588,8 @@ class ControllerWindowService {
     late final _ControllerChildProcess child;
     child = _ControllerChildProcess(
       process: process,
+      onPreferencesChanged: (preferences) =>
+          _handlePreferencesChanged(mode, preferences),
       onExit: () {
         if (identical(_children[mode], child)) _children.remove(mode);
       },
@@ -574,12 +659,45 @@ class ControllerWindowService {
     }
   }
 
+  static Future<void> _handlePreferencesChanged(
+    ControllerWindowMode sourceMode,
+    ControllerDisplayPreferences preferences,
+  ) async {
+    final activeModes = <ControllerWindowMode>{
+      ..._opening.keys,
+      ..._children.keys,
+    };
+    _snapshots.updatePreferences(
+      modes: activeModes,
+      preferences: preferences,
+    );
+
+    final callback = _preferencesChangedCallbacks[sourceMode];
+    final persistence = callback == null
+        ? null
+        : Future<void>.sync(() => callback(preferences));
+    for (final entry in _children.entries.toList(growable: false)) {
+      final child = entry.value;
+      final launch = _snapshots[entry.key];
+      if (child.exited || launch == null) continue;
+      try {
+        await child.send(ControllerWindowMessageType.update, launch: launch);
+      } catch (_) {
+        if (identical(_children[entry.key], child)) {
+          _children.remove(entry.key);
+        }
+      }
+    }
+    if (persistence != null) await persistence;
+  }
+
   static Future<void> closeAll() async {
     _generation += 1;
     _opening.clear();
     final children = _children.values.toSet().toList(growable: false);
     _children.clear();
     _snapshots.clear();
+    _preferencesChangedCallbacks.clear();
     await Future.wait(children.map((child) => child.shutdown()));
   }
 }
@@ -587,8 +705,10 @@ class ControllerWindowService {
 class _ControllerChildProcess {
   _ControllerChildProcess({
     required this.process,
+    required ControllerWindowPreferencesChanged onPreferencesChanged,
     required void Function() onExit,
-  }) : _onExit = onExit {
+  })  : _onPreferencesChanged = onPreferencesChanged,
+        _onExit = onExit {
     // The owning startup path still awaits this future. This extra listener
     // prevents a very early child exit from becoming an unhandled zone error
     // before that await is installed (for example, when the first pipe write
@@ -600,6 +720,23 @@ class _ControllerChildProcess {
         .listen((line) {
       if (line == ControllerWindowProtocol.readyMarker && !ready.isCompleted) {
         ready.complete();
+        return;
+      }
+      try {
+        final event = ControllerWindowChildEventProtocol.tryDecode(line);
+        if (event != null) {
+          unawaited(
+            Future<void>.sync(
+              () => _onPreferencesChanged(event.preferences),
+            ).catchError((Object error, StackTrace stackTrace) {
+              debugPrint(
+                '[ControllerWindow] preference update failed: $error',
+              );
+            }),
+          );
+        }
+      } catch (error) {
+        debugPrint('[ControllerWindow] invalid child event: $error');
       }
     });
     _stderrSubscription = process.stderr.listen((_) {});
@@ -617,6 +754,7 @@ class _ControllerChildProcess {
   }
 
   final Process process;
+  final ControllerWindowPreferencesChanged _onPreferencesChanged;
   final void Function() _onExit;
   final Completer<void> ready = Completer<void>();
   late final StreamSubscription<String> _stdoutSubscription;
@@ -799,6 +937,22 @@ class _ControllerDisplayWindowAppState extends State<ControllerDisplayWindowApp>
 
   void _updatePreferences(ControllerDisplayPreferences preferences) {
     setState(() => _preferences = preferences);
+    unawaited(_publishPreferences(preferences));
+  }
+
+  Future<void> _publishPreferences(
+    ControllerDisplayPreferences preferences,
+  ) async {
+    try {
+      stdout.writeln(
+        ControllerWindowChildEventProtocol.encodePreferencesChanged(
+          preferences,
+        ),
+      );
+      await stdout.flush();
+    } catch (error) {
+      debugPrint('[ControllerWindow] preference publish failed: $error');
+    }
   }
 
   Future<void> _terminateChildWindow() async {

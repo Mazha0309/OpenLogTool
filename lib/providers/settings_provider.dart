@@ -206,11 +206,11 @@ class SettingsProvider with ChangeNotifier {
     ControllerDisplayPreferences preferences,
   ) async {
     _controllerDisplayPreferences = preferences;
+    notifyListeners();
     await _saveSetting(
       controllerDisplayPreferencesStorageKey,
       json.encode(preferences.toJson()),
     );
-    notifyListeners();
   }
 
   Future<void> updateExportSettings(ExportSettings settings) async {

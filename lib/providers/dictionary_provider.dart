@@ -45,6 +45,10 @@ typedef DictionaryRenameItem = Future<bridge.DictItem> Function({
 });
 
 typedef DictionaryAssetLoader = Future<String> Function(String assetPath);
+typedef DictionarySeedItems = Future<BigInt> Function({
+  required String dictType,
+  required List<String> items,
+});
 
 class _RawPinyinAbbrev {
   final String raw;
@@ -70,17 +74,29 @@ class DictionaryProvider with ChangeNotifier {
   final DictionaryClearItems _clearItems;
   final DictionaryRenameItem _renameItem;
   final DictionaryAssetLoader _loadAssetString;
+  final DictionarySeedItems _seedItems;
+  final Completer<void> _readyCompleter = Completer<void>();
+  int _dataRevision = 0;
 
   List<DictionaryItem> get deviceDict => _deviceDict;
   List<DictionaryItem> get antennaDict => _antennaDict;
   List<DictionaryItem> get callsignDict => _callsignDict;
   List<DictionaryItem> get qthDict => _qthDict;
+  Future<void> get ready => _readyCompleter.future;
+  int get dataRevision => _dataRevision;
 
   void setOnDictionaryChanged(Future<void> Function()? callback) {
     _onDictionaryChanged = callback;
   }
 
   Future<void> _notifyDictionaryChanged() async {
+    _dataRevision += 1;
+    // Publish the durable-data revision and the visible list change in the
+    // same notification. PersonalCloudProvider observes [dataRevision] from
+    // a ProxyProvider update; notifying before incrementing left it one
+    // revision behind and dictionary uploads only happened on the periodic
+    // poll.
+    _safeNotify();
     if (_onDictionaryChanged != null) {
       unawaited(_onDictionaryChanged!());
     }
@@ -97,6 +113,7 @@ class DictionaryProvider with ChangeNotifier {
     DictionaryClearItems? clearItems,
     DictionaryRenameItem? renameItem,
     DictionaryAssetLoader? loadAssetString,
+    DictionarySeedItems? seedItems,
   })  : _upsertItem = upsertItem ?? RustApi.upsertDictItem,
         _upsertActiveItem = upsertActiveItem ?? RustApi.upsertDictItemIfActive,
         _bulkUpsertItems = bulkUpsertItems ??
@@ -108,8 +125,14 @@ class DictionaryProvider with ChangeNotifier {
         _deleteItem = deleteItem ?? RustApi.softDeleteDictItem,
         _clearItems = clearItems ?? RustApi.softDeleteDictItems,
         _renameItem = renameItem ?? RustApi.renameDictItem,
-        _loadAssetString = loadAssetString ?? rootBundle.loadString {
-    if (autoload) scheduleMicrotask(_loadDictionaries);
+        _loadAssetString = loadAssetString ?? rootBundle.loadString,
+        _seedItems = seedItems ?? RustApi.seedDict {
+    _readyCompleter.future.ignore();
+    if (autoload) {
+      scheduleMicrotask(_loadDictionaries);
+    } else {
+      _readyCompleter.complete();
+    }
   }
 
   static DictionaryBulkUpsertItems _resolveBulkUpsertItems(
@@ -153,8 +176,12 @@ class DictionaryProvider with ChangeNotifier {
   Future<void> _loadDictionaries() async {
     try {
       await reloadFromDatabase(synchronizeBuiltins: true);
+      if (!_readyCompleter.isCompleted) _readyCompleter.complete();
     } catch (e, st) {
       debugPrint('[DictionaryProvider] _loadDictionaries failed: $e\n$st');
+      if (!_readyCompleter.isCompleted) {
+        _readyCompleter.completeError(e, st);
+      }
     }
   }
 
@@ -205,6 +232,10 @@ class DictionaryProvider with ChangeNotifier {
       'assets/dictionaries/qth.json',
       strict: strict,
     );
+    await _seedItems(
+      dictType: 'callsign_dictionary',
+      items: const <String>[],
+    );
   }
 
   Future<void> _backfillMissingPinyin() async {
@@ -220,7 +251,8 @@ class DictionaryProvider with ChangeNotifier {
     for (final item in target) {
       if (item.abbreviation.isNotEmpty && item.pinyin.isNotEmpty) continue;
       final generated = DictionaryPinyinHelper.generate(item.raw);
-      await _upsertActiveItem(
+      final upsert = item.origin == 'user' ? _upsertItem : _upsertActiveItem;
+      await upsert(
         dictType: dictType,
         raw: item.raw,
         pinyin: generated.pinyin,
@@ -240,6 +272,13 @@ class DictionaryProvider with ChangeNotifier {
       if (jsonData is! List) {
         throw FormatException('Invalid built-in dictionary: $assetPath');
       }
+      final rawItems = <String>[];
+      for (final item in jsonData) {
+        if (item is! Map) continue;
+        final raw = item['raw']?.toString().trim();
+        if (raw != null && raw.isNotEmpty) rawItems.add(raw);
+      }
+      await _seedItems(dictType: dictType, items: rawItems);
       for (final item in jsonData) {
         if (item is! Map) continue;
         final raw = item['raw']?.toString().trim();
@@ -271,6 +310,7 @@ class DictionaryProvider with ChangeNotifier {
       createdAt: b.createdAt,
       updatedAt: b.updatedAt,
       deletedAt: b.deletedAt,
+      origin: b.origin,
     );
   }
 
@@ -330,7 +370,6 @@ class DictionaryProvider with ChangeNotifier {
       }
       target.add(_toOldDictItem(persisted));
       target.sort((a, b) => a.raw.compareTo(b.raw));
-      _safeNotify();
       await _notifyDictionaryChanged();
     } catch (e, st) {
       debugPrint('[DictionaryProvider] _addDictItem failed: $e\n$st');
@@ -566,7 +605,6 @@ class DictionaryProvider with ChangeNotifier {
       _qthDict,
       persistedByType['qth_dictionary'],
     );
-    _safeNotify();
     await _notifyDictionaryChanged();
     return counts;
   }
@@ -714,7 +752,6 @@ class DictionaryProvider with ChangeNotifier {
 
     target[index] = _toOldDictItem(persisted);
     target.sort((a, b) => a.raw.compareTo(b.raw));
-    _safeNotify();
     await _notifyDictionaryChanged();
   }
 
@@ -738,7 +775,6 @@ class DictionaryProvider with ChangeNotifier {
     }
 
     target.removeWhere((item) => item.raw == normalizedRaw);
-    _safeNotify();
     await _notifyDictionaryChanged();
   }
 
@@ -748,8 +784,10 @@ class DictionaryProvider with ChangeNotifier {
     target
       ..clear()
       ..addAll(persisted);
-    _safeNotify();
     if (persisted.isNotEmpty) {
+      // The injected/alternate persistence layer did not perform the full
+      // clear. Reflect its read-back without claiming a successful revision.
+      _safeNotify();
       throw StateError(
         'DICT_CLEAR_FAILED: $dictType (${persisted.length} entries remain)',
       );

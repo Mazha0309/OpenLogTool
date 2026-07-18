@@ -2,6 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/utils/log_time.dart';
 
 void main() {
+  test('blank submission captures one full UTC timestamp including seconds',
+      () {
+    final capturedAt = DateTime.parse('2026-07-13T20:42:37.456+08:00');
+
+    final submitted = resolveLogTimeForSubmission(
+      '  ',
+      capturedAt: capturedAt,
+    );
+
+    expect(submitted, '2026-07-13T12:42:37.456Z');
+    expect(DateTime.parse(submitted).isUtc, isTrue);
+  });
+
+  test('manual clock input remains unchanged for submission', () {
+    expect(
+      resolveLogTimeForSubmission(
+        ' 20:42 ',
+        capturedAt: DateTime.utc(2026, 7, 13, 12, 42, 37),
+      ),
+      '20:42',
+    );
+  });
+
   test('local wall-clock time round-trips through canonical UTC storage', () {
     final localReference = DateTime(2026, 7, 13, 16, 49);
 

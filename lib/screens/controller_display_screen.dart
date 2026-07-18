@@ -46,122 +46,137 @@ class _ControllerDisplayScreenState extends State<ControllerDisplayScreen> {
   Widget build(BuildContext context) {
     final data = widget.data;
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _ControllerHeader(
-              data: data,
-              detail: _preferences.detail,
-              showCloseButton: widget.showCloseButton,
-              onConfigure: _showConfiguration,
-              onClose: widget.onClose ?? () => Navigator.maybePop(context),
-            ),
-            if (data.isStale)
-              MaterialBanner(
-                key: const Key('controller-stale-banner'),
-                backgroundColor: theme.colorScheme.errorContainer,
-                leading: Icon(
-                  Icons.cloud_off,
-                  color: theme.colorScheme.onErrorContainer,
-                ),
-                content: Text(
-                  context.l10n.staleControllerDataWarning,
-                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
-                ),
-                actions: const [SizedBox.shrink()],
+    final previousOrdinal = data.previous == null
+        ? null
+        : data.totalRecords > 0
+            ? data.totalRecords
+            : data.currentOrdinal > 1
+                ? data.currentOrdinal - 1
+                : null;
+    final previousTitle = previousOrdinal == null
+        ? context.l10n.previousSavedRecord
+        : context.l10n.recordOrdinal(previousOrdinal);
+    return _ControllerScaledViewport(
+      scale: _preferences.scale,
+      child: Scaffold(
+        backgroundColor: theme.colorScheme.surface,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _ControllerHeader(
+                data: data,
+                detail: _preferences.detail,
+                showCloseButton: widget.showCloseButton,
+                onConfigure: _showConfiguration,
+                onClose: widget.onClose ?? () => Navigator.maybePop(context),
               ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final viewSize = MediaQuery.sizeOf(context);
-                  final portrait = viewSize.height > viewSize.width;
-                  final horizontal = !portrait && constraints.maxWidth >= 720;
-                  final padding =
-                      EdgeInsets.all(constraints.maxWidth < 720 ? 8 : 16);
+              if (data.isStale)
+                MaterialBanner(
+                  key: const Key('controller-stale-banner'),
+                  backgroundColor: theme.colorScheme.errorContainer,
+                  leading: Icon(
+                    Icons.cloud_off,
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                  content: Text(
+                    context.l10n.staleControllerDataWarning,
+                    style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                  ),
+                  actions: const [SizedBox.shrink()],
+                ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final viewSize = MediaQuery.sizeOf(context);
+                    final portrait = viewSize.height > viewSize.width;
+                    final horizontal = !portrait && constraints.maxWidth >= 720;
+                    final padding =
+                        EdgeInsets.all(constraints.maxWidth < 720 ? 8 : 16);
 
-                  if (horizontal) {
-                    return Padding(
-                      key: const Key('controller-landscape-layout'),
+                    if (horizontal) {
+                      return Padding(
+                        key: const Key('controller-landscape-layout'),
+                        padding: padding,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _RecordPanel(
+                                key: const Key('controller-current-panel'),
+                                title: context.l10n
+                                    .currentOrdinal(data.currentOrdinal),
+                                icon: Icons.radio,
+                                record: data.current,
+                                fields: _preferences.fieldsFor(previous: false),
+                                accent: theme.colorScheme.primary,
+                                locks: data.locks,
+                                prominent: true,
+                                solidHeader: true,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 2,
+                              child: _RecordPanel(
+                                key: const Key('controller-previous-panel'),
+                                title: previousTitle,
+                                icon: Icons.history,
+                                record: data.previous,
+                                fields: _preferences.fieldsFor(previous: true),
+                                accent: theme.colorScheme.tertiary,
+                                locks: const [],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    // 竖屏让整个记录区统一滚动，卡片按内容自然展开。这样手机和
+                    // 平板不必把两张卡片强塞进有限高度，也不会出现两个很小的
+                    // 嵌套滚动区。窄横屏也复用这个更稳妥的紧凑布局。
+                    return SingleChildScrollView(
+                      key: Key(
+                        portrait
+                            ? 'controller-portrait-layout'
+                            : 'controller-compact-layout',
+                      ),
                       padding: padding,
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            flex: 3,
-                            child: _RecordPanel(
-                              key: const Key('controller-current-panel'),
-                              title: context.l10n
-                                  .currentOrdinal(data.currentOrdinal),
-                              icon: Icons.radio,
-                              record: data.current,
-                              fields: _preferences.fieldsFor(previous: false),
-                              accent: theme.colorScheme.primary,
-                              locks: data.locks,
-                              prominent: true,
-                            ),
+                          _RecordPanel(
+                            key: const Key('controller-current-panel'),
+                            title: context.l10n
+                                .currentOrdinal(data.currentOrdinal),
+                            icon: Icons.radio,
+                            record: data.current,
+                            fields: _preferences.fieldsFor(previous: false),
+                            accent: theme.colorScheme.primary,
+                            locks: data.locks,
+                            prominent: true,
+                            solidHeader: true,
+                            expandBody: false,
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 2,
-                            child: _RecordPanel(
-                              key: const Key('controller-previous-panel'),
-                              title: context.l10n.previousSavedRecord,
-                              icon: Icons.history,
-                              record: data.previous,
-                              fields: _preferences.fieldsFor(previous: true),
-                              accent: theme.colorScheme.tertiary,
-                              locks: const [],
-                            ),
+                          const SizedBox(height: 12),
+                          _RecordPanel(
+                            key: const Key('controller-previous-panel'),
+                            title: previousTitle,
+                            icon: Icons.history,
+                            record: data.previous,
+                            fields: _preferences.fieldsFor(previous: true),
+                            accent: theme.colorScheme.tertiary,
+                            locks: const [],
+                            expandBody: false,
                           ),
                         ],
                       ),
                     );
-                  }
-
-                  // 竖屏让整个记录区统一滚动，卡片按内容自然展开。这样手机和
-                  // 平板不必把两张卡片强塞进有限高度，也不会出现两个很小的
-                  // 嵌套滚动区。窄横屏也复用这个更稳妥的紧凑布局。
-                  return SingleChildScrollView(
-                    key: Key(
-                      portrait
-                          ? 'controller-portrait-layout'
-                          : 'controller-compact-layout',
-                    ),
-                    padding: padding,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _RecordPanel(
-                          key: const Key('controller-current-panel'),
-                          title:
-                              context.l10n.currentOrdinal(data.currentOrdinal),
-                          icon: Icons.radio,
-                          record: data.current,
-                          fields: _preferences.fieldsFor(previous: false),
-                          accent: theme.colorScheme.primary,
-                          locks: data.locks,
-                          prominent: true,
-                          expandBody: false,
-                        ),
-                        const SizedBox(height: 12),
-                        _RecordPanel(
-                          key: const Key('controller-previous-panel'),
-                          title: context.l10n.previousSavedRecord,
-                          icon: Icons.history,
-                          record: data.previous,
-                          fields: _preferences.fieldsFor(previous: true),
-                          accent: theme.colorScheme.tertiary,
-                          locks: const [],
-                          expandBody: false,
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -209,6 +224,12 @@ class _ControllerDisplayScreenState extends State<ControllerDisplayScreen> {
                         }
                       },
                     ),
+                    const SizedBox(height: 20),
+                    _ControllerScaleControl(
+                      scale: pending.scale,
+                      onChanged: (scale) =>
+                          update(pending.copyWith(scale: scale)),
+                    ),
                     if (pending.detail == ControllerDisplayDetail.custom) ...[
                       const SizedBox(height: 20),
                       _FieldSelector(
@@ -245,6 +266,122 @@ class _ControllerDisplayScreenState extends State<ControllerDisplayScreen> {
       ),
     );
     if (result != null && mounted) _setPreferences(result);
+  }
+}
+
+/// Applies browser-style zoom to a bounded logical viewport. The child lays
+/// itself out at `physicalSize / scale` and is then painted back into the real
+/// viewport, so responsive breakpoints and hit testing follow the visible UI.
+class _ControllerScaledViewport extends StatelessWidget {
+  const _ControllerScaledViewport({
+    required this.scale,
+    required this.child,
+  });
+
+  final double scale;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = ControllerDisplayPreferences.normalizeScale(scale);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+          return child;
+        }
+        final logicalSize = Size(
+          constraints.maxWidth / normalized,
+          constraints.maxHeight / normalized,
+        );
+        final mediaQuery = MediaQuery.of(context);
+        final logicalMediaQuery = mediaQuery.copyWith(
+          size: logicalSize,
+          padding: _scaleInsets(mediaQuery.padding, normalized),
+          viewPadding: _scaleInsets(mediaQuery.viewPadding, normalized),
+          viewInsets: _scaleInsets(mediaQuery.viewInsets, normalized),
+          systemGestureInsets:
+              _scaleInsets(mediaQuery.systemGestureInsets, normalized),
+        );
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.topLeft,
+            minWidth: 0,
+            minHeight: 0,
+            maxWidth: double.infinity,
+            maxHeight: double.infinity,
+            child: Transform.scale(
+              key: const Key('controller-display-scale-transform'),
+              scale: normalized,
+              alignment: Alignment.topLeft,
+              child: SizedBox.fromSize(
+                size: logicalSize,
+                child: MediaQuery(
+                  data: logicalMediaQuery,
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+EdgeInsets _scaleInsets(EdgeInsets value, double scale) => EdgeInsets.fromLTRB(
+      value.left / scale,
+      value.top / scale,
+      value.right / scale,
+      value.bottom / scale,
+    );
+
+class _ControllerScaleControl extends StatelessWidget {
+  const _ControllerScaleControl({
+    required this.scale,
+    required this.onChanged,
+  });
+
+  final double scale;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = (scale * 100).round();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                context.l10n.controllerDisplayScale,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            Text(
+              '$percent%',
+              key: const Key('controller-scale-value'),
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ],
+        ),
+        Slider(
+          key: const Key('controller-scale-slider'),
+          value: scale,
+          min: ControllerDisplayPreferences.minScale,
+          max: ControllerDisplayPreferences.maxScale,
+          divisions: ControllerDisplayPreferences.scaleDivisions,
+          label: '$percent%',
+          onChanged: onChanged,
+        ),
+        Text(
+          context.l10n.controllerDisplayScaleHint,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      ],
+    );
   }
 }
 
@@ -423,6 +560,7 @@ class _RecordPanel extends StatelessWidget {
     required this.accent,
     required this.locks,
     this.prominent = false,
+    this.solidHeader = false,
     this.expandBody = true,
   });
 
@@ -433,12 +571,14 @@ class _RecordPanel extends StatelessWidget {
   final Color accent;
   final List<ControllerFieldLock> locks;
   final bool prominent;
+  final bool solidHeader;
   final bool expandBody;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final value = record;
+    final headerForeground = solidHeader ? theme.colorScheme.onPrimary : accent;
     final recordContent = value == null
         ? SizedBox(
             height: 120,
@@ -512,17 +652,22 @@ class _RecordPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            color: accent.withValues(alpha: 0.12),
+            key: Key(
+              prominent
+                  ? 'controller-current-panel-header'
+                  : 'controller-previous-panel-header',
+            ),
+            color: solidHeader ? accent : accent.withValues(alpha: 0.12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(icon, color: accent),
+                Icon(icon, color: headerForeground),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
                     style: theme.textTheme.titleLarge?.copyWith(
-                      color: accent,
+                      color: headerForeground,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -565,6 +710,15 @@ class _FieldTile extends StatelessWidget {
     final displayValue = field == ControllerDisplayField.time
         ? formatLogTimeForDisplay(value)
         : value;
+    final visibleValue = displayValue.trim().isEmpty ? '—' : displayValue;
+    final valueText = Text(
+      visibleValue,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+      ),
+    );
     return Container(
       key: Key('controller-field-${field.wireName}'),
       constraints: const BoxConstraints(minHeight: 74),
@@ -605,13 +759,10 @@ class _FieldTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          SelectableText(
-            displayValue.trim().isEmpty ? '—' : displayValue,
-            maxLines: field == ControllerDisplayField.remarks ? 3 : 1,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          if (field == ControllerDisplayField.remarks)
+            Tooltip(message: visibleValue, child: valueText)
+          else
+            valueText,
         ],
       ),
     );

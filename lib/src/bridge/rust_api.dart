@@ -3,14 +3,14 @@ import 'api/logs.dart' as logs;
 import 'api/sessions.dart' as sessions;
 import 'api/dictionaries.dart' as dict;
 import 'api/settings.dart' as settings;
-import 'api/callsign_qth.dart' as callsign_qth;
 import 'api/collaboration.dart' as collaboration;
 import 'api/database.dart' as database;
 import 'api/personal_records.dart' as personal_records;
+import 'api/personal_cloud.dart' as personal_cloud;
+import 'api/personal_dictionary.dart' as personal_dictionary;
 import 'models/log_entry.dart';
 import 'models/session.dart';
 import 'models/dict_item.dart';
-import 'models/callsign_qth_record.dart';
 
 class RustApi {
   static Future<void> init({required String dbPath}) async {
@@ -292,32 +292,6 @@ class RustApi {
 
   static Future<List<(String, String)>> getAllSettings() {
     return settings.getAllSettings();
-  }
-
-  // Callsign-QTH history
-  static Future<void> addCallsignQthRecord({
-    required String callsign,
-    required String qth,
-  }) {
-    return callsign_qth.addCallsignQthRecord(callsign: callsign, qth: qth);
-  }
-
-  static Future<List<CallsignQthRecord>> getCallsignQthHistory({
-    required String callsign,
-    int? limit,
-  }) {
-    return callsign_qth.getCallsignQthHistory(callsign: callsign, limit: limit);
-  }
-
-  static Future<String?> getLastRecordedTime({
-    required String callsign,
-    required String qth,
-  }) {
-    return callsign_qth.getLastRecordedTime(callsign: callsign, qth: qth);
-  }
-
-  static Future<void> clearCallsignQthHistory() {
-    return callsign_qth.clearCallsignQthHistory();
   }
 
   // Collaboration replica
@@ -624,5 +598,53 @@ class RustApi {
 
   static Future<String> mergePersonalRecords({required String jsonData}) {
     return personal_records.mergePersonalRecords(jsonData: jsonData);
+  }
+
+  static Future<String> loadPersonalCloudState({
+    required String scopeHash,
+    required String dataset,
+  }) {
+    return personal_cloud.loadPersonalCloudState(
+      scopeHash: scopeHash,
+      dataset: dataset,
+    );
+  }
+
+  static Future<void> savePersonalCloudBaseline({
+    required String scopeHash,
+    required String dataset,
+    required int remoteRevision,
+    required String snapshotJson,
+    required String checksum,
+    required bool claimOwner,
+    required bool clearPairingRequirement,
+  }) {
+    return personal_cloud.savePersonalCloudBaseline(
+      scopeHash: scopeHash,
+      dataset: dataset,
+      remoteRevision: remoteRevision,
+      snapshotJson: snapshotJson,
+      checksum: checksum,
+      claimOwner: claimOwner,
+      clearPairingRequirement: clearPairingRequirement,
+    );
+  }
+
+  static Future<void> requirePersonalCloudPairing({required String reason}) {
+    return personal_cloud.requirePersonalCloudPairing(reason: reason);
+  }
+
+  static Future<String> exportPersonalDictionary() {
+    return personal_dictionary.exportPersonalDictionary();
+  }
+
+  static Future<String> replacePersonalDictionaryIfUnchanged({
+    required String jsonData,
+    required String expectedLocalJsonData,
+  }) {
+    return personal_dictionary.replacePersonalDictionaryIfUnchanged(
+      jsonData: jsonData,
+      expectedLocalJsonData: expectedLocalJsonData,
+    );
   }
 }
