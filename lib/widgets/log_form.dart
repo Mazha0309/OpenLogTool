@@ -262,9 +262,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       if (record.qth?.isNotEmpty ?? false) 'qth': record.qth!,
       if (record.power?.isNotEmpty ?? false) 'power': record.power!,
       if (record.height?.isNotEmpty ?? false) 'height': record.height!,
-      if (record.rstSent?.isNotEmpty ?? false) 'rstSent': record.rstSent!,
-      if (record.rstRcvd?.isNotEmpty ?? false) 'rstRcvd': record.rstRcvd!,
-      if (record.controller.isNotEmpty) 'controller': record.controller,
     };
     if (values.isEmpty || !mounted) return;
 
@@ -327,7 +324,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (_submissionInProgress) return;
     final collaboration = context.read<CollaborationProvider>();
     if (widget.readOnly ||
-        (collaboration.liveDraftSnapshot != null &&
+        (collaboration.binding != null &&
+            collaboration.liveDraftSnapshot != null &&
             !collaboration.canEditLiveDraft)) {
       return;
     }
@@ -404,7 +402,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
     if (!mounted) return;
 
-    if (collaboration.liveDraftSnapshot != null) {
+    if (collaboration.binding != null &&
+        collaboration.liveDraftSnapshot != null) {
       final enteredTime = _timeController.text.trim();
       final submittedTime =
           enteredTime.isNotEmpty ? enteredTime : _getCurrentTime();

@@ -139,9 +139,16 @@ class _LogTableState extends State<LogTable> {
 
   @override
   Widget build(BuildContext context) {
-    final logProvider = Provider.of<LogProvider>(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context);
+    final logProvider = context.watch<LogProvider>();
+    final settingsProvider = context.watch<SettingsProvider>();
+    return _buildContent(context, logProvider, settingsProvider);
+  }
 
+  Widget _buildContent(
+    BuildContext context,
+    LogProvider logProvider,
+    SettingsProvider settingsProvider,
+  ) {
     if (logProvider.logs.isEmpty) {
       return Container(
         margin: const EdgeInsets.all(16),

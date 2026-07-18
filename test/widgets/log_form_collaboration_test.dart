@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
@@ -270,11 +271,14 @@ void main() {
           'qth': 'Shanghai',
           'power': '100W',
           'height': '12m',
-          'rstSent': '58',
-          'rstRcvd': '47',
-          'controller': 'BG5CRL',
         });
         expect(collaboration.atomicUpdates.single, isNot(contains('time')));
+        expect(collaboration.atomicUpdates.single, isNot(contains('rstSent')));
+        expect(collaboration.atomicUpdates.single, isNot(contains('rstRcvd')));
+        expect(
+          collaboration.atomicUpdates.single,
+          isNot(contains('controller')),
+        );
         collaboration.acquiredFields.clear();
         collaboration.releasedFields.clear();
 
@@ -806,6 +810,21 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   LiveDraftCommitDisposition commitDisposition =
       LiveDraftCommitDisposition.committed;
   int commitCalls = 0;
+
+  @override
+  LocalCollaborationBinding get binding => const LocalCollaborationBinding(
+        serverInstanceId: 'server-1',
+        serverOrigin: 'https://example.test',
+        accountId: 'user-1',
+        sessionId: 'session-1',
+        membershipId: 'membership-1',
+        membershipVersion: 1,
+        role: SessionRole.owner,
+        replicaState: 'ready',
+        lastAppliedSeq: 1,
+        lastSeenHeadSeq: 1,
+        revokedAt: null,
+      );
 
   void replaceDraft({
     required String draftId,

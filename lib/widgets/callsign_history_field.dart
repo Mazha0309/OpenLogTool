@@ -223,21 +223,6 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     if (_canFill('height') && (log.height?.isNotEmpty ?? false)) {
       widget.heightController.text = log.height!;
     }
-    if (_canFill('rstSent') &&
-        widget.reportController != null &&
-        (log.rstSent?.isNotEmpty ?? false)) {
-      widget.reportController!.text = log.rstSent!;
-    }
-    if (_canFill('rstRcvd') &&
-        widget.rstRcvdController != null &&
-        (log.rstRcvd?.isNotEmpty ?? false)) {
-      widget.rstRcvdController!.text = log.rstRcvd!;
-    }
-    if (_canFill('controller') &&
-        widget.controllerController != null &&
-        log.controller.isNotEmpty) {
-      widget.controllerController!.text = log.controller;
-    }
   }
 
   void _showOverlay() {
