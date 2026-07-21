@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
@@ -13,15 +14,31 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
 import 'package:openlogtool/utils/log_time.dart';
+import 'package:openlogtool/services/ai_candidate_guard.dart';
+import 'package:openlogtool/services/ai_audio_recorder.dart';
+import 'package:openlogtool/services/ai_database_context.dart';
+import 'package:openlogtool/services/ai_recognition_runtime.dart';
+import 'package:openlogtool/widgets/ai_recognition_control.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 
 /// 日志表单组件
 /// 用于添加和编辑点名记录
 class LogForm extends StatefulWidget {
-  const LogForm({super.key, this.readOnly = false});
+  const LogForm({
+    super.key,
+    this.readOnly = false,
+    this.aiAudioRecorder,
+    this.aiRecognitionExecutor,
+    this.aiTranscriptionExecutor,
+    this.aiFieldExtractionExecutor,
+  });
 
   final bool readOnly;
+  final AiAudioRecorder? aiAudioRecorder;
+  final AiRecognitionExecutor? aiRecognitionExecutor;
+  final AiTranscriptionExecutor? aiTranscriptionExecutor;
+  final AiFieldExtractionExecutor? aiFieldExtractionExecutor;
 
   @override
   State<LogForm> createState() => _LogFormState();
@@ -56,6 +73,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
   final Set<String> _deferredSharedDraftFields = <String>{};
+  late final Map<String, int> _aiFieldRevisions;
+  int _aiRecordEpoch = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -81,6 +100,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     _draftFocusNodes = {
       for (final field in _draftControllers.keys)
         field: field == 'callsign' ? _callsignFocusNode : FocusNode(),
+    };
+    _aiFieldRevisions = {
+      for (final field in AiCandidateGuard.supportedFields) field: 0,
     };
     _draftControllerListeners = {
       for (final field in _draftControllers.keys)
@@ -142,7 +164,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       return;
     }
     final draftChanged = _lastSharedDraftId != snapshot.draft.draftId;
-    if (draftChanged) _deferredSharedDraftFields.clear();
+    if (draftChanged) {
+      _deferredSharedDraftFields.clear();
+      _aiRecordEpoch += 1;
+    }
     _lastSharedDraftId = snapshot.draft.draftId;
     _lastSharedDraftSignature = signature;
     _applyingSharedDraft = true;
@@ -180,7 +205,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   void _onDraftFieldChanged(String field) {
-    if (_applyingSharedDraft || !mounted) return;
+    if (!mounted) return;
+    if (_aiFieldRevisions.containsKey(field)) {
+      _aiFieldRevisions[field] = _aiFieldRevisions[field]! + 1;
+    }
+    if (_applyingSharedDraft) return;
     if (_hasActiveUpperCaseComposition(field)) {
       _draftDebounce.remove(field)?.cancel();
       return;
@@ -515,6 +544,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   }
 
   void _resetForm() {
+    _aiRecordEpoch += 1;
     // 主控呼号在连续添加时应保留，先保存再恢复。
     final controllerCallsign = _controllerController.text;
     _formKey.currentState?.reset();
@@ -532,12 +562,122 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 
+  AiDraftSnapshot _captureAiDraft(int captureGeneration) {
+    final sessionProvider = context.read<SessionProvider>();
+    final collaboration = context.read<CollaborationProvider>();
+    final remoteRevisions =
+        collaboration.liveDraftSnapshot?.draft.fieldRevisions;
+    return AiDraftSnapshot(
+      sessionId: sessionProvider.currentSessionId ?? '',
+      recordEpoch: _aiRecordEpoch,
+      captureGeneration: captureGeneration,
+      draftId: collaboration.liveDraftSnapshot?.draft.draftId,
+      fields: {
+        for (final field in AiCandidateGuard.supportedFields)
+          field: AiDraftFieldSnapshot(
+            value: _draftControllers[field]?.text ?? '',
+            revision: Object.hash(
+              _aiFieldRevisions[field] ?? 0,
+              remoteRevisions?[field] ?? 0,
+            ),
+            remoteRevision: remoteRevisions?[field],
+          ),
+      },
+    );
+  }
+
+  AiCandidateApplicationState _currentAiDraftState(
+    int captureGeneration,
+    CollaborationProvider collaboration,
+    bool readOnly,
+  ) {
+    final composingFields = <String>{};
+    for (final entry in _draftControllers.entries) {
+      final composing = entry.value.value.composing;
+      if (composing.isValid && !composing.isCollapsed) {
+        composingFields.add(entry.key);
+      }
+    }
+    final lockedFields = <String>{
+      for (final field in AiCandidateGuard.supportedFields)
+        if (collaboration.fieldLockedByAnotherUser(field)) field,
+    };
+    return AiCandidateApplicationState(
+      snapshot: _captureAiDraft(captureGeneration),
+      focusedFields: {
+        for (final entry in _draftFocusNodes.entries)
+          if (entry.value.hasFocus) entry.key,
+      },
+      composingFields: composingFields,
+      lockedFields: lockedFields,
+      readOnly: readOnly,
+      busy: _historyReuseInProgress || _submissionInProgress,
+    );
+  }
+
+  Future<void> _applyAiCandidateFields(
+    Map<String, String> values,
+    AiDraftSnapshot expectedSnapshot,
+    CollaborationProvider collaboration,
+  ) async {
+    final normalized = <String, String>{
+      for (final entry in values.entries)
+        if (AiCandidateGuard.supportedFields.contains(entry.key))
+          entry.key: _upperCaseDraftFields.contains(entry.key)
+              ? entry.value.trim().toUpperCase()
+              : entry.value.trim(),
+    };
+    if (normalized.isEmpty) return;
+
+    if (collaboration.liveDraftSnapshot != null) {
+      final expectedDraftId = expectedSnapshot.draftId;
+      if (expectedDraftId == null) {
+        throw StateError('LIVE_DRAFT_SUGGESTION_STALE');
+      }
+      final expectedValues = <String, String>{};
+      final expectedRevisions = <String, int>{};
+      for (final field in normalized.keys) {
+        final expected = expectedSnapshot.fields[field];
+        final remoteRevision = expected?.remoteRevision;
+        if (expected == null || remoteRevision == null) {
+          throw StateError('LIVE_DRAFT_SUGGESTION_STALE');
+        }
+        expectedValues[field] = expected.value;
+        expectedRevisions[field] = remoteRevision;
+      }
+      // AI suggestions are never rebased over a collaborator's newer edit.
+      await collaboration.updateLiveDraftFieldsStrict(
+        normalized,
+        expectedDraftId: expectedDraftId,
+        expectedValues: expectedValues,
+        expectedRevisions: expectedRevisions,
+      );
+      return;
+    }
+
+    _applyingSharedDraft = true;
+    try {
+      for (final entry in normalized.entries) {
+        final controller = _draftControllers[entry.key];
+        if (controller == null || controller.text == entry.value) continue;
+        controller.value = TextEditingValue(
+          text: entry.value,
+          selection: TextSelection.collapsed(offset: entry.value.length),
+        );
+      }
+    } finally {
+      _applyingSharedDraft = false;
+    }
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final dictionaryProvider = Provider.of<DictionaryProvider>(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final collaboration = Provider.of<CollaborationProvider>(context);
+    final aiSettings = Provider.of<AiRecognitionSettingsProvider?>(context);
     _syncSharedDraft(collaboration);
     final sharedDraft = collaboration.liveDraftSnapshot != null;
     final readOnly =
@@ -806,6 +946,44 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 ),
 
                 const SizedBox(height: 12),
+
+                if (aiSettings?.enabled == true &&
+                    aiSettings?.activeAsrProfile != null) ...[
+                  AiRecognitionControl(
+                    captureSnapshot: _captureAiDraft,
+                    currentState: (generation) => _currentAiDraftState(
+                      generation,
+                      collaboration,
+                      readOnly,
+                    ),
+                    applyFields: (values, expectedSnapshot) =>
+                        _applyAiCandidateFields(
+                      values,
+                      expectedSnapshot,
+                      collaboration,
+                    ),
+                    readOnly: readOnly,
+                    busy: _historyReuseInProgress || _submissionInProgress,
+                    audioRecorder: widget.aiAudioRecorder,
+                    executor: widget.aiRecognitionExecutor,
+                    transcriptionExecutor: widget.aiTranscriptionExecutor ??
+                        AiRecognitionRuntime.transcribe,
+                    fieldExtractionExecutor: widget.aiFieldExtractionExecutor ??
+                        AiRecognitionRuntime.extractFields,
+                    referenceContextBuilder:
+                        aiSettings?.useLocalReferenceContext == true
+                            ? (transcript) => AiDatabaseContextBuilder.build(
+                                  transcript: transcript,
+                                  devices: dictionaryProvider.deviceDict,
+                                  antennas: dictionaryProvider.antennaDict,
+                                  callsigns: dictionaryProvider.callsignDict,
+                                  qths: dictionaryProvider.qthDict,
+                                  recentLogs: context.read<LogProvider>().logs,
+                                )
+                            : null,
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 if (sharedDraft &&
                     collaboration.ownedLiveDraftLocks.isNotEmpty) ...[

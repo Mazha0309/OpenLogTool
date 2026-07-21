@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -99,6 +100,7 @@ class _HomeScreenTestApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppInfoProvider()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => AiRecognitionSettingsProvider()),
         ChangeNotifierProvider<SessionProvider>(
           create: (_) => _TestSessionProvider(session),
         ),

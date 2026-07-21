@@ -2490,6 +2490,303 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dataLocalDatabaseTab => '本地数据库';
+
+  @override
+  String get settingsCategoryAi => 'AI 辅助';
+
+  @override
+  String get aiSettingsTitle => 'AI 辅助识别';
+
+  @override
+  String get aiSettingsDescription => '配置可选的语音识别与字段提取服务。接口、模型与鉴权均由本机独立设置。';
+
+  @override
+  String get aiSettingsOptionalTitle => '可选且默认关闭';
+
+  @override
+  String get aiSettingsOptionalMessage =>
+      '音频将直接发送到你配置的服务，不经过 OpenLogTool 协作服务器。识别结果只作为候选，不会自动覆盖书记员正在编辑的内容。';
+
+  @override
+  String get aiRecognitionEnabled => '启用 AI 辅助识别';
+
+  @override
+  String get aiRecognitionEnabledHint => '启用后可从点名工作台调用当前语音识别配置。';
+
+  @override
+  String get aiLocalReferenceContext => '结合本地词库与近期记录';
+
+  @override
+  String get aiLocalReferenceContextHint =>
+      '默认开启。仅把与当前转写相近的少量词条和命中呼号的近期字段发送给文字模型，用于纠正呼号、设备、天线和 QTH；不会上传完整数据库。';
+
+  @override
+  String get aiRecognitionNeedsAsr => '请先添加并选择语音识别配置。';
+
+  @override
+  String get aiAsrStageTitle => '语音识别（ASR）';
+
+  @override
+  String get aiAsrStageDescription => '把音频转换为原始文本，三类接口格式可同时保存并随时切换。';
+
+  @override
+  String get aiExtractionStageTitle => '字段提取（可选）';
+
+  @override
+  String get aiExtractionStageDescription =>
+      '把转写文本整理为呼号、RST、QTH 等候选字段；不配置时保留原始转写。';
+
+  @override
+  String get aiSupportedProtocols => '支持的接口格式';
+
+  @override
+  String get aiActiveProfile => '当前配置';
+
+  @override
+  String get aiNoProfileConfigured => '尚未添加配置';
+
+  @override
+  String get aiNoActiveProfile => '不使用';
+
+  @override
+  String get aiCredentialStatus => '密钥状态';
+
+  @override
+  String get aiCredentialNoProfile => '选择配置后显示本机密钥状态。';
+
+  @override
+  String get aiCredentialStoredLocally => 'API 密钥单独保存在系统安全存储中，不进入配置导出。';
+
+  @override
+  String get aiStatusNotConfigured => '未配置';
+
+  @override
+  String get aiStatusNoCredentialNeeded => '无需密钥';
+
+  @override
+  String get aiStatusCredentialReady => '密钥已保存';
+
+  @override
+  String get aiStatusCredentialMissing => '缺少密钥';
+
+  @override
+  String get aiAddProfile => '添加配置';
+
+  @override
+  String get aiEditProfile => '编辑配置';
+
+  @override
+  String get aiDeleteProfileTitle => '删除 AI 配置';
+
+  @override
+  String aiDeleteProfileMessage(String name) {
+    return '确定删除“$name”及其本机密钥吗？';
+  }
+
+  @override
+  String get aiProfileName => '配置名称';
+
+  @override
+  String get aiBaseUrl => 'API Base URL';
+
+  @override
+  String get aiModelName => '模型名称';
+
+  @override
+  String get aiProtocol => '接口格式';
+
+  @override
+  String get aiAuthentication => '鉴权方式';
+
+  @override
+  String get aiCredentialName => '请求头或查询参数名';
+
+  @override
+  String get aiCredentialPrefix => '密钥前缀（可留空）';
+
+  @override
+  String get aiApiKey => 'API 密钥';
+
+  @override
+  String get aiApiKeyNewHint => '可暂时留空，保存后将显示缺少密钥。';
+
+  @override
+  String get aiApiKeyExistingHint => '留空会保留当前密钥；更换接口目的地时需要重新填写。';
+
+  @override
+  String get aiRequestOptions => '高级请求选项（JSON）';
+
+  @override
+  String get aiRequestOptionsHint =>
+      '通用 JSON 必须包含 requestTemplate；可设置 path、responsePath、body、fields、audioDataEncoding、includePrompt 等协议选项。这里的内容会随配置导出，请勿填写密钥。';
+
+  @override
+  String get aiRequiredField => '此项不能为空';
+
+  @override
+  String get aiRequestOptionsMustBeObject => '高级请求选项必须是 JSON 对象';
+
+  @override
+  String get aiJsonProtocolNeedsTemplate => '通用 JSON 格式必须包含 requestTemplate';
+
+  @override
+  String get aiInvalidJson => 'JSON 格式无效';
+
+  @override
+  String get aiInvalidBaseUrl => '请输入有效的 HTTP(S) API 地址';
+
+  @override
+  String aiSettingsFailed(String error) {
+    return 'AI 设置操作失败：$error';
+  }
+
+  @override
+  String get aiProtocolAudioTranscriptions => '音频转写 multipart';
+
+  @override
+  String get aiProtocolChatAudio => 'Chat input_audio';
+
+  @override
+  String get aiProtocolChatText => 'Chat 文本提取';
+
+  @override
+  String get aiProtocolGenericJson => '通用 JSON HTTP';
+
+  @override
+  String get aiAuthNone => '无需鉴权';
+
+  @override
+  String get aiAuthBearer => 'Authorization Bearer';
+
+  @override
+  String get aiAuthHeader => '自定义请求头';
+
+  @override
+  String get aiAuthQuery => '查询参数';
+
+  @override
+  String get aiWorkbenchTitle => 'AI 辅助识别';
+
+  @override
+  String get aiWorkbenchUnavailable => '当前记录为只读或正在处理，暂时不能识别。';
+
+  @override
+  String get aiReadyStatus => '点击麦克风录制一条点名内容。';
+
+  @override
+  String aiRecordingStatus(String elapsed) {
+    return '正在录音 $elapsed';
+  }
+
+  @override
+  String get aiLiveTranscriptTitle => '实时识别字段';
+
+  @override
+  String get aiLiveStructuredWaiting => '正在积累一段完整的点名内容，识别出的字段会显示在这里。';
+
+  @override
+  String get aiLiveStructuredUpdating => '正在根据目前的完整内容整理字段…';
+
+  @override
+  String aiLiveTranscriptionRetrying(String error) {
+    return '实时识别暂时失败；停止录音后仍会用完整内容重试：$error';
+  }
+
+  @override
+  String get aiRecognizingStatus => '正在识别并整理候选内容…';
+
+  @override
+  String get aiStartRecording => '录音';
+
+  @override
+  String get aiStopAndRecognize => '识别';
+
+  @override
+  String get aiMicrophonePermissionDenied => '未获得麦克风权限。';
+
+  @override
+  String aiRecordingFailed(String error) {
+    return '录音失败：$error';
+  }
+
+  @override
+  String aiRecognitionFailed(String error) {
+    return '识别失败：$error';
+  }
+
+  @override
+  String get aiReviewTitle => '确认 AI 候选内容';
+
+  @override
+  String get aiTranscriptTitle => '原始转写';
+
+  @override
+  String get aiCopyTranscript => '复制转写';
+
+  @override
+  String get aiTranscriptCopied => '已复制转写内容。';
+
+  @override
+  String get aiNoStructuredCandidates => '服务没有返回结构化字段，你仍可查看或复制上方转写。';
+
+  @override
+  String get aiCandidateRecord => '候选记录';
+
+  @override
+  String aiCandidateNumber(int number) {
+    return '候选 $number';
+  }
+
+  @override
+  String get aiCandidateHint => '空字段会默认勾选；替换已有内容必须由你手动勾选确认。';
+
+  @override
+  String get aiApplySelected => '应用所选字段';
+
+  @override
+  String aiCandidatesApplied(int count) {
+    return '已应用 $count 个候选字段。';
+  }
+
+  @override
+  String get aiCandidatesStale => '录音后记录内容已经变化，这些候选已不能安全应用。';
+
+  @override
+  String aiApplyFailed(String error) {
+    return '无法应用 AI 候选：$error';
+  }
+
+  @override
+  String aiWillReplaceValue(String value) {
+    return '将替换：$value';
+  }
+
+  @override
+  String get aiWillFillEmpty => '将填入空字段';
+
+  @override
+  String get aiReplacementNeedsConfirmation => '勾选后确认替换';
+
+  @override
+  String get aiCandidateUnchanged => '内容已经一致';
+
+  @override
+  String get aiCandidateStale => '录音后该字段已发生变化';
+
+  @override
+  String get aiCandidateBeingEdited => '该字段正在编辑或输入法组词';
+
+  @override
+  String get aiCandidateLocked => '另一位协作者正在编辑该字段';
+
+  @override
+  String get aiCandidateReadOnly => '当前记录为只读';
+
+  @override
+  String get aiCandidateBusy => '当前记录正在处理其他操作';
+
+  @override
+  String get aiCandidateInvalid => '不支持或无效的候选内容';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -3559,4 +3856,301 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get localCollaborationRequired => '当前会话已不是本机协作副本，请刷新页面后重试。';
+
+  @override
+  String get settingsCategoryAi => 'AI 辅助';
+
+  @override
+  String get aiSettingsTitle => 'AI 辅助识别';
+
+  @override
+  String get aiSettingsDescription => '配置可选的语音识别与字段提取服务。接口、模型与鉴权均由本机独立设置。';
+
+  @override
+  String get aiSettingsOptionalTitle => '可选且默认关闭';
+
+  @override
+  String get aiSettingsOptionalMessage =>
+      '音频将直接发送到你配置的服务，不经过 OpenLogTool 协作服务器。识别结果只作为候选，不会自动覆盖书记员正在编辑的内容。';
+
+  @override
+  String get aiRecognitionEnabled => '启用 AI 辅助识别';
+
+  @override
+  String get aiRecognitionEnabledHint => '启用后可从点名工作台调用当前语音识别配置。';
+
+  @override
+  String get aiLocalReferenceContext => '结合本地词库与近期记录';
+
+  @override
+  String get aiLocalReferenceContextHint =>
+      '默认开启。仅把与当前转写相近的少量词条和命中呼号的近期字段发送给文字模型，用于纠正呼号、设备、天线和 QTH；不会上传完整数据库。';
+
+  @override
+  String get aiRecognitionNeedsAsr => '请先添加并选择语音识别配置。';
+
+  @override
+  String get aiAsrStageTitle => '语音识别（ASR）';
+
+  @override
+  String get aiAsrStageDescription => '把音频转换为原始文本，三类接口格式可同时保存并随时切换。';
+
+  @override
+  String get aiExtractionStageTitle => '字段提取（可选）';
+
+  @override
+  String get aiExtractionStageDescription =>
+      '把转写文本整理为呼号、RST、QTH 等候选字段；不配置时保留原始转写。';
+
+  @override
+  String get aiSupportedProtocols => '支持的接口格式';
+
+  @override
+  String get aiActiveProfile => '当前配置';
+
+  @override
+  String get aiNoProfileConfigured => '尚未添加配置';
+
+  @override
+  String get aiNoActiveProfile => '不使用';
+
+  @override
+  String get aiCredentialStatus => '密钥状态';
+
+  @override
+  String get aiCredentialNoProfile => '选择配置后显示本机密钥状态。';
+
+  @override
+  String get aiCredentialStoredLocally => 'API 密钥单独保存在系统安全存储中，不进入配置导出。';
+
+  @override
+  String get aiStatusNotConfigured => '未配置';
+
+  @override
+  String get aiStatusNoCredentialNeeded => '无需密钥';
+
+  @override
+  String get aiStatusCredentialReady => '密钥已保存';
+
+  @override
+  String get aiStatusCredentialMissing => '缺少密钥';
+
+  @override
+  String get aiAddProfile => '添加配置';
+
+  @override
+  String get aiEditProfile => '编辑配置';
+
+  @override
+  String get aiDeleteProfileTitle => '删除 AI 配置';
+
+  @override
+  String aiDeleteProfileMessage(String name) {
+    return '确定删除“$name”及其本机密钥吗？';
+  }
+
+  @override
+  String get aiProfileName => '配置名称';
+
+  @override
+  String get aiBaseUrl => 'API Base URL';
+
+  @override
+  String get aiModelName => '模型名称';
+
+  @override
+  String get aiProtocol => '接口格式';
+
+  @override
+  String get aiAuthentication => '鉴权方式';
+
+  @override
+  String get aiCredentialName => '请求头或查询参数名';
+
+  @override
+  String get aiCredentialPrefix => '密钥前缀（可留空）';
+
+  @override
+  String get aiApiKey => 'API 密钥';
+
+  @override
+  String get aiApiKeyNewHint => '可暂时留空，保存后将显示缺少密钥。';
+
+  @override
+  String get aiApiKeyExistingHint => '留空会保留当前密钥；更换接口目的地时需要重新填写。';
+
+  @override
+  String get aiRequestOptions => '高级请求选项（JSON）';
+
+  @override
+  String get aiRequestOptionsHint =>
+      '通用 JSON 必须包含 requestTemplate；可设置 path、responsePath、body、fields、audioDataEncoding、includePrompt 等协议选项。这里的内容会随配置导出，请勿填写密钥。';
+
+  @override
+  String get aiRequiredField => '此项不能为空';
+
+  @override
+  String get aiRequestOptionsMustBeObject => '高级请求选项必须是 JSON 对象';
+
+  @override
+  String get aiJsonProtocolNeedsTemplate => '通用 JSON 格式必须包含 requestTemplate';
+
+  @override
+  String get aiInvalidJson => 'JSON 格式无效';
+
+  @override
+  String get aiInvalidBaseUrl => '请输入有效的 HTTP(S) API 地址';
+
+  @override
+  String aiSettingsFailed(String error) {
+    return 'AI 设置操作失败：$error';
+  }
+
+  @override
+  String get aiProtocolAudioTranscriptions => '音频转写 multipart';
+
+  @override
+  String get aiProtocolChatAudio => 'Chat input_audio';
+
+  @override
+  String get aiProtocolChatText => 'Chat 文本提取';
+
+  @override
+  String get aiProtocolGenericJson => '通用 JSON HTTP';
+
+  @override
+  String get aiAuthNone => '无需鉴权';
+
+  @override
+  String get aiAuthBearer => 'Authorization Bearer';
+
+  @override
+  String get aiAuthHeader => '自定义请求头';
+
+  @override
+  String get aiAuthQuery => '查询参数';
+
+  @override
+  String get aiWorkbenchTitle => 'AI 辅助识别';
+
+  @override
+  String get aiWorkbenchUnavailable => '当前记录为只读或正在处理，暂时不能识别。';
+
+  @override
+  String get aiReadyStatus => '点击麦克风录制一条点名内容。';
+
+  @override
+  String aiRecordingStatus(String elapsed) {
+    return '正在录音 $elapsed';
+  }
+
+  @override
+  String get aiLiveTranscriptTitle => '实时识别字段';
+
+  @override
+  String get aiLiveStructuredWaiting => '正在积累一段完整的点名内容，识别出的字段会显示在这里。';
+
+  @override
+  String get aiLiveStructuredUpdating => '正在根据目前的完整内容整理字段…';
+
+  @override
+  String aiLiveTranscriptionRetrying(String error) {
+    return '实时识别暂时失败；停止录音后仍会用完整内容重试：$error';
+  }
+
+  @override
+  String get aiRecognizingStatus => '正在识别并整理候选内容…';
+
+  @override
+  String get aiStartRecording => '录音';
+
+  @override
+  String get aiStopAndRecognize => '识别';
+
+  @override
+  String get aiMicrophonePermissionDenied => '未获得麦克风权限。';
+
+  @override
+  String aiRecordingFailed(String error) {
+    return '录音失败：$error';
+  }
+
+  @override
+  String aiRecognitionFailed(String error) {
+    return '识别失败：$error';
+  }
+
+  @override
+  String get aiReviewTitle => '确认 AI 候选内容';
+
+  @override
+  String get aiTranscriptTitle => '原始转写';
+
+  @override
+  String get aiCopyTranscript => '复制转写';
+
+  @override
+  String get aiTranscriptCopied => '已复制转写内容。';
+
+  @override
+  String get aiNoStructuredCandidates => '服务没有返回结构化字段，你仍可查看或复制上方转写。';
+
+  @override
+  String get aiCandidateRecord => '候选记录';
+
+  @override
+  String aiCandidateNumber(int number) {
+    return '候选 $number';
+  }
+
+  @override
+  String get aiCandidateHint => '空字段会默认勾选；替换已有内容必须由你手动勾选确认。';
+
+  @override
+  String get aiApplySelected => '应用所选字段';
+
+  @override
+  String aiCandidatesApplied(int count) {
+    return '已应用 $count 个候选字段。';
+  }
+
+  @override
+  String get aiCandidatesStale => '录音后记录内容已经变化，这些候选已不能安全应用。';
+
+  @override
+  String aiApplyFailed(String error) {
+    return '无法应用 AI 候选：$error';
+  }
+
+  @override
+  String aiWillReplaceValue(String value) {
+    return '将替换：$value';
+  }
+
+  @override
+  String get aiWillFillEmpty => '将填入空字段';
+
+  @override
+  String get aiReplacementNeedsConfirmation => '勾选后确认替换';
+
+  @override
+  String get aiCandidateUnchanged => '内容已经一致';
+
+  @override
+  String get aiCandidateStale => '录音后该字段已发生变化';
+
+  @override
+  String get aiCandidateBeingEdited => '该字段正在编辑或输入法组词';
+
+  @override
+  String get aiCandidateLocked => '另一位协作者正在编辑该字段';
+
+  @override
+  String get aiCandidateReadOnly => '当前记录为只读';
+
+  @override
+  String get aiCandidateBusy => '当前记录正在处理其他操作';
+
+  @override
+  String get aiCandidateInvalid => '不支持或无效的候选内容';
 }

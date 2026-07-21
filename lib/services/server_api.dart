@@ -937,7 +937,10 @@ final class ServerApi {
       queryParameters: queryParameters,
     );
     if (response.statusCode == 401) {
-      await _clearIfCurrent(replacement.refreshToken);
+      final code = _apiErrorFromResponse(response)?.code;
+      if (code == 'TOKEN_INVALID' || code == 'TOKEN_REVOKED') {
+        await _clearIfCurrent(replacement.refreshToken);
+      }
     }
     _throwForError(response);
     return response;
@@ -982,7 +985,8 @@ final class ServerApi {
       },
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      if (response.statusCode == 401) {
+      final code = _apiErrorFromResponse(response)?.code;
+      if (response.statusCode == 401 && code == 'REFRESH_TOKEN_INVALID') {
         await _clearIfCurrent(refreshToken);
       }
       _throwForError(response);
@@ -1085,14 +1089,7 @@ final class ServerApi {
       return;
     }
 
-    ApiErrorDto? apiError;
-    try {
-      final decoded = jsonDecode(response.body);
-      final envelope = _jsonObject(decoded, 'errorEnvelope');
-      apiError = ApiErrorDto.fromJson(envelope['error']);
-    } on FormatException {
-      // Fall through to a stable client-side envelope.
-    }
+    final apiError = _apiErrorFromResponse(response);
 
     throw ServerApiException(
       error: apiError ??
@@ -1104,6 +1101,16 @@ final class ServerApi {
       statusCode: response.statusCode,
       retryable: _isRetryableStatus(response.statusCode),
     );
+  }
+
+  ApiErrorDto? _apiErrorFromResponse(http.Response response) {
+    try {
+      final decoded = jsonDecode(response.body);
+      final envelope = _jsonObject(decoded, 'errorEnvelope');
+      return ApiErrorDto.fromJson(envelope['error']);
+    } on FormatException {
+      return null;
+    }
   }
 
   ServerApiException _clientException({

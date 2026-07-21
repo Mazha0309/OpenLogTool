@@ -42,6 +42,28 @@ abstract interface class SecureValueStore {
   Future<void> delete(String key);
 }
 
+/// Returns the shared resilient secret store used by account authentication.
+///
+/// Feature-specific credential stores should namespace their own keys while
+/// sharing these platform and Linux fallback guarantees. Keeping this accessor
+/// public also prevents API keys from falling back to ordinary preferences.
+/// The singleton is intentional: the Linux fallback performs read/modify/write
+/// operations on one private file and therefore must share one operation queue.
+SecureValueStore defaultSecureValueStore() =>
+    _sharedDefaultSecureValueStore ??= _buildDefaultSecureValueStore();
+
+SecureValueStore? _sharedDefaultSecureValueStore;
+
+SecureValueStore _buildDefaultSecureValueStore() {
+  final privateBackend = PlatformPrivateSecureValueBackend();
+  return ResilientSecureValueStore(
+    primary: const FlutterSecureValueStore(),
+    privateFileFallback: privateBackend.isSupported
+        ? PlatformPrivateSecureValueStore(privateBackend)
+        : null,
+  );
+}
+
 final class FlutterSecureValueStore implements SecureValueStore {
   const FlutterSecureValueStore([
     this._storage = const FlutterSecureStorage(
@@ -524,7 +546,8 @@ final class SecureTokenStore implements TokenStore, TokenStorageStatusSource {
   static final ValueNotifier<TokenStorageStatus> _secureStatus = ValueNotifier(
     const TokenStorageStatus(backend: TokenStorageBackend.platformSecure),
   );
-  static final SecureValueStore _defaultSecureValues = _buildDefaultStore();
+  static final SecureValueStore _defaultSecureValues =
+      defaultSecureValueStore();
 
   final SecureValueStore _secureValues;
   final String _key;
@@ -584,15 +607,5 @@ final class SecureTokenStore implements TokenStore, TokenStorageStatusSource {
     final normalized = serverUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final digest = sha256.convert(utf8.encode(normalized)).toString();
     return 'openlogtool.auth.v1.$digest';
-  }
-
-  static SecureValueStore _buildDefaultStore() {
-    final privateBackend = PlatformPrivateSecureValueBackend();
-    return ResilientSecureValueStore(
-      primary: const FlutterSecureValueStore(),
-      privateFileFallback: privateBackend.isSupported
-          ? PlatformPrivateSecureValueStore(privateBackend)
-          : null,
-    );
   }
 }

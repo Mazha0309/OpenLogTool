@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
@@ -101,6 +102,7 @@ Future<void> main(List<String> args) async {
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
         ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => AiRecognitionSettingsProvider()),
         ChangeNotifierProvider(create: (_) => SessionProvider()),
         ChangeNotifierProvider(create: (_) => ServerProvider()),
         ChangeNotifierProvider(create: (_) => DictionaryProvider()),

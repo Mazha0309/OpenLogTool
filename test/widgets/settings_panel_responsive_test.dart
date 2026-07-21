@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
@@ -148,16 +149,20 @@ void main() {
     expect(layoutCard, findsOneWidget);
 
     final appearanceOffstage = tester.widget<Offstage>(
-      find.ancestor(
-        of: appearanceSettings,
-        matching: find.byType(Offstage, skipOffstage: false),
-      ).first,
+      find
+          .ancestor(
+            of: appearanceSettings,
+            matching: find.byType(Offstage, skipOffstage: false),
+          )
+          .first,
     );
     final layoutOffstage = tester.widget<Offstage>(
-      find.ancestor(
-        of: layoutSettings,
-        matching: find.byType(Offstage, skipOffstage: false),
-      ).first,
+      find
+          .ancestor(
+            of: layoutSettings,
+            matching: find.byType(Offstage, skipOffstage: false),
+          )
+          .first,
     );
     expect(appearanceOffstage.offstage, isFalse);
     expect(layoutOffstage.offstage, isTrue);
@@ -177,10 +182,12 @@ void main() {
     expect(
       tester
           .widget<Offstage>(
-            find.ancestor(
-              of: appearanceSettings,
-              matching: find.byType(Offstage, skipOffstage: false),
-            ).first,
+            find
+                .ancestor(
+                  of: appearanceSettings,
+                  matching: find.byType(Offstage, skipOffstage: false),
+                )
+                .first,
           )
           .offstage,
       isTrue,
@@ -188,15 +195,109 @@ void main() {
     expect(
       tester
           .widget<Offstage>(
-            find.ancestor(
-              of: layoutSettings,
-              matching: find.byType(Offstage, skipOffstage: false),
-            ).first,
+            find
+                .ancestor(
+                  of: layoutSettings,
+                  matching: find.byType(Offstage, skipOffstage: false),
+                )
+                .first,
           )
           .offstage,
       isFalse,
     );
     expect(find.text('Net Desk & layout'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('AI settings expose every supported ASR endpoint format',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    _usePlatformLocale(tester, const Locale('en', 'US'));
+    await _setSurface(tester, const Size(1200, 900));
+    final providers = _SettingsProviders();
+    addTearDown(providers.dispose);
+
+    await tester.pumpWidget(_SettingsPanelHarness(providers: providers));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-category-ai')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI-assisted recognition'), findsOneWidget);
+    expect(find.text('Audio transcription multipart'), findsOneWidget);
+    expect(find.text('Chat input_audio'), findsOneWidget);
+    expect(find.text('Generic JSON HTTP'), findsWidgets);
+
+    await tester.tap(
+      find.byKey(
+        const Key('ai-add-profile-speechRecognition'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('ai-profile-editor-dialog')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('ai-profile-protocol')));
+    await tester.pumpAndSettle();
+    expect(find.text('Audio transcription multipart'), findsWidgets);
+    expect(find.text('Chat input_audio'), findsWidgets);
+    expect(find.text('Generic JSON HTTP'), findsWidgets);
+    await tester.tap(find.text('Generic JSON HTTP').last);
+    await tester.pumpAndSettle();
+    final optionsField = tester.widget<TextFormField>(
+      find.byKey(const Key('ai-profile-request-options')),
+    );
+    expect(optionsField.controller!.text, contains('requestTemplate'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('AI settings and profile editor fit a narrow scaled screen',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    _usePlatformLocale(tester, const Locale('zh', 'CN'));
+    await _setSurface(tester, const Size(320, 568));
+    final providers = _SettingsProviders();
+    addTearDown(providers.dispose);
+
+    await tester.pumpWidget(
+      _SettingsPanelHarness(
+        providers: providers,
+        textScaler: const TextScaler.linear(1.4),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final scrollable = find
+        .descendant(
+          of: find.byKey(const Key('settings-panel-scroll')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final aiCategory = find.byKey(const Key('settings-category-ai'));
+    await tester.scrollUntilVisible(
+      aiCategory,
+      240,
+      scrollable: scrollable,
+    );
+    await tester.tap(aiCategory);
+    await tester.pumpAndSettle();
+
+    final addAsr = find.byKey(
+      const Key('ai-add-profile-speechRecognition'),
+    );
+    await tester.scrollUntilVisible(
+      addAsr,
+      240,
+      scrollable: scrollable,
+    );
+    await tester.tap(addAsr);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('ai-profile-editor-dialog')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ai-profile-name')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
@@ -223,17 +324,20 @@ class _SettingsProviders {
       : settings = SettingsProvider(),
         server = ServerProvider(autoLoadSettings: false),
         appInfo = AppInfoProvider(),
+        aiRecognition = AiRecognitionSettingsProvider(),
         snackbarLog = SnackbarLogProvider();
 
   final SettingsProvider settings;
   final ServerProvider server;
   final AppInfoProvider appInfo;
+  final AiRecognitionSettingsProvider aiRecognition;
   final SnackbarLogProvider snackbarLog;
 
   void dispose() {
     settings.dispose();
     server.dispose();
     appInfo.dispose();
+    aiRecognition.dispose();
     snackbarLog.dispose();
   }
 }
@@ -257,6 +361,9 @@ class _SettingsPanelHarness extends StatelessWidget {
         ChangeNotifierProvider<ServerProvider>.value(value: providers.server),
         ChangeNotifierProvider<AppInfoProvider>.value(
           value: providers.appInfo,
+        ),
+        ChangeNotifierProvider<AiRecognitionSettingsProvider>.value(
+          value: providers.aiRecognition,
         ),
         ChangeNotifierProvider<SnackbarLogProvider>.value(
           value: providers.snackbarLog,

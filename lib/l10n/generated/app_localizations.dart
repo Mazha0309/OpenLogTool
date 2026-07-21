@@ -4473,6 +4473,552 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地数据库'**
   String get dataLocalDatabaseTab;
+
+  /// No description provided for @settingsCategoryAi.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 辅助'**
+  String get settingsCategoryAi;
+
+  /// No description provided for @aiSettingsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 辅助识别'**
+  String get aiSettingsTitle;
+
+  /// No description provided for @aiSettingsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置可选的语音识别与字段提取服务。接口、模型与鉴权均由本机独立设置。'**
+  String get aiSettingsDescription;
+
+  /// No description provided for @aiSettingsOptionalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选且默认关闭'**
+  String get aiSettingsOptionalTitle;
+
+  /// No description provided for @aiSettingsOptionalMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频将直接发送到你配置的服务，不经过 OpenLogTool 协作服务器。识别结果只作为候选，不会自动覆盖书记员正在编辑的内容。'**
+  String get aiSettingsOptionalMessage;
+
+  /// No description provided for @aiRecognitionEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用 AI 辅助识别'**
+  String get aiRecognitionEnabled;
+
+  /// No description provided for @aiRecognitionEnabledHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用后可从点名工作台调用当前语音识别配置。'**
+  String get aiRecognitionEnabledHint;
+
+  /// No description provided for @aiLocalReferenceContext.
+  ///
+  /// In zh, this message translates to:
+  /// **'结合本地词库与近期记录'**
+  String get aiLocalReferenceContext;
+
+  /// No description provided for @aiLocalReferenceContextHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认开启。仅把与当前转写相近的少量词条和命中呼号的近期字段发送给文字模型，用于纠正呼号、设备、天线和 QTH；不会上传完整数据库。'**
+  String get aiLocalReferenceContextHint;
+
+  /// No description provided for @aiRecognitionNeedsAsr.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先添加并选择语音识别配置。'**
+  String get aiRecognitionNeedsAsr;
+
+  /// No description provided for @aiAsrStageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音识别（ASR）'**
+  String get aiAsrStageTitle;
+
+  /// No description provided for @aiAsrStageDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'把音频转换为原始文本，三类接口格式可同时保存并随时切换。'**
+  String get aiAsrStageDescription;
+
+  /// No description provided for @aiExtractionStageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'字段提取（可选）'**
+  String get aiExtractionStageTitle;
+
+  /// No description provided for @aiExtractionStageDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'把转写文本整理为呼号、RST、QTH 等候选字段；不配置时保留原始转写。'**
+  String get aiExtractionStageDescription;
+
+  /// No description provided for @aiSupportedProtocols.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持的接口格式'**
+  String get aiSupportedProtocols;
+
+  /// No description provided for @aiActiveProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前配置'**
+  String get aiActiveProfile;
+
+  /// No description provided for @aiNoProfileConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未添加配置'**
+  String get aiNoProfileConfigured;
+
+  /// No description provided for @aiNoActiveProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'不使用'**
+  String get aiNoActiveProfile;
+
+  /// No description provided for @aiCredentialStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'密钥状态'**
+  String get aiCredentialStatus;
+
+  /// No description provided for @aiCredentialNoProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择配置后显示本机密钥状态。'**
+  String get aiCredentialNoProfile;
+
+  /// No description provided for @aiCredentialStoredLocally.
+  ///
+  /// In zh, this message translates to:
+  /// **'API 密钥单独保存在系统安全存储中，不进入配置导出。'**
+  String get aiCredentialStoredLocally;
+
+  /// No description provided for @aiStatusNotConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未配置'**
+  String get aiStatusNotConfigured;
+
+  /// No description provided for @aiStatusNoCredentialNeeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'无需密钥'**
+  String get aiStatusNoCredentialNeeded;
+
+  /// No description provided for @aiStatusCredentialReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'密钥已保存'**
+  String get aiStatusCredentialReady;
+
+  /// No description provided for @aiStatusCredentialMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少密钥'**
+  String get aiStatusCredentialMissing;
+
+  /// No description provided for @aiAddProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加配置'**
+  String get aiAddProfile;
+
+  /// No description provided for @aiEditProfile.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑配置'**
+  String get aiEditProfile;
+
+  /// No description provided for @aiDeleteProfileTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除 AI 配置'**
+  String get aiDeleteProfileTitle;
+
+  /// No description provided for @aiDeleteProfileMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除“{name}”及其本机密钥吗？'**
+  String aiDeleteProfileMessage(String name);
+
+  /// No description provided for @aiProfileName.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置名称'**
+  String get aiProfileName;
+
+  /// No description provided for @aiBaseUrl.
+  ///
+  /// In zh, this message translates to:
+  /// **'API Base URL'**
+  String get aiBaseUrl;
+
+  /// No description provided for @aiModelName.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型名称'**
+  String get aiModelName;
+
+  /// No description provided for @aiProtocol.
+  ///
+  /// In zh, this message translates to:
+  /// **'接口格式'**
+  String get aiProtocol;
+
+  /// No description provided for @aiAuthentication.
+  ///
+  /// In zh, this message translates to:
+  /// **'鉴权方式'**
+  String get aiAuthentication;
+
+  /// No description provided for @aiCredentialName.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求头或查询参数名'**
+  String get aiCredentialName;
+
+  /// No description provided for @aiCredentialPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'密钥前缀（可留空）'**
+  String get aiCredentialPrefix;
+
+  /// No description provided for @aiApiKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'API 密钥'**
+  String get aiApiKey;
+
+  /// No description provided for @aiApiKeyNewHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可暂时留空，保存后将显示缺少密钥。'**
+  String get aiApiKeyNewHint;
+
+  /// No description provided for @aiApiKeyExistingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'留空会保留当前密钥；更换接口目的地时需要重新填写。'**
+  String get aiApiKeyExistingHint;
+
+  /// No description provided for @aiRequestOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级请求选项（JSON）'**
+  String get aiRequestOptions;
+
+  /// No description provided for @aiRequestOptionsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'通用 JSON 必须包含 requestTemplate；可设置 path、responsePath、body、fields、audioDataEncoding、includePrompt 等协议选项。这里的内容会随配置导出，请勿填写密钥。'**
+  String get aiRequestOptionsHint;
+
+  /// No description provided for @aiRequiredField.
+  ///
+  /// In zh, this message translates to:
+  /// **'此项不能为空'**
+  String get aiRequiredField;
+
+  /// No description provided for @aiRequestOptionsMustBeObject.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级请求选项必须是 JSON 对象'**
+  String get aiRequestOptionsMustBeObject;
+
+  /// No description provided for @aiJsonProtocolNeedsTemplate.
+  ///
+  /// In zh, this message translates to:
+  /// **'通用 JSON 格式必须包含 requestTemplate'**
+  String get aiJsonProtocolNeedsTemplate;
+
+  /// No description provided for @aiInvalidJson.
+  ///
+  /// In zh, this message translates to:
+  /// **'JSON 格式无效'**
+  String get aiInvalidJson;
+
+  /// No description provided for @aiInvalidBaseUrl.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的 HTTP(S) API 地址'**
+  String get aiInvalidBaseUrl;
+
+  /// No description provided for @aiSettingsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 设置操作失败：{error}'**
+  String aiSettingsFailed(String error);
+
+  /// No description provided for @aiProtocolAudioTranscriptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频转写 multipart'**
+  String get aiProtocolAudioTranscriptions;
+
+  /// No description provided for @aiProtocolChatAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'Chat input_audio'**
+  String get aiProtocolChatAudio;
+
+  /// No description provided for @aiProtocolChatText.
+  ///
+  /// In zh, this message translates to:
+  /// **'Chat 文本提取'**
+  String get aiProtocolChatText;
+
+  /// No description provided for @aiProtocolGenericJson.
+  ///
+  /// In zh, this message translates to:
+  /// **'通用 JSON HTTP'**
+  String get aiProtocolGenericJson;
+
+  /// No description provided for @aiAuthNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'无需鉴权'**
+  String get aiAuthNone;
+
+  /// No description provided for @aiAuthBearer.
+  ///
+  /// In zh, this message translates to:
+  /// **'Authorization Bearer'**
+  String get aiAuthBearer;
+
+  /// No description provided for @aiAuthHeader.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义请求头'**
+  String get aiAuthHeader;
+
+  /// No description provided for @aiAuthQuery.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询参数'**
+  String get aiAuthQuery;
+
+  /// No description provided for @aiWorkbenchTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 辅助识别'**
+  String get aiWorkbenchTitle;
+
+  /// No description provided for @aiWorkbenchUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前记录为只读或正在处理，暂时不能识别。'**
+  String get aiWorkbenchUnavailable;
+
+  /// No description provided for @aiReadyStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击麦克风录制一条点名内容。'**
+  String get aiReadyStatus;
+
+  /// No description provided for @aiRecordingStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在录音 {elapsed}'**
+  String aiRecordingStatus(String elapsed);
+
+  /// No description provided for @aiLiveTranscriptTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时识别字段'**
+  String get aiLiveTranscriptTitle;
+
+  /// No description provided for @aiLiveStructuredWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在积累一段完整的点名内容，识别出的字段会显示在这里。'**
+  String get aiLiveStructuredWaiting;
+
+  /// No description provided for @aiLiveStructuredUpdating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在根据目前的完整内容整理字段…'**
+  String get aiLiveStructuredUpdating;
+
+  /// No description provided for @aiLiveTranscriptionRetrying.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时识别暂时失败；停止录音后仍会用完整内容重试：{error}'**
+  String aiLiveTranscriptionRetrying(String error);
+
+  /// No description provided for @aiRecognizingStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在识别并整理候选内容…'**
+  String get aiRecognizingStatus;
+
+  /// No description provided for @aiStartRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音'**
+  String get aiStartRecording;
+
+  /// No description provided for @aiStopAndRecognize.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别'**
+  String get aiStopAndRecognize;
+
+  /// No description provided for @aiMicrophonePermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未获得麦克风权限。'**
+  String get aiMicrophonePermissionDenied;
+
+  /// No description provided for @aiRecordingFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音失败：{error}'**
+  String aiRecordingFailed(String error);
+
+  /// No description provided for @aiRecognitionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别失败：{error}'**
+  String aiRecognitionFailed(String error);
+
+  /// No description provided for @aiReviewTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认 AI 候选内容'**
+  String get aiReviewTitle;
+
+  /// No description provided for @aiTranscriptTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始转写'**
+  String get aiTranscriptTitle;
+
+  /// No description provided for @aiCopyTranscript.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制转写'**
+  String get aiCopyTranscript;
+
+  /// No description provided for @aiTranscriptCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制转写内容。'**
+  String get aiTranscriptCopied;
+
+  /// No description provided for @aiNoStructuredCandidates.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务没有返回结构化字段，你仍可查看或复制上方转写。'**
+  String get aiNoStructuredCandidates;
+
+  /// No description provided for @aiCandidateRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'候选记录'**
+  String get aiCandidateRecord;
+
+  /// No description provided for @aiCandidateNumber.
+  ///
+  /// In zh, this message translates to:
+  /// **'候选 {number}'**
+  String aiCandidateNumber(int number);
+
+  /// No description provided for @aiCandidateHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'空字段会默认勾选；替换已有内容必须由你手动勾选确认。'**
+  String get aiCandidateHint;
+
+  /// No description provided for @aiApplySelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用所选字段'**
+  String get aiApplySelected;
+
+  /// No description provided for @aiCandidatesApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已应用 {count} 个候选字段。'**
+  String aiCandidatesApplied(int count);
+
+  /// No description provided for @aiCandidatesStale.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音后记录内容已经变化，这些候选已不能安全应用。'**
+  String get aiCandidatesStale;
+
+  /// No description provided for @aiApplyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法应用 AI 候选：{error}'**
+  String aiApplyFailed(String error);
+
+  /// No description provided for @aiWillReplaceValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'将替换：{value}'**
+  String aiWillReplaceValue(String value);
+
+  /// No description provided for @aiWillFillEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'将填入空字段'**
+  String get aiWillFillEmpty;
+
+  /// No description provided for @aiReplacementNeedsConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'勾选后确认替换'**
+  String get aiReplacementNeedsConfirmation;
+
+  /// No description provided for @aiCandidateUnchanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容已经一致'**
+  String get aiCandidateUnchanged;
+
+  /// No description provided for @aiCandidateStale.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音后该字段已发生变化'**
+  String get aiCandidateStale;
+
+  /// No description provided for @aiCandidateBeingEdited.
+  ///
+  /// In zh, this message translates to:
+  /// **'该字段正在编辑或输入法组词'**
+  String get aiCandidateBeingEdited;
+
+  /// No description provided for @aiCandidateLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'另一位协作者正在编辑该字段'**
+  String get aiCandidateLocked;
+
+  /// No description provided for @aiCandidateReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前记录为只读'**
+  String get aiCandidateReadOnly;
+
+  /// No description provided for @aiCandidateBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前记录正在处理其他操作'**
+  String get aiCandidateBusy;
+
+  /// No description provided for @aiCandidateInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'不支持或无效的候选内容'**
+  String get aiCandidateInvalid;
 }
 
 class _AppLocalizationsDelegate

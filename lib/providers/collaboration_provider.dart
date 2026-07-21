@@ -2020,6 +2020,43 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<void> updateLiveDraftFieldsAtomically(Map<String, String> updates) {
+    return _queueLiveDraftFieldsAtomicUpdate(
+      updates,
+      retryRevisionConflicts: true,
+    );
+  }
+
+  /// Applies a version-checked multi-field update exactly once. This is used
+  /// for externally generated suggestions: a conflict must return to review
+  /// instead of rebasing the same values over a collaborator's newer edit.
+  Future<void> updateLiveDraftFieldsStrict(
+    Map<String, String> updates, {
+    required String expectedDraftId,
+    required Map<String, String> expectedValues,
+    required Map<String, int> expectedRevisions,
+  }) {
+    if (!updates.keys.every(expectedValues.containsKey) ||
+        !updates.keys.every(expectedRevisions.containsKey)) {
+      return Future<void>.error(
+        ArgumentError('strict updates require an expected value and revision'),
+      );
+    }
+    return _queueLiveDraftFieldsAtomicUpdate(
+      updates,
+      retryRevisionConflicts: false,
+      expectedDraftId: expectedDraftId,
+      expectedValues: Map.unmodifiable(expectedValues),
+      expectedRevisions: Map.unmodifiable(expectedRevisions),
+    );
+  }
+
+  Future<void> _queueLiveDraftFieldsAtomicUpdate(
+    Map<String, String> updates, {
+    required bool retryRevisionConflicts,
+    String? expectedDraftId,
+    Map<String, String>? expectedValues,
+    Map<String, int>? expectedRevisions,
+  }) {
     if (updates.isEmpty) return Future<void>.value();
     for (final field in updates.keys) {
       if (!liveDraftFieldNames.contains(field)) {
@@ -2031,7 +2068,13 @@ class CollaborationProvider with ChangeNotifier {
     }
     final requested = Map<String, String>.unmodifiable(updates);
     return _serializeLiveDraft(
-      () => _updateLiveDraftFieldsAtomically(requested),
+      () => _updateLiveDraftFieldsAtomically(
+        requested,
+        retryRevisionConflicts: retryRevisionConflicts,
+        expectedDraftId: expectedDraftId,
+        expectedValues: expectedValues,
+        expectedRevisions: expectedRevisions,
+      ),
     );
   }
 
@@ -3957,17 +4000,31 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<void> _updateLiveDraftFieldsAtomically(
-    Map<String, String> updates,
-  ) async {
+    Map<String, String> updates, {
+    required bool retryRevisionConflicts,
+    String? expectedDraftId,
+    Map<String, String>? expectedValues,
+    Map<String, int>? expectedRevisions,
+  }) async {
     final context = _requireLiveDraftContext(requireEdit: true);
     try {
-      await executeLiveDraftAtomicPatchWithRebaseRetry<void>(
-        attempt: () => _updateLiveDraftFieldsAtomicAttempt(updates, context),
-        rebase: () => _rebaseLiveDraftForAtomicRetry(
-          updates.keys.toSet(),
+      if (retryRevisionConflicts) {
+        await executeLiveDraftAtomicPatchWithRebaseRetry<void>(
+          attempt: () => _updateLiveDraftFieldsAtomicAttempt(updates, context),
+          rebase: () => _rebaseLiveDraftForAtomicRetry(
+            updates.keys.toSet(),
+            context,
+          ),
+        );
+      } else {
+        await _updateLiveDraftFieldsAtomicAttempt(
+          updates,
           context,
-        ),
-      );
+          expectedDraftId: expectedDraftId,
+          expectedValues: expectedValues,
+          expectedRevisions: expectedRevisions,
+        );
+      }
     } on ServerApiException catch (error) {
       _setLiveDraftError(error.code, error.message);
       if (error.code == 'LIVE_DRAFT_LOCK_REQUIRED') {
@@ -3996,12 +4053,26 @@ class CollaborationProvider with ChangeNotifier {
 
   Future<void> _updateLiveDraftFieldsAtomicAttempt(
     Map<String, String> updates,
-    _LiveDraftContext context,
-  ) async {
+    _LiveDraftContext context, {
+    String? expectedDraftId,
+    Map<String, String>? expectedValues,
+    Map<String, int>? expectedRevisions,
+  }) async {
     final snapshot = _liveDraftSnapshot;
     final local = _localLiveDraftFields;
     if (snapshot == null || local == null) {
       throw StateError('LIVE_DRAFT_NOT_LOADED');
+    }
+    if (expectedDraftId != null) {
+      if (snapshot.draft.draftId != expectedDraftId) {
+        throw StateError('LIVE_DRAFT_SUGGESTION_STALE');
+      }
+      for (final field in updates.keys) {
+        if (local[field] != expectedValues?[field] ||
+            snapshot.draft.fieldRevisions[field] != expectedRevisions?[field]) {
+          throw StateError('LIVE_DRAFT_SUGGESTION_STALE');
+        }
+      }
     }
 
     final beforeDirtyFields = Set<String>.of(_dirtyLiveDraftFields);
