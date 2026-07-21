@@ -988,6 +988,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createPublicShare => '创建公开链接';
 
   @override
+  String get publicShareExpiryDialogTitle => '设置 Live Share 有效期';
+
+  @override
+  String get publicShareExpiryDialogHint => '公开链接将在所选时长后自动失效。';
+
+  @override
+  String get publicShareExpiryPresets => '快捷选择';
+
+  @override
+  String get publicShareExpiryOneHour => '1小时';
+
+  @override
+  String get publicShareExpirySixHours => '6小时';
+
+  @override
+  String get publicShareExpiryTwelveHours => '12小时';
+
+  @override
+  String get publicShareExpiryOneDay => '1天';
+
+  @override
+  String get publicShareExpiryThreeDays => '3天';
+
+  @override
+  String get publicShareExpirySevenDays => '7天';
+
+  @override
+  String get publicShareExpiryThirtyDays => '30天';
+
+  @override
+  String get publicShareExpiryCustom => '自定义';
+
+  @override
+  String get publicShareExpiryCustomHours => '有效期（小时）';
+
+  @override
+  String get publicShareExpiryRangeError => '请输入 1–720 之间的整数小时';
+
+  @override
+  String publicShareEstimatedExpiry(String time) {
+    return '预计失效：$time（本地时间）';
+  }
+
+  @override
   String get copyPublicShareLink => '复制链接';
 
   @override
@@ -2960,6 +3004,50 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get createPublicShare => '创建公开链接';
+
+  @override
+  String get publicShareExpiryDialogTitle => '设置 Live Share 有效期';
+
+  @override
+  String get publicShareExpiryDialogHint => '公开链接将在所选时长后自动失效。';
+
+  @override
+  String get publicShareExpiryPresets => '快捷选择';
+
+  @override
+  String get publicShareExpiryOneHour => '1小时';
+
+  @override
+  String get publicShareExpirySixHours => '6小时';
+
+  @override
+  String get publicShareExpiryTwelveHours => '12小时';
+
+  @override
+  String get publicShareExpiryOneDay => '1天';
+
+  @override
+  String get publicShareExpiryThreeDays => '3天';
+
+  @override
+  String get publicShareExpirySevenDays => '7天';
+
+  @override
+  String get publicShareExpiryThirtyDays => '30天';
+
+  @override
+  String get publicShareExpiryCustom => '自定义';
+
+  @override
+  String get publicShareExpiryCustomHours => '有效期（小时）';
+
+  @override
+  String get publicShareExpiryRangeError => '请输入 1–720 之间的整数小时';
+
+  @override
+  String publicShareEstimatedExpiry(String time) {
+    return '预计失效：$time（本地时间）';
+  }
 
   @override
   String get copyPublicShareLink => '复制链接';

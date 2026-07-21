@@ -1840,6 +1840,90 @@ abstract class AppLocalizations {
   /// **'创建公开链接'**
   String get createPublicShare;
 
+  /// No description provided for @publicShareExpiryDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置 Live Share 有效期'**
+  String get publicShareExpiryDialogTitle;
+
+  /// No description provided for @publicShareExpiryDialogHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开链接将在所选时长后自动失效。'**
+  String get publicShareExpiryDialogHint;
+
+  /// No description provided for @publicShareExpiryPresets.
+  ///
+  /// In zh, this message translates to:
+  /// **'快捷选择'**
+  String get publicShareExpiryPresets;
+
+  /// No description provided for @publicShareExpiryOneHour.
+  ///
+  /// In zh, this message translates to:
+  /// **'1小时'**
+  String get publicShareExpiryOneHour;
+
+  /// No description provided for @publicShareExpirySixHours.
+  ///
+  /// In zh, this message translates to:
+  /// **'6小时'**
+  String get publicShareExpirySixHours;
+
+  /// No description provided for @publicShareExpiryTwelveHours.
+  ///
+  /// In zh, this message translates to:
+  /// **'12小时'**
+  String get publicShareExpiryTwelveHours;
+
+  /// No description provided for @publicShareExpiryOneDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'1天'**
+  String get publicShareExpiryOneDay;
+
+  /// No description provided for @publicShareExpiryThreeDays.
+  ///
+  /// In zh, this message translates to:
+  /// **'3天'**
+  String get publicShareExpiryThreeDays;
+
+  /// No description provided for @publicShareExpirySevenDays.
+  ///
+  /// In zh, this message translates to:
+  /// **'7天'**
+  String get publicShareExpirySevenDays;
+
+  /// No description provided for @publicShareExpiryThirtyDays.
+  ///
+  /// In zh, this message translates to:
+  /// **'30天'**
+  String get publicShareExpiryThirtyDays;
+
+  /// No description provided for @publicShareExpiryCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get publicShareExpiryCustom;
+
+  /// No description provided for @publicShareExpiryCustomHours.
+  ///
+  /// In zh, this message translates to:
+  /// **'有效期（小时）'**
+  String get publicShareExpiryCustomHours;
+
+  /// No description provided for @publicShareExpiryRangeError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入 1–720 之间的整数小时'**
+  String get publicShareExpiryRangeError;
+
+  /// No description provided for @publicShareEstimatedExpiry.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计失效：{time}（本地时间）'**
+  String publicShareEstimatedExpiry(String time);
+
   /// No description provided for @copyPublicShareLink.
   ///
   /// In zh, this message translates to:

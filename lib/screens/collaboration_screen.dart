@@ -617,15 +617,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
                     onPressed: collaboration.isBusy
                         ? null
                         : () => unawaited(
-                              _run(
-                                () async {
-                                  final share =
-                                      await collaboration.createPublicShare();
-                                  await _copyPublicShare(collaboration, share);
-                                  return share;
-                                },
-                                success: context.l10n.publicShareLinkCopied,
-                              ),
+                              _createPublicShare(collaboration),
                             ),
                     icon: const Icon(Icons.add_link),
                     label: Text(context.l10n.createPublicShare),
@@ -683,6 +675,27 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _createPublicShare(
+    CollaborationProvider collaboration,
+  ) async {
+    final expiresInHours = await showDialog<int>(
+      context: context,
+      builder: (_) => const _PublicShareExpiryDialog(),
+    );
+    if (!mounted || expiresInHours == null) return;
+
+    await _run(
+      () async {
+        final share = await collaboration.createPublicShare(
+          expiresInHours: expiresInHours,
+        );
+        await _copyPublicShare(collaboration, share);
+        return share;
+      },
+      success: context.l10n.publicShareLinkCopied,
     );
   }
 
@@ -1664,4 +1677,186 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
         SessionRole.viewer => context.l10n.roleViewer,
         null => context.l10n.unknown,
       };
+}
+
+class _PublicShareExpiryDialog extends StatefulWidget {
+  const _PublicShareExpiryDialog();
+
+  @override
+  State<_PublicShareExpiryDialog> createState() =>
+      _PublicShareExpiryDialogState();
+}
+
+class _PublicShareExpiryDialogState extends State<_PublicShareExpiryDialog> {
+  static const _presetHours = [1, 6, 12, 24, 72, 168, 720];
+
+  final _customHoursController = TextEditingController();
+  late final DateTime _createdAt;
+  int _selectedHours = 24;
+  bool _usesCustomHours = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _createdAt = DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _customHoursController.dispose();
+    super.dispose();
+  }
+
+  int? get _effectiveHours {
+    if (!_usesCustomHours) return _selectedHours;
+    final value = int.tryParse(_customHoursController.text);
+    return value != null && value >= 1 && value <= 720 ? value : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveHours = _effectiveHours;
+    final customValue = int.tryParse(_customHoursController.text);
+    final customValueOutOfRange = _usesCustomHours &&
+        _customHoursController.text.isNotEmpty &&
+        (customValue == null || customValue < 1 || customValue > 720);
+
+    return AlertDialog(
+      key: const Key('public-share-expiry-dialog'),
+      title: Text(context.l10n.publicShareExpiryDialogTitle),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(context.l10n.publicShareExpiryDialogHint),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.publicShareExpiryPresets,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final hours in _presetHours)
+                    ChoiceChip(
+                      key: Key('public-share-expiry-$hours'),
+                      label: Text(_presetLabel(context, hours)),
+                      selected: !_usesCustomHours && _selectedHours == hours,
+                      onSelected: (_) {
+                        setState(() {
+                          _usesCustomHours = false;
+                          _selectedHours = hours;
+                        });
+                      },
+                    ),
+                  ChoiceChip(
+                    key: const Key('public-share-expiry-custom'),
+                    label: Text(context.l10n.publicShareExpiryCustom),
+                    selected: _usesCustomHours,
+                    onSelected: (_) {
+                      setState(() => _usesCustomHours = true);
+                    },
+                  ),
+                ],
+              ),
+              if (_usesCustomHours) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  key: const Key('public-share-custom-hours'),
+                  controller: _customHoursController,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: context.l10n.publicShareExpiryCustomHours,
+                    hintText: '1–720',
+                    errorText: customValueOutOfRange
+                        ? context.l10n.publicShareExpiryRangeError
+                        : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) {
+                    final hours = _effectiveHours;
+                    if (hours != null) Navigator.pop(context, hours);
+                  },
+                ),
+              ],
+              if (effectiveHours != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  key: const Key('public-share-estimated-expiry'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.schedule, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          context.l10n.publicShareEstimatedExpiry(
+                            _formatLocalExpiry(
+                              context,
+                              _createdAt.add(Duration(hours: effectiveHours)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.cancel),
+        ),
+        FilledButton(
+          key: const Key('confirm-public-share-expiry'),
+          onPressed: effectiveHours == null
+              ? null
+              : () => Navigator.pop(context, effectiveHours),
+          child: Text(context.l10n.confirm),
+        ),
+      ],
+    );
+  }
+
+  String _presetLabel(BuildContext context, int hours) => switch (hours) {
+        1 => context.l10n.publicShareExpiryOneHour,
+        6 => context.l10n.publicShareExpirySixHours,
+        12 => context.l10n.publicShareExpiryTwelveHours,
+        24 => context.l10n.publicShareExpiryOneDay,
+        72 => context.l10n.publicShareExpiryThreeDays,
+        168 => context.l10n.publicShareExpirySevenDays,
+        720 => context.l10n.publicShareExpiryThirtyDays,
+        _ => '$hours h',
+      };
+
+  String _formatLocalExpiry(BuildContext context, DateTime expiry) {
+    final localizations = MaterialLocalizations.of(context);
+    final date = localizations.formatMediumDate(expiry);
+    final time = localizations.formatTimeOfDay(
+      TimeOfDay.fromDateTime(expiry),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return '$date $time';
+  }
 }

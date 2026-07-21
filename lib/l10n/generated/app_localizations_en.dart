@@ -1035,6 +1035,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createPublicShare => 'Create public link';
 
   @override
+  String get publicShareExpiryDialogTitle => 'Set Live Share expiration';
+
+  @override
+  String get publicShareExpiryDialogHint =>
+      'The public link will expire automatically after the selected duration.';
+
+  @override
+  String get publicShareExpiryPresets => 'Presets';
+
+  @override
+  String get publicShareExpiryOneHour => '1 hour';
+
+  @override
+  String get publicShareExpirySixHours => '6 hours';
+
+  @override
+  String get publicShareExpiryTwelveHours => '12 hours';
+
+  @override
+  String get publicShareExpiryOneDay => '1 day';
+
+  @override
+  String get publicShareExpiryThreeDays => '3 days';
+
+  @override
+  String get publicShareExpirySevenDays => '7 days';
+
+  @override
+  String get publicShareExpiryThirtyDays => '30 days';
+
+  @override
+  String get publicShareExpiryCustom => 'Custom';
+
+  @override
+  String get publicShareExpiryCustomHours => 'Validity (hours)';
+
+  @override
+  String get publicShareExpiryRangeError =>
+      'Enter a whole number from 1 to 720.';
+
+  @override
+  String publicShareEstimatedExpiry(String time) {
+    return 'Estimated expiry: $time (local time)';
+  }
+
+  @override
   String get copyPublicShareLink => 'Copy link';
 
   @override
@@ -3101,6 +3147,52 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get createPublicShare => 'Create public link';
+
+  @override
+  String get publicShareExpiryDialogTitle => 'Set Live Share expiration';
+
+  @override
+  String get publicShareExpiryDialogHint =>
+      'The public link will expire automatically after the selected duration.';
+
+  @override
+  String get publicShareExpiryPresets => 'Presets';
+
+  @override
+  String get publicShareExpiryOneHour => '1 hour';
+
+  @override
+  String get publicShareExpirySixHours => '6 hours';
+
+  @override
+  String get publicShareExpiryTwelveHours => '12 hours';
+
+  @override
+  String get publicShareExpiryOneDay => '1 day';
+
+  @override
+  String get publicShareExpiryThreeDays => '3 days';
+
+  @override
+  String get publicShareExpirySevenDays => '7 days';
+
+  @override
+  String get publicShareExpiryThirtyDays => '30 days';
+
+  @override
+  String get publicShareExpiryCustom => 'Custom';
+
+  @override
+  String get publicShareExpiryCustomHours => 'Validity (hours)';
+
+  @override
+  String get publicShareExpiryRangeError =>
+      'Enter a whole number from 1 to 720.';
+
+  @override
+  String publicShareEstimatedExpiry(String time) {
+    return 'Estimated expiry: $time (local time)';
+  }
 
   @override
   String get copyPublicShareLink => 'Copy link';

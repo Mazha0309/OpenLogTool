@@ -67,7 +67,29 @@ void main() {
     await tester.tap(createButton);
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const Key('public-share-expiry-dialog')),
+      findsOneWidget,
+    );
+    expect(collaboration.createCount, 0);
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.byKey(const Key('public-share-expiry-24')),
+          )
+          .selected,
+      isTrue,
+    );
+    expect(
+      find.byKey(const Key('public-share-estimated-expiry')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('confirm-public-share-expiry')));
+    await tester.pumpAndSettle();
+
     expect(collaboration.createCount, 1);
+    expect(collaboration.lastExpiresInHours, 24);
     expect(find.byKey(const Key('public-share-ready')), findsOneWidget);
     expect(copiedText, _publicUri.toString());
 
@@ -82,6 +104,59 @@ void main() {
     await tester.tap(openButton);
     await tester.pumpAndSettle();
     expect(openedUri, _publicUri);
+  });
+
+  testWidgets('expiry dialog offers presets and validates custom hours',
+      (tester) async {
+    final collaboration = _PublicShareCollaborationProvider(supported: true);
+    await _pumpScreen(
+      tester,
+      collaboration: collaboration,
+      locale: const Locale('zh', 'CN'),
+    );
+
+    final createButton = find.byKey(const Key('create-public-share-link'));
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+
+    for (final label in ['1小时', '6小时', '12小时', '1天', '3天', '7天', '30天']) {
+      expect(find.text(label), findsOneWidget);
+    }
+
+    await tester.tap(find.byKey(const Key('public-share-expiry-custom')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('public-share-estimated-expiry')),
+      findsNothing,
+    );
+
+    final customHours = find.byKey(const Key('public-share-custom-hours'));
+    await tester.enterText(customHours, '721');
+    await tester.pump();
+    expect(find.text('请输入 1–720 之间的整数小时'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const Key('confirm-public-share-expiry')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.enterText(customHours, '36');
+    await tester.pump();
+    expect(
+      find.byKey(const Key('public-share-estimated-expiry')),
+      findsOneWidget,
+    );
+    final confirm = find.byKey(const Key('confirm-public-share-expiry'));
+    await tester.ensureVisible(confirm);
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    expect(collaboration.createCount, 1);
+    expect(collaboration.lastExpiresInHours, 36);
   });
 
   testWidgets('an active link without its one-time secret explains recovery',
@@ -174,6 +249,7 @@ class _PublicShareCollaborationProvider extends CollaborationProvider {
   List<PublicShareDto> testShares;
   PublicShareDto? createdShare;
   int createCount = 0;
+  int? lastExpiresInHours;
 
   @override
   CollaborationState get state => CollaborationState.ready;
@@ -205,6 +281,7 @@ class _PublicShareCollaborationProvider extends CollaborationProvider {
   @override
   Future<PublicShareDto> createPublicShare({int expiresInHours = 24}) async {
     createCount += 1;
+    lastExpiresInHours = expiresInHours;
     final share = _share(secret: 'one-time-secret');
     createdShare = share;
     testShares = [share];
