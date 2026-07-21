@@ -6,6 +6,13 @@ import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
 
 void main() {
+  test('feature credential stores share the default operation queue', () {
+    expect(
+      identical(defaultSecureValueStore(), defaultSecureValueStore()),
+      isTrue,
+    );
+  });
+
   test('persists a session across token-store instances for the same server',
       () async {
     final values = _MemorySecureValues();

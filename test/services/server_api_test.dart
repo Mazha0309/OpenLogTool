@@ -137,6 +137,102 @@ void main() {
       expect(invalidations, 1);
     });
 
+    test('a non-token 401 after refresh does not erase the rotated session',
+        () async {
+      final store = MemoryTokenStore(
+        AuthSessionDto.fromJson(_authJson('old-access', 'old-refresh')),
+      );
+      var accountCalls = 0;
+      var invalidations = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/refresh') {
+          return _jsonResponse(_authJson('new-access', 'new-refresh'));
+        }
+        accountCalls += 1;
+        return accountCalls == 1
+            ? _apiError(401, 'TOKEN_EXPIRED')
+            : _apiError(401, 'AUTH_REQUIRED');
+      });
+      final api = _api(
+        store: store,
+        client: client,
+        onAuthInvalidated: () => invalidations += 1,
+      );
+
+      await expectLater(
+        api.getMe(),
+        throwsA(
+          isA<ServerApiException>()
+              .having((error) => error.code, 'code', 'AUTH_REQUIRED'),
+        ),
+      );
+
+      expect((await store.read())?.refreshToken, 'new-refresh');
+      expect(invalidations, 0);
+    });
+
+    test('an ambiguous refresh 401 preserves the current login', () async {
+      final store = MemoryTokenStore(
+        AuthSessionDto.fromJson(_authJson('old-access', 'old-refresh')),
+      );
+      var invalidations = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/refresh') {
+          return _apiError(401, 'AUTH_REQUIRED');
+        }
+        return _apiError(401, 'TOKEN_EXPIRED');
+      });
+      final api = _api(
+        store: store,
+        client: client,
+        onAuthInvalidated: () => invalidations += 1,
+      );
+
+      await expectLater(
+        api.getMe(),
+        throwsA(
+          isA<ServerApiException>()
+              .having((error) => error.code, 'code', 'AUTH_REQUIRED'),
+        ),
+      );
+
+      expect((await store.read())?.refreshToken, 'old-refresh');
+      expect(invalidations, 0);
+    });
+
+    test('an explicitly invalid refresh token clears the current login',
+        () async {
+      final store = MemoryTokenStore(
+        AuthSessionDto.fromJson(_authJson('old-access', 'old-refresh')),
+      );
+      var invalidations = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/refresh') {
+          return _apiError(401, 'REFRESH_TOKEN_INVALID');
+        }
+        return _apiError(401, 'TOKEN_EXPIRED');
+      });
+      final api = _api(
+        store: store,
+        client: client,
+        onAuthInvalidated: () => invalidations += 1,
+      );
+
+      await expectLater(
+        api.getMe(),
+        throwsA(
+          isA<ServerApiException>().having(
+            (error) => error.code,
+            'code',
+            'REFRESH_TOKEN_INVALID',
+          ),
+        ),
+      );
+
+      expect(await store.read(), isNull);
+      expect(invalidations, 1);
+    });
+
     test('a 401 never replays with a different account session', () async {
       final store = MemoryTokenStore(
         AuthSessionDto.fromJson(_authJson('alice-access', 'alice-refresh')),

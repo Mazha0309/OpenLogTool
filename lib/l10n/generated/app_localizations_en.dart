@@ -1035,6 +1035,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createPublicShare => 'Create public link';
 
   @override
+  String get publicShareExpiryDialogTitle => 'Set Live Share expiration';
+
+  @override
+  String get publicShareExpiryDialogHint =>
+      'The public link will expire automatically after the selected duration.';
+
+  @override
+  String get publicShareExpiryPresets => 'Presets';
+
+  @override
+  String get publicShareExpiryOneHour => '1 hour';
+
+  @override
+  String get publicShareExpirySixHours => '6 hours';
+
+  @override
+  String get publicShareExpiryTwelveHours => '12 hours';
+
+  @override
+  String get publicShareExpiryOneDay => '1 day';
+
+  @override
+  String get publicShareExpiryThreeDays => '3 days';
+
+  @override
+  String get publicShareExpirySevenDays => '7 days';
+
+  @override
+  String get publicShareExpiryThirtyDays => '30 days';
+
+  @override
+  String get publicShareExpiryCustom => 'Custom';
+
+  @override
+  String get publicShareExpiryCustomHours => 'Validity (hours)';
+
+  @override
+  String get publicShareExpiryRangeError =>
+      'Enter a whole number from 1 to 720.';
+
+  @override
+  String publicShareEstimatedExpiry(String time) {
+    return 'Estimated expiry: $time (local time)';
+  }
+
+  @override
   String get copyPublicShareLink => 'Copy link';
 
   @override
@@ -2572,6 +2618,321 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dataLocalDatabaseTab => 'Local database';
+
+  @override
+  String get settingsCategoryAi => 'AI assistance';
+
+  @override
+  String get aiSettingsTitle => 'AI-assisted recognition';
+
+  @override
+  String get aiSettingsDescription =>
+      'Configure optional speech recognition and field extraction services. Endpoints, models, and authentication stay device-specific.';
+
+  @override
+  String get aiSettingsOptionalTitle => 'Optional and off by default';
+
+  @override
+  String get aiSettingsOptionalMessage =>
+      'Audio is sent directly to the service you configure, not through the OpenLogTool collaboration server. Results are suggestions and never overwrite a scribe\'s active edits automatically.';
+
+  @override
+  String get aiRecognitionEnabled => 'Enable AI-assisted recognition';
+
+  @override
+  String get aiRecognitionEnabledHint =>
+      'Makes the selected speech recognition profile available from the Net Desk.';
+
+  @override
+  String get aiLocalReferenceContext =>
+      'Use local dictionaries and recent records';
+
+  @override
+  String get aiLocalReferenceContextHint =>
+      'On by default. Sends only a few terms similar to the current transcript and recent fields for a matched callsign to the text model. The complete database is never uploaded.';
+
+  @override
+  String get aiRecognitionNeedsAsr =>
+      'Add and select a speech recognition profile first.';
+
+  @override
+  String get aiAsrStageTitle => 'Speech recognition (ASR)';
+
+  @override
+  String get aiAsrStageDescription =>
+      'Turns audio into raw text. All three endpoint formats can be saved and switched at any time.';
+
+  @override
+  String get aiExtractionStageTitle => 'Field extraction (optional)';
+
+  @override
+  String get aiExtractionStageDescription =>
+      'Turns a transcript into suggested callsign, RST, QTH, and other fields. Without it, the raw transcript remains available.';
+
+  @override
+  String get aiSupportedProtocols => 'Supported endpoint formats';
+
+  @override
+  String get aiActiveProfile => 'Active profile';
+
+  @override
+  String get aiNoProfileConfigured => 'No profiles have been added';
+
+  @override
+  String get aiNoActiveProfile => 'Do not use';
+
+  @override
+  String get aiCredentialStatus => 'Credential status';
+
+  @override
+  String get aiCredentialNoProfile =>
+      'Select a profile to see its on-device credential status.';
+
+  @override
+  String get aiCredentialStoredLocally =>
+      'API keys are stored separately in secure system storage and are excluded from profile exports.';
+
+  @override
+  String get aiStatusNotConfigured => 'Not configured';
+
+  @override
+  String get aiStatusNoCredentialNeeded => 'No key required';
+
+  @override
+  String get aiStatusCredentialReady => 'Key stored';
+
+  @override
+  String get aiStatusCredentialMissing => 'Key missing';
+
+  @override
+  String get aiAddProfile => 'Add profile';
+
+  @override
+  String get aiEditProfile => 'Edit profile';
+
+  @override
+  String get aiDeleteProfileTitle => 'Delete AI profile';
+
+  @override
+  String aiDeleteProfileMessage(String name) {
+    return 'Delete “$name” and its on-device credential?';
+  }
+
+  @override
+  String get aiProfileName => 'Profile name';
+
+  @override
+  String get aiBaseUrl => 'API base URL';
+
+  @override
+  String get aiModelName => 'Model name';
+
+  @override
+  String get aiProtocol => 'Endpoint format';
+
+  @override
+  String get aiAuthentication => 'Authentication';
+
+  @override
+  String get aiCredentialName => 'Header or query parameter name';
+
+  @override
+  String get aiCredentialPrefix => 'Credential prefix (optional)';
+
+  @override
+  String get aiApiKey => 'API key';
+
+  @override
+  String get aiApiKeyNewHint =>
+      'You may leave this empty and add the key later.';
+
+  @override
+  String get aiApiKeyExistingHint =>
+      'Leave empty to keep the current key. A changed destination requires a new key.';
+
+  @override
+  String get aiRequestOptions => 'Advanced request options (JSON)';
+
+  @override
+  String get aiRequestOptionsHint =>
+      'Generic JSON requires requestTemplate. Protocol options include path, responsePath, body, fields, audioDataEncoding, and includePrompt. This metadata is exported with the profile; never place a key here.';
+
+  @override
+  String get aiRequiredField => 'This field is required';
+
+  @override
+  String get aiRequestOptionsMustBeObject =>
+      'Advanced request options must be a JSON object';
+
+  @override
+  String get aiJsonProtocolNeedsTemplate =>
+      'Generic JSON requires requestTemplate';
+
+  @override
+  String get aiInvalidJson => 'Invalid JSON';
+
+  @override
+  String get aiInvalidBaseUrl => 'Enter a valid HTTP(S) API address';
+
+  @override
+  String aiSettingsFailed(String error) {
+    return 'AI settings operation failed: $error';
+  }
+
+  @override
+  String get aiProtocolAudioTranscriptions => 'Audio transcription multipart';
+
+  @override
+  String get aiProtocolChatAudio => 'Chat input_audio';
+
+  @override
+  String get aiProtocolChatText => 'Chat text extraction';
+
+  @override
+  String get aiProtocolGenericJson => 'Generic JSON HTTP';
+
+  @override
+  String get aiAuthNone => 'No authentication';
+
+  @override
+  String get aiAuthBearer => 'Authorization Bearer';
+
+  @override
+  String get aiAuthHeader => 'Custom header';
+
+  @override
+  String get aiAuthQuery => 'Query parameter';
+
+  @override
+  String get aiWorkbenchTitle => 'AI-assisted recognition';
+
+  @override
+  String get aiWorkbenchUnavailable =>
+      'Recognition is unavailable while this record is read-only or busy.';
+
+  @override
+  String get aiReadyStatus => 'Tap the microphone to capture one check-in.';
+
+  @override
+  String aiRecordingStatus(String elapsed) {
+    return 'Recording $elapsed';
+  }
+
+  @override
+  String get aiLiveTranscriptTitle => 'Live recognized fields';
+
+  @override
+  String get aiLiveStructuredWaiting =>
+      'Building enough context for a complete check-in. Recognized fields will appear here.';
+
+  @override
+  String get aiLiveStructuredUpdating =>
+      'Organizing fields from everything recognized so far…';
+
+  @override
+  String aiLiveTranscriptionRetrying(String error) {
+    return 'Live recognition temporarily failed. The complete content will still be retried after recording stops: $error';
+  }
+
+  @override
+  String get aiRecognizingStatus => 'Recognizing and preparing suggestions…';
+
+  @override
+  String get aiStartRecording => 'Record';
+
+  @override
+  String get aiStopAndRecognize => 'Recognize';
+
+  @override
+  String get aiMicrophonePermissionDenied =>
+      'Microphone permission was not granted.';
+
+  @override
+  String aiRecordingFailed(String error) {
+    return 'Recording failed: $error';
+  }
+
+  @override
+  String aiRecognitionFailed(String error) {
+    return 'Recognition failed: $error';
+  }
+
+  @override
+  String get aiReviewTitle => 'Review AI suggestions';
+
+  @override
+  String get aiTranscriptTitle => 'Transcript';
+
+  @override
+  String get aiCopyTranscript => 'Copy transcript';
+
+  @override
+  String get aiTranscriptCopied => 'Transcript copied.';
+
+  @override
+  String get aiNoStructuredCandidates =>
+      'No structured fields were returned. The transcript is still available above.';
+
+  @override
+  String get aiCandidateRecord => 'Suggested record';
+
+  @override
+  String aiCandidateNumber(int number) {
+    return 'Candidate $number';
+  }
+
+  @override
+  String get aiCandidateHint =>
+      'Empty fields are selected automatically. Replacing existing text always requires your explicit selection.';
+
+  @override
+  String get aiApplySelected => 'Apply selected';
+
+  @override
+  String aiCandidatesApplied(int count) {
+    return 'Applied $count suggested field(s).';
+  }
+
+  @override
+  String get aiCandidatesStale =>
+      'These suggestions are no longer safe to apply because the record changed.';
+
+  @override
+  String aiApplyFailed(String error) {
+    return 'Could not apply AI suggestions: $error';
+  }
+
+  @override
+  String aiWillReplaceValue(String value) {
+    return 'Will replace: $value';
+  }
+
+  @override
+  String get aiWillFillEmpty => 'Will fill an empty field';
+
+  @override
+  String get aiReplacementNeedsConfirmation => 'Select to confirm replacement';
+
+  @override
+  String get aiCandidateUnchanged => 'Already matches';
+
+  @override
+  String get aiCandidateStale => 'The field changed after recording began';
+
+  @override
+  String get aiCandidateBeingEdited => 'The field is currently being edited';
+
+  @override
+  String get aiCandidateLocked => 'Another collaborator is editing this field';
+
+  @override
+  String get aiCandidateReadOnly => 'This record is read-only';
+
+  @override
+  String get aiCandidateBusy => 'The record is busy';
+
+  @override
+  String get aiCandidateInvalid => 'Unsupported or invalid suggestion';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -3103,6 +3464,52 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get createPublicShare => 'Create public link';
 
   @override
+  String get publicShareExpiryDialogTitle => 'Set Live Share expiration';
+
+  @override
+  String get publicShareExpiryDialogHint =>
+      'The public link will expire automatically after the selected duration.';
+
+  @override
+  String get publicShareExpiryPresets => 'Presets';
+
+  @override
+  String get publicShareExpiryOneHour => '1 hour';
+
+  @override
+  String get publicShareExpirySixHours => '6 hours';
+
+  @override
+  String get publicShareExpiryTwelveHours => '12 hours';
+
+  @override
+  String get publicShareExpiryOneDay => '1 day';
+
+  @override
+  String get publicShareExpiryThreeDays => '3 days';
+
+  @override
+  String get publicShareExpirySevenDays => '7 days';
+
+  @override
+  String get publicShareExpiryThirtyDays => '30 days';
+
+  @override
+  String get publicShareExpiryCustom => 'Custom';
+
+  @override
+  String get publicShareExpiryCustomHours => 'Validity (hours)';
+
+  @override
+  String get publicShareExpiryRangeError =>
+      'Enter a whole number from 1 to 720.';
+
+  @override
+  String publicShareEstimatedExpiry(String time) {
+    return 'Estimated expiry: $time (local time)';
+  }
+
+  @override
   String get copyPublicShareLink => 'Copy link';
 
   @override
@@ -3631,4 +4038,319 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get localCollaborationRequired =>
       'The current session is no longer an on-device collaboration replica. Refresh the page and try again.';
+
+  @override
+  String get settingsCategoryAi => 'AI assistance';
+
+  @override
+  String get aiSettingsTitle => 'AI-assisted recognition';
+
+  @override
+  String get aiSettingsDescription =>
+      'Configure optional speech recognition and field extraction services. Endpoints, models, and authentication stay device-specific.';
+
+  @override
+  String get aiSettingsOptionalTitle => 'Optional and off by default';
+
+  @override
+  String get aiSettingsOptionalMessage =>
+      'Audio is sent directly to the service you configure, not through the OpenLogTool collaboration server. Results are suggestions and never overwrite a scribe\'s active edits automatically.';
+
+  @override
+  String get aiRecognitionEnabled => 'Enable AI-assisted recognition';
+
+  @override
+  String get aiRecognitionEnabledHint =>
+      'Makes the selected speech recognition profile available from the Net Desk.';
+
+  @override
+  String get aiLocalReferenceContext =>
+      'Use local dictionaries and recent records';
+
+  @override
+  String get aiLocalReferenceContextHint =>
+      'On by default. Sends only a few terms similar to the current transcript and recent fields for a matched callsign to the text model. The complete database is never uploaded.';
+
+  @override
+  String get aiRecognitionNeedsAsr =>
+      'Add and select a speech recognition profile first.';
+
+  @override
+  String get aiAsrStageTitle => 'Speech recognition (ASR)';
+
+  @override
+  String get aiAsrStageDescription =>
+      'Turns audio into raw text. All three endpoint formats can be saved and switched at any time.';
+
+  @override
+  String get aiExtractionStageTitle => 'Field extraction (optional)';
+
+  @override
+  String get aiExtractionStageDescription =>
+      'Turns a transcript into suggested callsign, RST, QTH, and other fields. Without it, the raw transcript remains available.';
+
+  @override
+  String get aiSupportedProtocols => 'Supported endpoint formats';
+
+  @override
+  String get aiActiveProfile => 'Active profile';
+
+  @override
+  String get aiNoProfileConfigured => 'No profiles have been added';
+
+  @override
+  String get aiNoActiveProfile => 'Do not use';
+
+  @override
+  String get aiCredentialStatus => 'Credential status';
+
+  @override
+  String get aiCredentialNoProfile =>
+      'Select a profile to see its on-device credential status.';
+
+  @override
+  String get aiCredentialStoredLocally =>
+      'API keys are stored separately in secure system storage and are excluded from profile exports.';
+
+  @override
+  String get aiStatusNotConfigured => 'Not configured';
+
+  @override
+  String get aiStatusNoCredentialNeeded => 'No key required';
+
+  @override
+  String get aiStatusCredentialReady => 'Key stored';
+
+  @override
+  String get aiStatusCredentialMissing => 'Key missing';
+
+  @override
+  String get aiAddProfile => 'Add profile';
+
+  @override
+  String get aiEditProfile => 'Edit profile';
+
+  @override
+  String get aiDeleteProfileTitle => 'Delete AI profile';
+
+  @override
+  String aiDeleteProfileMessage(String name) {
+    return 'Delete “$name” and its on-device credential?';
+  }
+
+  @override
+  String get aiProfileName => 'Profile name';
+
+  @override
+  String get aiBaseUrl => 'API base URL';
+
+  @override
+  String get aiModelName => 'Model name';
+
+  @override
+  String get aiProtocol => 'Endpoint format';
+
+  @override
+  String get aiAuthentication => 'Authentication';
+
+  @override
+  String get aiCredentialName => 'Header or query parameter name';
+
+  @override
+  String get aiCredentialPrefix => 'Credential prefix (optional)';
+
+  @override
+  String get aiApiKey => 'API key';
+
+  @override
+  String get aiApiKeyNewHint =>
+      'You may leave this empty and add the key later.';
+
+  @override
+  String get aiApiKeyExistingHint =>
+      'Leave empty to keep the current key. A changed destination requires a new key.';
+
+  @override
+  String get aiRequestOptions => 'Advanced request options (JSON)';
+
+  @override
+  String get aiRequestOptionsHint =>
+      'Generic JSON requires requestTemplate. Protocol options include path, responsePath, body, fields, audioDataEncoding, and includePrompt. This metadata is exported with the profile; never place a key here.';
+
+  @override
+  String get aiRequiredField => 'This field is required';
+
+  @override
+  String get aiRequestOptionsMustBeObject =>
+      'Advanced request options must be a JSON object';
+
+  @override
+  String get aiJsonProtocolNeedsTemplate =>
+      'Generic JSON requires requestTemplate';
+
+  @override
+  String get aiInvalidJson => 'Invalid JSON';
+
+  @override
+  String get aiInvalidBaseUrl => 'Enter a valid HTTP(S) API address';
+
+  @override
+  String aiSettingsFailed(String error) {
+    return 'AI settings operation failed: $error';
+  }
+
+  @override
+  String get aiProtocolAudioTranscriptions => 'Audio transcription multipart';
+
+  @override
+  String get aiProtocolChatAudio => 'Chat input_audio';
+
+  @override
+  String get aiProtocolChatText => 'Chat text extraction';
+
+  @override
+  String get aiProtocolGenericJson => 'Generic JSON HTTP';
+
+  @override
+  String get aiAuthNone => 'No authentication';
+
+  @override
+  String get aiAuthBearer => 'Authorization Bearer';
+
+  @override
+  String get aiAuthHeader => 'Custom header';
+
+  @override
+  String get aiAuthQuery => 'Query parameter';
+
+  @override
+  String get aiWorkbenchTitle => 'AI-assisted recognition';
+
+  @override
+  String get aiWorkbenchUnavailable =>
+      'Recognition is unavailable while this record is read-only or busy.';
+
+  @override
+  String get aiReadyStatus => 'Tap the microphone to capture one check-in.';
+
+  @override
+  String aiRecordingStatus(String elapsed) {
+    return 'Recording $elapsed';
+  }
+
+  @override
+  String get aiLiveTranscriptTitle => 'Live recognized fields';
+
+  @override
+  String get aiLiveStructuredWaiting =>
+      'Building enough context for a complete check-in. Recognized fields will appear here.';
+
+  @override
+  String get aiLiveStructuredUpdating =>
+      'Organizing fields from everything recognized so far…';
+
+  @override
+  String aiLiveTranscriptionRetrying(String error) {
+    return 'Live recognition temporarily failed. The complete content will still be retried after recording stops: $error';
+  }
+
+  @override
+  String get aiRecognizingStatus => 'Recognizing and preparing suggestions…';
+
+  @override
+  String get aiStartRecording => 'Record';
+
+  @override
+  String get aiStopAndRecognize => 'Recognize';
+
+  @override
+  String get aiMicrophonePermissionDenied =>
+      'Microphone permission was not granted.';
+
+  @override
+  String aiRecordingFailed(String error) {
+    return 'Recording failed: $error';
+  }
+
+  @override
+  String aiRecognitionFailed(String error) {
+    return 'Recognition failed: $error';
+  }
+
+  @override
+  String get aiReviewTitle => 'Review AI suggestions';
+
+  @override
+  String get aiTranscriptTitle => 'Transcript';
+
+  @override
+  String get aiCopyTranscript => 'Copy transcript';
+
+  @override
+  String get aiTranscriptCopied => 'Transcript copied.';
+
+  @override
+  String get aiNoStructuredCandidates =>
+      'No structured fields were returned. The transcript is still available above.';
+
+  @override
+  String get aiCandidateRecord => 'Suggested record';
+
+  @override
+  String aiCandidateNumber(int number) {
+    return 'Candidate $number';
+  }
+
+  @override
+  String get aiCandidateHint =>
+      'Empty fields are selected automatically. Replacing existing text always requires your explicit selection.';
+
+  @override
+  String get aiApplySelected => 'Apply selected';
+
+  @override
+  String aiCandidatesApplied(int count) {
+    return 'Applied $count suggested field(s).';
+  }
+
+  @override
+  String get aiCandidatesStale =>
+      'These suggestions are no longer safe to apply because the record changed.';
+
+  @override
+  String aiApplyFailed(String error) {
+    return 'Could not apply AI suggestions: $error';
+  }
+
+  @override
+  String aiWillReplaceValue(String value) {
+    return 'Will replace: $value';
+  }
+
+  @override
+  String get aiWillFillEmpty => 'Will fill an empty field';
+
+  @override
+  String get aiReplacementNeedsConfirmation => 'Select to confirm replacement';
+
+  @override
+  String get aiCandidateUnchanged => 'Already matches';
+
+  @override
+  String get aiCandidateStale => 'The field changed after recording began';
+
+  @override
+  String get aiCandidateBeingEdited => 'The field is currently being edited';
+
+  @override
+  String get aiCandidateLocked => 'Another collaborator is editing this field';
+
+  @override
+  String get aiCandidateReadOnly => 'This record is read-only';
+
+  @override
+  String get aiCandidateBusy => 'The record is busy';
+
+  @override
+  String get aiCandidateInvalid => 'Unsupported or invalid suggestion';
 }

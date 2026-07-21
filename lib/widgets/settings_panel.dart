@@ -7,6 +7,7 @@ import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/about_app_dialog.dart';
 import 'package:openlogtool/widgets/font_picker_dialog.dart';
 import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
+import 'package:openlogtool/widgets/settings/ai_recognition_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/server_account_settings.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
@@ -18,6 +19,7 @@ enum _SettingsCategory {
   appearance,
   workbench,
   controller,
+  ai,
   serverAccount,
   application,
 }
@@ -27,6 +29,7 @@ extension on _SettingsCategory {
         _SettingsCategory.appearance => Icons.palette_outlined,
         _SettingsCategory.workbench => Icons.dashboard_customize_outlined,
         _SettingsCategory.controller => Icons.cast_outlined,
+        _SettingsCategory.ai => Icons.auto_awesome_outlined,
         _SettingsCategory.serverAccount => Icons.cloud_outlined,
         _SettingsCategory.application => Icons.info_outline,
       };
@@ -35,6 +38,7 @@ extension on _SettingsCategory {
         _SettingsCategory.appearance => context.l10n.settingsCategoryAppearance,
         _SettingsCategory.workbench => context.l10n.settingsCategoryWorkbench,
         _SettingsCategory.controller => context.l10n.settingsCategoryController,
+        _SettingsCategory.ai => context.l10n.settingsCategoryAi,
         _SettingsCategory.serverAccount =>
           context.l10n.settingsCategoryServerAccount,
         _SettingsCategory.application =>
@@ -46,6 +50,7 @@ extension on _SettingsCategory {
         _SettingsCategory.workbench => context.l10n.layoutSettingsHint,
         _SettingsCategory.controller =>
           context.l10n.controllerDisplaySettingsHint,
+        _SettingsCategory.ai => context.l10n.aiSettingsDescription,
         _SettingsCategory.serverAccount => context.l10n.serverSettingsHint,
         _SettingsCategory.application => context.l10n.settingsSupportHint,
       };
@@ -247,6 +252,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
           ),
         _SettingsCategory.controller =>
           ControllerDisplaySettings(cardPadding: cardPadding),
+        _SettingsCategory.ai => AiRecognitionSettings(cardPadding: cardPadding),
         _SettingsCategory.serverAccount =>
           ServerAccountSettings(cardPadding: cardPadding),
         _SettingsCategory.application => _buildApplicationSettings(
