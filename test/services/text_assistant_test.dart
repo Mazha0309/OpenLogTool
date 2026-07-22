@@ -431,11 +431,26 @@ void main() {
       target: 'FT-991A',
       reason: 'Normalize model name',
     );
+    const duplicateAdd = DictionaryAiSuggestion(
+      category: DictionaryAiCategory.device,
+      action: DictionaryAiAction.add,
+      source: 'IC-705',
+      target: 'ICOM IC-705',
+      reason: 'Normalize model name',
+    );
+    const sameTargetAdd = DictionaryAiSuggestion(
+      category: DictionaryAiCategory.device,
+      action: DictionaryAiAction.add,
+      source: 'ICOM705',
+      target: 'ICOM IC-705',
+      reason: 'Normalize model name',
+    );
 
     expect(source.recordCount, 3);
     expect(source.history[DictionaryAiCategory.device]!.single.count, 2);
     expect(suggestion.toApplyJson(), containsPair('source', 'FT991A'));
     expect(suggestion.toApplyJson(), containsPair('target', 'FT-991A'));
     expect(suggestion.toApplyJson()['dictType'], 'device_dictionary');
+    expect(duplicateAdd.id, sameTargetAdd.id);
   });
 }

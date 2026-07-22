@@ -52,6 +52,7 @@ async fn dictionary_ai_uses_aggregates_and_applies_reviewed_changes_atomically()
 
     for (dict_type, raw) in [
         ("device_dictionary", "Old Radio"),
+        ("device_dictionary", "Spare Radio"),
         ("antenna_dictionary", "Dipole"),
         ("antenna_dictionary", "DP"),
     ] {
@@ -86,9 +87,24 @@ async fn dictionary_ai_uses_aggregates_and_applies_reviewed_changes_atomically()
                         "abbreviation": "BG5CRL"
                     },
                     {
+                        "action": "add",
+                        "dictType": "callsign_dictionary",
+                        "target": "BG5CRL",
+                        "pinyin": "bg5crl",
+                        "abbreviation": "BG5CRL"
+                    },
+                    {
                         "action": "rename",
                         "dictType": "device_dictionary",
                         "source": "Old Radio",
+                        "target": "New Radio",
+                        "pinyin": "new radio",
+                        "abbreviation": "NR"
+                    },
+                    {
+                        "action": "rename",
+                        "dictType": "device_dictionary",
+                        "source": "Spare Radio",
                         "target": "New Radio",
                         "pinyin": "new radio",
                         "abbreviation": "NR"
@@ -107,7 +123,7 @@ async fn dictionary_ai_uses_aggregates_and_applies_reviewed_changes_atomically()
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(result, json!({"added": 1, "renamed": 1, "merged": 1}));
+    assert_eq!(result, json!({"added": 1, "renamed": 1, "merged": 2}));
     assert!(
         search::get_dict_item_by_raw("callsign_dictionary", "BG5CRL")
             .await
@@ -125,6 +141,12 @@ async fn dictionary_ai_uses_aggregates_and_applies_reviewed_changes_atomically()
             .await
             .unwrap()
             .is_some()
+    );
+    assert!(
+        search::get_dict_item_by_raw("device_dictionary", "Spare Radio")
+            .await
+            .unwrap()
+            .is_none()
     );
     assert!(search::get_dict_item_by_raw("antenna_dictionary", "DP")
         .await

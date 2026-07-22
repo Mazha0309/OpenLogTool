@@ -94,7 +94,9 @@ final class DictionaryAiSuggestion {
   final String reason;
   final int evidenceCount;
 
-  String get id => '${category.name}:${action.name}:${source ?? ''}:$target';
+  String get id => action == DictionaryAiAction.add
+      ? '${category.name}:${action.name}:$target'
+      : '${category.name}:${action.name}:${source ?? ''}:$target';
 
   Map<String, Object?> toApplyJson() {
     final generated = DictionaryPinyinHelper.generate(target);

@@ -448,12 +448,21 @@ class DictionaryProvider with ChangeNotifier {
     required List<DictionaryAiSuggestion> suggestions,
   }) async {
     if (suggestions.isEmpty) return;
+    final operations = <Map<String, Object?>>[];
+    final operationKeys = <String>{};
+    for (final suggestion in suggestions) {
+      final operation = suggestion.toApplyJson();
+      final source = operation['source']?.toString() ?? '';
+      final key = suggestion.action == DictionaryAiAction.add
+          ? '${operation['dictType']}\u0000add\u0000${operation['target']}'
+          : '${operation['dictType']}\u0000${operation['action']}\u0000'
+              '$source\u0000${operation['target']}';
+      if (operationKeys.add(key)) operations.add(operation);
+    }
     await RustApi.applyDictionaryAiChanges(
       requestJson: jsonEncode(<String, Object?>{
         'expectedStateToken': expectedStateToken,
-        'operations': suggestions
-            .map((suggestion) => suggestion.toApplyJson())
-            .toList(growable: false),
+        'operations': operations,
       }),
     );
     await reloadFromDatabase(synchronizeBuiltins: false);

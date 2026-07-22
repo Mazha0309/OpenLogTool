@@ -218,14 +218,27 @@ pub async fn apply_dictionary_ai_changes(request_json: String) -> anyhow::Result
         let target = operation.target.trim();
         match operation.action.as_str() {
             "add" => {
-                ensure_inactive(&mut tx, dict_type, target).await?;
+                // Multiple observed values may independently normalize to the
+                // same canonical term. Later additions are already satisfied.
+                if is_active(&mut tx, dict_type, target).await? {
+                    continue;
+                }
                 upsert_ai_target(&mut tx, &operation, target, &now).await?;
                 added += 1;
             }
             "rename" => {
                 let source = operation.source.as_deref().unwrap().trim();
+                if source == target {
+                    anyhow::bail!("DICTIONARY_AI_RENAME_SAME_ITEM");
+                }
                 ensure_active(&mut tx, dict_type, source).await?;
-                ensure_inactive(&mut tx, dict_type, target).await?;
+                if is_active(&mut tx, dict_type, target).await? {
+                    // A previous operation may already have created this
+                    // target, turning the remaining rename into a merge.
+                    tombstone(&mut tx, dict_type, source, &now).await?;
+                    merged += 1;
+                    continue;
+                }
                 tombstone(&mut tx, dict_type, source, &now).await?;
                 upsert_ai_target(&mut tx, &operation, target, &now).await?;
                 renamed += 1;
@@ -337,11 +350,11 @@ async fn ensure_active(
     Ok(())
 }
 
-async fn ensure_inactive(
+async fn is_active(
     tx: &mut Transaction<'_, Sqlite>,
     dict_type: &str,
     raw: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let found: Option<(i64,)> = sqlx::query_as(
         "SELECT id FROM dictionary_items
          WHERE dict_type = ? AND raw = ? AND deleted_at IS NULL",
@@ -350,10 +363,7 @@ async fn ensure_inactive(
     .bind(raw)
     .fetch_optional(&mut **tx)
     .await?;
-    if found.is_some() {
-        anyhow::bail!("DICTIONARY_AI_TARGET_EXISTS: {dict_type}/{raw}");
-    }
-    Ok(())
+    Ok(found.is_some())
 }
 
 async fn tombstone(
