@@ -146,7 +146,7 @@ void main() {
     client.close();
   });
 
-  test('compatible Chat retries when reasoning exhausts the output limit',
+  test('compatible Chat retries a non-empty response truncated by its limit',
       () async {
     final tokenBudgets = <int>[];
     final client = TextAssistantClient(
@@ -167,7 +167,7 @@ void main() {
                 {
                   'finish_reason': 'length',
                   'message': {
-                    'content': '',
+                    'content': '{"ok":',
                     'reasoning_content': 'Still reasoning',
                   }
                 }
@@ -185,6 +185,48 @@ void main() {
                   'content': [
                     {'type': 'text', 'text': '{"ok":true}'}
                   ]
+                }
+              }
+            ]
+          }),
+          200,
+        );
+      }),
+    );
+
+    expect(
+      await client.completeJson(
+        systemPrompt: 'system',
+        userPrompt: 'user',
+        maxOutputTokens: 48,
+      ),
+      {'ok': true},
+    );
+    expect(tokenBudgets, [1024, 4096]);
+    client.close();
+  });
+
+  test('malformed JSON retries even when a gateway reports stop', () async {
+    final tokenBudgets = <int>[];
+    final client = TextAssistantClient(
+      config: TextAssistantConfig(
+        provider: TextAssistantProvider.openAiCompatible,
+        baseUrl: Uri.parse('https://llm.example/v1'),
+        model: 'gateway-model',
+        credentialId: 'key',
+      ),
+      secretResolver: (_) async => 'secret',
+      httpClient: MockClient((request) async {
+        final body = Map<String, Object?>.from(jsonDecode(request.body) as Map);
+        tokenBudgets.add(body['max_tokens']! as int);
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'finish_reason': 'stop',
+                'message': {
+                  'content':
+                      tokenBudgets.length == 1 ? '{"ok":' : '{"ok":true}',
                 }
               }
             ]

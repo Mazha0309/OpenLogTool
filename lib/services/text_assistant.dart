@@ -100,31 +100,61 @@ final class TextAssistantClient {
     }
     cancellationToken?.throwIfCancelled(providerId: 'text-assistant');
 
-    final responseText = switch (config.provider) {
-      TextAssistantProvider.anthropic => _completeAnthropic(
-          secret: secret,
-          systemPrompt: systemPrompt,
-          userPrompt: userPrompt,
-          maxOutputTokens: maxOutputTokens,
-          cancellationToken: cancellationToken,
-        ),
-      TextAssistantProvider.openAi => _completeOpenAiResponses(
-          secret: secret,
-          systemPrompt: systemPrompt,
-          userPrompt: userPrompt,
-          maxOutputTokens: maxOutputTokens,
-          cancellationToken: cancellationToken,
-        ),
-      TextAssistantProvider.openAiCompatible => _completeOpenAiChat(
-          secret: secret,
-          systemPrompt: systemPrompt,
-          userPrompt: userPrompt,
-          maxOutputTokens: maxOutputTokens,
-          cancellationToken: cancellationToken,
-        ),
-    };
-    return _decodeJsonObject(await responseText);
+    var outputTokenBudget = maxOutputTokens;
+    for (var attempt = 0; attempt < 2; attempt += 1) {
+      final responseText = await _requestText(
+        secret: secret,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+        maxOutputTokens: outputTokenBudget,
+        cancellationToken: cancellationToken,
+      );
+      try {
+        return _decodeJsonObject(responseText);
+      } on FormatException {
+        if (attempt == 1) rethrow;
+      } on StateError catch (error) {
+        if (attempt == 1 ||
+            error.message != 'TEXT_ASSISTANT_RESPONSE_NOT_JSON') {
+          rethrow;
+        }
+      }
+      outputTokenBudget =
+          outputTokenBudget < 4096 ? 4096 : outputTokenBudget * 2;
+    }
+    throw StateError('TEXT_ASSISTANT_RESPONSE_NOT_JSON');
   }
+
+  Future<String> _requestText({
+    required String secret,
+    required String systemPrompt,
+    required String userPrompt,
+    required int maxOutputTokens,
+    required AiCancellationToken? cancellationToken,
+  }) =>
+      switch (config.provider) {
+        TextAssistantProvider.anthropic => _completeAnthropic(
+            secret: secret,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            maxOutputTokens: maxOutputTokens,
+            cancellationToken: cancellationToken,
+          ),
+        TextAssistantProvider.openAi => _completeOpenAiResponses(
+            secret: secret,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            maxOutputTokens: maxOutputTokens,
+            cancellationToken: cancellationToken,
+          ),
+        TextAssistantProvider.openAiCompatible => _completeOpenAiChat(
+            secret: secret,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            maxOutputTokens: maxOutputTokens,
+            cancellationToken: cancellationToken,
+          ),
+      };
 
   Future<String> _completeOpenAiResponses({
     required String secret,
@@ -237,8 +267,7 @@ final class TextAssistantClient {
     _requireSuccess(response);
     var decoded = _decodeResponseObject(response);
     var text = _tryReadOpenAiChatText(decoded);
-    if (text == null &&
-        _openAiChatReachedOutputLimit(decoded) &&
+    if (_openAiChatReachedOutputLimit(decoded) &&
         effectiveMaxOutputTokens < 4096) {
       response = await _postJson(
         endpoint,
@@ -254,6 +283,9 @@ final class TextAssistantClient {
       _requireSuccess(response);
       decoded = _decodeResponseObject(response);
       text = _tryReadOpenAiChatText(decoded);
+    }
+    if (_openAiChatReachedOutputLimit(decoded)) {
+      throw StateError('TEXT_ASSISTANT_OUTPUT_LIMIT');
     }
     if (text != null) return text;
     throw StateError('TEXT_ASSISTANT_EMPTY_RESPONSE');

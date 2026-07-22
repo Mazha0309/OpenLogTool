@@ -111,6 +111,7 @@ final class DictionaryAiSuggestion {
 }
 
 typedef TextAssistantProgress = void Function(int completed, int total);
+const int _dictionaryAiBatchSize = 40;
 typedef InlineTextSuggestionExecutor = Future<String?> Function({
   required AiRecognitionSettingsProvider settings,
   required String field,
@@ -183,18 +184,21 @@ explicit. Preserve floor/height meaning and units.
       final missing = source.history[category]!
           .where((item) => !existing.contains(item.value))
           .toList(growable: false);
-      for (var start = 0; start < missing.length; start += 100) {
+      for (var start = 0;
+          start < missing.length;
+          start += _dictionaryAiBatchSize) {
         jobs.add((
           category: category,
           values: missing.sublist(
             start,
-            (start + 100).clamp(0, missing.length),
+            (start + _dictionaryAiBatchSize).clamp(0, missing.length),
           ),
         ));
       }
     }
     final result = <String, DictionaryAiSuggestion>{};
     var completed = 0;
+    onProgress?.call(0, jobs.length);
     for (final job in jobs) {
       cancellationToken?.throwIfCancelled(providerId: 'text-assistant');
       final client = settings.createTextAssistantClient(
@@ -240,21 +244,41 @@ explicit. Preserve floor/height meaning and units.
     final categories = DictionaryAiCategory.values
         .where((category) => source.dictionaries[category]!.isNotEmpty)
         .toList(growable: false);
+    final jobs = <({
+      DictionaryAiCategory category,
+      List<String> candidateSources,
+    })>[];
+    for (final category in categories) {
+      final terms = source.dictionaries[category]!;
+      for (var start = 0;
+          start < terms.length;
+          start += _dictionaryAiBatchSize) {
+        jobs.add((
+          category: category,
+          candidateSources: terms.sublist(
+            start,
+            (start + _dictionaryAiBatchSize).clamp(0, terms.length),
+          ),
+        ));
+      }
+    }
     final result = <String, DictionaryAiSuggestion>{};
     var completed = 0;
-    for (final category in categories) {
+    onProgress?.call(0, jobs.length);
+    for (final job in jobs) {
       cancellationToken?.throwIfCancelled(providerId: 'text-assistant');
       final client = settings.createTextAssistantClient(
         timeout: const Duration(seconds: 45),
       );
       try {
         final response = await client.completeJson(
-          systemPrompt: _optimizationPrompt(category),
+          systemPrompt: _optimizationPrompt(job.category),
           userPrompt: jsonEncode(<String, Object?>{
-            'category': category.name,
-            'dictionaryTerms': source.dictionaries[category],
+            'category': job.category.name,
+            'candidateSources': job.candidateSources,
+            'dictionaryTerms': source.dictionaries[job.category],
             'usage': <Object?>[
-              for (final item in source.history[category]!)
+              for (final item in source.history[job.category]!)
                 <String, Object?>{'value': item.value, 'count': item.count},
             ],
           }),
@@ -263,8 +287,9 @@ explicit. Preserve floor/height meaning and units.
         );
         for (final suggestion in _parseOptimizationSuggestions(
           response,
-          category,
+          job.category,
           source,
+          job.candidateSources,
         )) {
           result[suggestion.id] = suggestion;
         }
@@ -272,7 +297,7 @@ explicit. Preserve floor/height meaning and units.
         client.close();
       }
       completed += 1;
-      onProgress?.call(completed, categories.length);
+      onProgress?.call(completed, jobs.length);
     }
     return result.values.toList(growable: false);
   }
@@ -295,7 +320,8 @@ Every source must exactly exist. For rename, target must not already exist and
 may only normalize spelling, casing, spacing, punctuation, or conventional
 notation. For merge, target must be another exact existing term. Never propose
 standalone deletion and never invent equipment, locations, antennas, or callsigns.
-Use usage counts only as supporting evidence.
+Only propose changes whose source appears in candidateSources. Use usage counts
+only as supporting evidence.
 ''';
 
 List<DictionaryAiSuggestion> _parseHistorySuggestions(
@@ -339,6 +365,7 @@ List<DictionaryAiSuggestion> _parseOptimizationSuggestions(
   Map<String, Object?> response,
   DictionaryAiCategory category,
   DictionaryAiSource source,
+  List<String> candidateSources,
 ) {
   final raw = response['suggestions'];
   if (raw is! List) return const <DictionaryAiSuggestion>[];
@@ -346,6 +373,7 @@ List<DictionaryAiSuggestion> _parseOptimizationSuggestions(
   final usage = <String, int>{
     for (final item in source.history[category]!) item.value: item.count,
   };
+  final allowedSources = candidateSources.toSet();
   final result = <DictionaryAiSuggestion>[];
   for (final item in raw) {
     if (item is! Map) continue;
@@ -358,6 +386,7 @@ List<DictionaryAiSuggestion> _parseOptimizationSuggestions(
     final target = item['target']?.toString().trim() ?? '';
     if (action == null ||
         !existing.contains(sourceValue) ||
+        !allowedSources.contains(sourceValue) ||
         sourceValue == target ||
         target.isEmpty ||
         target.length > 120 ||
