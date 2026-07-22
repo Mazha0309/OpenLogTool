@@ -177,6 +177,11 @@ final class TextAssistantClient {
     required AiCancellationToken? cancellationToken,
   }) async {
     final endpoint = _endpoint(config.baseUrl, const ['chat', 'completions']);
+    // Reasoning models exposed through Chat Completions count hidden reasoning
+    // against the completion budget. Tiny limits can therefore produce a
+    // successful response whose visible message is still empty.
+    final effectiveMaxOutputTokens =
+        maxOutputTokens < 1024 ? 1024 : maxOutputTokens;
     final baseBody = <String, Object?>{
       'model': config.model,
       'messages': <Object?>[
@@ -188,7 +193,7 @@ final class TextAssistantClient {
     final fastBody = <String, Object?>{
       ...baseBody,
       'temperature': 0,
-      'max_tokens': maxOutputTokens,
+      'max_tokens': effectiveMaxOutputTokens,
       'response_format': <String, Object?>{'type': 'json_object'},
     };
     var response = await _postJson(
@@ -206,22 +211,33 @@ final class TextAssistantClient {
         headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
         body: <String, Object?>{
           ...baseBody,
-          'max_tokens': maxOutputTokens,
+          'max_tokens': effectiveMaxOutputTokens,
         },
         cancellationToken: cancellationToken,
         allowHttpError: true,
       );
     }
     _requireSuccess(response);
-    final decoded = _decodeResponseObject(response);
-    final choices = decoded['choices'];
-    if (choices is! List || choices.isEmpty || choices.first is! Map) {
-      throw StateError('TEXT_ASSISTANT_INVALID_RESPONSE');
+    var decoded = _decodeResponseObject(response);
+    var text = _tryReadOpenAiChatText(decoded);
+    if (text == null &&
+        _openAiChatReachedOutputLimit(decoded) &&
+        effectiveMaxOutputTokens < 4096) {
+      response = await _postJson(
+        endpoint,
+        headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
+        body: <String, Object?>{
+          ...baseBody,
+          'max_tokens': 4096,
+        },
+        cancellationToken: cancellationToken,
+        allowHttpError: true,
+      );
+      _requireSuccess(response);
+      decoded = _decodeResponseObject(response);
+      text = _tryReadOpenAiChatText(decoded);
     }
-    final message = (choices.first as Map)['message'];
-    if (message is! Map) throw StateError('TEXT_ASSISTANT_INVALID_RESPONSE');
-    final content = message['content'];
-    if (content is String && content.trim().isNotEmpty) return content;
+    if (text != null) return text;
     throw StateError('TEXT_ASSISTANT_EMPTY_RESPONSE');
   }
 
@@ -304,6 +320,43 @@ final class TextAssistantClient {
     _closed = true;
     if (_ownsClient) _client.close();
   }
+}
+
+String? _tryReadOpenAiChatText(Map<String, Object?> decoded) {
+  final choices = decoded['choices'];
+  if (choices is! List || choices.isEmpty || choices.first is! Map) {
+    throw StateError('TEXT_ASSISTANT_INVALID_RESPONSE');
+  }
+  final message = (choices.first as Map)['message'];
+  if (message is! Map) throw StateError('TEXT_ASSISTANT_INVALID_RESPONSE');
+  final content = message['content'];
+  if (content is String) {
+    return content.trim().isEmpty ? null : content;
+  }
+  if (content is List) {
+    final parts = <String>[];
+    for (final part in content) {
+      if (part is String && part.trim().isNotEmpty) {
+        parts.add(part);
+      } else if (part is Map &&
+          (part['type'] == 'text' || part['type'] == 'output_text') &&
+          part['text'] is String &&
+          (part['text'] as String).trim().isNotEmpty) {
+        parts.add(part['text'] as String);
+      }
+    }
+    final joined = parts.join();
+    return joined.trim().isEmpty ? null : joined;
+  }
+  return null;
+}
+
+bool _openAiChatReachedOutputLimit(Map<String, Object?> decoded) {
+  final choices = decoded['choices'];
+  return choices is List &&
+      choices.isNotEmpty &&
+      choices.first is Map &&
+      (choices.first as Map)['finish_reason'] == 'length';
 }
 
 String _readOpenAiResponsesText(Map<String, Object?> decoded) {

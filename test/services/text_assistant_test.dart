@@ -99,12 +99,72 @@ void main() {
       {'role': 'system', 'content': 'system'},
       {'role': 'user', 'content': 'user'},
     ]);
-    expect(body['max_tokens'], 512);
+    expect(body['max_tokens'], 1024);
     expect(body['response_format'], {'type': 'json_object'});
     expect(body.containsKey('instructions'), isFalse);
     expect(body.containsKey('input'), isFalse);
     expect(body.containsKey('reasoning_effort'), isFalse);
     expect(body.containsKey('enable_thinking'), isFalse);
+    client.close();
+  });
+
+  test('compatible Chat retries when reasoning exhausts the output limit',
+      () async {
+    final tokenBudgets = <int>[];
+    final client = TextAssistantClient(
+      config: TextAssistantConfig(
+        provider: TextAssistantProvider.openAiCompatible,
+        baseUrl: Uri.parse('https://llm.example/v1'),
+        model: 'reasoning-model',
+        credentialId: 'key',
+      ),
+      secretResolver: (_) async => 'secret',
+      httpClient: MockClient((request) async {
+        final body = Map<String, Object?>.from(jsonDecode(request.body) as Map);
+        tokenBudgets.add(body['max_tokens']! as int);
+        if (tokenBudgets.length == 1) {
+          return http.Response(
+            jsonEncode({
+              'choices': [
+                {
+                  'finish_reason': 'length',
+                  'message': {
+                    'content': '',
+                    'reasoning_content': 'Still reasoning',
+                  }
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'finish_reason': 'stop',
+                'message': {
+                  'content': [
+                    {'type': 'text', 'text': '{"ok":true}'}
+                  ]
+                }
+              }
+            ]
+          }),
+          200,
+        );
+      }),
+    );
+
+    expect(
+      await client.completeJson(
+        systemPrompt: 'system',
+        userPrompt: 'user',
+        maxOutputTokens: 48,
+      ),
+      {'ok': true},
+    );
+    expect(tokenBudgets, [1024, 4096]);
     client.close();
   });
 
