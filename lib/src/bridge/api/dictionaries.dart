@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import '../models/dict_item.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `active_dictionary_rows`, `aggregate_log_values`, `dictionary_state_token`, `dictionary_values`, `ensure_active`, `ensure_inactive`, `tombstone`, `upsert_ai_target`
+// These functions are ignored because they are not marked as `pub`: `active_dictionary_rows`, `aggregate_log_values`, `dictionary_state_token`, `dictionary_values`, `ensure_active`, `is_active`, `tombstone`, `upsert_ai_target`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BulkUpsertDictItem`, `BulkUpsertDictRequest`, `DictionaryAiApplyRequest`, `DictionaryAiOperation`, `DictionaryAiSource`
 
 Future<List<DictItem>> searchDict(
