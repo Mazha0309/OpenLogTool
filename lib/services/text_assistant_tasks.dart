@@ -311,6 +311,7 @@ Every source must exactly match one observed value. Do not invent a term.
 Omit uncertain, sentence-like, placeholder, or malformed values. A target may
 only normalize spelling, casing, spacing, punctuation, or a conventional model
 name. Do not return values already present in existingTerms.
+${_categorySafetyRules(category)}
 ''';
 
 String _optimizationPrompt(DictionaryAiCategory category) => '''
@@ -322,7 +323,22 @@ notation. For merge, target must be another exact existing term. Never propose
 standalone deletion and never invent equipment, locations, antennas, or callsigns.
 Only propose changes whose source appears in candidateSources. Use usage counts
 only as supporting evidence.
+${_categorySafetyRules(category)}
 ''';
+
+String _categorySafetyRules(DictionaryAiCategory category) =>
+    category == DictionaryAiCategory.qth
+        ? '''
+QTH values are detailed factual locations, not labels to generalize. Preserve
+every administrative area, town, street, village, community, building,
+institution, repeater site, landmark, floor, and other location component.
+Never shorten a QTH to its city, district, county, town, station, or other parent
+area. Never remove a prefix or a suffix such as a city/district name, university
+town, hospital, service area, subway/rail station, building, mountain, or site.
+The target must retain the complete original place and may differ only in case,
+spacing, or punctuation. If that is not possible, omit the suggestion.
+'''
+        : '';
 
 List<DictionaryAiSuggestion> _parseHistorySuggestions(
   Map<String, Object?> response,
@@ -346,6 +362,7 @@ List<DictionaryAiSuggestion> _parseHistorySuggestions(
         target.isEmpty ||
         target.length > 120 ||
         existingSet.contains(target) ||
+        !_preservesQthDetail(category, source, target) ||
         !_validCategoryValue(category, target)) {
       continue;
     }
@@ -390,6 +407,7 @@ List<DictionaryAiSuggestion> _parseOptimizationSuggestions(
         sourceValue == target ||
         target.isEmpty ||
         target.length > 120 ||
+        !_preservesQthDetail(category, sourceValue, target) ||
         !_validCategoryValue(category, target)) {
       continue;
     }
@@ -410,6 +428,20 @@ List<DictionaryAiSuggestion> _parseOptimizationSuggestions(
   }
   return result;
 }
+
+bool _preservesQthDetail(
+  DictionaryAiCategory category,
+  String source,
+  String target,
+) {
+  if (category != DictionaryAiCategory.qth) return true;
+  return _qthFormattingKey(source) == _qthFormattingKey(target);
+}
+
+String _qthFormattingKey(String value) => value
+    .trim()
+    .toLowerCase()
+    .replaceAll(RegExp(r'[\s\-‐‑‒–—―_.,，。、/\\·:：;；()（）\[\]【】]+'), '');
 
 bool _validCategoryValue(DictionaryAiCategory category, String value) {
   if (RegExp(r'[\r\n\t]').hasMatch(value)) return false;
