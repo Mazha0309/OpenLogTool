@@ -96,6 +96,10 @@ void main() {
         remarksDecoration.hintText,
         isEnglish ? 'Remarks (optional)' : '备注（可选）',
       );
+      expect(
+        find.text(isEnglish ? 'Clear fields' : '清空已填内容'),
+        findsOneWidget,
+      );
 
       tester
           .widget<FilledButton>(find.byKey(const Key('save-log-record')))
@@ -146,6 +150,109 @@ void main() {
       expect(collaboration.commitCalls, 1);
     });
   }
+
+  testWidgets(
+    'clear fields keeps the controller callsign and updates collaboration atomically',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialTimeRevision: 1,
+        initialFields: const {
+          'time': '12:34',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '58',
+          'rstRcvd': '47',
+          'qth': 'Shanghai',
+          'device': 'IC-7300',
+          'power': '100W',
+          'antenna': 'DP',
+          'height': '12m',
+          'remarks': 'portable',
+        },
+      );
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      TextEditingController controllerFor(String label) => tester
+          .widget<TextFormField>(
+            find.ancestor(
+              of: find.text(label),
+              matching: find.byType(TextFormField),
+            ),
+          )
+          .controller!;
+
+      await tester.tap(find.byKey(const Key('clear-log-fields')));
+      await tester.pumpAndSettle();
+
+      expect(collaboration.atomicUpdates, hasLength(1));
+      expect(collaboration.atomicUpdates.single, {
+        'time': '',
+        'callsign': '',
+        'rstSent': '',
+        'rstRcvd': '',
+        'qth': '',
+        'device': '',
+        'power': '',
+        'antenna': '',
+        'height': '',
+        'remarks': '',
+      });
+      expect(collaboration.atomicUpdates.single, isNot(contains('controller')));
+      expect(controllerFor('Controller callsign *').text, 'BG5CRL');
+      for (final label in const <String>[
+        'Callsign',
+        'Radio',
+        'Antenna',
+        'Power',
+        'QTH',
+        'Height',
+        'Time',
+        'RST sent',
+        'RST received',
+        'Remarks',
+      ]) {
+        expect(controllerFor(label).text, isEmpty, reason: label);
+      }
+      expect(
+        find.text('Fields cleared; controller callsign retained'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('clear fields also works locally without clearing controller',
+      (tester) async {
+    final collaboration = _LocalOnlyCollaborationProvider();
+    addTearDown(collaboration.dispose);
+
+    await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+    await tester.pumpAndSettle();
+
+    TextEditingController controllerFor(String label) => tester
+        .widget<TextFormField>(
+          find.ancestor(
+            of: find.text(label),
+            matching: find.byType(TextFormField),
+          ),
+        )
+        .controller!;
+
+    controllerFor('Controller callsign *').text = 'BG5CRL';
+    controllerFor('Callsign').text = 'BA4AAA';
+    controllerFor('Remarks').text = 'portable';
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('clear-log-fields')));
+    await tester.pumpAndSettle();
+
+    expect(controllerFor('Controller callsign *').text, 'BG5CRL');
+    expect(controllerFor('Callsign').text, isEmpty);
+    expect(controllerFor('RST sent').text, isEmpty);
+    expect(controllerFor('RST received').text, isEmpty);
+    expect(controllerFor('Remarks').text, isEmpty);
+  });
 
   testWidgets('save shortcut keeps invalid and read-only forms blocked',
       (tester) async {
@@ -848,6 +955,7 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
       'rstSent': '59',
       'rstRcvd': '59',
     },
+    int initialTimeRevision = 0,
     this.nextDraftTime = '',
     this.nextDraftTimeRevision = 0,
   }) : _snapshot = LiveDraftSnapshotDto(
@@ -857,7 +965,8 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
             version: 1,
             fields: LiveDraftFieldsDto(initialFields),
             fieldRevisions: {
-              for (final field in liveDraftFieldNames) field: 0,
+              for (final field in liveDraftFieldNames)
+                field: field == 'time' ? initialTimeRevision : 0,
             },
             lastUpdatedBy: null,
             createdAt: DateTime.utc(2026, 7, 13),
@@ -1010,6 +1119,31 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   ) async {
     atomicUpdates.add(Map<String, String>.from(updates));
     await atomicGate?.future;
+    final previous = _snapshot.draft;
+    _snapshot = LiveDraftSnapshotDto(
+      draft: LiveDraftDto(
+        draftId: previous.draftId,
+        sessionId: previous.sessionId,
+        version: previous.version + 1,
+        fields: LiveDraftFieldsDto({
+          ...previous.fields.values,
+          ...updates,
+        }),
+        fieldRevisions: {
+          for (final field in liveDraftFieldNames)
+            field: (previous.fieldRevisions[field] ?? 0) +
+                (updates.containsKey(field) ? 1 : 0),
+        },
+        lastUpdatedBy: previous.lastUpdatedBy,
+        createdAt: previous.createdAt,
+        lastUpdatedAt: DateTime.now().toUtc(),
+      ),
+      locks: _snapshot.locks,
+      currentOrdinal: _snapshot.currentOrdinal,
+      totalRecords: _snapshot.totalRecords,
+      previousRecord: _snapshot.previousRecord,
+    );
+    notifyListeners();
   }
 
   @override
@@ -1050,6 +1184,14 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
     notifyListeners();
     return disposition;
   }
+}
+
+class _LocalOnlyCollaborationProvider extends CollaborationProvider {
+  @override
+  LocalCollaborationBinding? get binding => null;
+
+  @override
+  LiveDraftSnapshotDto? get liveDraftSnapshot => null;
 }
 
 class _NoopDictionaryProvider extends DictionaryProvider {

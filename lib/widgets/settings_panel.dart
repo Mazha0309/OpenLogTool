@@ -174,30 +174,36 @@ class _SettingsPanelState extends State<SettingsPanel> {
           for (final category in _SettingsCategory.values)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpace.xxs),
-              child: ListTile(
-                key: Key('settings-category-${category.name}'),
-                selected: selected == category,
-                selectedTileColor: colors.primaryContainer,
-                selectedColor: colors.onPrimaryContainer,
-                leading: AppIconBadge(
-                  icon: category.icon,
-                  tone:
-                      selected == category ? AppTone.primary : AppTone.neutral,
-                  size: AppIconBadgeSize.action,
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                clipBehavior: Clip.antiAlias,
+                child: ListTile(
+                  key: Key('settings-category-${category.name}'),
+                  selected: selected == category,
+                  selectedTileColor: colors.primaryContainer,
+                  selectedColor: colors.onPrimaryContainer,
+                  leading: AppIconBadge(
+                    icon: category.icon,
+                    tone: selected == category
+                        ? AppTone.primary
+                        : AppTone.neutral,
+                    size: AppIconBadgeSize.action,
+                  ),
+                  title: Text(
+                    category.label(context),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    category.description(context),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: selected == null
+                      ? const Icon(Icons.chevron_right, size: 20)
+                      : null,
+                  onTap: () => onSelected(category),
                 ),
-                title: Text(
-                  category.label(context),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  category.description(context),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: selected == null
-                    ? const Icon(Icons.chevron_right, size: 20)
-                    : null,
-                onTap: () => onSelected(category),
               ),
             ),
         ],

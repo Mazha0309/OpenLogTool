@@ -59,6 +59,7 @@ class SessionProvider with ChangeNotifier {
   Session? _currentSession;
   int _databaseRevision = 0;
   int _dataRevision = 0;
+  int _collaborationCatalogRevision = 0;
   // Fail closed until SharedPreferences has proved that no replacement was
   // interrupted. Personal-cloud synchronization awaits [ready], so a
   // preference read failure cannot accidentally expose a stale baseline.
@@ -69,6 +70,7 @@ class SessionProvider with ChangeNotifier {
   Session? get currentSession => _currentSession;
   int get databaseRevision => _databaseRevision;
   int get dataRevision => _dataRevision;
+  int get collaborationCatalogRevision => _collaborationCatalogRevision;
   bool get databaseReplacementPending => _databaseReplacementPending;
 
   Future<void> get ready => _initCompleter?.future ?? Future.value();
@@ -654,6 +656,13 @@ class SessionProvider with ChangeNotifier {
 
   void _markPersonalDataChanged() {
     _dataRevision += 1;
+    _safeNotify();
+  }
+
+  /// Invalidates session-list readers after a background collaboration
+  /// snapshot install without marking personal-cloud data as changed.
+  void notifyCollaborationCatalogChanged() {
+    _collaborationCatalogRevision += 1;
     _safeNotify();
   }
 }

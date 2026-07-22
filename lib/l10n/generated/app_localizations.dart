@@ -940,6 +940,18 @@ abstract class AppLocalizations {
   /// **'保存记录'**
   String get saveRecord;
 
+  /// No description provided for @clearEnteredFields.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空已填内容'**
+  String get clearEnteredFields;
+
+  /// No description provided for @enteredFieldsCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'已清空，主控呼号已保留'**
+  String get enteredFieldsCleared;
+
   /// No description provided for @recordAdded.
   ///
   /// In zh, this message translates to:

@@ -107,27 +107,38 @@ class _HomeScreenState extends State<HomeScreen> {
             index: _selectedIndex,
             children: pages,
           );
-          if (constraints.maxWidth < 720) return content;
+          final showSidebar = constraints.maxWidth >= 720;
           final isDesktop = constraints.maxWidth >= 1200;
+          // Keep the page stack at a stable element position when crossing the
+          // mobile/sidebar breakpoint. Reparenting the focused TextField while
+          // Windows is dispatching WM_SIZE can tear down its native IME
+          // connection in the middle of that callback.
           return Row(
             children: [
-              PrimaryNavigationRail(
-                isDesktop: isDesktop,
-                expanded: primarySidebarExpanded,
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: _onItemTapped,
-                onExpandedChanged:
-                    context.read<SettingsProvider>().setPrimarySidebarExpanded,
-                destinations: [
-                  for (final destination in _destinations)
-                    NavigationRailDestination(
-                      icon: Icon(destination.icon),
-                      selectedIcon: Icon(destination.selectedIcon),
-                      label: Text(destination.label(context.l10n)),
-                    ),
-                ],
+              if (showSidebar)
+                PrimaryNavigationRail(
+                  isDesktop: isDesktop,
+                  expanded: primarySidebarExpanded,
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _onItemTapped,
+                  onExpandedChanged: context
+                      .read<SettingsProvider>()
+                      .setPrimarySidebarExpanded,
+                  destinations: [
+                    for (final destination in _destinations)
+                      NavigationRailDestination(
+                        icon: Icon(destination.icon),
+                        selectedIcon: Icon(destination.selectedIcon),
+                        label: Text(destination.label(context.l10n)),
+                      ),
+                  ],
+                )
+              else
+                const SizedBox.shrink(),
+              Expanded(
+                key: const ValueKey('home-page-stack'),
+                child: content,
               ),
-              Expanded(child: content),
             ],
           );
         },

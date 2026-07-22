@@ -81,6 +81,45 @@ void main() {
       ScrollViewKeyboardDismissBehavior.onDrag,
     );
   });
+
+  testWidgets(
+    'resizing across navigation breakpoints preserves the focused form',
+    (tester) async {
+      tester.view.physicalSize = const Size(680, 960);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(const _HomeScreenTestApp());
+      await tester.pumpAndSettle();
+
+      final formFinder = find.byType(LogForm);
+      final initialState = tester.state(formFinder);
+      final editableFinder = find.byType(EditableText).first;
+      final editable = tester.widget<EditableText>(editableFinder);
+      editable.focusNode.requestFocus();
+      await tester.enterText(editableFinder, 'BG5CRL');
+      expect(editable.focusNode.hasFocus, isTrue);
+
+      for (final size in const <Size>[
+        Size(900, 960),
+        Size(1280, 960),
+        Size(650, 960),
+        Size(1440, 960),
+        Size(700, 960),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(tester.state(formFinder), same(initialState));
+        expect(
+          tester.widget<EditableText>(editableFinder).controller.text,
+          'BG5CRL',
+        );
+        expect(editable.focusNode.hasFocus, isTrue);
+      }
+    },
+  );
 }
 
 class _HomeScreenTestApp extends StatelessWidget {
