@@ -182,6 +182,7 @@ final class TextAssistantClient {
     // successful response whose visible message is still empty.
     final effectiveMaxOutputTokens =
         maxOutputTokens < 1024 ? 1024 : maxOutputTokens;
+    final tokenLimitField = _openAiChatTokenLimitField(config.model);
     final baseBody = <String, Object?>{
       'model': config.model,
       'messages': <Object?>[
@@ -193,8 +194,9 @@ final class TextAssistantClient {
     final fastBody = <String, Object?>{
       ...baseBody,
       'temperature': 0,
-      'max_tokens': effectiveMaxOutputTokens,
+      tokenLimitField: effectiveMaxOutputTokens,
       'response_format': <String, Object?>{'type': 'json_object'},
+      'thinking': <String, Object?>{'type': 'disabled'},
     };
     var response = await _postJson(
       endpoint,
@@ -203,15 +205,30 @@ final class TextAssistantClient {
       cancellationToken: cancellationToken,
       allowHttpError: true,
     );
-    // Old Chat Completions implementations differ on optional JSON-mode and
-    // sampling fields. Retry once with the smallest compatible request.
+    // DeepSeek V4 and MiMo V2.5 both use this official switch. If another
+    // Chat-compatible server rejects optional sampling, token-limit, or JSON
+    // fields, first preserve disabled thinking while stripping those options.
     if (response.statusCode == 400 || response.statusCode == 422) {
       response = await _postJson(
         endpoint,
         headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
         body: <String, Object?>{
           ...baseBody,
-          'max_tokens': effectiveMaxOutputTokens,
+          'thinking': <String, Object?>{'type': 'disabled'},
+        },
+        cancellationToken: cancellationToken,
+        allowHttpError: true,
+      );
+    }
+    // The thinking object is not part of the baseline legacy Chat protocol.
+    // Keep a final compatibility path for providers that reject it entirely.
+    if (response.statusCode == 400 || response.statusCode == 422) {
+      response = await _postJson(
+        endpoint,
+        headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
+        body: <String, Object?>{
+          ...baseBody,
+          tokenLimitField: effectiveMaxOutputTokens,
         },
         cancellationToken: cancellationToken,
         allowHttpError: true,
@@ -228,7 +245,8 @@ final class TextAssistantClient {
         headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
         body: <String, Object?>{
           ...baseBody,
-          'max_tokens': 4096,
+          tokenLimitField: 4096,
+          'thinking': <String, Object?>{'type': 'disabled'},
         },
         cancellationToken: cancellationToken,
         allowHttpError: true,
@@ -262,7 +280,9 @@ final class TextAssistantClient {
         ],
         'max_tokens': maxOutputTokens,
         'temperature': 0,
-        // Extended thinking is intentionally omitted for low-latency tasks.
+        if (_isMiMoV25Model(config.model))
+          'thinking': <String, Object?>{'type': 'disabled'},
+        // Claude extended thinking remains opt-in and is intentionally omitted.
       },
       cancellationToken: cancellationToken,
       allowHttpError: true,
@@ -358,6 +378,12 @@ bool _openAiChatReachedOutputLimit(Map<String, Object?> decoded) {
       choices.first is Map &&
       (choices.first as Map)['finish_reason'] == 'length';
 }
+
+bool _isMiMoV25Model(String model) =>
+    model.trim().toLowerCase().startsWith('mimo-v2.5');
+
+String _openAiChatTokenLimitField(String model) =>
+    _isMiMoV25Model(model) ? 'max_completion_tokens' : 'max_tokens';
 
 String _readOpenAiResponsesText(Map<String, Object?> decoded) {
   final output = decoded['output'];

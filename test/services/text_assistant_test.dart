@@ -101,10 +101,48 @@ void main() {
     ]);
     expect(body['max_tokens'], 1024);
     expect(body['response_format'], {'type': 'json_object'});
+    expect(body['thinking'], {'type': 'disabled'});
     expect(body.containsKey('instructions'), isFalse);
     expect(body.containsKey('input'), isFalse);
     expect(body.containsKey('reasoning_effort'), isFalse);
     expect(body.containsKey('enable_thinking'), isFalse);
+    client.close();
+  });
+
+  test('MiMo V2.5 uses its official completion token field', () async {
+    late Map<String, Object?> body;
+    final client = TextAssistantClient(
+      config: TextAssistantConfig(
+        provider: TextAssistantProvider.openAiCompatible,
+        baseUrl: Uri.parse('https://api.xiaomimimo.com/v1'),
+        model: 'mimo-v2.5',
+        credentialId: 'key',
+      ),
+      secretResolver: (_) async => 'secret',
+      httpClient: MockClient((request) async {
+        expect(request.url.toString(),
+            'https://api.xiaomimimo.com/v1/chat/completions');
+        body = Map<String, Object?>.from(jsonDecode(request.body) as Map);
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '{"ok":true}'}
+              }
+            ]
+          }),
+          200,
+        );
+      }),
+    );
+
+    expect(
+      await client.completeJson(systemPrompt: 'system', userPrompt: 'user'),
+      {'ok': true},
+    );
+    expect(body['thinking'], {'type': 'disabled'});
+    expect(body['max_completion_tokens'], 1024);
+    expect(body.containsKey('max_tokens'), false);
     client.close();
   });
 
@@ -203,8 +241,51 @@ void main() {
     expect(requests, hasLength(2));
     expect(requests.first['temperature'], 0);
     expect(requests.first['response_format'], {'type': 'json_object'});
+    expect(requests.first['thinking'], {'type': 'disabled'});
     expect(requests.last.containsKey('response_format'), false);
     expect(requests.last.containsKey('temperature'), false);
+    expect(requests.last.containsKey('max_tokens'), false);
+    expect(requests.last['thinking'], {'type': 'disabled'});
+    client.close();
+  });
+
+  test('compatible Chat finally falls back when thinking is unsupported',
+      () async {
+    final requests = <Map<String, Object?>>[];
+    final client = TextAssistantClient(
+      config: TextAssistantConfig(
+        provider: TextAssistantProvider.openAiCompatible,
+        baseUrl: Uri.parse('https://legacy.example/v1'),
+        model: 'legacy-model',
+        credentialId: 'key',
+      ),
+      secretResolver: (_) async => 'secret',
+      httpClient: MockClient((request) async {
+        requests
+            .add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
+        if (requests.length < 3) return http.Response('unsupported', 400);
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '{"ok":true}'}
+              }
+            ]
+          }),
+          200,
+        );
+      }),
+    );
+
+    expect(
+      await client.completeJson(systemPrompt: 'system', userPrompt: 'user'),
+      {'ok': true},
+    );
+    expect(requests, hasLength(3));
+    expect(requests[0]['thinking'], {'type': 'disabled'});
+    expect(requests[1]['thinking'], {'type': 'disabled'});
+    expect(requests[2].containsKey('thinking'), false);
+    expect(requests[2]['max_tokens'], 1024);
     client.close();
   });
 
@@ -241,6 +322,40 @@ void main() {
     );
     expect(body.containsKey('thinking'), false);
     expect(body['system'], 'system');
+    client.close();
+  });
+
+  test('MiMo V2.5 over Anthropic Messages explicitly disables thinking',
+      () async {
+    late Map<String, Object?> body;
+    final client = TextAssistantClient(
+      config: TextAssistantConfig(
+        provider: TextAssistantProvider.anthropic,
+        baseUrl: Uri.parse('https://api.xiaomimimo.com/anthropic'),
+        model: 'mimo-v2.5-pro',
+        credentialId: 'key',
+      ),
+      secretResolver: (_) async => 'mimo-secret',
+      httpClient: MockClient((request) async {
+        expect(request.url.toString(),
+            'https://api.xiaomimimo.com/anthropic/v1/messages');
+        body = Map<String, Object?>.from(jsonDecode(request.body) as Map);
+        return http.Response(
+          jsonEncode({
+            'content': [
+              {'type': 'text', 'text': '{"ok":true}'}
+            ]
+          }),
+          200,
+        );
+      }),
+    );
+
+    expect(
+      await client.completeJson(systemPrompt: 'system', userPrompt: 'user'),
+      {'ok': true},
+    );
+    expect(body['thinking'], {'type': 'disabled'});
     client.close();
   });
 
