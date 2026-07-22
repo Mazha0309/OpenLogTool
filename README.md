@@ -75,6 +75,14 @@
 - Linux 构建需要 `libsecret-1-dev`，运行需要 `libsecret-1-0` 和可用的 Secret Service/keyring
 - Windows 构建需要 Visual Studio C++ ATL 组件
 
+### Windows 崩溃诊断
+
+Windows 原生崩溃会先在
+`%LOCALAPPDATA%\OpenLogTool\CrashDumps` 写入 minidump，再交给 Windows
+错误报告处理。Windows 10 默认启用无障碍语义树兼容保护，以规避 Flutter
+在响应式布局重组语义节点时的原生崩溃。确实需要屏幕阅读器的用户可在启动前设置
+`OPENLOGTOOL_ENABLE_WINDOWS_ACCESSIBILITY=1`，重新启用完整 Windows 语义树。
+
 ### 构建
 
 ```bash

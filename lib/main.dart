@@ -15,6 +15,7 @@ import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/theme/app_theme.dart';
+import 'package:openlogtool/utils/windows_accessibility_guard.dart';
 import 'package:openlogtool/src/bridge/frb_generated.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'dart:io';
@@ -66,7 +67,11 @@ Future<void> main(List<String> args) async {
   final controllerWindow =
       await ControllerWindowService.currentWindowLaunch(args);
   if (controllerWindow != null) {
-    runApp(ControllerDisplayWindowApp(session: controllerWindow));
+    runApp(
+      WindowsAccessibilityCrashGuard(
+        child: ControllerDisplayWindowApp(session: controllerWindow),
+      ),
+    );
     return;
   }
 
@@ -134,7 +139,7 @@ Future<void> main(List<String> args) async {
                 ),
         ),
       ],
-      child: const MyApp(),
+      child: const WindowsAccessibilityCrashGuard(child: MyApp()),
     ),
   );
 }
