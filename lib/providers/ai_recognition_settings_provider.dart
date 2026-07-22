@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:openlogtool/services/ai_credential_store.dart';
 import 'package:openlogtool/services/ai_recognition/models.dart';
 import 'package:openlogtool/services/ai_recognition/providers.dart';
+import 'package:openlogtool/services/text_assistant.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// On-device AI configuration. Provider profiles are ordinary exportable JSON;
@@ -32,12 +33,18 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
   String? _activeFieldExtractionProfileId;
   bool _enabled = false;
   bool _useLocalReferenceContext = true;
+  TextAssistantConfig? _textAssistantConfig;
+  bool _textAssistantEnabled = false;
+  bool _inlineTextSuggestionsEnabled = true;
   Object? _loadError;
   bool _disposed = false;
 
   Future<void> get initialized => _initialized.future;
   bool get enabled => _enabled;
   bool get useLocalReferenceContext => _useLocalReferenceContext;
+  TextAssistantConfig? get textAssistantConfig => _textAssistantConfig;
+  bool get textAssistantEnabled => _textAssistantEnabled;
+  bool get inlineTextSuggestionsEnabled => _inlineTextSuggestionsEnabled;
   Object? get loadError => _loadError;
   List<AiProviderProfile> get profiles => _profiles;
   Iterable<AiProviderProfile> get asrProfiles => _profiles.where(
@@ -67,6 +74,9 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
       _activeFieldExtractionProfileId = null;
       _enabled = false;
       _useLocalReferenceContext = true;
+      _textAssistantConfig = null;
+      _textAssistantEnabled = false;
+      _inlineTextSuggestionsEnabled = true;
     } finally {
       if (!_initialized.isCompleted) _initialized.complete();
       if (!_disposed) notifyListeners();
@@ -101,6 +111,17 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
     );
     _enabled = json['enabled'] == true && _activeAsrProfileId != null;
     _useLocalReferenceContext = json['useLocalReferenceContext'] != false;
+    final textAssistant = json['textAssistant'];
+    if (textAssistant != null) {
+      _textAssistantConfig = TextAssistantConfig.fromJson(textAssistant);
+    } else {
+      _textAssistantConfig = _migrateTextAssistantProfile();
+    }
+    _textAssistantEnabled = _textAssistantConfig != null &&
+        (json['textAssistantEnabled'] == true ||
+            (textAssistant == null && _activeFieldExtractionProfileId != null));
+    _inlineTextSuggestionsEnabled =
+        json['inlineTextSuggestionsEnabled'] != false;
   }
 
   Future<void> setEnabled(bool value) => _mutate(() async {
@@ -121,6 +142,91 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
         notifyListeners();
         await _persist();
       });
+
+  Future<void> saveTextAssistant({
+    required TextAssistantProvider provider,
+    required Uri baseUrl,
+    required String model,
+    String? secret,
+  }) =>
+      _mutate(() async {
+        await initialized;
+        final previous = _textAssistantConfig;
+        final sameCredentialDestination = previous != null &&
+            previous.provider == provider &&
+            previous.baseUrl.origin == baseUrl.origin;
+        final credentialId = sameCredentialDestination
+            ? previous.credentialId
+            : 'text-assistant-${DateTime.now().microsecondsSinceEpoch}';
+        final next = TextAssistantConfig(
+          provider: provider,
+          baseUrl: baseUrl,
+          model: model,
+          credentialId: credentialId,
+        );
+        final normalizedSecret = secret?.trim();
+        if (!sameCredentialDestination &&
+            (normalizedSecret == null || normalizedSecret.isEmpty)) {
+          throw StateError('TEXT_ASSISTANT_API_KEY_REQUIRED');
+        }
+        if (normalizedSecret != null && normalizedSecret.isNotEmpty) {
+          await _credentialStore.write(credentialId, normalizedSecret);
+        }
+        _textAssistantConfig = next;
+        _textAssistantEnabled = true;
+        if (previous == null) _inlineTextSuggestionsEnabled = true;
+        notifyListeners();
+        await _persist();
+        if (previous != null && previous.credentialId != credentialId) {
+          await _credentialStore.delete(previous.credentialId);
+        }
+      });
+
+  Future<void> setTextAssistantEnabled(bool value) => _mutate(() async {
+        await initialized;
+        if (value && _textAssistantConfig == null) {
+          throw StateError('TEXT_ASSISTANT_CONFIG_REQUIRED');
+        }
+        if (_textAssistantEnabled == value) return;
+        _textAssistantEnabled = value;
+        notifyListeners();
+        await _persist();
+      });
+
+  Future<void> setInlineTextSuggestionsEnabled(bool value) => _mutate(() async {
+        await initialized;
+        if (_inlineTextSuggestionsEnabled == value) return;
+        _inlineTextSuggestionsEnabled = value;
+        notifyListeners();
+        await _persist();
+      });
+
+  Future<bool> hasTextAssistantCredential() async {
+    await initialized;
+    final credentialId = _textAssistantConfig?.credentialId;
+    return credentialId != null &&
+        (await _credentialStore.read(credentialId)) != null;
+  }
+
+  Future<String?> resolveTextAssistantSecret(String credentialId) async {
+    await initialized;
+    if (_textAssistantConfig?.credentialId != credentialId) return null;
+    return _credentialStore.read(credentialId);
+  }
+
+  TextAssistantClient createTextAssistantClient({
+    Duration timeout = const Duration(seconds: 30),
+  }) {
+    final config = _textAssistantConfig;
+    if (!_textAssistantEnabled || config == null) {
+      throw StateError('TEXT_ASSISTANT_DISABLED');
+    }
+    return TextAssistantClient(
+      config: config,
+      secretResolver: resolveTextAssistantSecret,
+      timeout: timeout,
+    );
+  }
 
   Future<void> setActiveAsrProfile(String? profileId) => _mutate(() async {
         await initialized;
@@ -202,6 +308,7 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
 
         final credentialId = profile.credentialId;
         if (credentialId != null &&
+            _textAssistantConfig?.credentialId != credentialId &&
             !_profiles.any((item) => item.credentialId == credentialId)) {
           await _credentialStore.delete(credentialId);
         }
@@ -307,10 +414,16 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
             .map((profile) => profile.credentialId)
             .whereType<String>()
             .toSet();
+        if (_textAssistantConfig?.credentialId case final credentialId?) {
+          credentialIds.add(credentialId);
+        }
         _profiles = const [];
         _activeAsrProfileId = null;
         _activeFieldExtractionProfileId = null;
         _enabled = false;
+        _textAssistantConfig = null;
+        _textAssistantEnabled = false;
+        _inlineTextSuggestionsEnabled = true;
         _loadError = null;
         notifyListeners();
         await _removePersistedSettings();
@@ -324,6 +437,10 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
       'schemaVersion': schemaVersion,
       'enabled': _enabled,
       'useLocalReferenceContext': _useLocalReferenceContext,
+      'textAssistantEnabled': _textAssistantEnabled,
+      'inlineTextSuggestionsEnabled': _inlineTextSuggestionsEnabled,
+      if (_textAssistantConfig != null)
+        'textAssistant': _textAssistantConfig!.toJson(),
       'activeAsrProfileId': _activeAsrProfileId,
       'activeFieldExtractionProfileId': _activeFieldExtractionProfileId,
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
@@ -375,6 +492,24 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
       if (profile.id == id) return profile;
     }
     return null;
+  }
+
+  TextAssistantConfig? _migrateTextAssistantProfile() {
+    final profile = _profileById(_activeFieldExtractionProfileId);
+    if (profile == null ||
+        profile.protocol != AiProtocol.openAiChatCompletions ||
+        profile.credentialId == null) {
+      return null;
+    }
+    final provider = profile.baseUrl.host.toLowerCase() == 'api.openai.com'
+        ? TextAssistantProvider.openAi
+        : TextAssistantProvider.openAiCompatible;
+    return TextAssistantConfig(
+      provider: provider,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      credentialId: profile.credentialId!,
+    );
   }
 
   String? _validActiveId(Object? value, AiProviderKind kind) {

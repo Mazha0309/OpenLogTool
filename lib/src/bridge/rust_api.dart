@@ -248,6 +248,16 @@ class RustApi {
     return dict.bulkUpsertDictItems(requestJson: requestJson);
   }
 
+  static Future<String> getDictionaryAiSource() {
+    return dict.getDictionaryAiSource();
+  }
+
+  static Future<String> applyDictionaryAiChanges({
+    required String requestJson,
+  }) {
+    return dict.applyDictionaryAiChanges(requestJson: requestJson);
+  }
+
   static Future<List<DictItem>> getDictItems({required String dictType}) {
     return dict.getDictItems(dictType: dictType);
   }

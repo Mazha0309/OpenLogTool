@@ -227,11 +227,11 @@ void main() {
     expect(find.text('Chat input_audio'), findsOneWidget);
     expect(find.text('Generic JSON HTTP'), findsWidgets);
 
-    await tester.tap(
-      find.byKey(
-        const Key('ai-add-profile-speechRecognition'),
-      ),
+    final addAsrProfile = find.byKey(
+      const Key('ai-add-profile-speechRecognition'),
     );
+    await tester.ensureVisible(addAsrProfile);
+    await tester.tap(addAsrProfile);
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('ai-profile-editor-dialog')),

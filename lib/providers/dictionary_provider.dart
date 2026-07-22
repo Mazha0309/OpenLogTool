@@ -6,6 +6,7 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/dict_item.dart' as bridge;
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/dictionary_pinyin_helper.dart';
+import 'package:openlogtool/services/text_assistant_tasks.dart';
 
 typedef DictionaryUpsertItem = Future<void> Function({
   required String dictType,
@@ -440,6 +441,23 @@ class DictionaryProvider with ChangeNotifier {
       'callsigns': encodeItems(_callsignDict),
       'qths': encodeItems(_qthDict),
     });
+  }
+
+  Future<void> applyAiSuggestions({
+    required String expectedStateToken,
+    required List<DictionaryAiSuggestion> suggestions,
+  }) async {
+    if (suggestions.isEmpty) return;
+    await RustApi.applyDictionaryAiChanges(
+      requestJson: jsonEncode(<String, Object?>{
+        'expectedStateToken': expectedStateToken,
+        'operations': suggestions
+            .map((suggestion) => suggestion.toApplyJson())
+            .toList(growable: false),
+      }),
+    );
+    await reloadFromDatabase(synchronizeBuiltins: false);
+    await _notifyDictionaryChanged();
   }
 
   Map<String, List<_RawPinyinAbbrev>> _extractDictionaryMap(Map data) {

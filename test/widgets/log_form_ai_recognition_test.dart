@@ -11,8 +11,12 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/services/ai_audio_recorder.dart';
+import 'package:openlogtool/services/ai_credential_store.dart';
 import 'package:openlogtool/services/ai_recognition/ai_recognition.dart';
 import 'package:openlogtool/services/ai_recognition_runtime.dart';
+import 'package:openlogtool/services/secure_token_store.dart';
+import 'package:openlogtool/services/text_assistant.dart';
+import 'package:openlogtool/services/text_assistant_tasks.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -258,6 +262,62 @@ void main() {
     expect(find.byKey(const Key('ai-review-panel')), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
   });
+
+  testWidgets(
+      'inline normalization appears after 300 ms and fills on selection',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final aiSettings = AiRecognitionSettingsProvider(
+      credentialStore: AiCredentialStore(secureValues: _MemorySecureValues()),
+    );
+    addTearDown(aiSettings.dispose);
+    await aiSettings.initialized;
+    await aiSettings.saveTextAssistant(
+      provider: TextAssistantProvider.openAiCompatible,
+      baseUrl: Uri.parse('https://text.example/v1'),
+      model: 'fast-model',
+      secret: 'secret',
+    );
+    var calls = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        aiSettings: aiSettings,
+        recorder: _FakeAiAudioRecorder(),
+        inlineTextSuggestionExecutor: ({
+          required settings,
+          required field,
+          required value,
+          localReferences = const <String>[],
+          cancellationToken,
+        }) async {
+          calls += 1;
+          expect(field, 'device');
+          expect(value, 'ft991a');
+          return 'FT-991A';
+        },
+      ),
+    );
+    await tester.pump();
+    final device = _fieldFinder('Radio');
+    await tester.ensureVisible(device);
+    await tester.tap(device);
+    await tester.enterText(device, 'ft991a');
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(calls, 0);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(calls, 1);
+    final suggestion = find.byKey(const Key('inline-ai-suggestion-device'));
+    expect(suggestion, findsOneWidget);
+    await tester.tap(suggestion);
+    await tester.pump();
+    expect(_fieldController(tester, 'Radio').text, 'FT-991A');
+  });
 }
 
 Future<void> _enableAi(AiRecognitionSettingsProvider settings) async {
@@ -304,6 +364,7 @@ class _TestApp extends StatelessWidget {
     this.executor,
     this.transcriptionExecutor,
     this.fieldExtractionExecutor,
+    this.inlineTextSuggestionExecutor,
     this.collaboration,
   });
 
@@ -312,6 +373,7 @@ class _TestApp extends StatelessWidget {
   final AiRecognitionExecutor? executor;
   final AiTranscriptionExecutor? transcriptionExecutor;
   final AiFieldExtractionExecutor? fieldExtractionExecutor;
+  final InlineTextSuggestionExecutor? inlineTextSuggestionExecutor;
   final CollaborationProvider? collaboration;
 
   @override
@@ -350,11 +412,27 @@ class _TestApp extends StatelessWidget {
                 aiRecognitionExecutor: executor,
                 aiTranscriptionExecutor: transcriptionExecutor,
                 aiFieldExtractionExecutor: fieldExtractionExecutor,
+                inlineTextSuggestionExecutor: inlineTextSuggestionExecutor,
               ),
             ),
           ),
         ),
       );
+}
+
+final class _MemorySecureValues implements SecureValueStore {
+  final Map<String, String> _values = <String, String>{};
+
+  @override
+  Future<void> delete(String key) async => _values.remove(key);
+
+  @override
+  Future<String?> read(String key) async => _values[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    _values[key] = value;
+  }
 }
 
 class _TestSessionProvider extends SessionProvider {

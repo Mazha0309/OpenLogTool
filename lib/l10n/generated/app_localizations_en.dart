@@ -2933,6 +2933,133 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiCandidateInvalid => 'Unsupported or invalid suggestion';
+
+  @override
+  String get textAssistantTitle => 'Text assistant';
+
+  @override
+  String get textAssistantDescription =>
+      'Use a simple text-model setup for structured fields, inline suggestions, and dictionary maintenance.';
+
+  @override
+  String get textAssistantPrivacyTitle =>
+      'Processed by your selected model service';
+
+  @override
+  String get textAssistantPrivacyMessage =>
+      'When needed, current field text or aggregated historical terms are sent to the selected service. Complete records, remarks, and times are not sent. The API key is used only for request authentication and stored securely on this device.';
+
+  @override
+  String get textAssistantEnabled => 'Enable text assistant';
+
+  @override
+  String get textAssistantNotConfigured => 'Text assistant is not configured';
+
+  @override
+  String get textAssistantInlineSuggestions =>
+      'Show AI formatting suggestions while typing';
+
+  @override
+  String get textAssistantInlineSuggestionsHint =>
+      'Shows one fast suggestion for device, antenna, QTH, height, and power after typing pauses for about 300 ms.';
+
+  @override
+  String get textAssistantTest => 'Test connection';
+
+  @override
+  String get textAssistantConfigure => 'Configure text assistant';
+
+  @override
+  String get textAssistantEdit => 'Edit configuration';
+
+  @override
+  String get textAssistantConfigureTitle => 'Configure text assistant';
+
+  @override
+  String get textAssistantProvider => 'Provider type';
+
+  @override
+  String get textAssistantProviderOpenAi => 'OpenAI';
+
+  @override
+  String get textAssistantProviderAnthropic => 'Anthropic';
+
+  @override
+  String get textAssistantProviderCompatible => 'OpenAI-compatible';
+
+  @override
+  String get textAssistantTestSucceeded =>
+      'The text assistant connection works.';
+
+  @override
+  String get textAssistantSuggestionLabel => 'AI formatting suggestion';
+
+  @override
+  String get aiDictionaryRecognize => 'Recognize from history';
+
+  @override
+  String get aiDictionaryOptimize => 'Optimize dictionaries with AI';
+
+  @override
+  String get aiDictionaryNeedsAssistant =>
+      'Configure and enable the text assistant in Settings first.';
+
+  @override
+  String get aiDictionaryNoSuggestions =>
+      'No dictionary changes were suggested.';
+
+  @override
+  String aiDictionaryApplied(int count) {
+    return 'Applied $count dictionary suggestion(s).';
+  }
+
+  @override
+  String aiDictionaryFailed(String error) {
+    return 'Dictionary AI operation failed: $error';
+  }
+
+  @override
+  String get aiDictionaryOptimizing => 'Optimizing dictionaries';
+
+  @override
+  String get aiDictionaryRecognizing => 'Recognizing historical terms';
+
+  @override
+  String get aiDictionaryPreparing => 'Preparing local data…';
+
+  @override
+  String aiDictionaryProgress(int completed, int total) {
+    return 'Completed $completed / $total';
+  }
+
+  @override
+  String get aiDictionaryReviewTitle => 'Review dictionary suggestions';
+
+  @override
+  String aiDictionaryReviewHint(int recordCount) {
+    return 'Generated from $recordCount historical record(s) and the current dictionaries. Only selected changes will be written.';
+  }
+
+  @override
+  String get aiDictionaryActionAdd => 'Add';
+
+  @override
+  String get aiDictionaryActionRename => 'Rename';
+
+  @override
+  String get aiDictionaryActionMerge => 'Merge';
+
+  @override
+  String aiDictionaryUsedCount(int count) {
+    return 'Used $count time(s) in history';
+  }
+
+  @override
+  String get aiDictionaryMergeWarning =>
+      'Merging hides the source term and is not selected by default. Historical records are unchanged.';
+
+  @override
+  String get aiDictionaryApplySelected => 'Apply selected suggestions';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -4353,4 +4480,131 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get aiCandidateInvalid => 'Unsupported or invalid suggestion';
+
+  @override
+  String get textAssistantTitle => 'Text assistant';
+
+  @override
+  String get textAssistantDescription =>
+      'Use a simple text-model setup for structured fields, inline suggestions, and dictionary maintenance.';
+
+  @override
+  String get textAssistantPrivacyTitle =>
+      'Processed by your selected model service';
+
+  @override
+  String get textAssistantPrivacyMessage =>
+      'When needed, current field text or aggregated historical terms are sent to the selected service. Complete records, remarks, and times are not sent. The API key is used only for request authentication and stored securely on this device.';
+
+  @override
+  String get textAssistantEnabled => 'Enable text assistant';
+
+  @override
+  String get textAssistantNotConfigured => 'Text assistant is not configured';
+
+  @override
+  String get textAssistantInlineSuggestions =>
+      'Show AI formatting suggestions while typing';
+
+  @override
+  String get textAssistantInlineSuggestionsHint =>
+      'Shows one fast suggestion for device, antenna, QTH, height, and power after typing pauses for about 300 ms.';
+
+  @override
+  String get textAssistantTest => 'Test connection';
+
+  @override
+  String get textAssistantConfigure => 'Configure text assistant';
+
+  @override
+  String get textAssistantEdit => 'Edit configuration';
+
+  @override
+  String get textAssistantConfigureTitle => 'Configure text assistant';
+
+  @override
+  String get textAssistantProvider => 'Provider type';
+
+  @override
+  String get textAssistantProviderOpenAi => 'OpenAI';
+
+  @override
+  String get textAssistantProviderAnthropic => 'Anthropic';
+
+  @override
+  String get textAssistantProviderCompatible => 'OpenAI-compatible';
+
+  @override
+  String get textAssistantTestSucceeded =>
+      'The text assistant connection works.';
+
+  @override
+  String get textAssistantSuggestionLabel => 'AI formatting suggestion';
+
+  @override
+  String get aiDictionaryRecognize => 'Recognize from history';
+
+  @override
+  String get aiDictionaryOptimize => 'Optimize dictionaries with AI';
+
+  @override
+  String get aiDictionaryNeedsAssistant =>
+      'Configure and enable the text assistant in Settings first.';
+
+  @override
+  String get aiDictionaryNoSuggestions =>
+      'No dictionary changes were suggested.';
+
+  @override
+  String aiDictionaryApplied(int count) {
+    return 'Applied $count dictionary suggestion(s).';
+  }
+
+  @override
+  String aiDictionaryFailed(String error) {
+    return 'Dictionary AI operation failed: $error';
+  }
+
+  @override
+  String get aiDictionaryOptimizing => 'Optimizing dictionaries';
+
+  @override
+  String get aiDictionaryRecognizing => 'Recognizing historical terms';
+
+  @override
+  String get aiDictionaryPreparing => 'Preparing local data…';
+
+  @override
+  String aiDictionaryProgress(int completed, int total) {
+    return 'Completed $completed / $total';
+  }
+
+  @override
+  String get aiDictionaryReviewTitle => 'Review dictionary suggestions';
+
+  @override
+  String aiDictionaryReviewHint(int recordCount) {
+    return 'Generated from $recordCount historical record(s) and the current dictionaries. Only selected changes will be written.';
+  }
+
+  @override
+  String get aiDictionaryActionAdd => 'Add';
+
+  @override
+  String get aiDictionaryActionRename => 'Rename';
+
+  @override
+  String get aiDictionaryActionMerge => 'Merge';
+
+  @override
+  String aiDictionaryUsedCount(int count) {
+    return 'Used $count time(s) in history';
+  }
+
+  @override
+  String get aiDictionaryMergeWarning =>
+      'Merging hides the source term and is not selected by default. Historical records are unchanged.';
+
+  @override
+  String get aiDictionaryApplySelected => 'Apply selected suggestions';
 }

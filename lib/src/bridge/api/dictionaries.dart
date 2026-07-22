@@ -7,7 +7,8 @@ import '../frb_generated.dart';
 import '../models/dict_item.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BulkUpsertDictItem`, `BulkUpsertDictRequest`
+// These functions are ignored because they are not marked as `pub`: `active_dictionary_rows`, `aggregate_log_values`, `dictionary_state_token`, `dictionary_values`, `ensure_active`, `ensure_inactive`, `tombstone`, `upsert_ai_target`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BulkUpsertDictItem`, `BulkUpsertDictRequest`, `DictionaryAiApplyRequest`, `DictionaryAiOperation`, `DictionaryAiSource`
 
 Future<List<DictItem>> searchDict(
         {required String dictType,
@@ -64,6 +65,19 @@ Future<DictItem> renameDictItem(
 Future<void> bulkUpsertDictItems({required String requestJson}) =>
     RustLib.instance.api
         .crateApiDictionariesBulkUpsertDictItems(requestJson: requestJson);
+
+/// Returns an aggregate-only data source for the on-device dictionary
+/// assistant. No session IDs, timestamps, remarks, or complete log rows leave
+/// SQLite. Collaboration and local sessions are intentionally both included.
+Future<String> getDictionaryAiSource() =>
+    RustLib.instance.api.crateApiDictionariesGetDictionaryAiSource();
+
+/// Applies a reviewed assistant plan in one immediate SQLite transaction.
+/// The state token prevents suggestions generated for an older dictionary
+/// snapshot from changing newer user edits.
+Future<String> applyDictionaryAiChanges({required String requestJson}) =>
+    RustLib.instance.api
+        .crateApiDictionariesApplyDictionaryAiChanges(requestJson: requestJson);
 
 Future<List<DictItem>> getDictItems({required String dictType}) =>
     RustLib.instance.api.crateApiDictionariesGetDictItems(dictType: dictType);
