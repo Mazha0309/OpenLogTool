@@ -6,6 +6,7 @@ import 'package:openlogtool/services/ai_credential_store.dart';
 import 'package:openlogtool/services/ai_recognition/models.dart';
 import 'package:openlogtool/services/ai_recognition/providers.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
+import 'package:openlogtool/services/text_assistant.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -249,6 +250,76 @@ void main() {
     );
 
     expect(credentials?.apiKey, 'resolved-key');
+  });
+
+  test('text assistant persists separately and keeps an explicit inline choice',
+      () async {
+    final values = _MemorySecureValues();
+    final provider = _provider(values);
+    await provider.initialized;
+    await provider.saveTextAssistant(
+      provider: TextAssistantProvider.openAiCompatible,
+      baseUrl: Uri.parse('https://text.example/v1'),
+      model: 'fast-model',
+      secret: 'text-secret',
+    );
+    await provider.setInlineTextSuggestionsEnabled(false);
+    await provider.saveTextAssistant(
+      provider: TextAssistantProvider.openAiCompatible,
+      baseUrl: Uri.parse('https://text.example/v1'),
+      model: 'faster-model',
+    );
+
+    final restarted = _provider(values);
+    await restarted.initialized;
+    expect(restarted.textAssistantEnabled, true);
+    expect(restarted.inlineTextSuggestionsEnabled, false);
+    expect(restarted.textAssistantConfig?.model, 'faster-model');
+    expect(await restarted.hasTextAssistantCredential(), true);
+  });
+
+  test('portable ASR profile import does not erase text assistant settings',
+      () async {
+    final values = _MemorySecureValues();
+    final provider = _provider(values);
+    await provider.initialized;
+    await provider.saveTextAssistant(
+      provider: TextAssistantProvider.anthropic,
+      baseUrl: Uri.parse('https://api.anthropic.com'),
+      model: 'claude-test',
+      secret: 'text-secret',
+    );
+
+    await provider.importProfiles(jsonEncode({
+      'schemaVersion': 1,
+      'profiles': <Object?>[],
+    }));
+
+    expect(provider.textAssistantEnabled, true);
+    expect(provider.textAssistantConfig?.provider,
+        TextAssistantProvider.anthropic);
+    expect(await provider.hasTextAssistantCredential(), true);
+  });
+
+  test('legacy selected chat extractor migrates without losing its credential',
+      () async {
+    final values = _MemorySecureValues();
+    final first = _provider(values);
+    await first.initialized;
+    await first.upsertProfile(_extractorProfile());
+    await first.setActiveFieldExtractionProfile('extractor');
+    await first.saveCredential('extractor', 'legacy-secret');
+
+    final restarted = _provider(values);
+    await restarted.initialized;
+    expect(restarted.textAssistantEnabled, true);
+    expect(restarted.textAssistantConfig?.provider,
+        TextAssistantProvider.openAiCompatible);
+    expect(restarted.textAssistantConfig?.model, 'text-model');
+    expect(await restarted.hasTextAssistantCredential(), true);
+
+    await restarted.removeProfile('extractor');
+    expect(await restarted.hasTextAssistantCredential(), true);
   });
 }
 

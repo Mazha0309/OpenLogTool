@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/services/ai_recognition/models.dart';
+import 'package:openlogtool/services/ai_recognition/providers.dart';
+import 'package:openlogtool/services/text_assistant.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
@@ -79,6 +81,8 @@ class _AiRecognitionSettingsState extends State<AiRecognitionSettings> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
+        _buildTextAssistantCard(context, settings),
+        const SizedBox(height: AppSpace.md),
         _buildStageCard(
           context,
           settings: settings,
@@ -86,16 +90,142 @@ class _AiRecognitionSettingsState extends State<AiRecognitionSettings> {
           profiles: settings.asrProfiles.toList(growable: false),
           active: activeAsr,
         ),
-        const SizedBox(height: AppSpace.md),
-        _buildStageCard(
-          context,
-          settings: settings,
-          kind: AiProviderKind.fieldExtraction,
-          profiles: settings.fieldExtractionProfiles.toList(growable: false),
-          active: settings.activeFieldExtractionProfile,
-        ),
       ],
     );
+  }
+
+  Widget _buildTextAssistantCard(
+    BuildContext context,
+    AiRecognitionSettingsProvider settings,
+  ) {
+    final config = settings.textAssistantConfig;
+    return SettingsSectionCard(
+      key: const Key('text-assistant-settings'),
+      icon: Icons.chat_bubble_outline,
+      title: context.l10n.textAssistantTitle,
+      description: context.l10n.textAssistantDescription,
+      padding: widget.cardPadding,
+      tone: SettingsTone.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppNotice(
+            title: context.l10n.textAssistantPrivacyTitle,
+            message: context.l10n.textAssistantPrivacyMessage,
+            icon: Icons.security_outlined,
+            tone: AppTone.primary,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          SettingsTileGroup(
+            children: [
+              SettingsActionTile(
+                key: const Key('text-assistant-enabled'),
+                icon: Icons.auto_awesome_outlined,
+                title: context.l10n.textAssistantEnabled,
+                subtitle: config == null
+                    ? context.l10n.textAssistantNotConfigured
+                    : '${_textAssistantProviderLabel(context, config.provider)}'
+                        ' · ${config.model}\n${config.baseUrl}',
+                trailing: Switch(
+                  value: settings.textAssistantEnabled,
+                  onChanged: _busy || config == null
+                      ? null
+                      : (value) =>
+                          _run(() => settings.setTextAssistantEnabled(value)),
+                ),
+              ),
+              SettingsActionTile(
+                key: const Key('text-assistant-inline-enabled'),
+                icon: Icons.format_indent_increase_outlined,
+                title: context.l10n.textAssistantInlineSuggestions,
+                subtitle: context.l10n.textAssistantInlineSuggestionsHint,
+                trailing: Switch(
+                  value: settings.inlineTextSuggestionsEnabled,
+                  onChanged: _busy || !settings.textAssistantEnabled
+                      ? null
+                      : (value) => _run(
+                            () =>
+                                settings.setInlineTextSuggestionsEnabled(value),
+                          ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Wrap(
+            spacing: AppSpace.xs,
+            runSpacing: AppSpace.xs,
+            alignment: WrapAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('text-assistant-test'),
+                onPressed: _busy || config == null
+                    ? null
+                    : () => _testTextAssistant(settings),
+                icon: const Icon(Icons.network_check_outlined),
+                label: Text(context.l10n.textAssistantTest),
+              ),
+              FilledButton.tonalIcon(
+                key: const Key('text-assistant-configure'),
+                onPressed:
+                    _busy ? null : () => _editTextAssistant(settings, config),
+                icon: Icon(config == null ? Icons.add : Icons.edit_outlined),
+                label: Text(config == null
+                    ? context.l10n.textAssistantConfigure
+                    : context.l10n.textAssistantEdit),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editTextAssistant(
+    AiRecognitionSettingsProvider settings,
+    TextAssistantConfig? existing,
+  ) async {
+    final draft = await showDialog<_TextAssistantDraft>(
+      context: context,
+      builder: (dialogContext) =>
+          _TextAssistantEditorDialog(existing: existing),
+    );
+    if (draft == null || !mounted) return;
+    await _run(
+      () => settings.saveTextAssistant(
+        provider: draft.provider,
+        baseUrl: draft.baseUrl,
+        model: draft.model,
+        secret: draft.secret,
+      ),
+    );
+  }
+
+  Future<void> _testTextAssistant(
+    AiRecognitionSettingsProvider settings,
+  ) async {
+    await _run(() async {
+      final client = settings.createTextAssistantClient(
+        timeout: const Duration(seconds: 15),
+      );
+      try {
+        final result = await client.completeJson(
+          systemPrompt: 'Return only a JSON object. Do not explain.',
+          userPrompt: 'Return {"ok":true}.',
+          cancellationToken: AiCancellationToken(),
+          maxOutputTokens: 48,
+        );
+        if (result['ok'] != true) {
+          throw StateError('TEXT_ASSISTANT_TEST_INVALID_RESPONSE');
+        }
+      } finally {
+        client.close();
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.textAssistantTestSucceeded)),
+      );
+    });
   }
 
   Widget _buildStageCard(
@@ -321,6 +451,200 @@ class _AiRecognitionSettingsState extends State<AiRecognitionSettings> {
     }
   }
 }
+
+final class _TextAssistantDraft {
+  const _TextAssistantDraft({
+    required this.provider,
+    required this.baseUrl,
+    required this.model,
+    this.secret,
+  });
+
+  final TextAssistantProvider provider;
+  final Uri baseUrl;
+  final String model;
+  final String? secret;
+}
+
+class _TextAssistantEditorDialog extends StatefulWidget {
+  const _TextAssistantEditorDialog({this.existing});
+
+  final TextAssistantConfig? existing;
+
+  @override
+  State<_TextAssistantEditorDialog> createState() =>
+      _TextAssistantEditorDialogState();
+}
+
+class _TextAssistantEditorDialogState
+    extends State<_TextAssistantEditorDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextAssistantProvider _provider;
+  late final TextEditingController _baseUrlController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _secretController;
+
+  @override
+  void initState() {
+    super.initState();
+    _provider = widget.existing?.provider ?? TextAssistantProvider.openAi;
+    _baseUrlController = TextEditingController(
+      text:
+          widget.existing?.baseUrl.toString() ?? _defaultTextBaseUrl(_provider),
+    );
+    _modelController =
+        TextEditingController(text: widget.existing?.model ?? '');
+    _secretController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _baseUrlController.dispose();
+    _modelController.dispose();
+    _secretController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('text-assistant-editor-dialog'),
+      scrollable: true,
+      title: Text(context.l10n.textAssistantConfigureTitle),
+      content: SizedBox(
+        width: 520,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<TextAssistantProvider>(
+                key: const Key('text-assistant-provider'),
+                initialValue: _provider,
+                decoration: InputDecoration(
+                  labelText: context.l10n.textAssistantProvider,
+                ),
+                items: [
+                  for (final provider in TextAssistantProvider.values)
+                    DropdownMenuItem(
+                      value: provider,
+                      child:
+                          Text(_textAssistantProviderLabel(context, provider)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  final oldDefault = _defaultTextBaseUrl(_provider);
+                  final replaceBase = _baseUrlController.text.trim().isEmpty ||
+                      _baseUrlController.text.trim() == oldDefault;
+                  setState(() {
+                    _provider = value;
+                    if (replaceBase) {
+                      _baseUrlController.text = _defaultTextBaseUrl(value);
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextFormField(
+                key: const Key('text-assistant-base-url'),
+                controller: _baseUrlController,
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: context.l10n.aiBaseUrl,
+                  hintText: 'https://api.example.com/v1',
+                ),
+                validator: (value) {
+                  final uri = Uri.tryParse(value?.trim() ?? '');
+                  if (uri == null ||
+                      !uri.hasScheme ||
+                      (uri.scheme != 'http' && uri.scheme != 'https') ||
+                      uri.host.isEmpty ||
+                      uri.userInfo.isNotEmpty ||
+                      uri.fragment.isNotEmpty) {
+                    return context.l10n.aiInvalidBaseUrl;
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextFormField(
+                key: const Key('text-assistant-model'),
+                controller: _modelController,
+                decoration:
+                    InputDecoration(labelText: context.l10n.aiModelName),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? context.l10n.aiRequiredField
+                    : null,
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextFormField(
+                key: const Key('text-assistant-api-key'),
+                controller: _secretController,
+                obscureText: true,
+                enableSuggestions: false,
+                autocorrect: false,
+                decoration: InputDecoration(
+                  labelText: context.l10n.aiApiKey,
+                  helperText: widget.existing == null
+                      ? context.l10n.aiApiKeyNewHint
+                      : context.l10n.aiApiKeyExistingHint,
+                ),
+                validator: (value) => widget.existing == null &&
+                        (value == null || value.trim().isEmpty)
+                    ? context.l10n.aiRequiredField
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.cancel),
+        ),
+        FilledButton(
+          key: const Key('text-assistant-save'),
+          onPressed: () {
+            if (!(_formKey.currentState?.validate() ?? false)) return;
+            Navigator.pop(
+              context,
+              _TextAssistantDraft(
+                provider: _provider,
+                baseUrl: Uri.parse(_baseUrlController.text.trim()),
+                model: _modelController.text.trim(),
+                secret: _secretController.text.trim().isEmpty
+                    ? null
+                    : _secretController.text.trim(),
+              ),
+            );
+          },
+          child: Text(context.l10n.save),
+        ),
+      ],
+    );
+  }
+}
+
+String _defaultTextBaseUrl(TextAssistantProvider provider) =>
+    switch (provider) {
+      TextAssistantProvider.openAi => 'https://api.openai.com/v1',
+      TextAssistantProvider.anthropic => 'https://api.anthropic.com',
+      TextAssistantProvider.openAiCompatible => '',
+    };
+
+String _textAssistantProviderLabel(
+  BuildContext context,
+  TextAssistantProvider provider,
+) =>
+    switch (provider) {
+      TextAssistantProvider.openAi => context.l10n.textAssistantProviderOpenAi,
+      TextAssistantProvider.anthropic =>
+        context.l10n.textAssistantProviderAnthropic,
+      TextAssistantProvider.openAiCompatible =>
+        context.l10n.textAssistantProviderCompatible,
+    };
 
 class _CredentialStatus extends StatelessWidget {
   const _CredentialStatus({

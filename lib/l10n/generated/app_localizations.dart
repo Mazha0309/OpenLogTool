@@ -5019,6 +5019,222 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'不支持或无效的候选内容'**
   String get aiCandidateInvalid;
+
+  /// No description provided for @textAssistantTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字助手'**
+  String get textAssistantTitle;
+
+  /// No description provided for @textAssistantDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用简单的文字模型配置完成字段整理、填写建议和词库维护。'**
+  String get textAssistantDescription;
+
+  /// No description provided for @textAssistantPrivacyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'由你选择的模型服务处理'**
+  String get textAssistantPrivacyTitle;
+
+  /// No description provided for @textAssistantPrivacyMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要时会向所选服务发送当前字段文本或聚合后的历史词条，不会发送完整记录、备注或时间；API 密钥仅用于请求鉴权并安全保存在本机。'**
+  String get textAssistantPrivacyMessage;
+
+  /// No description provided for @textAssistantEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用文字助手'**
+  String get textAssistantEnabled;
+
+  /// No description provided for @textAssistantNotConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未配置文字助手'**
+  String get textAssistantNotConfigured;
+
+  /// No description provided for @textAssistantInlineSuggestions.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写时显示 AI 规范建议'**
+  String get textAssistantInlineSuggestions;
+
+  /// No description provided for @textAssistantInlineSuggestionsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备、天线、QTH、高度和功率停止输入约 300 毫秒后，显示一条快速建议。'**
+  String get textAssistantInlineSuggestionsHint;
+
+  /// No description provided for @textAssistantTest.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试连接'**
+  String get textAssistantTest;
+
+  /// No description provided for @textAssistantConfigure.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置文字助手'**
+  String get textAssistantConfigure;
+
+  /// No description provided for @textAssistantEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改配置'**
+  String get textAssistantEdit;
+
+  /// No description provided for @textAssistantConfigureTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置文字助手'**
+  String get textAssistantConfigureTitle;
+
+  /// No description provided for @textAssistantProvider.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务类型'**
+  String get textAssistantProvider;
+
+  /// No description provided for @textAssistantProviderOpenAi.
+  ///
+  /// In zh, this message translates to:
+  /// **'OpenAI（Responses API）'**
+  String get textAssistantProviderOpenAi;
+
+  /// No description provided for @textAssistantProviderAnthropic.
+  ///
+  /// In zh, this message translates to:
+  /// **'Anthropic'**
+  String get textAssistantProviderAnthropic;
+
+  /// No description provided for @textAssistantProviderCompatible.
+  ///
+  /// In zh, this message translates to:
+  /// **'OpenAI 兼容（旧版 Chat Completions）'**
+  String get textAssistantProviderCompatible;
+
+  /// No description provided for @textAssistantTestSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字助手连接正常。'**
+  String get textAssistantTestSucceeded;
+
+  /// No description provided for @textAssistantSuggestionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 规范建议'**
+  String get textAssistantSuggestionLabel;
+
+  /// No description provided for @aiDictionaryRecognize.
+  ///
+  /// In zh, this message translates to:
+  /// **'从历史识别'**
+  String get aiDictionaryRecognize;
+
+  /// No description provided for @aiDictionaryOptimize.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 优化词库'**
+  String get aiDictionaryOptimize;
+
+  /// No description provided for @aiDictionaryNeedsAssistant.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在设置中配置并启用文字助手。'**
+  String get aiDictionaryNeedsAssistant;
+
+  /// No description provided for @aiDictionaryNoSuggestions.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有发现需要处理的词条。'**
+  String get aiDictionaryNoSuggestions;
+
+  /// No description provided for @aiDictionaryApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已应用 {count} 条词库建议。'**
+  String aiDictionaryApplied(int count);
+
+  /// No description provided for @aiDictionaryFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库 AI 操作失败：{error}'**
+  String aiDictionaryFailed(String error);
+
+  /// No description provided for @aiDictionaryOptimizing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在优化词库'**
+  String get aiDictionaryOptimizing;
+
+  /// No description provided for @aiDictionaryRecognizing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在识别历史词条'**
+  String get aiDictionaryRecognizing;
+
+  /// No description provided for @aiDictionaryPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在整理本地数据…'**
+  String get aiDictionaryPreparing;
+
+  /// No description provided for @aiDictionaryProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成 {completed} / {total}'**
+  String aiDictionaryProgress(int completed, int total);
+
+  /// No description provided for @aiDictionaryReviewTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认词库建议'**
+  String get aiDictionaryReviewTitle;
+
+  /// No description provided for @aiDictionaryReviewHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'根据 {recordCount} 条历史记录及当前词库生成。只有勾选的内容会写入。'**
+  String aiDictionaryReviewHint(int recordCount);
+
+  /// No description provided for @aiDictionaryActionAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增'**
+  String get aiDictionaryActionAdd;
+
+  /// No description provided for @aiDictionaryActionRename.
+  ///
+  /// In zh, this message translates to:
+  /// **'改名'**
+  String get aiDictionaryActionRename;
+
+  /// No description provided for @aiDictionaryActionMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并'**
+  String get aiDictionaryActionMerge;
+
+  /// No description provided for @aiDictionaryUsedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史出现 {count} 次'**
+  String aiDictionaryUsedCount(int count);
+
+  /// No description provided for @aiDictionaryMergeWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并会从词库隐藏源词条，默认不勾选；不会改写历史记录。'**
+  String get aiDictionaryMergeWarning;
+
+  /// No description provided for @aiDictionaryApplySelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用所选建议'**
+  String get aiDictionaryApplySelected;
 }
 
 class _AppLocalizationsDelegate

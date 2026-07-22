@@ -6,6 +6,7 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/dict_item.dart' as bridge;
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/dictionary_pinyin_helper.dart';
+import 'package:openlogtool/services/text_assistant_tasks.dart';
 
 typedef DictionaryUpsertItem = Future<void> Function({
   required String dictType,
@@ -440,6 +441,32 @@ class DictionaryProvider with ChangeNotifier {
       'callsigns': encodeItems(_callsignDict),
       'qths': encodeItems(_qthDict),
     });
+  }
+
+  Future<void> applyAiSuggestions({
+    required String expectedStateToken,
+    required List<DictionaryAiSuggestion> suggestions,
+  }) async {
+    if (suggestions.isEmpty) return;
+    final operations = <Map<String, Object?>>[];
+    final operationKeys = <String>{};
+    for (final suggestion in suggestions) {
+      final operation = suggestion.toApplyJson();
+      final source = operation['source']?.toString() ?? '';
+      final key = suggestion.action == DictionaryAiAction.add
+          ? '${operation['dictType']}\u0000add\u0000${operation['target']}'
+          : '${operation['dictType']}\u0000${operation['action']}\u0000'
+              '$source\u0000${operation['target']}';
+      if (operationKeys.add(key)) operations.add(operation);
+    }
+    await RustApi.applyDictionaryAiChanges(
+      requestJson: jsonEncode(<String, Object?>{
+        'expectedStateToken': expectedStateToken,
+        'operations': operations,
+      }),
+    );
+    await reloadFromDatabase(synchronizeBuiltins: false);
+    await _notifyDictionaryChanged();
   }
 
   Map<String, List<_RawPinyinAbbrev>> _extractDictionaryMap(Map data) {

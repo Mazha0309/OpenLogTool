@@ -18,6 +18,8 @@ import 'package:openlogtool/services/ai_candidate_guard.dart';
 import 'package:openlogtool/services/ai_audio_recorder.dart';
 import 'package:openlogtool/services/ai_database_context.dart';
 import 'package:openlogtool/services/ai_recognition_runtime.dart';
+import 'package:openlogtool/services/ai_recognition/providers.dart';
+import 'package:openlogtool/services/text_assistant_tasks.dart';
 import 'package:openlogtool/widgets/ai_recognition_control.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
@@ -32,6 +34,7 @@ class LogForm extends StatefulWidget {
     this.aiRecognitionExecutor,
     this.aiTranscriptionExecutor,
     this.aiFieldExtractionExecutor,
+    this.inlineTextSuggestionExecutor,
   });
 
   final bool readOnly;
@@ -39,6 +42,7 @@ class LogForm extends StatefulWidget {
   final AiRecognitionExecutor? aiRecognitionExecutor;
   final AiTranscriptionExecutor? aiTranscriptionExecutor;
   final AiFieldExtractionExecutor? aiFieldExtractionExecutor;
+  final InlineTextSuggestionExecutor? inlineTextSuggestionExecutor;
 
   @override
   State<LogForm> createState() => _LogFormState();
@@ -75,6 +79,22 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final Set<String> _deferredSharedDraftFields = <String>{};
   late final Map<String, int> _aiFieldRevisions;
   int _aiRecordEpoch = 0;
+  static const Set<String> _inlineAiFields = <String>{
+    'device',
+    'antenna',
+    'qth',
+    'height',
+    'power',
+  };
+  final Map<String, Timer> _inlineAiDebounce = <String, Timer>{};
+  final Map<String, AiCancellationToken> _inlineAiTokens =
+      <String, AiCancellationToken>{};
+  final Map<String, int> _inlineAiGenerations = <String, int>{};
+  final Map<String, String> _inlineAiSuggestions = <String, String>{};
+  final Map<String, String> _acceptedInlineAiValues = <String, String>{};
+  final Map<String, String?> _inlineAiCache = <String, String?>{};
+  final Set<String> _inlineAiPending = <String>{};
+  bool _refreshingInlineAiOptions = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -123,6 +143,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   @override
   void dispose() {
     _lockExpiryTimer?.cancel();
+    for (final timer in _inlineAiDebounce.values) {
+      timer.cancel();
+    }
+    for (final token in _inlineAiTokens.values) {
+      token.cancel();
+    }
     for (final timer in _draftDebounce.values) {
       timer.cancel();
     }
@@ -206,6 +232,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _onDraftFieldChanged(String field) {
     if (!mounted) return;
+    if (_refreshingInlineAiOptions) return;
     if (_aiFieldRevisions.containsKey(field)) {
       _aiFieldRevisions[field] = _aiFieldRevisions[field]! + 1;
     }
@@ -213,6 +240,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (_hasActiveUpperCaseComposition(field)) {
       _draftDebounce.remove(field)?.cancel();
       return;
+    }
+    if (_inlineAiFields.contains(field)) {
+      _scheduleInlineAiSuggestion(field);
     }
     final collaboration = context.read<CollaborationProvider>();
     if (field == 'time') collaboration.cancelAutomaticLiveDraftTime();
@@ -232,11 +262,169 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     });
   }
 
+  void _scheduleInlineAiSuggestion(String field) {
+    _inlineAiDebounce.remove(field)?.cancel();
+    _inlineAiTokens.remove(field)?.cancel();
+    final generation = (_inlineAiGenerations[field] ?? 0) + 1;
+    _inlineAiGenerations[field] = generation;
+    final controller = _draftControllers[field]!;
+    final value = controller.text.trim();
+    if (!(_draftFocusNodes[field]?.hasFocus ?? false) ||
+        value.isEmpty ||
+        _acceptedInlineAiValues[field] == value) {
+      _clearInlineAiSuggestion(field);
+      return;
+    }
+    final settings = Provider.of<AiRecognitionSettingsProvider?>(
+      context,
+      listen: false,
+    );
+    if (settings == null ||
+        !settings.textAssistantEnabled ||
+        !settings.inlineTextSuggestionsEnabled) {
+      _clearInlineAiSuggestion(field);
+      return;
+    }
+    final references = _inlineDictionaryReferences(field, value);
+    if (references.any((item) => item == value)) {
+      _clearInlineAiSuggestion(field);
+      return;
+    }
+    _inlineAiDebounce[field] = Timer(
+      const Duration(milliseconds: 300),
+      () => unawaited(
+        _requestInlineAiSuggestion(
+          field: field,
+          value: value,
+          references: references,
+          generation: generation,
+          settings: settings,
+        ),
+      ),
+    );
+  }
+
+  List<String> _inlineDictionaryReferences(String field, String value) {
+    final provider = context.read<DictionaryProvider>();
+    final items = switch (field) {
+      'device' => provider.filterDevices(value),
+      'antenna' => provider.filterAntennas(value),
+      'qth' => provider.filterQths(value),
+      _ => const <DictionaryItem>[],
+    };
+    return items.take(8).map((item) => item.raw).toList(growable: false);
+  }
+
+  Future<void> _requestInlineAiSuggestion({
+    required String field,
+    required String value,
+    required List<String> references,
+    required int generation,
+    required AiRecognitionSettingsProvider settings,
+  }) async {
+    if (!mounted || _inlineAiGenerations[field] != generation) return;
+    final signature = settings.textAssistantConfig?.signature ?? '';
+    final cacheKey = '$signature\u0000$field\u0000$value';
+    if (_inlineAiCache.containsKey(cacheKey)) {
+      _adoptInlineAiSuggestion(
+        field,
+        value,
+        generation,
+        _inlineAiCache[cacheKey],
+      );
+      return;
+    }
+    final token = AiCancellationToken();
+    _inlineAiTokens[field] = token;
+    setState(() => _inlineAiPending.add(field));
+    try {
+      final executor = widget.inlineTextSuggestionExecutor ??
+          TextAssistantTasks.suggestInline;
+      final suggestion = await executor(
+        settings: settings,
+        field: field,
+        value: value,
+        localReferences: references,
+        cancellationToken: token,
+      );
+      _inlineAiCache[cacheKey] = suggestion;
+      _adoptInlineAiSuggestion(field, value, generation, suggestion);
+    } catch (_) {
+      // Inline assistance is opportunistic and must never interrupt typing.
+    } finally {
+      if (_inlineAiTokens[field] == token) _inlineAiTokens.remove(field);
+      if (mounted && _inlineAiGenerations[field] == generation) {
+        setState(() => _inlineAiPending.remove(field));
+      }
+    }
+  }
+
+  void _adoptInlineAiSuggestion(
+    String field,
+    String source,
+    int generation,
+    String? suggestion,
+  ) {
+    if (!mounted ||
+        _inlineAiGenerations[field] != generation ||
+        !(_draftFocusNodes[field]?.hasFocus ?? false) ||
+        _draftControllers[field]!.text.trim() != source) {
+      return;
+    }
+    setState(() {
+      if (suggestion == null || suggestion == source) {
+        _inlineAiSuggestions.remove(field);
+      } else {
+        _inlineAiSuggestions[field] = suggestion;
+      }
+    });
+    _queueInlineAiOptionsRefresh(field);
+  }
+
+  void _clearInlineAiSuggestion(String field) {
+    if (!_inlineAiSuggestions.containsKey(field) &&
+        !_inlineAiPending.contains(field)) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _inlineAiSuggestions.remove(field);
+        _inlineAiPending.remove(field);
+      });
+      _queueInlineAiOptionsRefresh(field);
+    }
+  }
+
+  void _queueInlineAiOptionsRefresh(String field) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !(_draftFocusNodes[field]?.hasFocus ?? false)) return;
+      final controller = _draftControllers[field];
+      if (controller == null || controller.text.isEmpty) return;
+      final original = controller.value;
+      _refreshingInlineAiOptions = true;
+      try {
+        // RawAutocomplete only reevaluates options after the text changes.
+        // This synchronous pulse occurs after the new options builder is
+        // installed, so no empty value reaches a frame or the live draft.
+        controller.value = const TextEditingValue();
+        controller.value = original;
+      } finally {
+        _refreshingInlineAiOptions = false;
+      }
+    });
+  }
+
   void _onDraftFocusChanged(String field) {
     if (!mounted) return;
+    final focused = _draftFocusNodes[field]?.hasFocus ?? false;
+    if (_inlineAiFields.contains(field) && !focused) {
+      _inlineAiDebounce.remove(field)?.cancel();
+      _inlineAiTokens.remove(field)?.cancel();
+      _inlineAiGenerations[field] = (_inlineAiGenerations[field] ?? 0) + 1;
+      _clearInlineAiSuggestion(field);
+    }
     final collaboration = context.read<CollaborationProvider>();
     if (collaboration.liveDraftSnapshot == null) return;
-    final focused = _draftFocusNodes[field]?.hasFocus ?? false;
     focused
         ? _focusedDraftFields.add(field)
         : _focusedDraftFields.remove(field);
@@ -545,6 +733,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   void _resetForm() {
     _aiRecordEpoch += 1;
+    for (final timer in _inlineAiDebounce.values) {
+      timer.cancel();
+    }
+    _inlineAiDebounce.clear();
+    for (final token in _inlineAiTokens.values) {
+      token.cancel();
+    }
+    _inlineAiTokens.clear();
+    _inlineAiSuggestions.clear();
+    _inlineAiPending.clear();
+    _acceptedInlineAiValues.clear();
     // 主控呼号在连续添加时应保留，先保存再恢复。
     final controllerCallsign = _controllerController.text;
     _formKey.currentState?.reset();
@@ -834,17 +1033,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     ),
                     SizedBox(
                       width: calculatedFieldWidth,
-                      child: _buildMaterialTextField(
+                      child: _buildAutocompleteField(
                         controller: _powerController,
                         label: fieldLabel('power', context.l10n.fieldPower),
                         hintText: context.l10n.inputFieldHint(
                           context.l10n.fieldPower,
                         ),
-                        keyboardType: TextInputType.number,
+                        options: const <DictionaryItem>[],
                         upperCase: false,
                         isCompact: isNarrow,
                         textInputAction: TextInputAction.next,
-                        focusNode: _draftFocusNodes['power'],
+                        draftField: 'power',
                         enabled: fieldEnabled('power'),
                       ),
                     ),
@@ -866,17 +1065,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     ),
                     SizedBox(
                       width: calculatedFieldWidth,
-                      child: _buildMaterialTextField(
+                      child: _buildAutocompleteField(
                         controller: _heightController,
                         label: fieldLabel('height', context.l10n.fieldHeight),
                         hintText: context.l10n.inputFieldHint(
                           context.l10n.fieldHeight,
                         ),
-                        keyboardType: TextInputType.number,
+                        options: const <DictionaryItem>[],
                         upperCase: false,
                         isCompact: isNarrow,
                         textInputAction: TextInputAction.next,
-                        focusNode: _draftFocusNodes['height'],
+                        draftField: 'height',
                         enabled: fieldEnabled('height'),
                       ),
                     ),
@@ -1111,12 +1310,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         : const <TextInputFormatter>[];
 
     final draftFocusNode = _draftFocusNodes[draftField]!;
-    final autocomplete = Autocomplete<DictionaryItem>(
+    final aiSuggestion = _inlineAiSuggestions[draftField];
+    final autocomplete = Autocomplete<_FormSuggestion>(
+      key: ValueKey<String>('log-autocomplete-$draftField'),
       textEditingController: controller,
       focusNode: draftFocusNode,
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
-          return const Iterable<DictionaryItem>.empty();
+          return const Iterable<_FormSuggestion>.empty();
         }
         final query = textEditingValue.text.toLowerCase();
         final scored = <_ScoredOption>[];
@@ -1147,11 +1348,24 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           if (b.score != a.score) return b.score.compareTo(a.score);
           return a.option.raw.compareTo(b.option.raw);
         });
-        return scored.take(20).map((s) => s.option);
+        return <_FormSuggestion>[
+          for (final scoredOption in scored.take(20))
+            _FormSuggestion.local(scoredOption.option),
+          if (aiSuggestion != null &&
+              aiSuggestion.isNotEmpty &&
+              !scored.any((item) => item.option.raw == aiSuggestion))
+            _FormSuggestion.ai(aiSuggestion),
+        ];
       },
-      displayStringForOption: (option) => option.raw,
-      onSelected: (DictionaryItem selection) {
-        controller.text = selection.raw;
+      displayStringForOption: (option) => option.value,
+      onSelected: (_FormSuggestion selection) {
+        if (selection.isAi) {
+          _acceptedInlineAiValues[draftField] = selection.value;
+        }
+        controller.value = TextEditingValue(
+          text: selection.value,
+          selection: TextSelection.collapsed(offset: selection.value.length),
+        );
       },
       fieldViewBuilder: (
         BuildContext context,
@@ -1167,6 +1381,15 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             labelText: label,
             hintText: hintText,
             isDense: true,
+            suffixIcon: _inlineAiPending.contains(draftField)
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
             contentPadding: EdgeInsets.symmetric(
                 horizontal: 12, vertical: isCompact ? 10 : 14),
           ),
@@ -1181,8 +1404,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       },
       optionsViewBuilder: (
         BuildContext context,
-        AutocompleteOnSelected<DictionaryItem> onSelected,
-        Iterable<DictionaryItem> options,
+        AutocompleteOnSelected<_FormSuggestion> onSelected,
+        Iterable<_FormSuggestion> options,
       ) {
         final theme = Theme.of(context);
         return Align(
@@ -1197,17 +1420,35 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 shrinkWrap: true,
                 itemCount: options.length,
                 itemBuilder: (BuildContext context, int index) {
-                  final DictionaryItem item = options.elementAt(index);
+                  final item = options.elementAt(index);
                   return ListTile(
+                    key: item.isAi
+                        ? Key('inline-ai-suggestion-$draftField')
+                        : null,
                     dense: true,
-                    title: Text(item.raw),
-                    subtitle:
-                        item.abbreviation.isNotEmpty || item.pinyin.isNotEmpty
+                    leading: item.isAi
+                        ? Icon(
+                            Icons.auto_awesome,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          )
+                        : null,
+                    title: Text(item.value),
+                    subtitle: item.isAi
+                        ? Text(
+                            context.l10n.textAssistantSuggestionLabel,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          )
+                        : item.item!.abbreviation.isNotEmpty ||
+                                item.item!.pinyin.isNotEmpty
                             ? Text(
                                 [
-                                  if (item.abbreviation.isNotEmpty)
-                                    item.abbreviation,
-                                  if (item.pinyin.isNotEmpty) item.pinyin,
+                                  if (item.item!.abbreviation.isNotEmpty)
+                                    item.item!.abbreviation,
+                                  if (item.item!.pinyin.isNotEmpty)
+                                    item.item!.pinyin,
                                 ].join(' · '),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
@@ -1252,4 +1493,19 @@ class _ScoredOption {
   final int score;
 
   _ScoredOption(this.option, this.score);
+}
+
+class _FormSuggestion {
+  factory _FormSuggestion.local(DictionaryItem item) =>
+      _FormSuggestion._(item, item.raw, false);
+
+  const _FormSuggestion.ai(this.value)
+      : item = null,
+        isAi = true;
+
+  const _FormSuggestion._(this.item, this.value, this.isAi);
+
+  final DictionaryItem? item;
+  final String value;
+  final bool isAi;
 }

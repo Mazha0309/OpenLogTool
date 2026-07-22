@@ -2787,6 +2787,127 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiCandidateInvalid => '不支持或无效的候选内容';
+
+  @override
+  String get textAssistantTitle => '文字助手';
+
+  @override
+  String get textAssistantDescription => '使用简单的文字模型配置完成字段整理、填写建议和词库维护。';
+
+  @override
+  String get textAssistantPrivacyTitle => '由你选择的模型服务处理';
+
+  @override
+  String get textAssistantPrivacyMessage =>
+      '需要时会向所选服务发送当前字段文本或聚合后的历史词条，不会发送完整记录、备注或时间；API 密钥仅用于请求鉴权并安全保存在本机。';
+
+  @override
+  String get textAssistantEnabled => '启用文字助手';
+
+  @override
+  String get textAssistantNotConfigured => '尚未配置文字助手';
+
+  @override
+  String get textAssistantInlineSuggestions => '填写时显示 AI 规范建议';
+
+  @override
+  String get textAssistantInlineSuggestionsHint =>
+      '设备、天线、QTH、高度和功率停止输入约 300 毫秒后，显示一条快速建议。';
+
+  @override
+  String get textAssistantTest => '测试连接';
+
+  @override
+  String get textAssistantConfigure => '配置文字助手';
+
+  @override
+  String get textAssistantEdit => '修改配置';
+
+  @override
+  String get textAssistantConfigureTitle => '配置文字助手';
+
+  @override
+  String get textAssistantProvider => '服务类型';
+
+  @override
+  String get textAssistantProviderOpenAi => 'OpenAI（Responses API）';
+
+  @override
+  String get textAssistantProviderAnthropic => 'Anthropic';
+
+  @override
+  String get textAssistantProviderCompatible =>
+      'OpenAI 兼容（旧版 Chat Completions）';
+
+  @override
+  String get textAssistantTestSucceeded => '文字助手连接正常。';
+
+  @override
+  String get textAssistantSuggestionLabel => 'AI 规范建议';
+
+  @override
+  String get aiDictionaryRecognize => '从历史识别';
+
+  @override
+  String get aiDictionaryOptimize => 'AI 优化词库';
+
+  @override
+  String get aiDictionaryNeedsAssistant => '请先在设置中配置并启用文字助手。';
+
+  @override
+  String get aiDictionaryNoSuggestions => '没有发现需要处理的词条。';
+
+  @override
+  String aiDictionaryApplied(int count) {
+    return '已应用 $count 条词库建议。';
+  }
+
+  @override
+  String aiDictionaryFailed(String error) {
+    return '词库 AI 操作失败：$error';
+  }
+
+  @override
+  String get aiDictionaryOptimizing => '正在优化词库';
+
+  @override
+  String get aiDictionaryRecognizing => '正在识别历史词条';
+
+  @override
+  String get aiDictionaryPreparing => '正在整理本地数据…';
+
+  @override
+  String aiDictionaryProgress(int completed, int total) {
+    return '已完成 $completed / $total';
+  }
+
+  @override
+  String get aiDictionaryReviewTitle => '确认词库建议';
+
+  @override
+  String aiDictionaryReviewHint(int recordCount) {
+    return '根据 $recordCount 条历史记录及当前词库生成。只有勾选的内容会写入。';
+  }
+
+  @override
+  String get aiDictionaryActionAdd => '新增';
+
+  @override
+  String get aiDictionaryActionRename => '改名';
+
+  @override
+  String get aiDictionaryActionMerge => '合并';
+
+  @override
+  String aiDictionaryUsedCount(int count) {
+    return '历史出现 $count 次';
+  }
+
+  @override
+  String get aiDictionaryMergeWarning => '合并会从词库隐藏源词条，默认不勾选；不会改写历史记录。';
+
+  @override
+  String get aiDictionaryApplySelected => '应用所选建议';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -4153,4 +4274,125 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get aiCandidateInvalid => '不支持或无效的候选内容';
+
+  @override
+  String get textAssistantTitle => '文字助手';
+
+  @override
+  String get textAssistantDescription => '使用简单的文字模型配置完成字段整理、填写建议和词库维护。';
+
+  @override
+  String get textAssistantPrivacyTitle => '由你选择的模型服务处理';
+
+  @override
+  String get textAssistantPrivacyMessage =>
+      '需要时会向所选服务发送当前字段文本或聚合后的历史词条，不会发送完整记录、备注或时间；API 密钥仅用于请求鉴权并安全保存在本机。';
+
+  @override
+  String get textAssistantEnabled => '启用文字助手';
+
+  @override
+  String get textAssistantNotConfigured => '尚未配置文字助手';
+
+  @override
+  String get textAssistantInlineSuggestions => '填写时显示 AI 规范建议';
+
+  @override
+  String get textAssistantInlineSuggestionsHint =>
+      '设备、天线、QTH、高度和功率停止输入约 300 毫秒后，显示一条快速建议。';
+
+  @override
+  String get textAssistantTest => '测试连接';
+
+  @override
+  String get textAssistantConfigure => '配置文字助手';
+
+  @override
+  String get textAssistantEdit => '修改配置';
+
+  @override
+  String get textAssistantConfigureTitle => '配置文字助手';
+
+  @override
+  String get textAssistantProvider => '服务类型';
+
+  @override
+  String get textAssistantProviderOpenAi => 'OpenAI（Responses API）';
+
+  @override
+  String get textAssistantProviderAnthropic => 'Anthropic';
+
+  @override
+  String get textAssistantProviderCompatible =>
+      'OpenAI 兼容（旧版 Chat Completions）';
+
+  @override
+  String get textAssistantTestSucceeded => '文字助手连接正常。';
+
+  @override
+  String get textAssistantSuggestionLabel => 'AI 规范建议';
+
+  @override
+  String get aiDictionaryRecognize => '从历史识别';
+
+  @override
+  String get aiDictionaryOptimize => 'AI 优化词库';
+
+  @override
+  String get aiDictionaryNeedsAssistant => '请先在设置中配置并启用文字助手。';
+
+  @override
+  String get aiDictionaryNoSuggestions => '没有发现需要处理的词条。';
+
+  @override
+  String aiDictionaryApplied(int count) {
+    return '已应用 $count 条词库建议。';
+  }
+
+  @override
+  String aiDictionaryFailed(String error) {
+    return '词库 AI 操作失败：$error';
+  }
+
+  @override
+  String get aiDictionaryOptimizing => '正在优化词库';
+
+  @override
+  String get aiDictionaryRecognizing => '正在识别历史词条';
+
+  @override
+  String get aiDictionaryPreparing => '正在整理本地数据…';
+
+  @override
+  String aiDictionaryProgress(int completed, int total) {
+    return '已完成 $completed / $total';
+  }
+
+  @override
+  String get aiDictionaryReviewTitle => '确认词库建议';
+
+  @override
+  String aiDictionaryReviewHint(int recordCount) {
+    return '根据 $recordCount 条历史记录及当前词库生成。只有勾选的内容会写入。';
+  }
+
+  @override
+  String get aiDictionaryActionAdd => '新增';
+
+  @override
+  String get aiDictionaryActionRename => '改名';
+
+  @override
+  String get aiDictionaryActionMerge => '合并';
+
+  @override
+  String aiDictionaryUsedCount(int count) {
+    return '历史出现 $count 次';
+  }
+
+  @override
+  String get aiDictionaryMergeWarning => '合并会从词库隐藏源词条，默认不勾选；不会改写历史记录。';
+
+  @override
+  String get aiDictionaryApplySelected => '应用所选建议';
 }

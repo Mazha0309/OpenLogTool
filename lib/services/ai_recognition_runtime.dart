@@ -85,6 +85,44 @@ Keep RST sent and received separate.
   }) async {
     await settings.initialized;
     if (!settings.enabled) throw StateError('AI_RECOGNITION_DISABLED');
+    if (settings.textAssistantEnabled &&
+        settings.textAssistantConfig != null &&
+        isActionableTranscription(transcription.text)) {
+      final client = settings.createTextAssistantClient();
+      try {
+        final fields = await client.completeJson(
+          systemPrompt: _instructionsWithContext(referenceContext),
+          userPrompt: transcription.text,
+          cancellationToken: cancellationToken,
+          maxOutputTokens: 700,
+        );
+        final candidateFields = <String, Object?>{
+          for (final entry in fields.entries)
+            if (entry.value is String &&
+                (entry.value as String).trim().isNotEmpty)
+              entry.key: (entry.value as String).trim(),
+        };
+        return _withExplicitPowerFallback(
+          AiRecognitionResult(
+            transcription: transcription,
+            candidates: candidateFields.isEmpty
+                ? const []
+                : <RecognitionCandidate>[
+                    RecognitionCandidate(
+                      fields: candidateFields,
+                      sourceText: transcription.text,
+                      metadata: <String, Object?>{
+                        'provider': settings.textAssistantConfig!.provider.name,
+                        'model': settings.textAssistantConfig!.model,
+                      },
+                    ),
+                  ],
+          ),
+        );
+      } finally {
+        client.close();
+      }
+    }
     final extractionProfile = settings.activeFieldExtractionProfile;
     if (extractionProfile == null ||
         !isActionableTranscription(transcription.text)) {

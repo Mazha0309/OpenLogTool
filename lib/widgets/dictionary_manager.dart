@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,6 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
+import 'package:openlogtool/services/ai_recognition/errors.dart';
+import 'package:openlogtool/services/ai_recognition/providers.dart';
+import 'package:openlogtool/services/text_assistant_tasks.dart';
+import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -49,9 +55,10 @@ class _DictionaryManagerState extends State<DictionaryManager> {
   final Set<String> _busyLibraries = <String>{};
   bool _importing = false;
   bool _exporting = false;
+  bool _aiBusy = false;
 
   bool get _mutationInProgress =>
-      _importing || _exporting || _busyLibraries.isNotEmpty;
+      _importing || _exporting || _aiBusy || _busyLibraries.isNotEmpty;
 
   @override
   void dispose() {
@@ -363,6 +370,27 @@ class _DictionaryManagerState extends State<DictionaryManager> {
 
   List<Widget> _buildHeaderActions() => [
         OutlinedButton.icon(
+          key: const Key('ai-recognize-dictionaries'),
+          onPressed: _mutationInProgress
+              ? null
+              : () => _runDictionaryAssistant(optimize: false),
+          icon: _aiBusy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.manage_search_outlined, size: 18),
+          label: Text(context.l10n.aiDictionaryRecognize),
+        ),
+        OutlinedButton.icon(
+          key: const Key('ai-optimize-dictionaries'),
+          onPressed: _mutationInProgress
+              ? null
+              : () => _runDictionaryAssistant(optimize: true),
+          icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
+          label: Text(context.l10n.aiDictionaryOptimize),
+        ),
+        OutlinedButton.icon(
           key: const Key('export-library-json'),
           onPressed: _mutationInProgress ? null : _exportToFile,
           icon: _exporting
@@ -385,6 +413,102 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           label: Text(context.l10n.importLibraryJson),
         ),
       ];
+
+  Future<void> _runDictionaryAssistant({required bool optimize}) async {
+    if (_mutationInProgress) return;
+    final settings = Provider.of<AiRecognitionSettingsProvider?>(
+      context,
+      listen: false,
+    );
+    if (settings == null ||
+        !settings.textAssistantEnabled ||
+        settings.textAssistantConfig == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.aiDictionaryNeedsAssistant)),
+      );
+      return;
+    }
+    final token = AiCancellationToken();
+    final progress = ValueNotifier<(int, int)>((0, 0));
+    var progressOpen = true;
+    setState(() => _aiBusy = true);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => _AiDictionaryProgressDialog(
+          progress: progress,
+          cancellationToken: token,
+          optimize: optimize,
+        ),
+      ),
+    );
+    try {
+      final source = DictionaryAiSource.fromJson(
+        await RustApi.getDictionaryAiSource(),
+      );
+      final suggestions = optimize
+          ? await TextAssistantTasks.optimizeDictionaries(
+              settings: settings,
+              source: source,
+              cancellationToken: token,
+              onProgress: (done, total) => progress.value = (done, total),
+            )
+          : await TextAssistantTasks.recognizeHistory(
+              settings: settings,
+              source: source,
+              cancellationToken: token,
+              onProgress: (done, total) => progress.value = (done, total),
+            );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      progressOpen = false;
+      if (suggestions.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.aiDictionaryNoSuggestions)),
+        );
+        return;
+      }
+      final selected = await showDialog<List<DictionaryAiSuggestion>>(
+        context: context,
+        builder: (dialogContext) => _AiDictionaryReviewDialog(
+          suggestions: suggestions,
+          recordCount: source.recordCount,
+        ),
+      );
+      if (selected == null || selected.isEmpty || !mounted) return;
+      await context.read<DictionaryProvider>().applyAiSuggestions(
+            expectedStateToken: source.stateToken,
+            suggestions: selected,
+          );
+      if (!mounted) return;
+      _pages.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.aiDictionaryApplied(selected.length),
+          ),
+        ),
+      );
+    } on AiRecognitionException catch (error) {
+      if (!mounted) return;
+      if (progressOpen) Navigator.of(context, rootNavigator: true).pop();
+      if (error.kind != AiRecognitionErrorKind.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.aiDictionaryFailed('$error'))),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (progressOpen) Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.aiDictionaryFailed('$error'))),
+      );
+    } finally {
+      progress.dispose();
+      if (mounted) setState(() => _aiBusy = false);
+    }
+  }
 
   Widget _buildHeader() {
     final actions = _buildHeaderActions();
@@ -876,6 +1000,176 @@ class _EditLibraryItemDialogState extends State<_EditLibraryItemDialog> {
           key: Key('confirm-edit-library-item-${widget.libraryType}'),
           onPressed: _submit,
           child: Text(context.l10n.save),
+        ),
+      ],
+    );
+  }
+}
+
+class _AiDictionaryProgressDialog extends StatelessWidget {
+  const _AiDictionaryProgressDialog({
+    required this.progress,
+    required this.cancellationToken,
+    required this.optimize,
+  });
+
+  final ValueListenable<(int, int)> progress;
+  final AiCancellationToken cancellationToken;
+  final bool optimize;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('ai-dictionary-progress'),
+      title: Text(optimize
+          ? context.l10n.aiDictionaryOptimizing
+          : context.l10n.aiDictionaryRecognizing),
+      content: ValueListenableBuilder<(int, int)>(
+        valueListenable: progress,
+        builder: (context, value, _) {
+          final (completed, total) = value;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LinearProgressIndicator(
+                value: total <= 0 ? null : completed / total,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                total <= 0
+                    ? context.l10n.aiDictionaryPreparing
+                    : context.l10n.aiDictionaryProgress(completed, total),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          );
+        },
+      ),
+      actions: [
+        TextButton(
+          key: const Key('cancel-ai-dictionary'),
+          onPressed: cancellationToken.cancel,
+          child: Text(context.l10n.cancel),
+        ),
+      ],
+    );
+  }
+}
+
+class _AiDictionaryReviewDialog extends StatefulWidget {
+  const _AiDictionaryReviewDialog({
+    required this.suggestions,
+    required this.recordCount,
+  });
+
+  final List<DictionaryAiSuggestion> suggestions;
+  final int recordCount;
+
+  @override
+  State<_AiDictionaryReviewDialog> createState() =>
+      _AiDictionaryReviewDialogState();
+}
+
+class _AiDictionaryReviewDialogState extends State<_AiDictionaryReviewDialog> {
+  late final Set<String> _selected = <String>{
+    for (final suggestion in widget.suggestions)
+      if (suggestion.action != DictionaryAiAction.merge) suggestion.id,
+  };
+
+  String _categoryLabel(DictionaryAiCategory category) => switch (category) {
+        DictionaryAiCategory.device => context.l10n.deviceLibrary,
+        DictionaryAiCategory.antenna => context.l10n.antennaLibrary,
+        DictionaryAiCategory.callsign => context.l10n.callsignLibrary,
+        DictionaryAiCategory.qth => context.l10n.qthLibrary,
+      };
+
+  String _actionLabel(DictionaryAiAction action) => switch (action) {
+        DictionaryAiAction.add => context.l10n.aiDictionaryActionAdd,
+        DictionaryAiAction.rename => context.l10n.aiDictionaryActionRename,
+        DictionaryAiAction.merge => context.l10n.aiDictionaryActionMerge,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AlertDialog(
+      key: const Key('ai-dictionary-review'),
+      title: Text(context.l10n.aiDictionaryReviewTitle),
+      content: SizedBox(
+        width: 680,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              context.l10n.aiDictionaryReviewHint(widget.recordCount),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: widget.suggestions.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final suggestion = widget.suggestions[index];
+                  final selected = _selected.contains(suggestion.id);
+                  final source = suggestion.source;
+                  return CheckboxListTile(
+                    key: Key('ai-dictionary-suggestion-${suggestion.id}'),
+                    value: selected,
+                    onChanged: (value) => setState(() {
+                      value == true
+                          ? _selected.add(suggestion.id)
+                          : _selected.remove(suggestion.id);
+                    }),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(
+                      source == null || source == suggestion.target
+                          ? suggestion.target
+                          : '$source  →  ${suggestion.target}',
+                    ),
+                    subtitle: Text(
+                      <String>[
+                        '${_categoryLabel(suggestion.category)} · '
+                            '${_actionLabel(suggestion.action)}',
+                        if (suggestion.evidenceCount > 0)
+                          context.l10n.aiDictionaryUsedCount(
+                            suggestion.evidenceCount,
+                          ),
+                        if (suggestion.reason.isNotEmpty) suggestion.reason,
+                        if (suggestion.action == DictionaryAiAction.merge)
+                          context.l10n.aiDictionaryMergeWarning,
+                      ].join('\n'),
+                    ),
+                    isThreeLine: true,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.cancel),
+        ),
+        FilledButton(
+          key: const Key('apply-ai-dictionary-suggestions'),
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    <DictionaryAiSuggestion>[
+                      for (final suggestion in widget.suggestions)
+                        if (_selected.contains(suggestion.id)) suggestion,
+                    ],
+                  ),
+          child: Text(context.l10n.aiDictionaryApplySelected),
         ),
       ],
     );
