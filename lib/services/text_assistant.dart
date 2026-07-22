@@ -108,9 +108,14 @@ final class TextAssistantClient {
           maxOutputTokens: maxOutputTokens,
           cancellationToken: cancellationToken,
         ),
-      TextAssistantProvider.openAi ||
-      TextAssistantProvider.openAiCompatible =>
-        _completeOpenAi(
+      TextAssistantProvider.openAi => _completeOpenAiResponses(
+          secret: secret,
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt,
+          maxOutputTokens: maxOutputTokens,
+          cancellationToken: cancellationToken,
+        ),
+      TextAssistantProvider.openAiCompatible => _completeOpenAiChat(
           secret: secret,
           systemPrompt: systemPrompt,
           userPrompt: userPrompt,
@@ -121,7 +126,50 @@ final class TextAssistantClient {
     return _decodeJsonObject(await responseText);
   }
 
-  Future<String> _completeOpenAi({
+  Future<String> _completeOpenAiResponses({
+    required String secret,
+    required String systemPrompt,
+    required String userPrompt,
+    required int maxOutputTokens,
+    required AiCancellationToken? cancellationToken,
+  }) async {
+    final endpoint = _endpoint(config.baseUrl, const ['responses']);
+    final baseBody = <String, Object?>{
+      'model': config.model,
+      'instructions': systemPrompt,
+      'input': userPrompt,
+      'max_output_tokens': maxOutputTokens,
+      'stream': false,
+    };
+    var response = await _postJson(
+      endpoint,
+      headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
+      body: <String, Object?>{
+        ...baseBody,
+        'reasoning': <String, Object?>{'effort': 'none'},
+        'text': <String, Object?>{
+          'format': <String, Object?>{'type': 'json_object'},
+        },
+      },
+      cancellationToken: cancellationToken,
+      allowHttpError: true,
+    );
+    // Some older OpenAI models do not accept reasoning controls or JSON mode.
+    // Keep the Responses endpoint while retrying with its minimal request shape.
+    if (response.statusCode == 400 || response.statusCode == 422) {
+      response = await _postJson(
+        endpoint,
+        headers: <String, String>{'authorization': 'Bearer ${secret.trim()}'},
+        body: baseBody,
+        cancellationToken: cancellationToken,
+        allowHttpError: true,
+      );
+    }
+    _requireSuccess(response);
+    return _readOpenAiResponsesText(_decodeResponseObject(response));
+  }
+
+  Future<String> _completeOpenAiChat({
     required String secret,
     required String systemPrompt,
     required String userPrompt,
@@ -142,9 +190,6 @@ final class TextAssistantClient {
       'temperature': 0,
       'max_tokens': maxOutputTokens,
       'response_format': <String, Object?>{'type': 'json_object'},
-      'reasoning_effort': 'none',
-      if (config.provider == TextAssistantProvider.openAiCompatible)
-        'enable_thinking': false,
     };
     var response = await _postJson(
       endpoint,
@@ -153,9 +198,8 @@ final class TextAssistantClient {
       cancellationToken: cancellationToken,
       allowHttpError: true,
     );
-    // OpenAI-compatible servers differ on optional reasoning/JSON fields. A
-    // single conservative retry keeps the simple preset usable without an
-    // advanced request-options editor.
+    // Old Chat Completions implementations differ on optional JSON-mode and
+    // sampling fields. Retry once with the smallest compatible request.
     if (response.statusCode == 400 || response.statusCode == 422) {
       response = await _postJson(
         endpoint,
@@ -260,6 +304,25 @@ final class TextAssistantClient {
     _closed = true;
     if (_ownsClient) _client.close();
   }
+}
+
+String _readOpenAiResponsesText(Map<String, Object?> decoded) {
+  final output = decoded['output'];
+  if (output is! List) throw StateError('TEXT_ASSISTANT_INVALID_RESPONSE');
+  final text = <String>[];
+  for (final item in output.whereType<Map>()) {
+    if (item['type'] != 'message') continue;
+    final content = item['content'];
+    if (content is! List) continue;
+    for (final part in content.whereType<Map>()) {
+      if (part['type'] == 'output_text' && part['text'] is String) {
+        text.add(part['text'] as String);
+      }
+    }
+  }
+  final joined = text.join();
+  if (joined.trim().isEmpty) throw StateError('TEXT_ASSISTANT_EMPTY_RESPONSE');
+  return joined;
 }
 
 Uri _endpoint(Uri base, List<String> suffix) {

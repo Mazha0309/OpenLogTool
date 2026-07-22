@@ -2830,13 +2830,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get textAssistantProvider => '服务类型';
 
   @override
-  String get textAssistantProviderOpenAi => 'OpenAI';
+  String get textAssistantProviderOpenAi => 'OpenAI（Responses API）';
 
   @override
   String get textAssistantProviderAnthropic => 'Anthropic';
 
   @override
-  String get textAssistantProviderCompatible => 'OpenAI 兼容协议';
+  String get textAssistantProviderCompatible =>
+      'OpenAI 兼容（旧版 Chat Completions）';
 
   @override
   String get textAssistantTestSucceeded => '文字助手连接正常。';
@@ -4316,13 +4317,14 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get textAssistantProvider => '服务类型';
 
   @override
-  String get textAssistantProviderOpenAi => 'OpenAI';
+  String get textAssistantProviderOpenAi => 'OpenAI（Responses API）';
 
   @override
   String get textAssistantProviderAnthropic => 'Anthropic';
 
   @override
-  String get textAssistantProviderCompatible => 'OpenAI 兼容协议';
+  String get textAssistantProviderCompatible =>
+      'OpenAI 兼容（旧版 Chat Completions）';
 
   @override
   String get textAssistantTestSucceeded => '文字助手连接正常。';

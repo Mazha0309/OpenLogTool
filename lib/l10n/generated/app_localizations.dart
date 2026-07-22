@@ -5101,7 +5101,7 @@ abstract class AppLocalizations {
   /// No description provided for @textAssistantProviderOpenAi.
   ///
   /// In zh, this message translates to:
-  /// **'OpenAI'**
+  /// **'OpenAI（Responses API）'**
   String get textAssistantProviderOpenAi;
 
   /// No description provided for @textAssistantProviderAnthropic.
@@ -5113,7 +5113,7 @@ abstract class AppLocalizations {
   /// No description provided for @textAssistantProviderCompatible.
   ///
   /// In zh, this message translates to:
-  /// **'OpenAI 兼容协议'**
+  /// **'OpenAI 兼容（旧版 Chat Completions）'**
   String get textAssistantProviderCompatible;
 
   /// No description provided for @textAssistantTestSucceeded.

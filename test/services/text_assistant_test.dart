@@ -7,7 +7,7 @@ import 'package:openlogtool/services/text_assistant.dart';
 import 'package:openlogtool/services/text_assistant_tasks.dart';
 
 void main() {
-  test('OpenAI preset requests JSON with low-latency reasoning disabled',
+  test('OpenAI preset uses Responses API with low-latency JSON output',
       () async {
     late Map<String, Object?> body;
     final client = TextAssistantClient(
@@ -19,15 +19,24 @@ void main() {
       ),
       secretResolver: (_) async => 'secret',
       httpClient: MockClient((request) async {
-        expect(request.url.toString(),
-            'https://api.openai.com/v1/chat/completions');
+        expect(request.url.toString(), 'https://api.openai.com/v1/responses');
         expect(request.headers['authorization'], 'Bearer secret');
         body = Map<String, Object?>.from(jsonDecode(request.body) as Map);
         return http.Response(
           jsonEncode({
-            'choices': [
+            'output': [
               {
-                'message': {'content': '```json\n{"suggestion":"5 W"}\n```'}
+                'type': 'reasoning',
+                'summary': [],
+              },
+              {
+                'type': 'message',
+                'content': [
+                  {
+                    'type': 'output_text',
+                    'text': '```json\n{"suggestion":"5 W"}\n```',
+                  }
+                ]
               }
             ]
           }),
@@ -43,14 +52,63 @@ void main() {
     );
 
     expect(result, {'suggestion': '5 W'});
-    expect(body['reasoning_effort'], 'none');
-    expect(body['temperature'], 0);
-    expect(body['response_format'], {'type': 'json_object'});
-    expect(body.containsKey('thinking'), isFalse);
+    expect(body['instructions'], 'system');
+    expect(body['input'], 'user');
+    expect(body['max_output_tokens'], 80);
+    expect(body['reasoning'], {'effort': 'none'});
+    expect(body['text'], {
+      'format': {'type': 'json_object'}
+    });
+    expect(body.containsKey('messages'), isFalse);
     client.close();
   });
 
-  test('compatible preset retries once without unsupported optional fields',
+  test('compatible preset uses old Chat Completions protocol', () async {
+    late Uri endpoint;
+    late Map<String, Object?> body;
+    final client = TextAssistantClient(
+      config: TextAssistantConfig(
+        provider: TextAssistantProvider.openAiCompatible,
+        baseUrl: Uri.parse('https://llm.example/v1'),
+        model: 'fast-model',
+        credentialId: 'key',
+      ),
+      secretResolver: (_) async => 'secret',
+      httpClient: MockClient((request) async {
+        endpoint = request.url;
+        body = Map<String, Object?>.from(jsonDecode(request.body) as Map);
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '{"ok":true}'}
+              }
+            ]
+          }),
+          200,
+        );
+      }),
+    );
+
+    expect(
+      await client.completeJson(systemPrompt: 'system', userPrompt: 'user'),
+      {'ok': true},
+    );
+    expect(endpoint.toString(), 'https://llm.example/v1/chat/completions');
+    expect(body['messages'], [
+      {'role': 'system', 'content': 'system'},
+      {'role': 'user', 'content': 'user'},
+    ]);
+    expect(body['max_tokens'], 512);
+    expect(body['response_format'], {'type': 'json_object'});
+    expect(body.containsKey('instructions'), isFalse);
+    expect(body.containsKey('input'), isFalse);
+    expect(body.containsKey('reasoning_effort'), isFalse);
+    expect(body.containsKey('enable_thinking'), isFalse);
+    client.close();
+  });
+
+  test('compatible Chat preset retries without unsupported optional fields',
       () async {
     final requests = <Map<String, Object?>>[];
     final client = TextAssistantClient(
@@ -83,11 +141,10 @@ void main() {
       {'ok': true},
     );
     expect(requests, hasLength(2));
-    expect(requests.first['enable_thinking'], false);
-    expect(requests.first['reasoning_effort'], 'none');
-    expect(requests.last.containsKey('enable_thinking'), false);
-    expect(requests.last.containsKey('reasoning_effort'), false);
+    expect(requests.first['temperature'], 0);
+    expect(requests.first['response_format'], {'type': 'json_object'});
     expect(requests.last.containsKey('response_format'), false);
+    expect(requests.last.containsKey('temperature'), false);
     client.close();
   });
 

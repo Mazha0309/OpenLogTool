@@ -2979,13 +2979,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get textAssistantProvider => 'Provider type';
 
   @override
-  String get textAssistantProviderOpenAi => 'OpenAI';
+  String get textAssistantProviderOpenAi => 'OpenAI (Responses API)';
 
   @override
   String get textAssistantProviderAnthropic => 'Anthropic';
 
   @override
-  String get textAssistantProviderCompatible => 'OpenAI-compatible';
+  String get textAssistantProviderCompatible =>
+      'OpenAI-compatible (legacy Chat Completions)';
 
   @override
   String get textAssistantTestSucceeded =>
@@ -4526,13 +4527,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get textAssistantProvider => 'Provider type';
 
   @override
-  String get textAssistantProviderOpenAi => 'OpenAI';
+  String get textAssistantProviderOpenAi => 'OpenAI (Responses API)';
 
   @override
   String get textAssistantProviderAnthropic => 'Anthropic';
 
   @override
-  String get textAssistantProviderCompatible => 'OpenAI-compatible';
+  String get textAssistantProviderCompatible =>
+      'OpenAI-compatible (legacy Chat Completions)';
 
   @override
   String get textAssistantTestSucceeded =>
