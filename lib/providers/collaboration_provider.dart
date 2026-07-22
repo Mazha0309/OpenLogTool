@@ -12,6 +12,7 @@ import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/services/collaboration_publish.dart';
+import 'package:openlogtool/services/collaboration_catalog_restore.dart';
 import 'package:openlogtool/services/collaboration_conflicts.dart';
 import 'package:openlogtool/services/collaboration_replica.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
@@ -998,6 +999,13 @@ class CollaborationProvider with ChangeNotifier {
   final ResettableLiveDraftSerialExecutor _liveDraftSerial =
       ResettableLiveDraftSerialExecutor();
   Timer? _liveDraftRenewalTimer;
+  Timer? _catalogTimer;
+  Future<void>? _catalogOperation;
+  String? _catalogScope;
+  bool _catalogRefreshScheduled = false;
+  bool _catalogSyncing = false;
+  String? _catalogErrorMessage;
+  int _catalogRestoredCount = 0;
 
   CollaborationState _state = CollaborationState.localOnly;
   LocalCollaborationBinding? _binding;
@@ -1082,6 +1090,9 @@ class CollaborationProvider with ChangeNotifier {
   List<PublicShareDto> get publicShares => _publicShares;
   PublicShareDto? get lastCreatedPublicShare => _lastCreatedPublicShare;
   bool get isBusy => _operationInProgress;
+  bool get catalogSyncing => _catalogSyncing;
+  String? get catalogErrorMessage => _catalogErrorMessage;
+  int get catalogRestoredCount => _catalogRestoredCount;
   bool get canJoinWithInvite {
     final currentBinding = binding;
     return currentBinding == null ||
@@ -1277,6 +1288,7 @@ class CollaborationProvider with ChangeNotifier {
     if (mutationPermissionsChanged) {
       logs.refreshMutationPermissions();
     }
+    _updateCatalogScope(server, sessions);
     final key = '${server.contextRevision}|${server.serverUrl}|'
         '${server.accountId ?? ''}|'
         '${sessions.currentSessionId ?? ''}';
@@ -1287,6 +1299,164 @@ class CollaborationProvider with ChangeNotifier {
     _clearScopedState();
     _safeNotify();
     _scheduleRefresh();
+  }
+
+  void _updateCatalogScope(
+    ServerProvider server,
+    SessionProvider sessions,
+  ) {
+    final info = server.serverInfo;
+    final accountId = server.accountId;
+    final supported = info != null &&
+        info.features.contains('sessionSnapshots') &&
+        info.features.contains('sessionMembership');
+    final nextScope = server.isLoggedIn &&
+            !server.passwordChangeRequired &&
+            accountId != null &&
+            server.serverUrl.isNotEmpty &&
+            supported
+        ? '${info.serverInstanceId}|${server.serverUrl}|$accountId'
+        : null;
+    if (_catalogScope == nextScope) return;
+
+    _catalogScope = nextScope;
+    _catalogTimer?.cancel();
+    _catalogTimer = null;
+    _catalogErrorMessage = null;
+    _catalogRestoredCount = 0;
+    if (nextScope == null) {
+      _catalogSyncing = false;
+      return;
+    }
+
+    _scheduleCatalogRefresh();
+    _catalogTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _scheduleCatalogRefresh(),
+    );
+  }
+
+  void _scheduleCatalogRefresh() {
+    if (_catalogRefreshScheduled || _catalogScope == null || _disposed) return;
+    _catalogRefreshScheduled = true;
+    scheduleMicrotask(() async {
+      _catalogRefreshScheduled = false;
+      try {
+        await refreshAccountCollaborationSessions();
+      } catch (error, stackTrace) {
+        debugPrint(
+            '[CollaborationCatalog] refresh failed: $error\n$stackTrace');
+      }
+    });
+  }
+
+  /// Installs collaboration replicas visible to this account but absent from
+  /// the device. This never changes the current Session selection.
+  Future<void> refreshAccountCollaborationSessions() {
+    final current = _catalogOperation;
+    if (current != null) return current;
+    late final Future<void> operation;
+    operation = _refreshAccountCollaborationSessions().whenComplete(() {
+      if (identical(_catalogOperation, operation)) _catalogOperation = null;
+    });
+    _catalogOperation = operation;
+    return operation;
+  }
+
+  Future<void> _refreshAccountCollaborationSessions() async {
+    final scope = _catalogScope;
+    final server = _server;
+    final sessions = _sessions;
+    final info = server?.serverInfo;
+    final accountId = server?.accountId;
+    if (scope == null ||
+        server == null ||
+        sessions == null ||
+        info == null ||
+        accountId == null ||
+        !server.isLoggedIn ||
+        server.passwordChangeRequired) {
+      return;
+    }
+    final contextRevision = server.contextRevision;
+    final serverUrl = server.serverUrl;
+    final serverInstanceId = info.serverInstanceId;
+    bool isCurrent() =>
+        !_disposed &&
+        _catalogScope == scope &&
+        identical(_server, server) &&
+        identical(_sessions, sessions) &&
+        server.contextRevision == contextRevision &&
+        server.serverUrl == serverUrl &&
+        server.accountId == accountId &&
+        server.serverInfo?.serverInstanceId == serverInstanceId;
+
+    _catalogSyncing = true;
+    _catalogErrorMessage = null;
+    _safeNotify();
+    try {
+      final remoteSessions = await server.api.listSessions();
+      if (!isCurrent()) return;
+      final result = await restoreMissingCollaborationSessions(
+        remoteSessions: remoteSessions,
+        accountId: accountId,
+        isCurrent: isCurrent,
+        bindingExists: (sessionId) async {
+          final json = await RustApi.getCollaborationBinding(
+            serverInstanceId: serverInstanceId,
+            accountId: accountId,
+            sessionId: sessionId,
+          );
+          if (json == null) return false;
+          final binding = LocalCollaborationBinding.fromJson(jsonDecode(json));
+          return binding.serverInstanceId == serverInstanceId &&
+              binding.accountId == accountId &&
+              binding.sessionId == sessionId;
+        },
+        loadMembership: server.api.getMembership,
+        loadSnapshot: (sessionId) => server.api.getSessionSnapshot(
+          sessionId,
+          includeDeleted: false,
+        ),
+        installSnapshot: ({required membership, required snapshot}) async {
+          final bindingJson = await RustApi.installCollaborationSnapshot(
+            requestJson: jsonEncode({
+              'mode': 'join',
+              'serverInstanceId': serverInstanceId,
+              'serverOrigin': serverUrl,
+              'accountId': accountId,
+              'membership': membership.toJson(),
+              'snapshot': snapshot.toJson(),
+            }),
+          );
+          final installed = LocalCollaborationBinding.fromJson(
+            jsonDecode(bindingJson),
+          );
+          if (installed.serverInstanceId != serverInstanceId ||
+              installed.accountId != accountId ||
+              installed.sessionId != snapshot.session.sessionId) {
+            throw StateError('COLLABORATION_CATALOG_INSTALL_MISMATCH');
+          }
+        },
+      );
+      if (!isCurrent() || result.cancelled) return;
+      _catalogRestoredCount = result.installedSessionIds.length;
+      if (result.installedSessionIds.isNotEmpty) {
+        sessions.notifyCollaborationCatalogChanged();
+      }
+      if (result.issues.isNotEmpty) {
+        _catalogErrorMessage = result.issues
+            .map((issue) => '${issue.title}: ${issue.error}')
+            .join('\n');
+      }
+    } catch (error) {
+      if (isCurrent()) _catalogErrorMessage = error.toString();
+    } finally {
+      if (isCurrent()) {
+        _catalogSyncing = false;
+        _safeNotify();
+      }
+    }
   }
 
   Future<void> refreshCurrentSession() async {
@@ -2188,8 +2358,8 @@ class CollaborationProvider with ChangeNotifier {
             'OFFLINE_RECORD_QUEUED',
             '网络不可用，记录已保存到本机，恢复连接后将检查是否可安全提交',
           );
-          await _persistLiveDraftState(_guardFor(context));
           _safeNotify();
+          await _persistLiveDraftState(_guardFor(context));
           return LiveDraftCommitDisposition.queuedOffline;
         }
         final canonical = _liveDraftSnapshot;
@@ -2240,6 +2410,10 @@ class CollaborationProvider with ChangeNotifier {
           _liveDraftBaseRevisions = const {};
           _clearOwnedLiveDraftLocks();
           _clearLiveDraftError();
+          // Expose both the new table row and the reset draft immediately.
+          // Cache persistence and event catch-up are durability work and must
+          // not hold the visible form on the previous record.
+          _safeNotify();
           await _persistLiveDraftState(_guardFor(context));
           await _refreshLogsAfterLiveDraftCommit(
             context: context,
@@ -2285,8 +2459,8 @@ class CollaborationProvider with ChangeNotifier {
             'OFFLINE_RECORD_QUEUED',
             '网络不可用，记录已保存到本机，恢复连接后将检查是否可安全提交',
           );
-          await _persistLiveDraftState(_guardFor(context));
           _safeNotify();
+          await _persistLiveDraftState(_guardFor(context));
           return LiveDraftCommitDisposition.queuedOffline;
         }
       });
@@ -2325,8 +2499,8 @@ class CollaborationProvider with ChangeNotifier {
         _liveDraftBaseRevisions = const {};
         _clearOwnedLiveDraftLocks();
         _clearLiveDraftError();
-        await _persistLiveDraftState(_guardFor(context));
         _safeNotify();
+        await _persistLiveDraftState(_guardFor(context));
       });
 
   Future<void> resolveOfflineRecord(
@@ -2380,6 +2554,7 @@ class CollaborationProvider with ChangeNotifier {
           _dirtyLiveDraftFields = const {};
           _liveDraftBaseRevisions = const {};
           _clearOwnedLiveDraftLocks();
+          _safeNotify();
           await _refreshLogsAfterLiveDraftCommit(
             context: context,
             event: committed.event,
@@ -5248,6 +5423,7 @@ class CollaborationProvider with ChangeNotifier {
   @override
   void dispose() {
     _stopSynchronization();
+    _catalogTimer?.cancel();
     _logs?.setLogMutationGuard(null);
     _disposed = true;
     super.dispose();

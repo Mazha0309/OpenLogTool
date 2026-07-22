@@ -169,6 +169,8 @@
   "restoreLastDeletedRecordConfirmation": "将恢复最近一次删除的点名记录，不会影响其他记录。",
   "recordRestored": "记录已恢复",
   "saveRecord": "保存记录",
+  "clearEnteredFields": "清空已填内容",
+  "enteredFieldsCleared": "已清空，主控呼号已保留",
   "recordAdded": "记录已添加",
   "recordQueuedOffline": "网络不可用，记录已保存到本机待复核",
   "sharedDraftReadOnly": "当前协作草稿只读",

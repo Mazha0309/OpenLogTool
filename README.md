@@ -68,8 +68,8 @@
 ## 开始使用
 
 ### 环境要求
-- Flutter SDK 3.41+
-- Dart SDK 3.11+
+- Flutter SDK 3.44+
+- Dart SDK 3.12+
 - Rust toolchain 1.91.1（仓库中的 `rust-toolchain.toml` 会固定版本）
 - Android 构建额外需要 Android NDK 28.2.13676358 与 cargo-ndk 4.1.2
 - Linux 构建需要 `libsecret-1-dev`，运行需要 `libsecret-1-0` 和可用的 Secret Service/keyring

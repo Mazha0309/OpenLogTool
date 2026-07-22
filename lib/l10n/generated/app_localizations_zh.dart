@@ -491,6 +491,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saveRecord => '保存记录';
 
   @override
+  String get clearEnteredFields => '清空已填内容';
+
+  @override
+  String get enteredFieldsCleared => '已清空，主控呼号已保留';
+
+  @override
   String get recordAdded => '记录已添加';
 
   @override

@@ -50,6 +50,18 @@ class LogForm extends StatefulWidget {
 
 class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   static const _upperCaseDraftFields = {'controller', 'callsign'};
+  static const _clearableDraftFields = <String>{
+    'time',
+    'callsign',
+    'rstSent',
+    'rstRcvd',
+    'qth',
+    'device',
+    'power',
+    'antenna',
+    'height',
+    'remarks',
+  };
 
   final _formKey = GlobalKey<FormState>();
   final _controllerController = TextEditingController();
@@ -74,8 +86,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   bool _applyingSharedDraft = false;
   bool _historyReuseInProgress = false;
   bool _submissionInProgress = false;
+  bool _clearInProgress = false;
   String? _lastSharedDraftSignature;
   String? _lastSharedDraftId;
+  bool _sharedDraftSyncScheduled = false;
   final Set<String> _deferredSharedDraftFields = <String>{};
   late final Map<String, int> _aiFieldRevisions;
   int _aiRecordEpoch = 0;
@@ -228,6 +242,20 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     } finally {
       _applyingSharedDraft = false;
     }
+  }
+
+  void _scheduleSharedDraftSync() {
+    if (_sharedDraftSyncScheduled) return;
+    _sharedDraftSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sharedDraftSyncScheduled = false;
+      if (!mounted) return;
+      // A provider notification can rebuild this form while Windows is still
+      // dispatching a resize or IME callback. Updating TextEditingControllers
+      // from build re-enters the platform text-input connection at exactly
+      // that point. Apply the canonical draft only after the frame instead.
+      _syncSharedDraft(context.read<CollaborationProvider>());
+    });
   }
 
   void _onDraftFieldChanged(String field) {
@@ -596,6 +624,81 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  Future<void> _clearEnteredFields() async {
+    if (_clearInProgress || _historyReuseInProgress || _submissionInProgress) {
+      return;
+    }
+    final collaboration = context.read<CollaborationProvider>();
+    if (widget.readOnly ||
+        (collaboration.liveDraftSnapshot != null &&
+            !collaboration.canEditLiveDraft)) {
+      return;
+    }
+    final updates = <String, String>{
+      for (final field in _clearableDraftFields)
+        if (_draftControllers[field]!.text.isNotEmpty) field: '',
+    };
+    if (updates.isEmpty) return;
+
+    for (final field in _clearableDraftFields) {
+      _draftDebounce.remove(field)?.cancel();
+    }
+    collaboration.cancelAutomaticLiveDraftTime();
+    _unfocusDraftFields();
+    setState(() => _clearInProgress = true);
+    try {
+      if (collaboration.liveDraftSnapshot != null) {
+        // Do not make the UI look cleared until the shared draft accepts the
+        // whole operation. This also prevents one field from being left behind
+        // when a collaborator owns a lock.
+        await collaboration.updateLiveDraftFieldsAtomically(updates);
+      }
+      if (!mounted) return;
+      _applyClearedFieldsLocally();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.enteredFieldsCleared),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _clearInProgress = false);
+    }
+  }
+
+  void _applyClearedFieldsLocally() {
+    _aiRecordEpoch += 1;
+    for (final timer in _inlineAiDebounce.values) {
+      timer.cancel();
+    }
+    _inlineAiDebounce.clear();
+    for (final token in _inlineAiTokens.values) {
+      token.cancel();
+    }
+    _inlineAiTokens.clear();
+    _inlineAiSuggestions.clear();
+    _inlineAiPending.clear();
+    _acceptedInlineAiValues.clear();
+
+    final controllerCallsign = _controllerController.text;
+    _applyingSharedDraft = true;
+    try {
+      _formKey.currentState?.reset();
+      _controllerController.text = controllerCallsign;
+      for (final field in _clearableDraftFields) {
+        _draftControllers[field]!.clear();
+      }
+    } finally {
+      _applyingSharedDraft = false;
+    }
+  }
+
   Future<void> _submitValidatedForm(
     CollaborationProvider collaboration,
   ) async {
@@ -810,7 +913,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       composingFields: composingFields,
       lockedFields: lockedFields,
       readOnly: readOnly,
-      busy: _historyReuseInProgress || _submissionInProgress,
+      busy:
+          _historyReuseInProgress || _clearInProgress || _submissionInProgress,
     );
   }
 
@@ -877,7 +981,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final collaboration = Provider.of<CollaborationProvider>(context);
     final aiSettings = Provider.of<AiRecognitionSettingsProvider?>(context);
-    _syncSharedDraft(collaboration);
+    _scheduleSharedDraftSync();
     final sharedDraft = collaboration.liveDraftSnapshot != null;
     final readOnly =
         widget.readOnly || (sharedDraft && !collaboration.canEditLiveDraft);
@@ -899,9 +1003,18 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     _scheduleLockExpiryRefresh(activeForeignLocks);
     final firstForeignLock =
         activeForeignLocks.isEmpty ? null : activeForeignLocks.first;
+    final clearableForeignLocks = activeForeignLocks
+        .where((lock) => _clearableDraftFields.contains(lock.field))
+        .toList(growable: false);
     final canSubmit = !readOnly &&
         firstForeignLock == null &&
         !_historyReuseInProgress &&
+        !_clearInProgress &&
+        !_submissionInProgress;
+    final canClear = !readOnly &&
+        clearableForeignLocks.isEmpty &&
+        !_historyReuseInProgress &&
+        !_clearInProgress &&
         !_submissionInProgress;
 
     bool fieldEnabled(String field) => !readOnly && !isActiveForeignLock(field);
@@ -930,7 +1043,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
         return AbsorbPointer(
           key: const Key('history-reuse-guard'),
-          absorbing: _historyReuseInProgress,
+          absorbing: _historyReuseInProgress || _clearInProgress,
           child: Form(
             key: _formKey,
             child: Column(
@@ -1162,7 +1275,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       collaboration,
                     ),
                     readOnly: readOnly,
-                    busy: _historyReuseInProgress || _submissionInProgress,
+                    busy: _historyReuseInProgress ||
+                        _clearInProgress ||
+                        _submissionInProgress,
                     audioRecorder: widget.aiAudioRecorder,
                     executor: widget.aiRecognitionExecutor,
                     transcriptionExecutor: widget.aiTranscriptionExecutor ??
@@ -1188,46 +1303,85 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     collaboration.ownedLiveDraftLocks.isNotEmpty) ...[
                   OutlinedButton.icon(
                     key: const Key('finish-draft-editing'),
-                    onPressed:
-                        _historyReuseInProgress ? null : _unfocusDraftFields,
+                    onPressed: _historyReuseInProgress || _clearInProgress
+                        ? null
+                        : _unfocusDraftFields,
                     icon: const Icon(Icons.keyboard_hide_outlined),
                     label: Text(context.l10n.finishEditing),
                   ),
                   const SizedBox(height: 8),
                 ],
 
-                // 操作按钮 - 占满宽度
-                Tooltip(
-                  message: 'Ctrl/⌘ + Enter',
-                  child: SizedBox(
-                    height: isNarrow ? 44 : 48,
-                    child: FilledButton.icon(
-                      key: const Key('save-log-record'),
-                      onPressed: canSubmit ? _submitForm : null,
-                      icon: Icon(
-                        _historyReuseInProgress
-                            ? Icons.auto_fix_high
-                            : readOnly || firstForeignLock != null
-                                ? Icons.lock_outline
-                                : Icons.add,
-                      ),
-                      label: Text(
-                        _historyReuseInProgress
-                            ? context.l10n.reuseDatabaseInformation
-                            : readOnly
-                                ? context.l10n.sharedDraftReadOnly
-                                : firstForeignLock != null
-                                    ? context.l10n.fieldLockedBy(
-                                        firstForeignLock.username,
-                                      )
-                                    : context.l10n.saveRecord,
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding:
-                            EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
+                // 当前草稿操作；清空保留主控呼号。
+                Row(
+                  children: [
+                    Flexible(
+                      flex: 2,
+                      child: Tooltip(
+                        message: context.l10n.clearEnteredFields,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: isNarrow ? 44 : 48,
+                          child: OutlinedButton.icon(
+                            key: const Key('clear-log-fields'),
+                            onPressed: canClear ? _clearEnteredFields : null,
+                            icon: _clearInProgress
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.backspace_outlined),
+                            label: Text(
+                              context.l10n.clearEnteredFields,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: Tooltip(
+                        message: 'Ctrl/⌘ + Enter',
+                        child: SizedBox(
+                          height: isNarrow ? 44 : 48,
+                          child: FilledButton.icon(
+                            key: const Key('save-log-record'),
+                            onPressed: canSubmit ? _submitForm : null,
+                            icon: Icon(
+                              _historyReuseInProgress
+                                  ? Icons.auto_fix_high
+                                  : readOnly || firstForeignLock != null
+                                      ? Icons.lock_outline
+                                      : Icons.add,
+                            ),
+                            label: Text(
+                              _historyReuseInProgress
+                                  ? context.l10n.reuseDatabaseInformation
+                                  : readOnly
+                                      ? context.l10n.sharedDraftReadOnly
+                                      : firstForeignLock != null
+                                          ? context.l10n.fieldLockedBy(
+                                              firstForeignLock.username,
+                                            )
+                                          : context.l10n.saveRecord,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                vertical: isNarrow ? 10 : 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

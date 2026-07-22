@@ -162,13 +162,18 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
   String? _busySessionId;
   int _page = 0;
   int? _databaseRevision;
+  int? _collaborationCatalogRevision;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final sessions = context.watch<SessionProvider>();
-    if (_entries == null || _databaseRevision != sessions.databaseRevision) {
+    if (_entries == null ||
+        _databaseRevision != sessions.databaseRevision ||
+        _collaborationCatalogRevision !=
+            sessions.collaborationCatalogRevision) {
       _databaseRevision = sessions.databaseRevision;
+      _collaborationCatalogRevision = sessions.collaborationCatalogRevision;
       _entries = sessions.listAvailableSessionEntries();
       _busySessionId = null;
       _page = 0;

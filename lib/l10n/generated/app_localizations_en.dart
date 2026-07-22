@@ -503,6 +503,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveRecord => 'Save record';
 
   @override
+  String get clearEnteredFields => 'Clear fields';
+
+  @override
+  String get enteredFieldsCleared =>
+      'Fields cleared; controller callsign retained';
+
+  @override
   String get recordAdded => 'Record saved';
 
   @override

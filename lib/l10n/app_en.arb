@@ -143,6 +143,8 @@
   "restoreLastDeletedRecordConfirmation": "This restores the most recently deleted net record without changing any other records.",
   "recordRestored": "Record restored",
   "saveRecord": "Save record",
+  "clearEnteredFields": "Clear fields",
+  "enteredFieldsCleared": "Fields cleared; controller callsign retained",
   "recordAdded": "Record saved",
   "recordQueuedOffline": "Saved offline; review after reconnecting",
   "sharedDraftReadOnly": "This shared draft is read-only",

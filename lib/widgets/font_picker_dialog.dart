@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 
@@ -203,7 +204,7 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
               child: ListView.builder(
                 key: const Key('font-list'),
                 itemExtent: 48,
-                cacheExtent: 144,
+                scrollCacheExtent: const ScrollCacheExtent.pixels(144),
                 itemCount: filtered.length + 1,
                 itemBuilder: (context, index) {
                   if (index == 0) {
