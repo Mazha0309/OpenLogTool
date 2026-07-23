@@ -62,6 +62,10 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     'height',
     'remarks',
   };
+  static const _clearedDraftDefaults = <String, String>{
+    'rstSent': '59',
+    'rstRcvd': '59',
+  };
 
   final _formKey = GlobalKey<FormState>();
   final _controllerController = TextEditingController();
@@ -634,10 +638,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             !collaboration.canEditLiveDraft)) {
       return;
     }
-    final updates = <String, String>{
-      for (final field in _clearableDraftFields)
-        if (_draftControllers[field]!.text.isNotEmpty) field: '',
-    };
+    final updates = <String, String>{};
+    for (final field in _clearableDraftFields) {
+      final clearedValue = _clearedDraftDefaults[field] ?? '';
+      if (_draftControllers[field]!.text != clearedValue) {
+        updates[field] = clearedValue;
+      }
+    }
     if (updates.isEmpty) return;
 
     for (final field in _clearableDraftFields) {
@@ -692,7 +699,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       _formKey.currentState?.reset();
       _controllerController.text = controllerCallsign;
       for (final field in _clearableDraftFields) {
-        _draftControllers[field]!.clear();
+        _draftControllers[field]!.text = _clearedDraftDefaults[field] ?? '';
       }
     } finally {
       _applyingSharedDraft = false;
@@ -1314,13 +1321,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
                 // 当前草稿操作；清空保留主控呼号。
                 Row(
+                  key: const Key('log-form-actions'),
                   children: [
-                    Flexible(
-                      flex: 2,
+                    SizedBox(
+                      width: isNarrow ? 160 : 180,
                       child: Tooltip(
                         message: context.l10n.clearEnteredFields,
                         child: SizedBox(
-                          width: double.infinity,
                           height: isNarrow ? 44 : 48,
                           child: OutlinedButton.icon(
                             key: const Key('clear-log-fields'),
@@ -1344,7 +1351,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      flex: 3,
                       child: Tooltip(
                         message: 'Ctrl/⌘ + Enter',
                         child: SizedBox(

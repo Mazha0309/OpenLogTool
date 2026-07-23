@@ -100,6 +100,17 @@ void main() {
         find.text(isEnglish ? 'Clear fields' : '清空已填内容'),
         findsOneWidget,
       );
+      expect(
+        tester.getSize(find.byKey(const Key('clear-log-fields'))).width,
+        lessThanOrEqualTo(180),
+      );
+      final actionsWidth =
+          tester.getSize(find.byKey(const Key('log-form-actions'))).width;
+      final clearWidth =
+          tester.getSize(find.byKey(const Key('clear-log-fields'))).width;
+      final saveWidth =
+          tester.getSize(find.byKey(const Key('save-log-record'))).width;
+      expect(clearWidth + 8 + saveWidth, closeTo(actionsWidth, 0.1));
 
       tester
           .widget<FilledButton>(find.byKey(const Key('save-log-record')))
@@ -191,8 +202,8 @@ void main() {
       expect(collaboration.atomicUpdates.single, {
         'time': '',
         'callsign': '',
-        'rstSent': '',
-        'rstRcvd': '',
+        'rstSent': '59',
+        'rstRcvd': '59',
         'qth': '',
         'device': '',
         'power': '',
@@ -210,12 +221,12 @@ void main() {
         'QTH',
         'Height',
         'Time',
-        'RST sent',
-        'RST received',
         'Remarks',
       ]) {
         expect(controllerFor(label).text, isEmpty, reason: label);
       }
+      expect(controllerFor('RST sent').text, '59');
+      expect(controllerFor('RST received').text, '59');
       expect(
         find.text('Fields cleared; controller callsign retained'),
         findsOneWidget,
@@ -249,8 +260,8 @@ void main() {
 
     expect(controllerFor('Controller callsign *').text, 'BG5CRL');
     expect(controllerFor('Callsign').text, isEmpty);
-    expect(controllerFor('RST sent').text, isEmpty);
-    expect(controllerFor('RST received').text, isEmpty);
+    expect(controllerFor('RST sent').text, '59');
+    expect(controllerFor('RST received').text, '59');
     expect(controllerFor('Remarks').text, isEmpty);
   });
 
