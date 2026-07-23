@@ -245,6 +245,13 @@ class _LogTableState extends State<LogTable> {
                                 ? const ClampingScrollPhysics()
                                 : const NeverScrollableScrollPhysics(),
                             child: DataTable(
+                              // LogProvider replaces its visible projection
+                              // after every durable add/update/delete or
+                              // collaboration reconciliation. Give that
+                              // projection its own element identity so Flutter
+                              // cannot retain stale row render state across a
+                              // synchronous provider refresh.
+                              key: ObjectKey(logProvider.logs),
                               columnSpacing: 16,
                               horizontalMargin: 16,
                               headingRowHeight: 48,
@@ -418,6 +425,9 @@ class _LogTableState extends State<LogTable> {
       final reverseIndex = originalIndex + 1;
 
       return DataRow(
+        // Rows can move whenever a newer record is inserted at the top. Tie
+        // state to the durable sync id instead of the transient row index.
+        key: ValueKey(log.id),
         color: WidgetStatePropertyAll(
           isEditing
               ? Theme.of(context)

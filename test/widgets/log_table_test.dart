@@ -70,6 +70,44 @@ void main() {
     expect(find.text('暂无已保存记录'), findsNothing);
   });
 
+  testWidgets(
+      'replacing an existing projection reconstructs rows and shows the newest record',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'paginationEnabled': false},
+    );
+    final old = _log(
+      id: 'old-row',
+      time: 'OLD_TIME',
+      report: 'OLD_SENT',
+      rstRcvd: 'OLD_RCVD',
+    );
+    final fresh = _log(
+      id: 'fresh-row',
+      time: 'NEW_TIME',
+      report: 'NEW_SENT',
+      rstRcvd: 'NEW_RCVD',
+    );
+    final logProvider = _StaticLogProvider([old]);
+    await _pumpLogTable(tester, logProvider);
+
+    final oldTable = tester.widget<DataTable>(find.byType(DataTable));
+    final oldProjectionKey = oldTable.key;
+    expect(oldTable.rows.single.key, const ValueKey('old-row'));
+
+    logProvider.replaceLogs([old, fresh]);
+    await tester.pump();
+
+    final rebuiltTable = tester.widget<DataTable>(find.byType(DataTable));
+    expect(rebuiltTable.key, isNot(oldProjectionKey));
+    expect(
+      rebuiltTable.rows.map((row) => row.key),
+      const [ValueKey('fresh-row'), ValueKey('old-row')],
+    );
+    expect(_textOf(tester, rebuiltTable.rows.first.cells[4].child), 'NEW_SENT');
+    expect(find.text('NEW_SENT'), findsOneWidget);
+  });
+
   testWidgets('keeps RST sent and received aligned with the newest row',
       (tester) async {
     SharedPreferences.setMockInitialValues(
@@ -685,9 +723,9 @@ LogEntry _log({
     );
 
 class _StaticLogProvider extends LogProvider {
-  _StaticLogProvider(this.initialLogs);
+  _StaticLogProvider(List<LogEntry> initialLogs) : _logs = initialLogs;
 
-  final List<LogEntry> initialLogs;
+  List<LogEntry> _logs;
   int? updatedIndex;
   LogEntry? updatedLog;
   Object? updateError;
@@ -697,7 +735,12 @@ class _StaticLogProvider extends LogProvider {
   int deleteCalls = 0;
 
   @override
-  List<LogEntry> get logs => initialLogs;
+  List<LogEntry> get logs => _logs;
+
+  void replaceLogs(List<LogEntry> logs) {
+    _logs = logs;
+    notifyListeners();
+  }
 
   @override
   Future<void> updateLog(int index, LogEntry log) async {
@@ -714,7 +757,10 @@ class _StaticLogProvider extends LogProvider {
     await deleteGate?.future;
     final error = deleteError;
     if (error != null) throw error;
-    initialLogs.removeWhere((log) => log.id == syncId);
+    _logs = [
+      for (final log in _logs)
+        if (log.id != syncId) log,
+    ];
     notifyListeners();
   }
 }
