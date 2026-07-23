@@ -84,6 +84,9 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Verify synchronized versions
+        run: dart tool/bump_version.dart --check
+
       - name: Cache flutter_rust_bridge codegen
         id: frb-codegen-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
