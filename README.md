@@ -75,6 +75,14 @@
 - Linux 构建需要 `libsecret-1-dev`，运行需要 `libsecret-1-0` 和可用的 Secret Service/keyring
 - Windows 构建需要 Visual Studio C++ ATL 组件
 
+### Windows 崩溃诊断
+
+Windows 原生崩溃会先在
+`%LOCALAPPDATA%\OpenLogTool\CrashDumps` 写入 minidump，再交给 Windows
+错误报告处理。Windows 10 默认启用无障碍语义树兼容保护，以规避 Flutter
+在响应式布局重组语义节点时的原生崩溃。确实需要屏幕阅读器的用户可在启动前设置
+`OPENLOGTOOL_ENABLE_WINDOWS_ACCESSIBILITY=1`，重新启用完整 Windows 语义树。
+
 ### 构建
 
 ```bash
@@ -101,6 +109,24 @@ flutter build apk --release
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 flutter build macos --release
 ```
+
+### 迭代版本
+
+版本号只需输入一次。下面的命令会同步 Flutter、Rust、Cargo 锁文件和应用内
+版本常量，并使用 `cargo check --locked` 校验结果：
+
+```bash
+dart run tool/bump_version.dart 2.6.3-R+15
+```
+
+只检查当前文件是否一致而不修改内容：
+
+```bash
+dart run tool/bump_version.dart --check
+```
+
+`android/local.properties` 是 Flutter 在本机生成的构建配置，不是版本来源，也不
+纳入 Git。Android 的 `versionName` 和 `versionCode` 均来自 `pubspec.yaml`。
 
 Android 发布包允许连接局域网内的明文 HTTP 自建服务器，以匹配应用中可配置的
 `http://` 地址；通过公网访问或承载真实账号时应使用 HTTPS，避免凭据和点名记录
