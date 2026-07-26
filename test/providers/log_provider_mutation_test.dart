@@ -7,7 +7,7 @@ import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/src/bridge/models/session.dart';
 
 void main() {
-  test('add publishes the Rust canonical row without another table read',
+  test('add re-reads the durable table and retains its canonical row',
       () async {
     var pageReads = 0;
     final provider = LogProvider(
@@ -30,7 +30,7 @@ void main() {
 
     await provider.addLog(_modelLog(id: 'temporary', sessionId: 'session-a'));
 
-    expect(pageReads, readsBeforeAdd);
+    expect(pageReads, readsBeforeAdd + 1);
     expect(provider.logs.map((log) => log.id), ['canonical-new']);
     expect(provider.logs.single.callsign, 'BG5NEW');
     expect(notifications, greaterThan(0));

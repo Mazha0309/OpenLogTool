@@ -18,7 +18,9 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.44.7'
   RUST_VERSION: '1.91.1'
+  RUST_NIGHTLY: 'nightly-2026-07-26'
   FRB_CODEGEN_VERSION: '2.12.0'
+  WASM_PACK_VERSION: '0.15.0'
   CARGO_NDK_VERSION: '4.1.2'
   ANDROID_NDK_VERSION: '28.2.13676358'
   APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -118,6 +120,131 @@ jobs:
 
       - name: Test Rust
         run: cargo test --locked --manifest-path rust/Cargo.toml
+
+  build-web:
+    name: Build and verify WebClient
+    needs: [version, quality]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup threaded Rust Web toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
+          components: rust-src
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust Web dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool-web-${{ env.RUST_NIGHTLY }}
+
+      - name: Cache Web build tools
+        id: web-tools-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/flutter_rust_bridge_codegen
+            ~/.cargo/bin/wasm-pack
+            ~/.cache/.wasm-pack
+          key: ${{ runner.os }}-${{ runner.arch }}-web-tools-frb-${{ env.FRB_CODEGEN_VERSION }}-wasm-pack-${{ env.WASM_PACK_VERSION }}-rust-${{ env.RUST_VERSION }}-lock-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Install Web build tools
+        if: steps.web-tools-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked wasm-pack \
+            --version "$WASM_PACK_VERSION"
+          cargo install --locked flutter_rust_bridge_codegen \
+            --version "$FRB_CODEGEN_VERSION"
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Generate build version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+        run: dart tool/gen_version.dart
+
+      - name: Build WebClient
+        env:
+          OPENLOGTOOL_WEB_RUST_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          WEB_COMMIT_SHA: ${{ github.sha }}
+          WEB_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          bash tool/build_web.sh --no-pub \
+            --dart-define="GITHUB_SHA=$WEB_COMMIT_SHA" \
+            --dart-define="CI_BUILD_NUMBER=$WEB_BUILD_NUMBER"
+
+      - name: Verify WebClient bundle
+        run: |
+          set -euo pipefail
+          test -s build/web/index.html
+          test -s build/web/main.dart.js
+          test -s build/web/pkg/openlogtool_core.js
+          test -s build/web/pkg/openlogtool_core_bg.wasm
+          grep -Fq 'shared:true' build/web/pkg/openlogtool_core.js
+          grep -Fq '<title>OpenLogTool</title>' build/web/index.html
+
+      - name: Package WebClient artifact
+        env:
+          ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bundle_name="OpenLogTool-$ARTIFACT_VERSION-WebClient"
+          bundle_dir="$RUNNER_TEMP/$bundle_name"
+          archive="OpenLogTool-$ARTIFACT_VERSION-WebClient.tar.gz"
+          mkdir -p "$bundle_dir/web"
+          cp -a build/web/. "$bundle_dir/web/"
+          install -m 0644 \
+            deploy/web/release/Dockerfile \
+            "$bundle_dir/Dockerfile"
+          install -m 0644 \
+            deploy/web/release/docker-compose.yml \
+            "$bundle_dir/docker-compose.yml"
+          install -m 0644 \
+            deploy/web/release/README.md \
+            "$bundle_dir/README.md"
+          install -m 0644 \
+            deploy/web/nginx.conf \
+            "$bundle_dir/nginx.conf"
+
+          docker compose \
+            -f "$bundle_dir/docker-compose.yml" \
+            config --quiet
+          docker build \
+            --file "$bundle_dir/Dockerfile" \
+            --tag openlogtool-webclient:release-smoke \
+            "$bundle_dir"
+
+          tar -C "$RUNNER_TEMP" -czf "dist/$archive" "$bundle_name"
+          (
+            cd dist
+            sha256sum "$archive" > "$archive.sha256"
+          )
+
+      - name: Upload WebClient artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-webclient
+          path: |
+            dist/*WebClient.tar.gz
+            dist/*WebClient.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
 
   build-android:
     name: Build and verify Android
@@ -805,6 +932,7 @@ jobs:
       - build-linux
       - build-windows
       - build-macos
+      - build-web
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
     permissions:
@@ -843,6 +971,7 @@ jobs:
           compgen -G 'artifacts/*Windows*.zip' >/dev/null
           compgen -G 'artifacts/*.dmg' >/dev/null
           compgen -G 'artifacts/*macOS*.zip' >/dev/null
+          compgen -G 'artifacts/*WebClient*.tar.gz' >/dev/null
           (
             cd artifacts
             for checksum in *.sha256; do

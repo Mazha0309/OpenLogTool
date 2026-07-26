@@ -12,6 +12,7 @@ use std::str::FromStr;
 static DB_POOL: OnceCell<SqlitePool> = OnceCell::new();
 
 pub async fn init_database(db_path: &str) -> anyhow::Result<()> {
+    sqlx::install_web_vfs().await?;
     let conn_str = if db_path.starts_with("sqlite:") || db_path.starts_with("file:") {
         db_path.to_string()
     } else {

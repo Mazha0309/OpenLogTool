@@ -64,6 +64,7 @@
 - Windows
 - macOS
 - Android
+- WebClient（Flutter Web + Rust WASM）
 
 ## 开始使用
 
@@ -72,6 +73,9 @@
 - Dart SDK 3.12+
 - Rust toolchain 1.91.1（仓库中的 `rust-toolchain.toml` 会固定版本）
 - Android 构建额外需要 Android NDK 28.2.13676358 与 cargo-ndk 4.1.2
+- WebClient 构建额外需要 `nightly-2026-07-26`、`rust-src`、
+  `wasm32-unknown-unknown`、wasm-pack 0.15.0 和
+  flutter_rust_bridge_codegen 2.12.0
 - Linux 构建需要 `libsecret-1-dev`，运行需要 `libsecret-1-0` 和可用的 Secret Service/keyring
 - Windows 构建需要 Visual Studio C++ ATL 组件
 
@@ -93,6 +97,7 @@ flutter build linux
 flutter build windows
 flutter build macos
 flutter build apk
+bash tool/build_web.sh
 ```
 
 Linux、Windows 和 macOS 的平台工程会在 Flutter 构建时自动编译并打包 Rust
@@ -108,7 +113,62 @@ flutter build apk --release
 # macOS universal Release
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 flutter build macos --release
+
+# WebClient（首次执行前安装一次）
+rustup toolchain install nightly-2026-07-26 \
+  --profile minimal \
+  --component rust-src \
+  --target wasm32-unknown-unknown
+cargo install --locked wasm-pack --version 0.15.0
+cargo install --locked flutter_rust_bridge_codegen --version 2.12.0
+bash tool/build_web.sh
 ```
+
+### WebClient 数据与部署
+
+WebClient 与原生客户端共用同一套 Rust 数据核心、迁移和备份格式。浏览器端
+SQLite 优先使用 OPFS，并在不可用时回退到持久化 IndexedDB；数据按网站来源
+（协议、域名、端口）隔离，清除该网站数据会同时删除本地数据库。WebClient
+不再携带旧的 Dart/sqflite 数据库实现。
+
+Rust 工作线程依赖 `SharedArrayBuffer`。部署服务器必须返回
+`Cross-Origin-Opener-Policy: same-origin` 和
+`Cross-Origin-Embedder-Policy: credentialless`，WASM 还应使用
+`application/wasm` MIME 类型。除 `localhost` 外应通过 HTTPS 访问，否则浏览器
+不会提供安全上下文。
+
+仓库内置的 Nginx 镜像已包含这些响应头，Docker Compose 默认使用外部端口
+`5973`：
+
+```bash
+# 从源码构建 WebClient
+docker compose -f docker-compose.web.yml up -d --build
+# 本机访问：http://127.0.0.1:5973
+```
+
+可以覆盖外部端口，但容器内仍监听 80：
+
+```bash
+OPENLOGTOOL_WEB_PORT=8080 \
+  docker compose -f docker-compose.web.yml up -d --build
+```
+
+该容器只提供静态 WebClient，不包含 OpenLogToolServer。公网部署时应由现有的
+HTTPS 反向代理转发到 `127.0.0.1:5973`。GitHub Actions 会在每次推送和 PR
+自动构建 WebClient；普通构建可下载 Actions artifact，`v*` 标签发布时
+WebClient 压缩包会一并加入 GitHub Release。
+
+Release 中的 WebClient 压缩包是完整的预构建 Docker 部署包，不需要仓库源码，
+也不会在部署机器上重新编译 Flutter 或 Rust。下载并解压后直接运行：
+
+```bash
+tar -xzf OpenLogTool-*-WebClient.tar.gz
+cd OpenLogTool-*-WebClient
+docker compose up -d
+```
+
+发布包中已包含静态网页、Rust WASM、Dockerfile、Nginx 配置和
+`docker-compose.yml`，默认同样映射到外部端口 `5973`。
 
 ### 迭代版本
 
@@ -136,7 +196,8 @@ Android 发布包允许连接局域网内的明文 HTTP 自建服务器，以匹
 
 - Flutter
 - Provider（状态管理）
-- Rust + SQLx + SQLite（本地数据与协作副本）
+- Rust + rusqlite + SQLite（原生端）
+- Rust + sqlite-wasm-rs（Web 持久化 SQLite）
 - flutter_rust_bridge
 - Excel（导出）
 

@@ -1,0 +1,9 @@
+services:
+  webclient:
+    image: openlogtool-webclient:local
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "${OPENLOGTOOL_WEB_PORT:-5973}:80"

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/models/log_entry.dart' as model;
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -8,6 +9,7 @@ import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge_log;
 import 'package:openlogtool/src/bridge/models/session.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:provider/provider.dart';
@@ -107,6 +109,92 @@ void main() {
       );
     },
   );
+
+  testWidgets('a successful add rebuilds the mounted workbench table',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const canonical = bridge_log.LogEntry(
+      syncId: 'web-visible-row',
+      sessionId: 'revoked-session',
+      time: '2026-07-26T09:20:46.808Z',
+      controller: 'BG5CTRL',
+      callsign: 'BG5TEST',
+      rstSent: '59',
+      rstRcvd: '59',
+      createdAt: '2026-07-26T09:20:46.808Z',
+      updatedAt: '2026-07-26T09:20:46.808Z',
+    );
+    var durableLogs = <bridge_log.LogEntry>[];
+    final sessions = _SwitchingSessionProvider();
+    final logs = LogProvider(
+      sessionListLoader: () async => [
+        _SwitchingSessionProvider.revokedSession,
+      ],
+      sessionLogPageLoader: (_, __, ___) async => durableLogs,
+      logCreator: (_, __) async {
+        durableLogs = [canonical];
+        return canonical;
+      },
+    );
+    final collaboration = CollaborationProvider();
+    addTearDown(sessions.dispose);
+    addTearDown(logs.dispose);
+    addTearDown(collaboration.dispose);
+    await logs.reloadForSession(
+      _SwitchingSessionProvider.revokedSession.sessionId,
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+          ChangeNotifierProvider<LogProvider>.value(value: logs),
+          ChangeNotifierProvider<CollaborationProvider>.value(
+            value: collaboration,
+          ),
+          ChangeNotifierProvider(
+            create: (_) => DictionaryProvider(autoload: false),
+          ),
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
+          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: AddRecordPage()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('BG5TEST'), findsNothing);
+
+    await logs.addLog(
+      model.LogEntry(
+        sessionId: _SwitchingSessionProvider.revokedSession.sessionId,
+        time: canonical.time,
+        controller: canonical.controller,
+        callsign: canonical.callsign,
+        report: canonical.rstSent ?? '',
+        rstRcvd: canonical.rstRcvd ?? '',
+        qth: '',
+        device: '',
+        power: '',
+        antenna: '',
+        height: '',
+      ),
+      sessionId: _SwitchingSessionProvider.revokedSession.sessionId,
+    );
+    await tester.pump();
+
+    expect(find.byType(DataTable), findsOneWidget);
+    expect(find.text('BG5TEST'), findsOneWidget);
+    expect(find.text('当前第 2 位'), findsOneWidget);
+  });
 }
 
 final class _SwitchingSessionProvider extends SessionProvider {

@@ -5,6 +5,7 @@ import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/collaboration_conflicts.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/src/bridge/api/collaboration.dart' as bridge;
+import 'package:openlogtool/src/bridge/platform_int.dart';
 
 /// Thin JSON boundary around the Rust replica engine.
 ///
@@ -48,7 +49,7 @@ final class RustCollaborationReplicaPort
       accountId: identity.accountId,
       sessionId: identity.sessionId,
       membershipId: membership.membershipId,
-      membershipVersion: membership.version,
+      membershipVersion: toPlatformInt64(membership.version),
       role: membership.role.toJson(),
     );
   }
@@ -74,7 +75,7 @@ final class RustCollaborationReplicaPort
       serverInstanceId: identity.serverInstanceId,
       accountId: identity.accountId,
       sessionId: identity.sessionId,
-      limit: limit,
+      limit: toPlatformInt64(limit),
     );
     return PendingCollaborationMutations.fromJson(jsonDecode(json));
   }
@@ -102,7 +103,7 @@ final class RustCollaborationReplicaPort
         accountId: identity.accountId,
         sessionId: identity.sessionId,
         mutationId: mutationId,
-        acceptedEventSeq: acceptedEventSeq,
+        acceptedEventSeq: toPlatformInt64(acceptedEventSeq),
       );
 
   @override
@@ -185,7 +186,7 @@ final class RustCollaborationReplicaPort
         serverInstanceId: identity.serverInstanceId,
         accountId: identity.accountId,
         sessionId: identity.sessionId,
-        headSeq: headSeq,
+        headSeq: toPlatformInt64(headSeq),
       );
 
   @override

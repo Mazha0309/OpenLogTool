@@ -1,8 +1,15 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:openlogtool/config/version.dart';
 
 class AppConfig {
   static String get _commitHash {
+    if (kIsWeb) {
+      const value = String.fromEnvironment('GITHUB_SHA');
+      if (value.isEmpty) return 'local';
+      return value.length > 7 ? value.substring(0, 7) : value;
+    }
     final envHash = Platform.environment['GITHUB_SHA'];
     if (envHash != null && envHash.isNotEmpty) {
       return envHash.length > 7 ? envHash.substring(0, 7) : envHash;
@@ -11,6 +18,12 @@ class AppConfig {
   }
 
   static String get _buildNumber {
+    if (kIsWeb) {
+      return const String.fromEnvironment(
+        'CI_BUILD_NUMBER',
+        defaultValue: '0',
+      );
+    }
     final envBuild = Platform.environment['CI_BUILD_NUMBER'];
     if (envBuild != null && envBuild.isNotEmpty) {
       return envBuild;
@@ -26,14 +39,15 @@ class AppConfig {
     final parts = appVersion.split('-');
     return parts.isNotEmpty ? parts[0] : appVersion;
   }
-  
+
   static String get commitHash => _commitHash;
 
   static String get buildNumber => _buildNumber;
-  
+
   static String get fullVersion => appVersion;
 
   static String _getGitHash() {
+    if (kIsWeb) return 'local';
     try {
       final result = Process.runSync('git', ['rev-parse', '--short', 'HEAD']);
       if (result.exitCode == 0) {
@@ -45,6 +59,10 @@ class AppConfig {
 
   static Future<List<String>> getSystemFonts() async {
     final Set<String> fonts = {};
+
+    if (kIsWeb) {
+      return const ['SarasaGothicSC', 'Roboto', 'Arial', 'sans-serif'];
+    }
 
     try {
       if (Platform.isLinux) {
@@ -60,7 +78,8 @@ class AppConfig {
           }
         }
       } else if (Platform.isMacOS) {
-        final result = await Process.run('system_profiler', ['SPFontsDataType']);
+        final result =
+            await Process.run('system_profiler', ['SPFontsDataType']);
         if (result.exitCode == 0) {
           final regex = RegExp(r'^\s*(.+?):\s*$', multiLine: true);
           final matches = regex.allMatches(result.stdout as String);
@@ -74,7 +93,10 @@ class AppConfig {
       } else if (Platform.isWindows) {
         final regResult = await Process.run(
           'reg',
-          ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'],
+          [
+            'query',
+            'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'
+          ],
         );
         if (regResult.exitCode == 0) {
           final regex = RegExp(r'^\s*(.+?)\s+\(.*\)\s*=');
@@ -129,9 +151,21 @@ class AppConfig {
   static bool _isStyleVariant(String name) {
     final lower = name.toLowerCase();
     const variants = [
-      'bold', 'italic', 'oblique', 'light', 'regular',
-      'medium', 'black', 'thin', 'heavy', 'condensed',
-      'expanded', 'semi', 'extra', 'ultra', 'narrow',
+      'bold',
+      'italic',
+      'oblique',
+      'light',
+      'regular',
+      'medium',
+      'black',
+      'thin',
+      'heavy',
+      'condensed',
+      'expanded',
+      'semi',
+      'extra',
+      'ultra',
+      'narrow',
     ];
     return variants.any((v) => lower.contains(v));
   }

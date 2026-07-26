@@ -501,10 +501,20 @@ class AddRecordPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final logProvider = context.read<LogProvider>();
+    return ListenableBuilder(
+      listenable: logProvider,
+      builder: (context, _) => _buildWorkbench(context, logProvider),
+    );
+  }
+
+  Widget _buildWorkbench(
+    BuildContext context,
+    LogProvider logProvider,
+  ) {
     final currentSession = context.watch<SessionProvider>().currentSession;
     if (currentSession == null) return _buildNoSessionState(context);
 
-    final logProvider = Provider.of<LogProvider>(context);
     final sessionClosed = currentSession.status != 'active';
     final readOnly = logProvider.currentSessionReadOnly || sessionClosed;
     final conflictedLogIds =

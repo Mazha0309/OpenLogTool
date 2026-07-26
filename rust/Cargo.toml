@@ -7,13 +7,22 @@ license = "AGPL-3.0"
 [lib]
 crate-type = ["cdylib", "staticlib", "lib"]
 
+[package.metadata.wasm-pack.profile.release]
+# Rust already performs release optimization for this module. Avoid
+# wasm-pack's separate Binaryen download so CI and Docker builds do not depend
+# on a GitHub-hosted helper binary at build time.
+wasm-opt = false
+
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros"] }
-tokio = { version = "1", features = ["rt", "macros"] }
+# Keep the existing `sqlx::` call sites while the storage engine is migrated.
+# This is a project-local compatibility facade backed by rusqlite on every
+# platform and sqlite-wasm-rs in browsers; it is not the upstream SQLx crate.
+sqlx = { package = "openlogtool_sqlite", path = "sqlite_compat" }
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "js"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 anyhow = "1"
@@ -21,3 +30,6 @@ rand = "0.8"
 sha2 = "0.10"
 once_cell = "1"
 log = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }

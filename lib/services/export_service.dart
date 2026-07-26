@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
@@ -24,6 +24,7 @@ class ExportSaveResult {
 class ExportService {
   /// 根据配置的平台路径和平台类型，解析实际可用的导出路径。
   static Future<String?> resolveExportPath(String configuredPath) async {
+    if (kIsWeb) return null;
     if (!Platform.isAndroid && configuredPath.isNotEmpty) {
       return configuredPath;
     }
@@ -35,6 +36,9 @@ class ExportService {
   /// 判断当前 [configuredPath] 是否在 Android 上需要走 SAF 文件选择器。
   /// 桌面端始终返回 false。
   static Future<bool> shouldUseSaf(String configuredPath) async {
+    // Web file downloads also have to go through the browser picker because
+    // dart:io paths are unavailable.
+    if (kIsWeb) return true;
     if (!Platform.isAndroid) {
       return false;
     }

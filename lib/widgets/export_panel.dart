@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -1193,12 +1195,15 @@ class _ExportPanelState extends State<ExportPanel> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: kIsWeb,
       );
 
       if (result == null || result.files.isEmpty) return;
 
-      final file = File(result.files.single.path!);
-      final content = await file.readAsString();
+      final selected = result.files.single;
+      final content = selected.bytes != null
+          ? utf8.decode(selected.bytes!)
+          : await File(selected.path!).readAsString();
 
       final importResult = parseJsonImport(content);
 
