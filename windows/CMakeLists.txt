@@ -94,6 +94,18 @@ endif()
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
+# Flutter's Windows engine and native plugins use the dynamic Visual C++
+# runtime. Install the redistributable CRT and UCRT beside the executable so
+# the portable archive and installer also run on clean/minimal Windows images
+# without relying on a machine-wide VC++ Redistributable installation.
+if(MSVC)
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION
+    "${INSTALL_BUNDLE_LIB_DIR}")
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+  set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+  include(InstallRequiredSystemLibraries)
+endif()
+
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 

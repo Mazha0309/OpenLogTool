@@ -30,7 +30,12 @@ $artifactDirectory = Resolve-FromRepository $OutputDirectory
 $requiredFiles = @(
     "openlogtool.exe",
     "openlogtool_core.dll",
-    "flutter_windows.dll"
+    "flutter_windows.dll",
+    "msvcp140.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "ucrtbase.dll",
+    "api-ms-win-crt-runtime-l1-1-0.dll"
 )
 
 foreach ($relativePath in $requiredFiles) {

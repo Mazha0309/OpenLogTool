@@ -32,3 +32,14 @@ require a secure browser context outside `localhost`.
 
 从其他设备访问时请配置 HTTPS 反向代理；除 `localhost` 外，Rust WASM 工作线程
 需要浏览器安全上下文。
+
+If this WebClient and OpenLogToolServer use different origins, add the
+WebClient origin to the server's `CORS_ORIGINS`, then recreate the server
+container. Native clients do not require this setting.
+
+如果 WebClient 与 OpenLogToolServer 使用不同 Origin，请将 WebClient Origin
+加入服务端的 `CORS_ORIGINS`，随后重新创建服务端容器。原生客户端无需此设置。
+
+```dotenv
+CORS_ORIGINS=https://log.example.com
+```

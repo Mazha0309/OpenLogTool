@@ -330,6 +330,8 @@
   "limitWorkbenchWidthHint": "Center Net Desk content and limit it to 1440 pixels on wide screens to keep fields from stretching too far.",
   "serverConnectionFailed": "Connection failed: {detail}",
   "serverNetworkError": "The server at {url} did not respond. Check the address and port, and make sure the server or reverse proxy is running.",
+  "serverWebMixedContentError": "This WebClient uses HTTPS, so the browser cannot connect to the HTTP server at {url}. Enable HTTPS for the server.",
+  "serverWebCrossOriginError": "The browser could not access {url}. Confirm the server is online. If native clients can connect, add {origin} to the server's CORS_ORIGINS or use a same-origin reverse proxy.",
   "serverNetworkTimeout": "The connection to {url} timed out. Check the network, firewall, and server status.",
   "serverInvalidResponse": "Connected to {url}, but it did not return a compatible OpenLogTool Server response.",
   "serverAddressRequired": "Enter a server address first.",

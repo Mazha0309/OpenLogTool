@@ -87,6 +87,10 @@ Windows 原生崩溃会先在
 在响应式布局重组语义节点时的原生崩溃。确实需要屏幕阅读器的用户可在启动前设置
 `OPENLOGTOOL_ENABLE_WINDOWS_ACCESSIBILITY=1`，重新启用完整 Windows 语义树。
 
+正式 Windows 便携包会在应用目录内携带 Visual C++ CRT 与 Universal CRT，
+不要求系统预先安装 VC++ Redistributable。便携包必须完整解压后运行，不能只复制
+`openlogtool.exe`；安装版会自动安装同一套完整文件。
+
 ### 构建
 
 ```bash
@@ -169,6 +173,17 @@ docker compose up -d
 
 发布包中已包含静态网页、Rust WASM、Dockerfile、Nginx 配置和
 `docker-compose.yml`，默认同样映射到外部端口 `5973`。
+
+浏览器连接 OpenLogToolServer 时还要遵守同源策略。如果 WebClient 与 API 使用
+不同 Origin（协议、域名或端口任一不同），服务端的 `CORS_ORIGINS` 必须包含
+WebClient 的完整 Origin，例如：
+
+```dotenv
+CORS_ORIGINS=https://log.example.com
+```
+
+修改后需重新创建服务端容器。原生客户端不受 CORS 限制；使用同源反向代理时也
+不需要额外配置。
 
 ### 迭代版本
 

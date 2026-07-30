@@ -207,6 +207,8 @@
   "limitWorkbenchWidthHint": "宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。",
   "serverConnectionFailed": "连接失败：{detail}",
   "serverNetworkError": "服务器 {url} 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。",
+  "serverWebMixedContentError": "当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 {url}。请为服务器启用 HTTPS。",
+  "serverWebCrossOriginError": "浏览器无法访问服务器 {url}。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 {origin}，或使用同源反向代理。",
   "serverNetworkTimeout": "连接 {url} 超时。请检查网络、防火墙和服务端状态。",
   "serverInvalidResponse": "已连接 {url}，但它没有返回兼容的 OpenLogTool Server 响应。",
   "serverAddressRequired": "请先填写服务器地址。",

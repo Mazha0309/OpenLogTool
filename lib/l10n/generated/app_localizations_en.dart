@@ -1152,6 +1152,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String serverWebMixedContentError(String url) {
+    return 'This WebClient uses HTTPS, so the browser cannot connect to the HTTP server at $url. Enable HTTPS for the server.';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return 'The browser could not access $url. Confirm the server is online. If native clients can connect, add $origin to the server\'s CORS_ORIGINS or use a same-origin reverse proxy.';
+  }
+
+  @override
   String serverNetworkTimeout(String url) {
     return 'The connection to $url timed out. Check the network, firewall, and server status.';
   }
@@ -3706,6 +3716,16 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String serverNetworkError(String url) {
     return 'The server at $url did not respond. Check the address and port, and make sure the server or reverse proxy is running.';
+  }
+
+  @override
+  String serverWebMixedContentError(String url) {
+    return 'This WebClient uses HTTPS, so the browser cannot connect to the HTTP server at $url. Enable HTTPS for the server.';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return 'The browser could not access $url. Confirm the server is online. If native clients can connect, add $origin to the server\'s CORS_ORIGINS or use a same-origin reverse proxy.';
   }
 
   @override

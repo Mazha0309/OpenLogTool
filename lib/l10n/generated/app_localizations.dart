@@ -2044,6 +2044,18 @@ abstract class AppLocalizations {
   /// **'服务器 {url} 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。'**
   String serverNetworkError(String url);
 
+  /// No description provided for @serverWebMixedContentError.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 {url}。请为服务器启用 HTTPS。'**
+  String serverWebMixedContentError(String url);
+
+  /// No description provided for @serverWebCrossOriginError.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览器无法访问服务器 {url}。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 {origin}，或使用同源反向代理。'**
+  String serverWebCrossOriginError(String url, String origin);
+
   /// No description provided for @serverNetworkTimeout.
   ///
   /// In zh, this message translates to:

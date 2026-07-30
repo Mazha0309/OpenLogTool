@@ -1099,6 +1099,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String serverWebMixedContentError(String url) {
+    return '当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 $url。请为服务器启用 HTTPS。';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return '浏览器无法访问服务器 $url。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 $origin，或使用同源反向代理。';
+  }
+
+  @override
   String serverNetworkTimeout(String url) {
     return '连接 $url 超时。请检查网络、防火墙和服务端状态。';
   }
@@ -3532,6 +3542,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String serverNetworkError(String url) {
     return '服务器 $url 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。';
+  }
+
+  @override
+  String serverWebMixedContentError(String url) {
+    return '当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 $url。请为服务器启用 HTTPS。';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return '浏览器无法访问服务器 $url。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 $origin，或使用同源反向代理。';
   }
 
   @override
