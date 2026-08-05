@@ -666,6 +666,7 @@ jobs:
             pkgdeb/usr/share/icons/hicolor/256x256/apps
           cp deploy/linux/DEBIAN/control pkgdeb/DEBIAN/control
           sed -i "s/^Version: .*/Version: $VERSION_NAME/" pkgdeb/DEBIAN/control
+          grep -Fq "Version: $VERSION_NAME" pkgdeb/DEBIAN/control
           cp -r build/linux/x64/release/bundle/* pkgdeb/opt/openlogtool/
           cp deploy/linux/openlogtool.desktop pkgdeb/usr/share/applications/
           cp assets/images/app_icon_512.png \
@@ -684,13 +685,13 @@ jobs:
           rpmver="${VERSION_NAME%-R}"
           sed "s/^Version: .*/Version: $rpmver/" deploy/linux/openlogtool.spec \
             > /tmp/openlogtool.spec
+          grep -Fq "Version: $rpmver" /tmp/openlogtool.spec
           mkdir -p dist /tmp/rpmbuild/SOURCES
           cp -r build/linux/x64/release/bundle /tmp/rpmbuild/SOURCES/bundle
           cp deploy/linux/openlogtool.desktop /tmp/rpmbuild/SOURCES/
           cp assets/images/app_icon_512.png /tmp/rpmbuild/SOURCES/
           rpmbuild -bb /tmp/openlogtool.spec \
-            --define "_topdir /tmp/rpmbuild" \
-            --define "VERSION_NAME $VERSION_NAME"
+            --define "_topdir /tmp/rpmbuild"
           rpmfile=$(find /tmp/rpmbuild/RPMS -type f -name '*.rpm' | head -n 1)
           test -n "$rpmfile"
           rpm -qpl "$rpmfile" | grep -Fx '/opt/openlogtool/openlogtool'
