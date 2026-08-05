@@ -81,6 +81,11 @@ ios_target_for() {
 readonly CARGO_BIN="$(find_cargo)"
 readonly CONFIGURATION_NAME="${CONFIGURATION:-Release}"
 
+# 固定 iOS 部署目标：rusqlite bundled 会编译 sqlite3.c，cc crate 读取该环境
+# 变量；缺失时 clang/rustc 各用默认值可能不一致导致链接报
+# "object file built for newer iOS version"。
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-13.0}"
+
 if [[ "$CONFIGURATION_NAME" == Debug* ]]; then
   readonly CARGO_PROFILE="debug"
   readonly CARGO_RELEASE_FLAG=""
