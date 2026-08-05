@@ -39,7 +39,7 @@ jobs:
       artifact_version: ${{ steps.version.outputs.artifact_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -73,7 +73,7 @@ jobs:
           cache: true
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt
@@ -255,12 +255,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: '17'
@@ -272,7 +272,7 @@ jobs:
           cache: true
 
       - name: Setup Rust and Android targets
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
@@ -431,7 +431,8 @@ jobs:
           test -n "$apksigner"
           actual=$("$apksigner" verify --print-certs \
             build/release-apks/app-universal-release.apk |
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p; s/^V2 Signer: certificate SHA-256 digest: //p' |
+            head -n 1)
           test -n "$actual"
           if [ "$actual" != "$ANDROID_SIGNING_CERT_SHA256" ]; then
             echo "Unexpected Android signing certificate: $actual" >&2
@@ -476,7 +477,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -487,7 +488,7 @@ jobs:
           cache: true
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
@@ -725,7 +726,7 @@ jobs:
     timeout-minutes: 50
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -736,7 +737,7 @@ jobs:
           cache: true
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
@@ -913,7 +914,7 @@ jobs:
       MACOS_RUST_ARCHS: arm64 x86_64
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -924,7 +925,7 @@ jobs:
           cache: true
 
       - name: Setup Rust and Darwin targets
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -1096,10 +1097,16 @@ jobs:
           app=build/ios/iphoneos/Runner.app
           executable="$app/Runner"
           test -x "$executable"
-          test -s ios/Runner/rustlibs/libopenlogtool_core.a
+          ls -la ios/Runner/rustlibs/ 2>&1 || true
+          if ! test -s ios/Runner/rustlibs/libopenlogtool_core.a; then
+            echo "rustlibs missing: $(find ios -name '*.a' 2>/dev/null | tr '\n' ' ')" >&2
+            exit 1
+          fi
           xcrun lipo "$executable" -verify_arch arm64
-          # 静态库应链接进可执行文件（符号可见）
-          nm "$executable" | grep -c 'frb_init_frb_dart_api_dl' >/dev/null
+          echo "=== nm symbol check ==="
+          nm "$executable" | grep -c 'frb_init_frb_dart_api_dl' || true
+          nm "$executable" | grep 'frb_init_frb_dart_api_dl' || echo "symbol NOT found in executable" >&2
+          nm ios/Runner/rustlibs/libopenlogtool_core.a | grep 'frb_init_frb_dart_api_dl' || true
           plutil -lint "$app/Info.plist"
 
       - name: Package iOS artifacts
@@ -1132,7 +1139,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
