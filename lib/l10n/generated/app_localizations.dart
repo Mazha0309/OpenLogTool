@@ -1816,6 +1816,24 @@ abstract class AppLocalizations {
   /// **'添加新记录'**
   String get duplicateAddNewRecord;
 
+  /// No description provided for @duplicateContinueDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'呼号已记录过'**
+  String get duplicateContinueDialogTitle;
+
+  /// No description provided for @duplicateContinueDialogMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'{callsign} 已在本次点名中记录过，继续添加吗？'**
+  String duplicateContinueDialogMessage(String callsign);
+
+  /// No description provided for @duplicateContinueAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续添加'**
+  String get duplicateContinueAdd;
+
   /// No description provided for @duplicateUpdateDialogTitle.
   ///
   /// In zh, this message translates to:

@@ -21,69 +21,41 @@ void main() {
     );
   });
 
-  testWidgets('blurring the callsign with a duplicate shows update dialog',
+  testWidgets('blurring the callsign with a duplicate asks to continue',
       (tester) async {
-    final logProvider = _StaticLogProvider([
-      LogEntry(
-        id: 'old-1',
-        sessionId: 's1',
-        time: '2026-07-13T12:00:00Z',
-        controller: 'BG5CTRL',
-        callsign: 'BA4AAA',
-        report: '59',
-        rstRcvd: '59',
-        qth: '杭州',
-        device: 'FT-991A',
-        power: '50W',
-        antenna: 'GP',
-        height: '8m',
-        createdAt: '2026-07-13T12:00:00Z',
-        updatedAt: '2026-07-13T12:00:00Z',
-      ),
-    ]);
+    final logProvider = _StaticLogProvider([_oldLog()]);
     addTearDown(logProvider.dispose);
     await tester.pumpWidget(_app(logProvider));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.descendant(
-          of: find.byType(CallsignHistoryField),
-          matching: find.byType(TextFormField)),
-    );
-    await tester.pump();
-    await tester.enterText(
-      find.descendant(
-          of: find.byType(CallsignHistoryField),
-          matching: find.byType(TextFormField)),
-      'BA4AAA',
-    );
+    await _enterCallsign(tester, 'BA4AAA');
     await tester.tap(find.byKey(const Key('outside-log-form')));
     await tester.pumpAndSettle();
 
     expect(find.text('呼号已记录过'), findsOneWidget);
-    expect(find.text('更新旧记录'), findsOneWidget);
-    expect(find.text('添加新记录'), findsOneWidget);
+    expect(find.text('继续添加'), findsOneWidget);
+    expect(find.byKey(const Key('duplicate-continue-cancel')), findsOneWidget);
+    expect(find.byKey(const Key('duplicate-continue-add')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('duplicate-continue-cancel')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.descendant(
+              of: find.byType(CallsignHistoryField),
+              matching: find.byType(TextFormField),
+            ),
+          )
+          .controller!
+          .text,
+      isEmpty,
+    );
   });
 
-  testWidgets('updating the old record keeps its time', (tester) async {
-    final logProvider = _StaticLogProvider([
-      LogEntry(
-        id: 'old-1',
-        sessionId: 's1',
-        time: '2026-07-13T12:00:00Z',
-        controller: 'BG5CTRL',
-        callsign: 'BA4AAA',
-        report: '59',
-        rstRcvd: '59',
-        qth: '杭州',
-        device: 'FT-991A',
-        power: '50W',
-        antenna: 'GP',
-        height: '8m',
-        createdAt: '2026-07-13T12:00:00Z',
-        updatedAt: '2026-07-13T12:00:00Z',
-      ),
-    ]);
+  testWidgets('saving a duplicate asks update or add, update keeps time',
+      (tester) async {
+    final logProvider = _StaticLogProvider([_oldLog()]);
     addTearDown(logProvider.dispose);
     await tester.pumpWidget(_app(logProvider));
     await tester.pumpAndSettle();
@@ -92,23 +64,26 @@ void main() {
       find.widgetWithText(TextFormField, 'QTH'),
       '上海',
     );
-    await tester.tap(
-      find.descendant(
-          of: find.byType(CallsignHistoryField),
-          matching: find.byType(TextFormField)),
-    );
-    await tester.pump();
     await tester.enterText(
-      find.descendant(
-          of: find.byType(CallsignHistoryField),
-          matching: find.byType(TextFormField)),
-      'BA4AAA',
+      find.widgetWithText(TextFormField, '主控呼号 *'),
+      'BG5CTRL',
     );
+    await _enterCallsign(tester, 'BA4AAA');
     await tester.tap(find.byKey(const Key('outside-log-form')));
     await tester.pumpAndSettle();
 
     expect(find.text('呼号已记录过'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('duplicate-update-old-record')));
+    await tester.tap(find.byKey(const Key('duplicate-continue-add')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('save-log-record')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('duplicate-save-update-old')), findsOneWidget);
+    expect(find.byKey(const Key('duplicate-save-add-new')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('duplicate-save-update-old')));
     await tester.pumpAndSettle();
 
     expect(logProvider.updateCalls, 1);
@@ -119,51 +94,71 @@ void main() {
     expect(find.text('记录已更新'), findsOneWidget);
   });
 
-  testWidgets('adding a new record does not touch the old one', (tester) async {
-    final logProvider = _StaticLogProvider([
-      LogEntry(
-        id: 'old-1',
-        sessionId: 's1',
-        time: '2026-07-13T12:00:00Z',
-        controller: 'BG5CTRL',
-        callsign: 'BA4AAA',
-        report: '59',
-        rstRcvd: '59',
-        qth: '杭州',
-        device: '',
-        power: '',
-        antenna: '',
-        height: '',
-        createdAt: '2026-07-13T12:00:00Z',
-        updatedAt: '2026-07-13T12:00:00Z',
-      ),
-    ]);
+  testWidgets('saving a duplicate as new record adds without touching old',
+      (tester) async {
+    final logProvider = _StaticLogProvider([_oldLog()]);
     addTearDown(logProvider.dispose);
     await tester.pumpWidget(_app(logProvider));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.descendant(
-          of: find.byType(CallsignHistoryField),
-          matching: find.byType(TextFormField)),
-    );
-    await tester.pump();
     await tester.enterText(
-      find.descendant(
-          of: find.byType(CallsignHistoryField),
-          matching: find.byType(TextFormField)),
-      'BA4AAA',
+      find.widgetWithText(TextFormField, '主控呼号 *'),
+      'BG5CTRL',
     );
+    await _enterCallsign(tester, 'BA4AAA');
     await tester.tap(find.byKey(const Key('outside-log-form')));
     await tester.pumpAndSettle();
 
     expect(find.text('呼号已记录过'), findsOneWidget);
-    await tester.tap(find.text('添加新记录'));
+    await tester.tap(find.byKey(const Key('duplicate-continue-add')));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('save-log-record')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('duplicate-save-update-old')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('duplicate-save-add-new')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(logProvider.updateCalls, 0);
-    expect(find.text('呼号已记录过'), findsNothing);
+    expect(find.byKey(const Key('duplicate-save-update-old')), findsNothing);
   });
+}
+
+LogEntry _oldLog() => LogEntry(
+      id: 'old-1',
+      sessionId: 's1',
+      time: '2026-07-13T12:00:00Z',
+      controller: 'BG5CTRL',
+      callsign: 'BA4AAA',
+      report: '59',
+      rstRcvd: '59',
+      qth: '杭州',
+      device: 'FT-991A',
+      power: '50W',
+      antenna: 'GP',
+      height: '8m',
+      createdAt: '2026-07-13T12:00:00Z',
+      updatedAt: '2026-07-13T12:00:00Z',
+    );
+
+Future<void> _enterCallsign(WidgetTester tester, String text) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byType(CallsignHistoryField),
+      matching: find.byType(TextFormField),
+    ),
+  );
+  await tester.pump();
+  await tester.enterText(
+    find.descendant(
+      of: find.byType(CallsignHistoryField),
+      matching: find.byType(TextFormField),
+    ),
+    text,
+  );
+  await tester.pump();
 }
 
 Widget _app(LogProvider logProvider) => MultiProvider(
@@ -217,6 +212,9 @@ class _StaticLogProvider extends LogProvider {
     updateCalls += 1;
     updatedLog = log;
   }
+
+  @override
+  Future<void> addLog(LogEntry log, {String? sessionId}) async {}
 }
 
 class _NoopDictionaryProvider extends DictionaryProvider {

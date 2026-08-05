@@ -517,60 +517,30 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         .where((log) => log.callsign.trim().toUpperCase() == callsign)
         .toList(growable: false);
     if (existing.isEmpty || !mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
     final l10n = context.l10n;
-    final latest = existing.last;
-    final action = await showDialog<_DuplicateAction>(
+    final continueAdding = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.duplicateUpdateDialogTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.duplicateUpdateDialogMessage(callsign)),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(dialogContext)
-                    .colorScheme
-                    .surfaceContainerHighest
-                    .withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                l10n.duplicateOldRecordSummary(
-                  formatLogTimeForDisplay(latest.time),
-                  latest.callsign,
-                  latest.report,
-                  latest.rstRcvd,
-                  latest.qth,
-                ),
-                style: Theme.of(dialogContext).textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
+        title: Text(l10n.duplicateContinueDialogTitle),
+        content: Text(l10n.duplicateContinueDialogMessage(callsign)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, _DuplicateAction.add),
-            child: Text(l10n.duplicateAddNewRecord),
+            key: const Key('duplicate-continue-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
-            key: const Key('duplicate-update-old-record'),
-            onPressed: () =>
-                Navigator.pop(dialogContext, _DuplicateAction.update),
-            child: Text(l10n.duplicateUpdateOldRecord),
+            key: const Key('duplicate-continue-add'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.duplicateContinueAdd),
           ),
         ],
       ),
     );
-    if (!mounted || action == null) return;
-    if (action == _DuplicateAction.update) {
-      await _updateExistingLog(latest, callsign, messenger, l10n);
-    }
+    if (!mounted || continueAdding == true) return;
+    // 用户选择不继续，清空呼号让书记员重录或改录。
+    _callsignController.clear();
+    FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 
   Future<void> _updateExistingLog(
@@ -892,27 +862,76 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           (log) => log.callsign.trim().toUpperCase() == normalizedCallsign,
         );
     if (settingsProvider.duplicateCallsignWarningEnabled && duplicate) {
-      final proceed = await showDialog<bool>(
+      final existing = logProvider.logs
+          .where(
+            (log) => log.callsign.trim().toUpperCase() == normalizedCallsign,
+          )
+          .toList(growable: false);
+      final latest = existing.isEmpty ? null : existing.last;
+      final action = await showDialog<_DuplicateAction>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: Text(l10n.duplicateCallsignTitle),
-              content: Text(
-                l10n.duplicateCallsignMessage(normalizedCallsign),
+              title: Text(l10n.duplicateUpdateDialogTitle),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.duplicateUpdateDialogMessage(normalizedCallsign)),
+                  if (latest != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(dialogContext)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        l10n.duplicateOldRecordSummary(
+                          formatLogTimeForDisplay(latest.time),
+                          latest.callsign,
+                          latest.report,
+                          latest.rstRcvd,
+                          latest.qth,
+                        ),
+                        style: Theme.of(dialogContext).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: Text(l10n.cancel),
+                  key: const Key('duplicate-save-add-new'),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, _DuplicateAction.add),
+                  child: Text(l10n.duplicateAddNewRecord),
                 ),
                 FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: Text(l10n.saveAnyway),
+                  key: const Key('duplicate-save-update-old'),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, _DuplicateAction.update),
+                  child: Text(l10n.duplicateUpdateOldRecord),
                 ),
               ],
             ),
           ) ??
-          false;
-      if (!proceed || !mounted) return;
+          _DuplicateAction.add;
+      if (!mounted) return;
+      if (action == _DuplicateAction.update) {
+        if (latest != null) {
+          await _updateExistingLog(
+            latest,
+            normalizedCallsign,
+            ScaffoldMessenger.maybeOf(context),
+            l10n,
+          );
+        }
+        return;
+      }
     }
 
     if (submittedFields['device']!.isNotEmpty) {

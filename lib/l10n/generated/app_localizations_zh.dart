@@ -974,6 +974,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get duplicateAddNewRecord => '添加新记录';
 
   @override
+  String get duplicateContinueDialogTitle => '呼号已记录过';
+
+  @override
+  String duplicateContinueDialogMessage(String callsign) {
+    return '$callsign 已在本次点名中记录过，继续添加吗？';
+  }
+
+  @override
+  String get duplicateContinueAdd => '继续添加';
+
+  @override
   String get duplicateUpdateDialogTitle => '呼号已记录过';
 
   @override

@@ -1019,6 +1019,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get duplicateAddNewRecord => 'Add new record';
 
   @override
+  String get duplicateContinueDialogTitle => 'Callsign already recorded';
+
+  @override
+  String duplicateContinueDialogMessage(String callsign) {
+    return '$callsign is already recorded in this net. Continue adding it?';
+  }
+
+  @override
+  String get duplicateContinueAdd => 'Continue adding';
+
+  @override
   String get duplicateUpdateDialogTitle => 'Callsign already recorded';
 
   @override
