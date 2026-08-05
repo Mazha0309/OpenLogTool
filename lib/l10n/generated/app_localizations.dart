@@ -1825,8 +1825,8 @@ abstract class AppLocalizations {
   /// No description provided for @duplicateContinueDialogMessage.
   ///
   /// In zh, this message translates to:
-  /// **'{callsign} 已在本次点名中记录过，继续添加吗？'**
-  String duplicateContinueDialogMessage(String callsign);
+  /// **'{callsign} 已在第 {ordinal} 位记录过，继续添加吗？'**
+  String duplicateContinueDialogMessage(String callsign, int ordinal);
 
   /// No description provided for @duplicateContinueAdd.
   ///
@@ -1849,9 +1849,9 @@ abstract class AppLocalizations {
   /// No description provided for @duplicateOldRecordSummary.
   ///
   /// In zh, this message translates to:
-  /// **'原记录：{time} {callsign} {rstSent}/{rstRcvd} {qth}'**
-  String duplicateOldRecordSummary(
-      String time, String callsign, String rstSent, String rstRcvd, String qth);
+  /// **'原记录（第 {ordinal} 位）：{time} {callsign} {rstSent}/{rstRcvd} {qth}'**
+  String duplicateOldRecordSummary(int ordinal, String time, String callsign,
+      String rstSent, String rstRcvd, String qth);
 
   /// No description provided for @recordUpdated.
   ///

@@ -518,11 +518,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         .toList(growable: false);
     if (existing.isEmpty || !mounted) return;
     final l10n = context.l10n;
+    final ordinal = logProvider.logs.indexOf(existing.last) + 1;
     final continueAdding = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.duplicateContinueDialogTitle),
-        content: Text(l10n.duplicateContinueDialogMessage(callsign)),
+        content: Text(l10n.duplicateContinueDialogMessage(callsign, ordinal)),
         actions: [
           TextButton(
             key: const Key('duplicate-continue-cancel'),
@@ -891,6 +892,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       ),
                       child: Text(
                         l10n.duplicateOldRecordSummary(
+                          logProvider.logs.indexOf(latest) + 1,
                           formatLogTimeForDisplay(latest.time),
                           latest.callsign,
                           latest.report,

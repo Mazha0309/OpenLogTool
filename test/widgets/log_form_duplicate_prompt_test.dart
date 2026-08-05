@@ -33,6 +33,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('呼号已记录过'), findsOneWidget);
+    expect(find.text('BA4AAA 已在第 1 位记录过，继续添加吗？'), findsOneWidget);
     expect(find.text('继续添加'), findsOneWidget);
     expect(find.byKey(const Key('duplicate-continue-cancel')), findsOneWidget);
     expect(find.byKey(const Key('duplicate-continue-add')), findsOneWidget);
@@ -92,6 +93,51 @@ void main() {
     expect(updated.qth, '上海');
     expect(updated.time, '2026-07-13T12:00:00Z');
     expect(find.text('记录已更新'), findsOneWidget);
+  });
+
+  testWidgets('duplicate dialogs show the original list ordinal',
+      (tester) async {
+    final logProvider = _StaticLogProvider([
+      _oldLog(),
+      _oldLog().copyWith(
+        id: 'old-2',
+        callsign: 'BG7XYZ',
+        qth: '广州',
+      ),
+      _oldLog().copyWith(
+        id: 'old-3',
+        callsign: 'BG5FBT',
+        qth: '南京',
+      ),
+    ]);
+    addTearDown(logProvider.dispose);
+    await tester.pumpWidget(_app(logProvider));
+    await tester.pumpAndSettle();
+
+    await _enterCallsign(tester, 'BG5FBT');
+    await tester.tap(find.byKey(const Key('outside-log-form')));
+    await tester.pumpAndSettle();
+
+    // 失焦弹窗显示第 3 位。
+    expect(find.text('BG5FBT 已在第 3 位记录过，继续添加吗？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('duplicate-continue-add')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '主控呼号 *'),
+      'BG5CTRL',
+    );
+    await tester.tap(find.byKey(const Key('save-log-record')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 保存弹窗的旧记录摘要含第 3 位。
+    expect(find.byKey(const Key('duplicate-save-update-old')), findsOneWidget);
+    expect(find.textContaining('第 3 位'), findsWidgets);
+    expect(find.textContaining('原记录'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('duplicate-save-cancel')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('saving a duplicate as new record adds without touching old',

@@ -1022,8 +1022,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get duplicateContinueDialogTitle => 'Callsign already recorded';
 
   @override
-  String duplicateContinueDialogMessage(String callsign) {
-    return '$callsign is already recorded in this net. Continue adding it?';
+  String duplicateContinueDialogMessage(String callsign, int ordinal) {
+    return '$callsign was already logged at position $ordinal. Continue adding it?';
   }
 
   @override
@@ -1038,9 +1038,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
-      String rstRcvd, String qth) {
-    return 'Existing: $time $callsign $rstSent/$rstRcvd $qth';
+  String duplicateOldRecordSummary(int ordinal, String time, String callsign,
+      String rstSent, String rstRcvd, String qth) {
+    return 'Existing (#$ordinal): $time $callsign $rstSent/$rstRcvd $qth';
   }
 
   @override

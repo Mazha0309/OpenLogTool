@@ -977,8 +977,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get duplicateContinueDialogTitle => '呼号已记录过';
 
   @override
-  String duplicateContinueDialogMessage(String callsign) {
-    return '$callsign 已在本次点名中记录过，继续添加吗？';
+  String duplicateContinueDialogMessage(String callsign, int ordinal) {
+    return '$callsign 已在第 $ordinal 位记录过，继续添加吗？';
   }
 
   @override
@@ -993,9 +993,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
-      String rstRcvd, String qth) {
-    return '原记录：$time $callsign $rstSent/$rstRcvd $qth';
+  String duplicateOldRecordSummary(int ordinal, String time, String callsign,
+      String rstSent, String rstRcvd, String qth) {
+    return '原记录（第 $ordinal 位）：$time $callsign $rstSent/$rstRcvd $qth';
   }
 
   @override
