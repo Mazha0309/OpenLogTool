@@ -95,6 +95,7 @@ BEGIN
             VALUE "InternalName", "openlogtool" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 BG5CRL. All rights reserved." "\0"
             VALUE "OriginalFilename", "openlogtool.exe" "\0"
+            // Retained as a legacy data-directory identifier for in-place upgrades.
             VALUE "ProductName", "OpenLogTool" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END

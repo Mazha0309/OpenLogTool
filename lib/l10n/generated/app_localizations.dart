@@ -940,6 +940,12 @@ abstract class AppLocalizations {
   /// **'保存记录'**
   String get saveRecord;
 
+  /// No description provided for @savingRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存'**
+  String get savingRecord;
+
   /// No description provided for @clearEnteredFields.
   ///
   /// In zh, this message translates to:

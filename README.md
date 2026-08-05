@@ -1,4 +1,4 @@
-# OpenLogTool - 业余无线电点名记录工具
+# OpenLogTool - 业余无线电点名记录与协作工具
 
 专为业余无线电爱好者设计的点名记录工具，支持跨平台运行。
 
@@ -81,7 +81,7 @@
 
 ### Windows 崩溃诊断
 
-Windows 原生崩溃会先在
+Windows 原生崩溃会先在兼容目录
 `%LOCALAPPDATA%\OpenLogTool\CrashDumps` 写入 minidump，再交给 Windows
 错误报告处理。Windows 10 默认启用无障碍语义树兼容保护，以规避 Flutter
 在响应式布局重组语义节点时的原生崩溃。确实需要屏幕阅读器的用户可在启动前设置
@@ -112,7 +112,11 @@ cargo-ndk；macOS 的 Release 默认生成 universal App：
 # Android（在 Linux 或 macOS 上执行）
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo install --locked cargo-ndk --version 4.1.2
-flutter build apk --release
+flutter build apk --release --split-per-abi \
+  --target-platform=android-arm,android-arm64,android-x64
+# Universal 兼容包
+flutter build apk --release \
+  --target-platform=android-arm,android-arm64,android-x64
 
 # macOS universal Release
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
@@ -127,6 +131,16 @@ cargo install --locked wasm-pack --version 0.15.0
 cargo install --locked flutter_rust_bridge_codegen --version 2.12.0
 bash tool/build_web.sh
 ```
+
+Android Release 会分别生成 `armeabi-v7a`、`arm64-v8a` 和 `x86_64`
+三个 APK。CI 发布时还会额外保留一个包含全部架构的 Universal APK 作为兼容
+兜底；手机下载与处理器匹配的独立文件即可获得更小体积。
+
+Android Release 使用 applicationId
+`com.mazha0309.openlogtool` 和固定签名证书（SHA-256：
+`086f88968be282b45a8253de5a48b5c0c45c33321285116fde5fde86bbe78942`）。
+Release CI 会校验证书并拒绝误用其他密钥的产物。签名私钥和口令只保存在受控
+离线备份及 GitHub Actions Secrets，不得写入仓库或 Release。
 
 ### WebClient 数据与部署
 
@@ -157,7 +171,7 @@ OPENLOGTOOL_WEB_PORT=8080 \
   docker compose -f docker-compose.web.yml up -d --build
 ```
 
-该容器只提供静态 WebClient，不包含 OpenLogToolServer。公网部署时应由现有的
+该容器只提供静态 WebClient，不包含 OpenLogTool Server。公网部署时应由现有的
 HTTPS 反向代理转发到 `127.0.0.1:5973`。GitHub Actions 会在每次推送和 PR
 自动构建 WebClient；普通构建可下载 Actions artifact，`v*` 标签发布时
 WebClient 压缩包会一并加入 GitHub Release。
@@ -174,7 +188,7 @@ docker compose up -d
 发布包中已包含静态网页、Rust WASM、Dockerfile、Nginx 配置和
 `docker-compose.yml`，默认同样映射到外部端口 `5973`。
 
-浏览器连接 OpenLogToolServer 时还要遵守同源策略。如果 WebClient 与 API 使用
+浏览器连接 OpenLogTool Server 时还要遵守同源策略。如果 WebClient 与 API 使用
 不同 Origin（协议、域名或端口任一不同），服务端的 `CORS_ORIGINS` 必须包含
 WebClient 的完整 Origin，例如：
 

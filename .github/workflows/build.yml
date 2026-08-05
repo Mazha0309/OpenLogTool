@@ -23,6 +23,7 @@ env:
   WASM_PACK_VERSION: '0.15.0'
   CARGO_NDK_VERSION: '4.1.2'
   ANDROID_NDK_VERSION: '28.2.13676358'
+  ANDROID_SIGNING_CERT_SHA256: '086f88968be282b45a8253de5a48b5c0c45c33321285116fde5fde86bbe78942'
   APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
   APPIMAGETOOL_SHA256: a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0
   APPIMAGE_RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
@@ -231,18 +232,12 @@ jobs:
             "$bundle_dir"
 
           tar -C "$RUNNER_TEMP" -czf "dist/$archive" "$bundle_name"
-          (
-            cd dist
-            sha256sum "$archive" > "$archive.sha256"
-          )
 
       - name: Upload WebClient artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: openlogtool-${{ needs.version.outputs.artifact_version }}-webclient
-          path: |
-            dist/*WebClient.tar.gz
-            dist/*WebClient.tar.gz.sha256
+          path: dist/*WebClient.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -349,24 +344,49 @@ jobs:
         run: dart tool/gen_version.dart
 
       - name: Build Android release
-        run: >-
-          flutter build apk --release --no-pub
-          --build-name="${{ needs.version.outputs.version_name }}"
-          --build-number="${{ github.run_number }}"
-
-      - name: Verify APK and Rust libraries
         run: |
           set -euo pipefail
-          apk=build/app/outputs/flutter-apk/app-release.apk
-          test -s "$apk"
-          unzip -t "$apk"
+          flutter build apk --release --no-pub \
+            --split-per-abi \
+            --target-platform=android-arm,android-arm64,android-x64 \
+            --split-debug-info=build/symbols/android \
+            --build-name="${{ needs.version.outputs.version_name }}" \
+            --build-number="${{ github.run_number }}"
+          mkdir -p build/release-apks
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "build/app/outputs/flutter-apk/app-$abi-release.apk" \
+              "build/release-apks/app-$abi-release.apk"
+          done
+          flutter build apk --release --no-pub \
+            --target-platform=android-arm,android-arm64,android-x64 \
+            --split-debug-info=build/symbols/android \
+            --build-name="${{ needs.version.outputs.version_name }}" \
+            --build-number="${{ github.run_number }}"
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            build/release-apks/app-universal-release.apk
+
+      - name: Verify split APKs, symbols, and Rust libraries
+        run: |
+          set -euo pipefail
           extracted_libraries="$(mktemp -d)"
           trap 'rm -rf "$extracted_libraries"' EXIT
+          test -n "$(find build/symbols/android -type f -name '*.symbols' -print -quit)"
           for abi in arm64-v8a armeabi-v7a x86_64; do
+            apk="build/release-apks/app-$abi-release.apk"
+            listing="$extracted_libraries/$abi.list"
+            test -s "$apk"
+            unzip -t "$apk"
+            zipinfo -1 "$apk" > "$listing"
             source_library="android/app/src/main/jniLibs/$abi/libopenlogtool_core.so"
             test -s "$source_library"
-            zipinfo -1 "$apk" |
-              grep -Fx "lib/$abi/libopenlogtool_core.so"
+            grep -Fx "lib/$abi/libopenlogtool_core.so" "$listing"
+            for other_abi in arm64-v8a armeabi-v7a x86_64; do
+              if [ "$other_abi" != "$abi" ] &&
+                  grep -q "^lib/$other_abi/" "$listing"; then
+                echo "$apk unexpectedly contains $other_abi libraries" >&2
+                exit 1
+              fi
+            done
             unzip -p "$apk" "lib/$abi/libopenlogtool_core.so" \
               > "$extracted_libraries/$abi.so"
             test -s "$extracted_libraries/$abi.so"
@@ -380,34 +400,67 @@ jobs:
             esac
             readelf -h "$extracted_libraries/$abi.so" |
               grep -E "Machine:.*$expected_machine"
+            apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner |
+              sort -V | tail -n 1)
+            test -n "$apksigner"
+            "$apksigner" verify --verbose "$apk"
           done
+          universal=build/release-apks/app-universal-release.apk
+          universal_listing="$extracted_libraries/universal.list"
+          test -s "$universal"
+          unzip -t "$universal"
+          zipinfo -1 "$universal" > "$universal_listing"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            grep -Fx "lib/$abi/libopenlogtool_core.so" "$universal_listing"
+          done
+          "$apksigner" verify --verbose "$universal"
+
+      - name: Verify Android release signing certificate
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
           apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner |
             sort -V | tail -n 1)
           test -n "$apksigner"
-          "$apksigner" verify --verbose "$apk"
+          actual=$("$apksigner" verify --print-certs \
+            build/release-apks/app-universal-release.apk |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$actual"
+          if [ "$actual" != "$ANDROID_SIGNING_CERT_SHA256" ]; then
+            echo "Unexpected Android signing certificate: $actual" >&2
+            exit 1
+          fi
 
-      - name: Package Android artifact
+      - name: Package Android artifacts
         env:
           ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
         run: |
           set -euo pipefail
           mkdir -p dist
-          artifact="OpenLogTool-$ARTIFACT_VERSION-Android-universal.apk"
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/$artifact"
-          (
-            cd dist
-            sha256sum "$artifact" > "$artifact.sha256"
-          )
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            source="build/release-apks/app-$abi-release.apk"
+            artifact="OpenLogTool-$ARTIFACT_VERSION-Android-$abi.apk"
+            cp "$source" "dist/$artifact"
+          done
+          cp build/release-apks/app-universal-release.apk \
+            "dist/OpenLogTool-$ARTIFACT_VERSION-Android-universal.apk"
 
-      - name: Upload Android artifact
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: openlogtool-${{ needs.version.outputs.artifact_version }}-android-universal
-          path: |
-            dist/*.apk
-            dist/*.apk.sha256
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-android
+          path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload Android debug symbols
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-symbols-${{ needs.version.outputs.artifact_version }}-android
+          path: build/symbols/android/
+          if-no-files-found: error
+          retention-days: 90
 
   build-linux:
     name: Build and smoke-test Linux
@@ -457,9 +510,11 @@ jobs:
         run: dart tool/gen_version.dart
 
       - name: Build Linux release
-        run: flutter build linux --release --no-pub
+        run: >-
+          flutter build linux --release --no-pub
+          --split-debug-info=build/symbols/linux
 
-      - name: Verify bundled Rust core
+      - name: Verify bundled Rust core and Dart symbols
         run: |
           set -euo pipefail
           executable=build/linux/x64/release/bundle/openlogtool
@@ -471,6 +526,7 @@ jobs:
           cmp --silent "$source_library" "$bundled_library"
           readelf -d "$executable" | grep -F '$ORIGIN/lib'
           sha256sum "$source_library" "$bundled_library"
+          test -n "$(find build/symbols/linux -type f -name '*.symbols' -print -quit)"
 
       - name: Smoke-test Flutter bundle
         run: |
@@ -502,12 +558,8 @@ jobs:
         run: |
           set -euo pipefail
           release_dir=build/linux/x64/release
-          archive="openlogtool-${ARTIFACT_VERSION}-linux-x86_64.tar.gz"
+          archive="OpenLogTool-${ARTIFACT_VERSION}-linux-x86_64.tar.gz"
           tar -C "$release_dir" -czf "$release_dir/$archive" bundle
-          (
-            cd "$release_dir"
-            sha256sum "$archive" > "$archive.sha256"
-          )
 
           package_root="$RUNNER_TEMP/openlogtool-package"
           smoke_root="$RUNNER_TEMP/openlogtool-package-smoke"
@@ -567,18 +619,13 @@ jobs:
             'Type=Application' \
             'Categories=Utility;' \
             > "$appdir/openlogtool.desktop"
-          cp icon.png "$appdir/openlogtool.png"
+          cp assets/images/app_icon_512.png "$appdir/openlogtool.png"
 
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
             VERSION="$ARTIFACT_VERSION" \
             "$appimagetool" --runtime-file "$appimage_runtime" \
             "$appdir" "$appimage"
           test -x "$appimage"
-          (
-            cd "$release_dir"
-            sha256sum "$(basename "$appimage")" \
-              > "$(basename "$appimage").sha256"
-          )
 
           set +e
           (
@@ -605,11 +652,18 @@ jobs:
           name: openlogtool-${{ needs.version.outputs.artifact_version }}-linux-x86_64
           path: |
             build/linux/x64/release/*.tar.gz
-            build/linux/x64/release/*.tar.gz.sha256
             build/linux/x64/release/*.AppImage
-            build/linux/x64/release/*.AppImage.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload Linux debug symbols
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-symbols-${{ needs.version.outputs.artifact_version }}-linux-x86_64
+          path: build/symbols/linux/
+          if-no-files-found: error
+          retention-days: 90
 
   build-windows:
     name: Build and smoke-test Windows
@@ -686,10 +740,11 @@ jobs:
       - name: Build Windows release
         run: >-
           flutter build windows --release --no-pub
+          --split-debug-info=build/symbols/windows
           --build-name="${{ needs.version.outputs.version_name }}"
           --build-number="${{ github.run_number }}"
 
-      - name: Verify bundled Rust core
+      - name: Verify bundled Rust core and Dart symbols
         shell: pwsh
         run: |
           $source = "rust/target/release/openlogtool_core.dll"
@@ -703,6 +758,10 @@ jobs:
           $bundledHash = (Get-FileHash $bundled -Algorithm SHA256).Hash
           if ($sourceHash -ne $bundledHash) {
             throw "The bundled Rust DLL does not match Cargo output"
+          }
+          $symbols = Get-ChildItem "build/symbols/windows" -Filter *.symbols -Recurse
+          if (!$symbols) {
+            throw "Windows Dart debug symbols are missing"
           }
 
       - name: Package and smoke-test Windows archive
@@ -770,8 +829,8 @@ jobs:
           $destination = Join-Path "dist" $installer.Name
           Copy-Item -LiteralPath $installer.FullName -Destination $destination
           $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
-          $hashLine = "$hash  $(Split-Path $destination -Leaf)`n"
-          [System.IO.File]::WriteAllText("$destination.sha256", $hashLine)
+          Write-Host "Build-time SHA-256: $hash"
+          Write-Host "GitHub Release will publish the authoritative asset digest."
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -779,11 +838,18 @@ jobs:
           name: openlogtool-${{ needs.version.outputs.artifact_version }}-windows-x64
           path: |
             dist/*.zip
-            dist/*.zip.sha256
             dist/*.exe
-            dist/*.exe.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload Windows debug symbols
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-symbols-${{ needs.version.outputs.artifact_version }}-windows-x64
+          path: build/symbols/windows/
+          if-no-files-found: error
+          retention-days: 90
 
   build-macos:
     name: Build and verify macOS universal
@@ -831,10 +897,11 @@ jobs:
       - name: Build macOS universal release
         run: >-
           flutter build macos --release --no-pub
+          --split-debug-info=build/symbols/macos
           --build-name="${{ needs.version.outputs.version_name }}"
           --build-number="${{ github.run_number }}"
 
-      - name: Verify macOS app bundle
+      - name: Verify macOS app bundle and Dart symbols
         run: |
           set -euo pipefail
           app=build/macos/Build/Products/Release/openlogtool.app
@@ -850,6 +917,7 @@ jobs:
           xcrun otool -l "$executable" | grep -A3 LC_RPATH |
             grep -F '@executable_path/../Frameworks'
           codesign --verify --deep --strict --verbose=2 "$app"
+          test -n "$(find build/symbols/macos -type f -name '*.symbols' -print -quit)"
 
       - name: Package and verify macOS artifacts
         env:
@@ -860,11 +928,13 @@ jobs:
           mkdir -p dist
           zip_name="OpenLogTool-$ARTIFACT_VERSION-macOS-universal.zip"
           dmg_name="OpenLogTool-$ARTIFACT_VERSION-macOS-universal.dmg"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$zip_name"
+          package_app="$RUNNER_TEMP/OpenLogTool.app"
+          ditto "$app" "$package_app"
+          ditto -c -k --sequesterRsrc --keepParent "$package_app" "dist/$zip_name"
 
           dmg_stage="$RUNNER_TEMP/openlogtool-dmg-stage"
           mkdir -p "$dmg_stage"
-          ditto "$app" "$dmg_stage/openlogtool.app"
+          ditto "$package_app" "$dmg_stage/OpenLogTool.app"
           ln -s /Applications "$dmg_stage/Applications"
           hdiutil create \
             -volname OpenLogTool \
@@ -882,17 +952,17 @@ jobs:
             -mountpoint "$dmg_mount" "dist/$dmg_name")
           printf '%s\n' "$attach_output"
           device=$(printf '%s\n' "$attach_output" | awk 'END {print $1}')
-          test -d "$dmg_mount/openlogtool.app"
+          test -d "$dmg_mount/OpenLogTool.app"
           test -L "$dmg_mount/Applications"
           codesign --verify --deep --strict --verbose=2 \
-            "$dmg_mount/openlogtool.app"
+            "$dmg_mount/OpenLogTool.app"
           hdiutil detach "$device"
           device=""
 
           extracted="$RUNNER_TEMP/openlogtool-macos-package"
           mkdir -p "$extracted"
           ditto -x -k "dist/$zip_name" "$extracted"
-          packaged_app="$extracted/openlogtool.app"
+          packaged_app="$extracted/OpenLogTool.app"
           packaged_executable="$packaged_app/Contents/MacOS/openlogtool"
           packaged_library="$packaged_app/Contents/Frameworks/libopenlogtool_core.dylib"
           test -x "$packaged_executable"
@@ -906,23 +976,24 @@ jobs:
             grep -F '@executable_path/../Frameworks'
           codesign --verify --deep --strict --verbose=2 "$packaged_app"
 
-          (
-            cd dist
-            shasum -a 256 "$zip_name" > "$zip_name.sha256"
-            shasum -a 256 "$dmg_name" > "$dmg_name.sha256"
-          )
-
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: openlogtool-${{ needs.version.outputs.artifact_version }}-macos-universal
           path: |
             dist/*.zip
-            dist/*.zip.sha256
             dist/*.dmg
-            dist/*.dmg.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload macOS debug symbols
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-symbols-${{ needs.version.outputs.artifact_version }}-macos-universal
+          path: build/symbols/macos/
+          if-no-files-found: error
+          retention-days: 90
 
   release:
     name: Publish cross-platform release
@@ -964,7 +1035,11 @@ jobs:
       - name: Verify release inventory
         run: |
           set -euo pipefail
-          compgen -G 'artifacts/*.apk' >/dev/null
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            compgen -G "artifacts/*Android-$abi.apk" >/dev/null
+          done
+          compgen -G 'artifacts/*Android-universal.apk' >/dev/null
+          test "$(find artifacts -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 4
           compgen -G 'artifacts/*.tar.gz' >/dev/null
           compgen -G 'artifacts/*.AppImage' >/dev/null
           compgen -G 'artifacts/*.exe' >/dev/null
@@ -972,17 +1047,6 @@ jobs:
           compgen -G 'artifacts/*.dmg' >/dev/null
           compgen -G 'artifacts/*macOS*.zip' >/dev/null
           compgen -G 'artifacts/*WebClient*.tar.gz' >/dev/null
-          (
-            cd artifacts
-            for checksum in *.sha256; do
-              sed -i 's/\r$//' "$checksum"
-              sha256sum --check "$checksum"
-            done
-            find . -maxdepth 1 -type f ! -name '*.sha256' \
-              ! -name SHA256SUMS -print0 |
-              sort -z |
-              xargs -0 sha256sum > SHA256SUMS
-          )
           find artifacts -maxdepth 1 -type f -printf '%f\n' | sort
 
       - name: Create GitHub release

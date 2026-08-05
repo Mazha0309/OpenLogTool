@@ -22,11 +22,13 @@ class LogTable extends StatefulWidget {
 }
 
 class _LogTableState extends State<LogTable> {
+  static const double _mobileBreakpoint = 680;
   int? _editingIndex;
   late Map<String, TextEditingController> _controllers;
   int _currentPage = 0;
   static const int _itemsPerPage = 5;
   List<LogEntry> _lastSeenLogs = [];
+  bool _editingSaveInProgress = false;
 
   final ScrollController _horizontalController = ScrollController();
 
@@ -53,7 +55,11 @@ class _LogTableState extends State<LogTable> {
       return;
     }
     setState(() {
+      for (final controller in _controllers.values) {
+        controller.dispose();
+      }
       _editingIndex = index;
+      _editingSaveInProgress = false;
       _controllers = {
         'time': TextEditingController(
           text: formatLogTimeForDisplay(log.time),
@@ -79,6 +85,7 @@ class _LogTableState extends State<LogTable> {
     if (!mounted) return;
     setState(() {
       _editingIndex = null;
+      _editingSaveInProgress = false;
       for (var controller in _controllers.values) {
         controller.dispose();
       }
@@ -87,6 +94,7 @@ class _LogTableState extends State<LogTable> {
   }
 
   Future<void> _saveEditing() async {
+    if (_editingSaveInProgress) return;
     final logId = _controllers['_id']?.text ?? '';
     final logProvider = Provider.of<LogProvider>(context, listen: false);
     final currentIndex =
@@ -99,9 +107,11 @@ class _LogTableState extends State<LogTable> {
       _cancelEditing();
       return;
     }
+    setState(() => _editingSaveInProgress = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
     final time = _controllers['time']?.text ?? '';
     if (!isValidLogTimeInput(time)) {
+      setState(() => _editingSaveInProgress = false);
       messenger?.showSnackBar(
         SnackBar(content: Text(context.l10n.logTimeInvalid)),
       );
@@ -129,6 +139,7 @@ class _LogTableState extends State<LogTable> {
       await logProvider.updateLogById(logId, patch);
     } catch (error) {
       if (!mounted) return;
+      setState(() => _editingSaveInProgress = false);
       messenger?.showSnackBar(
         SnackBar(content: Text(context.l10n.operationFailed('$error'))),
       );
@@ -150,45 +161,52 @@ class _LogTableState extends State<LogTable> {
     SettingsProvider settingsProvider,
   ) {
     if (logProvider.logs.isEmpty) {
-      return Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(40),
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest
-              .withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.list_alt,
-              size: 64,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < _mobileBreakpoint;
+          return Container(
+            margin: EdgeInsets.all(compact ? 0 : 16),
+            padding: EdgeInsets.all(compact ? 24 : 40),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.noSavedRecords,
-              style: TextStyle(
-                fontSize: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.list_alt,
+                  size: compact ? 44 : 64,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                SizedBox(height: compact ? 10 : 16),
+                Text(
+                  context.l10n.noSavedRecords,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  context.l10n.addFirstRecordHint,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant
+                        .withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.addFirstRecordHint,
-              style: TextStyle(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant
-                    .withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       );
     }
 
@@ -196,16 +214,19 @@ class _LogTableState extends State<LogTable> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        var effectivePage = _currentPage;
-        if (settingsProvider.paginationEnabled) {
-          final totalPages = (logProvider.logs.length / _itemsPerPage).ceil();
-          if (effectivePage >= totalPages) effectivePage = totalPages - 1;
-          if (effectivePage < 0) effectivePage = 0;
+        final displayEntries = _visibleLogEntries(
+          logProvider,
+          settingsProvider,
+        );
+        if (constraints.maxWidth < _mobileBreakpoint) {
+          return _buildMobileRecords(
+            context,
+            logProvider,
+            settingsProvider,
+            displayEntries,
+          );
         }
-        final visibleRows = settingsProvider.paginationEnabled
-            ? (logProvider.logs.length - effectivePage * _itemsPerPage)
-                .clamp(1, _itemsPerPage)
-            : logProvider.logs.length;
+        final visibleRows = displayEntries.length;
         final contentHeight = (48.0 + visibleRows * 56.0).clamp(104.0, 400.0);
         final enableInnerVerticalScroll = !settingsProvider.paginationEnabled &&
             48.0 + logProvider.logs.length * 56.0 > 400.0;
@@ -356,7 +377,7 @@ class _LogTableState extends State<LogTable> {
                               rows: _buildTableRows(
                                 context,
                                 logProvider,
-                                settingsProvider,
+                                displayEntries,
                               ),
                             ),
                           ),
@@ -377,8 +398,10 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  List<DataRow> _buildTableRows(BuildContext context, LogProvider logProvider,
-      SettingsProvider settingsProvider) {
+  List<MapEntry<int, LogEntry>> _visibleLogEntries(
+    LogProvider logProvider,
+    SettingsProvider settingsProvider,
+  ) {
     final logs = logProvider.logs;
     final indexedLogs = logs.asMap().entries.toList().reversed.toList();
 
@@ -390,7 +413,6 @@ class _LogTableState extends State<LogTable> {
     }
 
     // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
-    List<MapEntry<int, LogEntry>> displayEntries;
     if (settingsProvider.paginationEnabled) {
       final totalPages =
           (indexedLogs.length / _itemsPerPage).ceil().clamp(1, 1 << 30);
@@ -402,11 +424,519 @@ class _LogTableState extends State<LogTable> {
       final startIndex = _currentPage * _itemsPerPage;
       final endIndex =
           (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
-      displayEntries = indexedLogs.sublist(startIndex, endIndex);
-    } else {
-      displayEntries = indexedLogs;
+      return indexedLogs.sublist(startIndex, endIndex);
+    }
+    return indexedLogs;
+  }
+
+  Widget _buildMobileRecords(
+    BuildContext context,
+    LogProvider logProvider,
+    SettingsProvider settingsProvider,
+    List<MapEntry<int, LogEntry>> displayEntries,
+  ) {
+    return Column(
+      key: const Key('mobile-log-list'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < displayEntries.length; index++) ...[
+          _buildMobileRecordCard(
+            context,
+            logProvider,
+            displayEntries[index],
+          ),
+          if (index != displayEntries.length - 1) const SizedBox(height: 10),
+        ],
+        if (settingsProvider.paginationEnabled &&
+            logProvider.logs.length > _itemsPerPage)
+          _buildPaginationControls(logProvider.logs.length),
+      ],
+    );
+  }
+
+  Widget _buildMobileRecordCard(
+    BuildContext context,
+    LogProvider logProvider,
+    MapEntry<int, LogEntry> indexedLog,
+  ) {
+    final originalIndex = indexedLog.key;
+    final log = indexedLog.value;
+    final isEditing = _editingIndex == originalIndex;
+    final isConflicted = widget.conflictedLogIds.contains(log.id);
+    final mutationBlockReason = widget.readOnly
+        ? 'COLLABORATION_SESSION_READ_ONLY'
+        : logProvider.mutationBlockReason(log);
+    final canMutate = mutationBlockReason == null && !isConflicted;
+    final mutationHint = isConflicted
+        ? context.l10n.logConflictReadOnlyHint
+        : mutationBlockReason == null
+            ? ''
+            : _mutationBlockLabel(context, mutationBlockReason);
+    if (isEditing) {
+      return _buildMobileRecordEditor(
+        context,
+        originalIndex: originalIndex,
+        log: log,
+        canMutate: canMutate,
+        mutationHint: mutationHint,
+      );
     }
 
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final details = <MapEntry<String, String>>[
+      MapEntry(context.l10n.fieldQth, log.qth),
+      MapEntry(context.l10n.fieldDevice, log.device),
+      MapEntry(context.l10n.fieldAntenna, log.antenna),
+      MapEntry(context.l10n.fieldPower, log.power),
+      MapEntry(context.l10n.fieldHeight, log.height),
+      MapEntry(context.l10n.fieldRemarks, log.remarks),
+    ].where((entry) => entry.value.trim().isNotEmpty).toList(growable: false);
+
+    return Material(
+      key: Key('mobile-log-card-${log.id}'),
+      color: colors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isConflicted ? colors.error : colors.outlineVariant,
+        ),
+      ),
+      child: Theme(
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey<String>('mobile-log-expansion-${log.id}'),
+          maintainState: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          childrenPadding: EdgeInsets.zero,
+          leading: Container(
+            constraints: const BoxConstraints(minWidth: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '#${originalIndex + 1}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: colors.onPrimaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  log.callsign.trim().isEmpty ? '—' : log.callsign,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (!canMutate) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  isConflicted ? Icons.warning_amber : Icons.lock_outline,
+                  size: 17,
+                  color: isConflicted ? colors.error : colors.onSurfaceVariant,
+                ),
+              ],
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              children: [
+                _buildMobileMeta(
+                  context,
+                  Icons.schedule_outlined,
+                  formatLogTimeForDisplay(log.time),
+                ),
+                _buildMobileMeta(
+                  context,
+                  Icons.record_voice_over_outlined,
+                  log.controller,
+                ),
+                _buildMobileMeta(
+                  context,
+                  Icons.cell_tower_outlined,
+                  '${log.report}/${log.rstRcvd}',
+                ),
+              ],
+            ),
+          ),
+          children: [
+            Divider(height: 1, color: colors.outlineVariant),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (details.isNotEmpty)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final itemWidth = (constraints.maxWidth - 8) / 2;
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final detail in details)
+                              SizedBox(
+                                width: detail.key == context.l10n.fieldRemarks
+                                    ? constraints.maxWidth
+                                    : itemWidth,
+                                child: _buildMobileDetail(
+                                  context,
+                                  detail.key,
+                                  detail.value,
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  if (details.isNotEmpty) const SizedBox(height: 12),
+                  if (canMutate)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final editButton = OutlinedButton.icon(
+                          key: Key('mobile-edit-log-${log.id}'),
+                          onPressed: () => _startEditing(originalIndex, log),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: Text(context.l10n.editRecord),
+                        );
+                        final deleteButton = OutlinedButton.icon(
+                          key: Key('mobile-delete-log-${log.id}'),
+                          onPressed: () =>
+                              _showDeleteConfirmation(context, log),
+                          icon: const Icon(Icons.delete_outline),
+                          label: Text(context.l10n.deleteRecord),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.error,
+                            side: BorderSide(
+                              color: colors.error.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        );
+                        if (constraints.maxWidth < 300) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              editButton,
+                              const SizedBox(height: 8),
+                              deleteButton,
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: editButton),
+                            const SizedBox(width: 8),
+                            Expanded(child: deleteButton),
+                          ],
+                        );
+                      },
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isConflicted
+                            ? colors.errorContainer
+                            : colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isConflicted
+                                ? Icons.warning_amber
+                                : Icons.lock_outline,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              mutationHint,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileRecordEditor(
+    BuildContext context, {
+    required int originalIndex,
+    required LogEntry log,
+    required bool canMutate,
+    required String mutationHint,
+  }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      key: Key('mobile-log-editor-${log.id}'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: 0.18),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '#${originalIndex + 1}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colors.onPrimaryContainer,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  context.l10n.editRecord,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final halfWidth = (constraints.maxWidth - 8) / 2;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 10,
+                children: [
+                  _buildMobileEditField(
+                    context,
+                    field: 'controller',
+                    label: context.l10n.fieldController,
+                    width: constraints.maxWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'callsign',
+                    label: context.l10n.fieldCallsign,
+                    width: constraints.maxWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'time',
+                    label: context.l10n.fieldTime,
+                    width: constraints.maxWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'report',
+                    label: context.l10n.fieldRstSent,
+                    width: halfWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'rstRcvd',
+                    label: context.l10n.fieldRstRcvd,
+                    width: halfWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'qth',
+                    label: context.l10n.fieldQth,
+                    width: constraints.maxWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'device',
+                    label: context.l10n.fieldDevice,
+                    width: constraints.maxWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'antenna',
+                    label: context.l10n.fieldAntenna,
+                    width: constraints.maxWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'power',
+                    label: context.l10n.fieldPower,
+                    width: halfWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'height',
+                    label: context.l10n.fieldHeight,
+                    width: halfWidth,
+                  ),
+                  _buildMobileEditField(
+                    context,
+                    field: 'remarks',
+                    label: context.l10n.fieldRemarks,
+                    width: constraints.maxWidth,
+                    textInputAction: TextInputAction.done,
+                  ),
+                ],
+              );
+            },
+          ),
+          if (!canMutate) ...[
+            const SizedBox(height: 10),
+            Text(
+              mutationHint,
+              style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _editingSaveInProgress ? null : _cancelEditing,
+                  child: Text(context.l10n.cancel),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  key: Key('mobile-save-log-${log.id}'),
+                  onPressed: !canMutate || _editingSaveInProgress
+                      ? null
+                      : _saveEditing,
+                  icon: _editingSaveInProgress
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check),
+                  label: Text(
+                    _editingSaveInProgress
+                        ? context.l10n.savingRecord
+                        : context.l10n.save,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileEditField(
+    BuildContext context, {
+    required String field,
+    required String label,
+    required double width,
+    TextInputAction textInputAction = TextInputAction.next,
+  }) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        key: Key('mobile-edit-field-$field'),
+        controller: _controllers[field],
+        textInputAction: textInputAction,
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileMeta(
+    BuildContext context,
+    IconData icon,
+    String value,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: colors.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(
+          value.trim().isEmpty ? '—' : value,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileDetail(
+    BuildContext context,
+    String label,
+    String value,
+  ) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: label == context.l10n.fieldRemarks ? 3 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<DataRow> _buildTableRows(
+    BuildContext context,
+    LogProvider logProvider,
+    List<MapEntry<int, LogEntry>> displayEntries,
+  ) {
     return displayEntries.asMap().entries.map((entry) {
       final originalIndex = entry.value.key;
       final log = entry.value.value;
@@ -638,8 +1168,17 @@ class _LogTableState extends State<LogTable> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.check, size: 20),
-                          onPressed: !canMutate ? null : _saveEditing,
+                          icon: _editingSaveInProgress
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.check, size: 20),
+                          onPressed: !canMutate || _editingSaveInProgress
+                              ? null
+                              : _saveEditing,
                           tooltip:
                               !canMutate ? mutationHint : context.l10n.save,
                           style: IconButton.styleFrom(
@@ -652,7 +1191,8 @@ class _LogTableState extends State<LogTable> {
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
-                          onPressed: _cancelEditing,
+                          onPressed:
+                              _editingSaveInProgress ? null : _cancelEditing,
                           tooltip: context.l10n.cancel,
                           style: IconButton.styleFrom(
                             backgroundColor: Theme.of(context)
@@ -738,6 +1278,7 @@ class _LogTableState extends State<LogTable> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
+            tooltip: context.l10n.previousPage,
             onPressed:
                 _currentPage > 0 ? () => setState(() => _currentPage--) : null,
           ),
@@ -746,6 +1287,7 @@ class _LogTableState extends State<LogTable> {
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.chevron_right),
+            tooltip: context.l10n.nextPage,
             onPressed: _currentPage < totalPages - 1
                 ? () => setState(() => _currentPage++)
                 : null,

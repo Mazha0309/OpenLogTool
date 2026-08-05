@@ -13,6 +13,14 @@ crate-type = ["cdylib", "staticlib", "lib"]
 # on a GitHub-hosted helper binary at build time.
 wasm-opt = false
 
+[profile.release]
+# Release libraries are shipped once per native architecture. Thin LTO keeps
+# build time reasonable while deduplicating generic code; runtime packages do
+# not need the compiler symbol table.
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
 # Keep the existing `sqlx::` call sites while the storage engine is migrated.

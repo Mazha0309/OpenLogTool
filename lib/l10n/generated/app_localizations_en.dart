@@ -503,6 +503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveRecord => 'Save record';
 
   @override
+  String get savingRecord => 'Saving';
+
+  @override
   String get clearEnteredFields => 'Clear fields';
 
   @override

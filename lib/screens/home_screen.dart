@@ -75,7 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
       (settings) => settings.primarySidebarExpanded,
     );
     final pages = <Widget>[
-      const _WorkbenchPage(),
+      _WorkbenchPage(
+        onOpenSessions: () => _onItemTapped(1),
+      ),
       SessionHubPage(
         onSessionOpened: () {
           if (mounted) setState(() => _selectedIndex = 0);
@@ -99,7 +101,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         centerTitle: false,
-        actions: const [_AppBarSyncStatus(), SizedBox(width: 8)],
+        actions: [
+          _AppBarSyncStatus(
+            onPressed: () => _onItemTapped(1),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -180,10 +187,14 @@ class _AppDestination {
 }
 
 class _WorkbenchPage extends StatelessWidget {
-  const _WorkbenchPage();
+  const _WorkbenchPage({required this.onOpenSessions});
+
+  final VoidCallback onOpenSessions;
 
   @override
-  Widget build(BuildContext context) => const AddRecordPage();
+  Widget build(BuildContext context) => AddRecordPage(
+        onOpenSessions: onOpenSessions,
+      );
 }
 
 class _WorkbenchStatusBar extends StatelessWidget {
@@ -318,7 +329,9 @@ class _WorkbenchStatusBar extends StatelessWidget {
 }
 
 class _AppBarSyncStatus extends StatelessWidget {
-  const _AppBarSyncStatus();
+  const _AppBarSyncStatus({required this.onPressed});
+
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -343,31 +356,31 @@ class _AppBarSyncStatus extends StatelessWidget {
             context.l10n,
             collaboration.state.name,
           );
-    return Tooltip(
-      message: context.l10n.collaborationStatusTooltip(
+    return IconButton(
+      key: const Key('open-sync-status'),
+      tooltip: context.l10n.collaborationStatusTooltip(
         statusLabel,
         collaboration.pendingCount,
       ),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        padding: const EdgeInsets.all(9),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          online
-              ? Icons.cloud_done_outlined
-              : reconnecting
-                  ? Icons.sync
-                  : Icons.cloud_off,
-          color: online
-              ? Colors.green
-              : reconnecting
-                  ? Colors.orange
-                  : Theme.of(context).colorScheme.error,
-          size: 20,
-        ),
+      ),
+      icon: Icon(
+        online
+            ? Icons.cloud_done_outlined
+            : reconnecting
+                ? Icons.sync
+                : Icons.cloud_off,
+        color: online
+            ? Colors.green
+            : reconnecting
+                ? Colors.orange
+                : Theme.of(context).colorScheme.error,
+        size: 20,
       ),
     );
   }
@@ -422,12 +435,14 @@ class _WorkbenchSectionCard extends StatelessWidget {
     required this.title,
     required this.child,
     this.trailing,
+    this.keepTrailingInlineOnCompact = false,
   });
 
   final IconData icon;
   final Widget title;
   final Widget child;
   final Widget? trailing;
+  final bool keepTrailingInlineOnCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -448,56 +463,67 @@ class _WorkbenchSectionCard extends StatelessWidget {
         Expanded(child: title),
       ],
     );
-    return Card(
-      margin: EdgeInsets.zero,
-      color: colors.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colors.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final action = trailing;
-                if (action == null) return heading;
-                if (constraints.maxWidth < 720) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      heading,
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: action,
-                      ),
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: heading),
-                    const SizedBox(width: 16),
-                    action,
-                  ],
-                );
-              },
+    return LayoutBuilder(
+      builder: (context, cardConstraints) {
+        final compact = cardConstraints.maxWidth < 600;
+        return Card(
+          margin: EdgeInsets.zero,
+          color: colors.surfaceContainerLow,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: colors.outlineVariant),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 14 : 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final action = trailing;
+                    if (action == null) return heading;
+                    if (constraints.maxWidth < 720 &&
+                        !keepTrailingInlineOnCompact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          heading,
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: action,
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: heading),
+                        const SizedBox(width: 16),
+                        action,
+                      ],
+                    );
+                  },
+                ),
+                SizedBox(height: compact ? 12 : 16),
+                child,
+              ],
             ),
-            const SizedBox(height: 16),
-            child,
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
 class AddRecordPage extends StatelessWidget {
-  const AddRecordPage({super.key});
+  const AddRecordPage({
+    super.key,
+    this.onOpenSessions,
+  });
+
+  final VoidCallback? onOpenSessions;
 
   @override
   Widget build(BuildContext context) {
@@ -574,6 +600,15 @@ class AddRecordPage extends StatelessWidget {
                           height: 1.4,
                         ),
                   ),
+                  if (onOpenSessions != null) ...[
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      key: const Key('open-sessions-from-empty-workbench'),
+                      onPressed: onOpenSessions,
+                      icon: const Icon(Icons.groups_outlined),
+                      label: Text(context.l10n.navSessions),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -631,6 +666,7 @@ class AddRecordPage extends StatelessWidget {
                 ),
           ),
           trailing: _currentOrdinalBadge(context, logProvider.logCount),
+          keepTrailingInlineOnCompact: true,
           child: LogForm(
             key: ValueKey('log-form-$currentSessionId'),
             readOnly: readOnly,
@@ -683,18 +719,25 @@ class AddRecordPage extends StatelessWidget {
     final limitWidth = context.select<SettingsProvider, bool>(
       (settings) => settings.limitWorkbenchWidth,
     );
-    return SingleChildScrollView(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      child: limitWidth
-          ? Center(
-              child: ConstrainedBox(
-                key: const Key('workbench-width-limit'),
-                constraints: const BoxConstraints(maxWidth: 1440),
-                child: stackedContent,
-              ),
-            )
-          : stackedContent,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.fromLTRB(
+          constraints.maxWidth < 600 ? 12 : 20,
+          12,
+          constraints.maxWidth < 600 ? 12 : 20,
+          24,
+        ),
+        child: limitWidth
+            ? Center(
+                child: ConstrainedBox(
+                  key: const Key('workbench-width-limit'),
+                  constraints: const BoxConstraints(maxWidth: 1440),
+                  child: stackedContent,
+                ),
+              )
+            : stackedContent,
+      ),
     );
   }
 

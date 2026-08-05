@@ -396,6 +396,84 @@ void main() {
     );
   });
 
+  testWidgets('phone uses expandable record cards with an inline editor',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'paginationEnabled': false},
+    );
+    final logProvider = _StaticLogProvider([
+      _log(
+        id: 'mobile-log',
+        time: '20:31',
+        report: '59',
+        rstRcvd: '47',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: SettingsProvider(),
+          ),
+          ChangeNotifierProvider<SnackbarLogProvider>(
+            create: (_) => SnackbarLogProvider(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: EdgeInsets.all(12),
+              child: LogTable(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DataTable), findsNothing);
+    expect(find.byKey(const Key('mobile-log-list')), findsOneWidget);
+    expect(find.byKey(const Key('mobile-log-card-mobile-log')), findsOneWidget);
+    expect(find.text('#1'), findsOneWidget);
+    expect(find.text('CALL_CELL'), findsOneWidget);
+    expect(find.text('59/47'), findsOneWidget);
+
+    await tester.tap(find.byType(ExpansionTile));
+    await tester.pumpAndSettle();
+    expect(find.text('QTH_CELL'), findsOneWidget);
+    expect(find.text('DEVICE_CELL'), findsOneWidget);
+    expect(find.byKey(const Key('mobile-edit-log-mobile-log')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('mobile-edit-log-mobile-log')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('mobile-log-editor-mobile-log')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('mobile-edit-field-callsign')),
+      'BG5NEW',
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('mobile-save-log-mobile-log')),
+    );
+    await tester.tap(find.byKey(const Key('mobile-save-log-mobile-log')));
+    await tester.pumpAndSettle();
+
+    expect(logProvider.updateCalls, 1);
+    expect(logProvider.updatedLog?.callsign, 'BG5NEW');
+    expect(find.byKey(const Key('mobile-log-editor-mobile-log')), findsNothing);
+  });
+
   testWidgets('runtime locale switch updates table and deletion copy',
       (tester) async {
     SharedPreferences.setMockInitialValues(

@@ -567,7 +567,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       _unfocusDraftFields();
       setState(() => _historyReuseInProgress = true);
       try {
-        await collaboration.updateLiveDraftFieldsAtomically(values);
+        await collaboration.updateLiveDraftFieldsOptimistically(values);
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -580,8 +580,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         if (mounted) setState(() => _historyReuseInProgress = false);
       }
       if (!mounted) return;
-      // The provider adopts the canonical multi-field response and notifies
-      // this form. Let _syncSharedDraft drive the controllers so a newer edit
+      // The provider stages the batch immediately, then adopts the canonical
+      // response. Let _syncSharedDraft drive the controllers so a newer edit
       // made while the request was in flight is never overwritten here.
       return;
     }
@@ -662,6 +662,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       }
       if (!mounted) return;
       _applyClearedFieldsLocally();
+      FocusScope.of(context).requestFocus(_callsignFocusNode);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(context.l10n.enteredFieldsCleared),
@@ -1047,6 +1048,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 .clamp(1, 5);
         final calculatedFieldWidth =
             (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
+        final primaryFieldWidth =
+            isNarrow ? availableWidth : calculatedFieldWidth;
+        final clearButtonWidth = isNarrow
+            ? (availableWidth * 0.38).clamp(112.0, 144.0).toDouble()
+            : 180.0;
 
         return AbsorbPointer(
           key: const Key('history-reuse-guard'),
@@ -1064,7 +1070,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                   alignment: WrapAlignment.start,
                   children: [
                     SizedBox(
-                      width: calculatedFieldWidth,
+                      width: primaryFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _controllerController,
                         label: fieldLabel(
@@ -1087,7 +1093,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       ),
                     ),
                     SizedBox(
-                      width: calculatedFieldWidth,
+                      width: primaryFieldWidth,
                       child: CallsignHistoryField(
                         callsignController: _callsignController,
                         deviceController: _deviceController,
@@ -1246,7 +1252,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       ),
                     ),
                     SizedBox(
-                      width: calculatedFieldWidth,
+                      width: primaryFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _remarksController,
                         label: fieldLabel('remarks', context.l10n.fieldRemarks),
@@ -1324,7 +1330,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                   key: const Key('log-form-actions'),
                   children: [
                     SizedBox(
-                      width: isNarrow ? 160 : 180,
+                      width: clearButtonWidth,
                       child: Tooltip(
                         message: context.l10n.clearEnteredFields,
                         child: SizedBox(
@@ -1358,23 +1364,32 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                           child: FilledButton.icon(
                             key: const Key('save-log-record'),
                             onPressed: canSubmit ? _submitForm : null,
-                            icon: Icon(
-                              _historyReuseInProgress
-                                  ? Icons.auto_fix_high
-                                  : readOnly || firstForeignLock != null
-                                      ? Icons.lock_outline
-                                      : Icons.add,
-                            ),
+                            icon: _submissionInProgress
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    _historyReuseInProgress
+                                        ? Icons.auto_fix_high
+                                        : readOnly || firstForeignLock != null
+                                            ? Icons.lock_outline
+                                            : Icons.add,
+                                  ),
                             label: Text(
-                              _historyReuseInProgress
-                                  ? context.l10n.reuseDatabaseInformation
-                                  : readOnly
-                                      ? context.l10n.sharedDraftReadOnly
-                                      : firstForeignLock != null
-                                          ? context.l10n.fieldLockedBy(
-                                              firstForeignLock.username,
-                                            )
-                                          : context.l10n.saveRecord,
+                              _submissionInProgress
+                                  ? context.l10n.savingRecord
+                                  : _historyReuseInProgress
+                                      ? context.l10n.reuseDatabaseInformation
+                                      : readOnly
+                                          ? context.l10n.sharedDraftReadOnly
+                                          : firstForeignLock != null
+                                              ? context.l10n.fieldLockedBy(
+                                                  firstForeignLock.username,
+                                                )
+                                              : context.l10n.saveRecord,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

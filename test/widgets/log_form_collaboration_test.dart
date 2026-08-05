@@ -341,10 +341,19 @@ void main() {
           .onPressed,
       isNull,
     );
+    expect(find.text('Saving'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('save-log-record')),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
 
     gate.complete();
     await tester.pumpAndSettle();
     expect(collaboration.commitCalls, 1);
+    expect(find.text('Save record'), findsOneWidget);
   });
 
   testWidgets(
@@ -369,6 +378,16 @@ void main() {
         );
         final reuse = historyField.onReuseRecord!(_historyRecord);
         await tester.pump();
+        await tester.pump();
+
+        TextEditingController controllerFor(String label) => tester
+            .widget<TextFormField>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(TextFormField),
+              ),
+            )
+            .controller!;
 
         expect(
           tester
@@ -378,6 +397,12 @@ void main() {
               .absorbing,
           isTrue,
         );
+        expect(controllerFor('Radio').text, 'IC-7300');
+        expect(controllerFor('Antenna').text, 'DP');
+        expect(controllerFor('QTH').text, 'Shanghai');
+        expect(controllerFor('Power').text, '100W');
+        expect(controllerFor('Height').text, '12m');
+
         reuseGate.complete();
         await reuse;
         await tester.pump();
@@ -990,6 +1015,7 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
         );
 
   LiveDraftSnapshotDto _snapshot;
+  LiveDraftFieldsDto? _optimisticFields;
   final List<Map<String, String>> atomicUpdates = [];
   final List<String> acquiredFields = [];
   final List<String> releasedFields = [];
@@ -1077,7 +1103,8 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   LiveDraftSnapshotDto get liveDraftSnapshot => _snapshot;
 
   @override
-  LiveDraftFieldsDto get liveDraftFields => _snapshot.draft.fields;
+  LiveDraftFieldsDto get liveDraftFields =>
+      _optimisticFields ?? _snapshot.draft.fields;
 
   @override
   bool get canEditLiveDraft => true;
@@ -1155,6 +1182,52 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
       previousRecord: _snapshot.previousRecord,
     );
     notifyListeners();
+  }
+
+  @override
+  Future<void> updateLiveDraftFieldsOptimistically(
+    Map<String, String> updates,
+  ) async {
+    final before = liveDraftFields;
+    atomicUpdates.add(Map<String, String>.from(updates));
+    _optimisticFields = LiveDraftFieldsDto({
+      ...before.values,
+      ...updates,
+    });
+    notifyListeners();
+    try {
+      await atomicGate?.future;
+      final previous = _snapshot.draft;
+      _snapshot = LiveDraftSnapshotDto(
+        draft: LiveDraftDto(
+          draftId: previous.draftId,
+          sessionId: previous.sessionId,
+          version: previous.version + 1,
+          fields: LiveDraftFieldsDto({
+            ...previous.fields.values,
+            ...updates,
+          }),
+          fieldRevisions: {
+            for (final field in liveDraftFieldNames)
+              field: (previous.fieldRevisions[field] ?? 0) +
+                  (updates.containsKey(field) ? 1 : 0),
+          },
+          lastUpdatedBy: previous.lastUpdatedBy,
+          createdAt: previous.createdAt,
+          lastUpdatedAt: DateTime.now().toUtc(),
+        ),
+        locks: _snapshot.locks,
+        currentOrdinal: _snapshot.currentOrdinal,
+        totalRecords: _snapshot.totalRecords,
+        previousRecord: _snapshot.previousRecord,
+      );
+      _optimisticFields = null;
+      notifyListeners();
+    } catch (_) {
+      _optimisticFields = before;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   @override
