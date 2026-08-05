@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/personal_cloud_provider.dart';
@@ -45,6 +46,9 @@ void main() {
           ChangeNotifierProvider.value(value: logs),
           ChangeNotifierProvider.value(value: dictionaries),
           ChangeNotifierProvider.value(value: personalCloud),
+          ChangeNotifierProvider<AiRecognitionSettingsProvider>(
+            create: (_) => AiRecognitionSettingsProvider(),
+          ),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),

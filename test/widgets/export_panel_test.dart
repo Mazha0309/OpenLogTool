@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/services/ai_credential_store.dart';
+import 'package:openlogtool/services/secure_token_store.dart';
+import 'package:openlogtool/services/text_assistant.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +35,9 @@ void main() {
         providers: [
           ChangeNotifierProvider<SettingsProvider>.value(value: settings),
           ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+          ChangeNotifierProvider<AiRecognitionSettingsProvider>(
+            create: (_) => AiRecognitionSettingsProvider(),
+          ),
         ],
         child: const MaterialApp(
           locale: Locale('zh', 'CN'),
@@ -77,6 +84,9 @@ void main() {
         providers: [
           ChangeNotifierProvider<SettingsProvider>.value(value: settings),
           ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+          ChangeNotifierProvider<AiRecognitionSettingsProvider>(
+            create: (_) => AiRecognitionSettingsProvider(),
+          ),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),
@@ -91,7 +101,8 @@ void main() {
     expect(find.text('Import and export'), findsOneWidget);
     expect(find.text('Record files'), findsOneWidget);
     expect(find.text('Export JSON'), findsOneWidget);
-    expect(find.text('Import Excel'), findsOneWidget);
+    // LLM 未启用时隐藏 Excel 导入按钮。
+    expect(find.text('Import Excel'), findsNothing);
     expect(find.text('Excel configuration'), findsOneWidget);
     expect(find.text('File formats'), findsOneWidget);
     expect(find.text('数据导入导出'), findsNothing);
@@ -144,4 +155,76 @@ void main() {
     expect(find.text('Net_Log_2024-03-28.xlsx'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Excel import button appears only when LLM is enabled',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final settings = SettingsProvider();
+    final sessions = SessionProvider();
+    final aiSettings = AiRecognitionSettingsProvider(
+      credentialStore: AiCredentialStore(
+        secureValues: _MemorySecureValues(),
+      ),
+    );
+    addTearDown(settings.dispose);
+    addTearDown(sessions.dispose);
+    addTearDown(aiSettings.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<SettingsProvider>.value(value: settings),
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+          ChangeNotifierProvider<AiRecognitionSettingsProvider>.value(
+            value: aiSettings,
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: ExportPanel()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Import Excel'), findsNothing);
+
+    await aiSettings.saveTextAssistant(
+      provider: TextAssistantProvider.openAi,
+      baseUrl: Uri.parse('https://api.openai.com/v1'),
+      model: 'gpt-4o-mini',
+      secret: 'test-key',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Import Excel'), findsOneWidget);
+
+    await aiSettings.setTextAssistantEnabled(false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Import Excel'), findsNothing);
+  });
+}
+
+final class _MemorySecureValues implements SecureValueStore {
+  final Map<String, String> values = <String, String>{};
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
 }

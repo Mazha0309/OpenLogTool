@@ -2596,6 +2596,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get excelImportComingSoon => 'Excel import is not available yet';
 
   @override
+  String get excelImportLlmProcessing => 'Parsing Excel with AI…';
+
+  @override
+  String get excelImportPreviewTitle => 'Import preview';
+
+  @override
+  String excelImportPreviewCount(int count) {
+    return '$count records recognized';
+  }
+
+  @override
+  String get excelImportConfirm => 'Import';
+
+  @override
+  String excelImportSuccess(int count) {
+    return 'Imported $count records';
+  }
+
+  @override
+  String excelImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
   String get pathCopied => 'Path copied';
 
   @override

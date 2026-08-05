@@ -7,10 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
+import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/services/excel_import_service.dart';
 import 'package:openlogtool/services/export_service.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/config/app_config.dart';
@@ -140,13 +143,17 @@ class _ExportPanelState extends State<ExportPanel> {
                 color: theme.colorScheme.tertiary,
                 onPressed: () => _importJSON(context),
               ),
-              _buildActionButton(
-                context,
-                label: l10n.importExcel,
-                icon: Icons.table_chart,
-                color: theme.colorScheme.outline,
-                onPressed: () => _importExcel(context),
-              ),
+              if (context
+                  .watch<AiRecognitionSettingsProvider>()
+                  .textAssistantEnabled) ...[
+                _buildActionButton(
+                  context,
+                  label: l10n.importExcel,
+                  icon: Icons.table_chart,
+                  color: theme.colorScheme.outline,
+                  onPressed: () => _importExcel(context),
+                ),
+              ],
             ],
           ),
         ],
@@ -1247,7 +1254,136 @@ class _ExportPanelState extends State<ExportPanel> {
   }
 
   Future<void> _importExcel(BuildContext context) async {
-    _showSnackBar(context.l10n.excelImportComingSoon);
+    final l10n = context.l10n;
+    final logProvider = Provider.of<LogProvider>(context, listen: false);
+    final sessionProvider =
+        Provider.of<SessionProvider>(context, listen: false);
+    final aiSettings =
+        Provider.of<AiRecognitionSettingsProvider>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    if (!mounted) return;
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        withData: kIsWeb,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final selected = result.files.single;
+      final bytes =
+          selected.bytes ?? (await File(selected.path!).readAsBytes());
+      if (bytes.isEmpty) {
+        throw const FormatException('EXCEL_IMPORT_EMPTY_FILE');
+      }
+
+      final rows = parseExcelRows(bytes);
+      if (rows.isEmpty) {
+        throw const FormatException('EXCEL_IMPORT_NO_ROWS');
+      }
+
+      final client = aiSettings.createTextAssistantClient(
+        timeout: const Duration(seconds: 60),
+      );
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.excelImportLlmProcessing),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      final records = await structureWithLlm(client, buildSheetText(rows));
+      if (records.isEmpty) {
+        throw const FormatException('EXCEL_IMPORT_NO_RECORDS');
+      }
+
+      if (!context.mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(l10n.excelImportPreviewTitle),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.excelImportPreviewCount(records.length)),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final record in records)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text(
+                                '${record['callsign']}'
+                                '${record['qth'] != null && (record['qth'] as String).isNotEmpty ? ' · ${record['qth']}' : ''}'
+                                '${record['time'] != null && (record['time'] as String).isNotEmpty ? ' · ${record['time']}' : ''}',
+                                style: Theme.of(dialogContext)
+                                    .textTheme
+                                    .bodyMedium,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('excel-import-confirm'),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(l10n.excelImportConfirm),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true) return;
+
+      final logs = records
+          .map(
+            (record) => LogEntry(
+              time: record['time']?.toString() ?? '',
+              controller: '',
+              callsign: record['callsign'].toString(),
+              report: record['rstSent']?.toString() ?? '',
+              rstRcvd: record['rstRcvd']?.toString() ?? '',
+              qth: record['qth']?.toString() ?? '',
+              device: record['device']?.toString() ?? '',
+              power: record['power']?.toString() ?? '',
+              antenna: '',
+              height: '',
+              remarks: record['remarks']?.toString() ?? '',
+            ),
+          )
+          .toList(growable: false);
+      await logProvider.importLogs(
+        logs,
+        sessionId: sessionProvider.currentSessionId,
+      );
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.excelImportSuccess(logs.length)),
+        ),
+      );
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.excelImportFailed('$e')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showSnackBar(String message) {

@@ -4427,6 +4427,42 @@ abstract class AppLocalizations {
   /// **'Excel 导入功能开发中'**
   String get excelImportComingSoon;
 
+  /// No description provided for @excelImportLlmProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在用 AI 解析 Excel 内容…'**
+  String get excelImportLlmProcessing;
+
+  /// No description provided for @excelImportPreviewTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入预览'**
+  String get excelImportPreviewTitle;
+
+  /// No description provided for @excelImportPreviewCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'共识别 {count} 条记录'**
+  String excelImportPreviewCount(int count);
+
+  /// No description provided for @excelImportConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认导入'**
+  String get excelImportConfirm;
+
+  /// No description provided for @excelImportSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已导入 {count} 条记录'**
+  String excelImportSuccess(int count);
+
+  /// No description provided for @excelImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入失败：{error}'**
+  String excelImportFailed(String error);
+
   /// No description provided for @pathCopied.
   ///
   /// In zh, this message translates to:

@@ -2466,6 +2466,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get excelImportComingSoon => 'Excel 导入功能开发中';
 
   @override
+  String get excelImportLlmProcessing => '正在用 AI 解析 Excel 内容…';
+
+  @override
+  String get excelImportPreviewTitle => '导入预览';
+
+  @override
+  String excelImportPreviewCount(int count) {
+    return '共识别 $count 条记录';
+  }
+
+  @override
+  String get excelImportConfirm => '确认导入';
+
+  @override
+  String excelImportSuccess(int count) {
+    return '已导入 $count 条记录';
+  }
+
+  @override
+  String excelImportFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
   String get pathCopied => '路径已复制';
 
   @override
