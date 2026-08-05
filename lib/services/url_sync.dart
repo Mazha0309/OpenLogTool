@@ -7,7 +7,10 @@ const _pages = ['workbench', 'sessions', 'data', 'settings'];
 String pageForHomeIndex(int index) =>
     index >= 0 && index < _pages.length ? _pages[index] : _pages.first;
 
-int homeIndexForPage(String? page) => _pages.indexOf(page ?? '').clamp(0, 3);
+int homeIndexForPage(String? page) {
+  final index = _pages.indexOf(page ?? '');
+  return index < 0 ? 0 : index;
+}
 
 String buildSyncQuery(String page, String? session) {
   final params = <String, String>{'page': page};

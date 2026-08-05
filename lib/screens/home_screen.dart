@@ -55,11 +55,27 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     if (route.page != null) _restoredFromUrl = true;
     final index = homeIndexForPage(route.page);
-    if (index == _selectedIndex) return;
+    final currentSessionId = context.read<SessionProvider>().currentSessionId;
+    if (route.session != null && route.session != currentSessionId) {
+      _restoreSessionFromUrl(route.session!);
+    }
+    if (index == _selectedIndex && route.session == null) return;
     if (_syncReady) {
       setState(() => _selectedIndex = index);
     } else {
       _selectedIndex = index;
+    }
+  }
+
+  /// 浏览器后退/分享链接带 session 参数时，切换回对应会话。
+  Future<void> _restoreSessionFromUrl(String sessionId) async {
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    try {
+      await logs.reloadForSession(sessionId, propagateErrors: true);
+      await sessions.switchToSession(sessionId);
+    } catch (e) {
+      debugPrint('[HomeScreen] URL session restore failed: $e');
     }
   }
 
@@ -88,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final sessionProvider = context.read<SessionProvider>();
     final destination =
         index == 0 && sessionProvider.currentSessionId == null ? 1 : index;
+    if (destination == _selectedIndex) return;
     setState(() => _selectedIndex = destination);
     UrlSync.push(
       pageForHomeIndex(destination),
