@@ -13,8 +13,8 @@ class WebKeyValueStore implements KeyValueStore {
   static const _dbName = 'openlogtool_settings';
   static const _storeName = 'kv';
 
-  static Future<WebKeyValueStore> open() async {
-    final db = await idbFactoryBrowser.open(
+  static Future<WebKeyValueStore> open({idb.IdbFactory? factory}) async {
+    final db = await (factory ?? idbFactoryBrowser).open(
       _dbName,
       version: 1,
       onUpgradeNeeded: (event) {
@@ -53,6 +53,15 @@ class WebKeyValueStore implements KeyValueStore {
     final value = await getString(key);
     return value == null ? null : int.tryParse(value);
   }
+
+  @override
+  Future<double?> getDouble(String key) async {
+    final value = await getString(key);
+    return value == null ? null : double.tryParse(value);
+  }
+
+  @override
+  Future<Object?> get(String key) async => getString(key);
 
   @override
   Future<bool> setString(String key, String value) async {

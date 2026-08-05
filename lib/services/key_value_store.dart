@@ -10,6 +10,8 @@ abstract class KeyValueStore {
   Future<String?> getString(String key);
   Future<bool> getBool(String key, {bool defaultValue = false});
   Future<int?> getInt(String key);
+  Future<double?> getDouble(String key);
+  Future<Object?> get(String key);
   Future<bool> setString(String key, String value);
   Future<bool> setBool(String key, bool value);
   Future<bool> setInt(String key, int value);
@@ -34,6 +36,12 @@ class PrefsKeyValueStore implements KeyValueStore {
 
   @override
   Future<int?> getInt(String key) async => _prefs.getInt(key);
+
+  @override
+  Future<double?> getDouble(String key) async => _prefs.getDouble(key);
+
+  @override
+  Future<Object?> get(String key) async => _prefs.get(key);
 
   @override
   Future<bool> setString(String key, String value) =>
@@ -77,33 +85,31 @@ Future<void> migrateLegacyLocalStorage(KeyValueStore store) async {
   if (!kIsWeb) return;
   try {
     if (await store.getBool(_migrationCompleteKey)) return;
-    final legacy = await SharedPreferences.getInstance();
-    final keys = legacy.getKeys();
-    for (final key in keys) {
-      if (await store.getString(key) != null) continue;
-      final s = legacy.getString(key);
-      if (s != null) {
-        await store.setString(key, s);
-        continue;
-      }
-      final b = legacy.getBool(key);
-      if (b != null) {
-        await store.setBool(key, b);
-        continue;
-      }
-      final i = legacy.getInt(key);
-      if (i != null) {
-        await store.setInt(key, i);
-        continue;
-      }
-      final d = legacy.getDouble(key);
-      if (d != null) {
-        await store.setDouble(key, d);
-      }
-    }
+    await migrateInto(
+        store, PrefsKeyValueStore(await SharedPreferences.getInstance()));
     await store.setBool(_migrationCompleteKey, true);
   } catch (e) {
     debugPrint('legacy localStorage migration failed: $e');
+  }
+}
+
+/// 迁移主体（可测试）：把 [legacy] 中 [store] 尚不存在的 key 拷贝过去。
+/// 单独抽出以便测试直接调用，跳过 kIsWeb 的编译期短路。
+/// 按值的运行时类型分发：SharedPreferences 的 typed getter（如 getString）
+/// 对类型不匹配的 key 会抛异常，因此先经 get() 读取原始值再按类型写入。
+Future<void> migrateInto(KeyValueStore store, KeyValueStore legacy) async {
+  for (final key in await legacy.getKeys()) {
+    if (await store.getString(key) != null) continue;
+    final raw = await legacy.get(key);
+    if (raw is String) {
+      await store.setString(key, raw);
+    } else if (raw is bool) {
+      await store.setBool(key, raw);
+    } else if (raw is int) {
+      await store.setInt(key, raw);
+    } else if (raw is double) {
+      await store.setDouble(key, raw);
+    }
   }
 }
 

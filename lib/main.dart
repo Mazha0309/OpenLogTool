@@ -71,8 +71,9 @@ Future<void> main(List<String> args) async {
 
   // Web：把 localStorage（SharedPreferences）旧数据一次性拷贝到 IndexedDB。
   // 桌面端无需迁移，直接使用 SharedPreferences。
+  // 首次启动等待迁移完成，避免 provider 先读 IndexedDB 读到默认值。
   if (kIsWeb) {
-    unawaited(migrateLegacyLocalStorage(await openKeyValueStore()));
+    await migrateLegacyLocalStorage(await openKeyValueStore());
   }
 
   runApp(
