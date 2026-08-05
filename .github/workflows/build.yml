@@ -422,15 +422,10 @@ jobs:
           apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner |
             sort -V | tail -n 1)
           test -n "$apksigner"
-          echo "apksigner: $apksigner"
-          echo "=== raw apksigner output ==="
-          "$apksigner" verify --print-certs \
-            build/release-apks/app-universal-release.apk || true
           actual=$("$apksigner" verify --print-certs \
             build/release-apks/app-universal-release.apk |
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
-          echo "=== extracted actual ==="
-          echo "[$actual]"
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p; s/^V2 Signer: certificate SHA-256 digest: //p' |
+            head -n 1)
           test -n "$actual"
           if [ "$actual" != "$ANDROID_SIGNING_CERT_SHA256" ]; then
             echo "Unexpected Android signing certificate: $actual" >&2
