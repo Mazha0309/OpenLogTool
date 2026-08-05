@@ -16,6 +16,20 @@
   -->
   <base href="$FLUTTER_BASE_HREF">
 
+  <style>
+    @font-face {
+      font-family: 'SarasaGothicSC';
+      src: url('fonts/SarasaGothicSC-subset.woff2') format('woff2');
+      font-display: swap;
+      font-weight: 400;
+    }
+    #loader { position: fixed; inset: 0; display: flex; align-items: center;
+              justify-content: center; background: #faf8f2;
+              font-family: sans-serif; color: #666; z-index: 9999; }
+    #loader::after { content: '加载中…'; }
+    .flt-app-ready #loader { display: none; }
+  </style>
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="OpenLogTool amateur radio net logging and collaboration client.">
@@ -34,6 +48,7 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <div id="loader"></div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -43,5 +58,10 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      document.body.classList.add('flt-app-ready');
+    });
+  </script>
 </body>
 </html>
