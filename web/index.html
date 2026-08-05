@@ -59,6 +59,9 @@
     window.addEventListener('error', function () {
       document.body.classList.add('flt-app-ready');
     });
+    window.addEventListener('unhandledrejection', function () {
+      document.body.classList.add('flt-app-ready');
+    });
   </script>
 </body>
 </html>

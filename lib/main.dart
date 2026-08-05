@@ -25,7 +25,11 @@ import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await loadAppFonts();
+  try {
+    await loadAppFonts();
+  } catch (e) {
+    debugPrint('Failed to load app fonts, falling back to system fonts: $e');
+  }
 
   // 桌面子窗口只渲染主控屏，不初始化 Rust、本地数据库或主应用 Provider。
   final controllerWindow =
