@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/personal_cloud_provider.dart';
@@ -28,6 +29,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   await AppLogger.instance.init();
   FlutterError.onError = (details) {

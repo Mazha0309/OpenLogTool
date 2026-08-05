@@ -1,0 +1,43 @@
+import 'url_sync_web.dart' if (dart.library.io) 'url_sync_stub.dart'
+    as url_sync_platform;
+
+/// 页面名与 HomeScreen tab 索引映射。
+const _pages = ['workbench', 'sessions', 'data', 'settings'];
+
+String pageForHomeIndex(int index) =>
+    index >= 0 && index < _pages.length ? _pages[index] : _pages.first;
+
+int homeIndexForPage(String? page) => _pages.indexOf(page ?? '').clamp(0, 3);
+
+String buildSyncQuery(String page, String? session) {
+  final params = <String, String>{'page': page};
+  if (session != null && session.isNotEmpty) {
+    params['session'] = session;
+  }
+  return '?${params.entries.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
+}
+
+class SyncRoute {
+  final String? page;
+  final String? session;
+  const SyncRoute({this.page, this.session});
+}
+
+SyncRoute parseSyncQuery(String query) {
+  final uri = Uri.parse(query.isEmpty ? '?x' : query);
+  return SyncRoute(
+    page: uri.queryParameters['page'],
+    session: uri.queryParameters['session'],
+  );
+}
+
+/// 浏览器 URL 同步：非 Web 平台为空实现。
+class UrlSync {
+  /// 初始化：立即回调一次当前 URL 的路由，并监听浏览器前进/后退。
+  static void init({required void Function(SyncRoute route) onRouteChanged}) =>
+      url_sync_platform.urlSyncInit(onRouteChanged);
+
+  /// 更新 URL（不触发 popstate，避免与前进/后退冲突）。
+  static void push(String page, String? session) =>
+      url_sync_platform.urlSyncPush(page, session);
+}
