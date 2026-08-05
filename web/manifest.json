@@ -1,9 +1,9 @@
 {
     "name": "OpenLogTool",
     "short_name": "OpenLogTool",
-    "start_url": ".",
+    "start_url": "./",
     "display": "standalone",
-    "background_color": "#FFFFFF",
+    "background_color": "#faf8f2",
     "theme_color": "#2196F3",
     "description": "OpenLogTool amateur radio net logging and collaboration client.",
     "prefer_related_applications": false,
@@ -32,5 +32,8 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "scope": "./",
+    "orientation": "any",
+    "lang": "zh-CN"
 }
