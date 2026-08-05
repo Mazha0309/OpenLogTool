@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
@@ -70,9 +72,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   List<bridge.LogEntry> _history = [];
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
+  BuildContext? _overlayContext;
   final FocusNode _ownFocusNode = FocusNode();
   bool _isSelecting = false;
   int _historyRequestGeneration = 0;
+  int _highlightIndex = -1;
+  final ScrollController _listController = ScrollController();
 
   FocusNode get _effFocus => widget.focusNode ?? _ownFocusNode;
   bool get _canUseHistory => widget.enabled && widget.historyEnabled;
@@ -82,6 +87,35 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     super.initState();
     _effFocus.addListener(_onFocusChanged);
     widget.callsignController.addListener(_onCallsignChanged);
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+  }
+
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (!_effFocus.hasFocus) return false;
+    if (_overlayEntry == null || _history.isEmpty) return false;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveHighlight(1);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveHighlight(-1);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (_highlightIndex >= 0 && _highlightIndex < _history.length) {
+        unawaited(_fillFromRecord(_history[_highlightIndex]));
+        return true;
+      }
+      return false;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      _hideOverlay();
+      return true;
+    }
+    return false;
   }
 
   @override
@@ -107,11 +141,36 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    _listController.dispose();
     _hideOverlay();
     widget.callsignController.removeListener(_onCallsignChanged);
     _effFocus.removeListener(_onFocusChanged);
     if (widget.focusNode == null) _ownFocusNode.dispose();
     super.dispose();
+  }
+
+  void _moveHighlight(int delta) {
+    if (_history.isEmpty) return;
+    final next = (_highlightIndex < 0 ? 0 : _highlightIndex + delta)
+        .clamp(0, _history.length - 1);
+    if (next == _highlightIndex) return;
+    _highlightIndex = next;
+    _overlayEntry?.markNeedsBuild();
+    if (!_listController.hasClients) return;
+    const itemExtent = 62.0;
+    final target = itemExtent * _highlightIndex;
+    if (target < _listController.position.pixels ||
+        target >
+            _listController.position.pixels +
+                _listController.position.viewportDimension -
+                itemExtent) {
+      _listController.animateTo(
+        math.max(0, target - _listController.position.viewportDimension / 3),
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _onCallsignChanged() {
@@ -252,6 +311,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   void _showOverlay() {
     _hideOverlay();
     if (!_canUseHistory || _history.isEmpty) return;
+    _highlightIndex = 0;
 
     final overlay = Overlay.of(context);
     final overlayBox = overlay.context.findRenderObject() as RenderBox;
@@ -299,145 +359,167 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     final list = _history;
 
     _overlayEntry = OverlayEntry(
-      builder: (ctx) => Positioned(
-        width: panelWidth,
-        child: CompositedTransformFollower(
-          link: _layerLink,
-          showWhenUnlinked: false,
-          offset: followerOffset,
-          child: TextFieldTapRegion(
-            child: Material(
-              key: const Key('callsign-history-overlay'),
-              elevation: 8,
-              borderRadius: BorderRadius.circular(10),
-              surfaceTintColor: Colors.transparent,
-              child: Container(
-                constraints: BoxConstraints(maxHeight: panelHeight),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: Theme.of(ctx).colorScheme.outlineVariant),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                      decoration: BoxDecoration(
-                        border: Border(
-                            bottom: BorderSide(
-                                color:
-                                    Theme.of(ctx).colorScheme.outlineVariant)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.auto_fix_high,
-                              size: 14,
-                              color: Theme.of(ctx).colorScheme.primary),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              context.l10n.reuseDatabaseInformation,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    Theme.of(ctx).colorScheme.onSurfaceVariant,
+      builder: (ctx) {
+        _overlayContext = ctx;
+        return Positioned(
+          width: panelWidth,
+          child: CompositedTransformFollower(
+            link: _layerLink,
+            showWhenUnlinked: false,
+            offset: followerOffset,
+            child: TextFieldTapRegion(
+              child: Material(
+                key: const Key('callsign-history-overlay'),
+                elevation: 8,
+                borderRadius: BorderRadius.circular(10),
+                surfaceTintColor: Colors.transparent,
+                child: Container(
+                  constraints: BoxConstraints(maxHeight: panelHeight),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Theme.of(ctx).colorScheme.outlineVariant),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                              bottom: BorderSide(
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .outlineVariant)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.auto_fix_high,
+                                size: 14,
+                                color: Theme.of(ctx).colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                context.l10n.reuseDatabaseInformation,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Flexible(
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: list.length,
-                        itemBuilder: (_, i) {
-                          final log = list[i];
-                          final details = [
-                            if (log.qth != null && log.qth!.isNotEmpty) log.qth,
-                            if (log.device != null && log.device!.isNotEmpty)
-                              log.device,
-                            if (log.antenna != null && log.antenna!.isNotEmpty)
-                              log.antenna,
-                          ].join(' · ');
-                          return InkWell(
-                            onTap: () async => _fillFromRecord(log),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                border: i < list.length - 1
-                                    ? Border(
-                                        bottom: BorderSide(
-                                            color: Theme.of(ctx)
-                                                .colorScheme
-                                                .outlineVariant
-                                                .withAlpha(80)))
-                                    : null,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.history,
-                                      size: 14,
-                                      color: Theme.of(ctx).colorScheme.primary),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _formatTime(log.time),
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
+                      Flexible(
+                        child: ListView.builder(
+                          controller: _listController,
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: list.length,
+                          itemBuilder: (_, i) {
+                            final log = list[i];
+                            final details = [
+                              if (log.qth != null && log.qth!.isNotEmpty)
+                                log.qth,
+                              if (log.device != null && log.device!.isNotEmpty)
+                                log.device,
+                              if (log.antenna != null &&
+                                  log.antenna!.isNotEmpty)
+                                log.antenna,
+                            ].join(' · ');
+                            final selected = i == _highlightIndex;
+                            return InkWell(
+                              onTap: () async => _fillFromRecord(log),
+                              onHover: (hovered) {
+                                if (hovered && _highlightIndex != i) {
+                                  _highlightIndex = i;
+                                  _overlayEntry?.markNeedsBuild();
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: selected
+                                      ? Theme.of(ctx)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.14)
+                                      : null,
+                                  border: i < list.length - 1
+                                      ? Border(
+                                          bottom: BorderSide(
                                               color: Theme.of(ctx)
                                                   .colorScheme
-                                                  .primary),
-                                        ),
-                                        if (details.isNotEmpty)
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 2),
-                                            child: Text(details,
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Theme.of(ctx)
-                                                        .colorScheme
-                                                        .onSurfaceVariant),
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis),
+                                                  .outlineVariant
+                                                  .withAlpha(80)))
+                                      : null,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.history,
+                                        size: 14,
+                                        color:
+                                            Theme.of(ctx).colorScheme.primary),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _formatTime(log.time),
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: Theme.of(ctx)
+                                                    .colorScheme
+                                                    .primary),
                                           ),
-                                      ],
+                                          if (details.isNotEmpty)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 2),
+                                              child: Text(details,
+                                                  style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Theme.of(ctx)
+                                                          .colorScheme
+                                                          .onSurfaceVariant),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis),
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Icon(Icons.chevron_right,
-                                      size: 16,
-                                      color: Theme.of(ctx)
-                                          .colorScheme
-                                          .onSurfaceVariant),
-                                ],
+                                    Icon(Icons.chevron_right,
+                                        size: 16,
+                                        color: Theme.of(ctx)
+                                            .colorScheme
+                                            .onSurfaceVariant),
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
     overlay.insert(_overlayEntry!);
   }
@@ -445,6 +527,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   void _hideOverlay() {
     final entry = _overlayEntry;
     _overlayEntry = null;
+    _overlayContext = null;
     if (entry == null) return;
     try {
       entry.remove();
@@ -480,7 +563,22 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
         textInputAction: widget.textInputAction ?? TextInputAction.next,
         textCapitalization: TextCapitalization.characters,
         inputFormatters: const [ImeSafeUpperCaseTextFormatter()],
-        onTapOutside: (_) => _effFocus.unfocus(),
+        onTapOutside: (event) {
+          final overlayContext = _overlayContext;
+          if (overlayContext != null) {
+            final renderObject = overlayContext.findRenderObject();
+            if (renderObject is RenderBox && renderObject.attached) {
+              final local = renderObject.globalToLocal(event.position);
+              if (local.dx >= 0 &&
+                  local.dy >= 0 &&
+                  local.dx <= renderObject.size.width &&
+                  local.dy <= renderObject.size.height) {
+                return;
+              }
+            }
+          }
+          _effFocus.unfocus();
+        },
       ),
     );
   }

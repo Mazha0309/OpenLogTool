@@ -30,7 +30,12 @@ $artifactDirectory = Resolve-FromRepository $OutputDirectory
 $requiredFiles = @(
     "openlogtool.exe",
     "openlogtool_core.dll",
-    "flutter_windows.dll"
+    "flutter_windows.dll",
+    "msvcp140.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "ucrtbase.dll",
+    "api-ms-win-crt-runtime-l1-1-0.dll"
 )
 
 foreach ($relativePath in $requiredFiles) {
@@ -99,9 +104,7 @@ finally {
 }
 
 $hash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$hashPath = "$artifactPath.sha256"
-$hashLine = "$hash  $([System.IO.Path]::GetFileName($artifactPath))`n"
-[System.IO.File]::WriteAllText($hashPath, $hashLine)
 
 Write-Output "Windows artifact: $artifactPath"
-Write-Output "SHA-256: $hash"
+Write-Output "Build-time SHA-256: $hash"
+Write-Output "GitHub Release will publish the authoritative asset digest."

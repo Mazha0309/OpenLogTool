@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
@@ -24,6 +24,7 @@ class ExportSaveResult {
 class ExportService {
   /// 根据配置的平台路径和平台类型，解析实际可用的导出路径。
   static Future<String?> resolveExportPath(String configuredPath) async {
+    if (kIsWeb) return null;
     if (!Platform.isAndroid && configuredPath.isNotEmpty) {
       return configuredPath;
     }
@@ -35,6 +36,9 @@ class ExportService {
   /// 判断当前 [configuredPath] 是否在 Android 上需要走 SAF 文件选择器。
   /// 桌面端始终返回 false。
   static Future<bool> shouldUseSaf(String configuredPath) async {
+    // Web file downloads also have to go through the browser picker because
+    // dart:io paths are unavailable.
+    if (kIsWeb) return true;
     if (!Platform.isAndroid) {
       return false;
     }
@@ -93,7 +97,19 @@ class ExportService {
   }
 
   /// 从模板和当前时间生成导出文件名。
-  static String generateFileName(String template, DateTime now) {
+  /// 模板支持 {yyyy} {MM} {dd} {HH} {mm} {ss} 以及可选的 {session}（会话名）。
+  /// [useSessionTitle] 开启且会话名非空时，文件名直接使用会话名。
+  static String generateFileName(
+    String template,
+    DateTime now, {
+    String? sessionTitle,
+    bool useSessionTitle = false,
+  }) {
+    final normalizedSessionTitle = sessionTitle?.trim() ?? '';
+    if (useSessionTitle && normalizedSessionTitle.isNotEmpty) {
+      return normalizedSessionTitle;
+    }
+
     String filename = template;
     filename = filename.replaceAll('{yyyy}', now.year.toString());
     filename =
@@ -104,6 +120,11 @@ class ExportService {
         filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
     filename =
         filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
+    if (sessionTitle != null && sessionTitle.isNotEmpty) {
+      filename = filename.replaceAll('{session}', sessionTitle);
+    } else {
+      filename = filename.replaceAll('{session}', 'session');
+    }
     return filename;
   }
 

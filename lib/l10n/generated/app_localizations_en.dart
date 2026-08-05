@@ -503,6 +503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveRecord => 'Save record';
 
   @override
+  String get savingRecord => 'Saving';
+
+  @override
   String get clearEnteredFields => 'Clear fields';
 
   @override
@@ -996,7 +999,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get duplicateCallsignWarningHint =>
-      'Warn before saving the same callsign again in this net, while still allowing it.';
+      'Check immediately after entering a callsign for an existing record in this net, and ask whether to update the old record or add a new one.';
 
   @override
   String get duplicateCallsignTitle => 'Callsign already recorded';
@@ -1008,6 +1011,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get saveAnyway => 'Save anyway';
+
+  @override
+  String get duplicateUpdateOldRecord => 'Update old record';
+
+  @override
+  String get duplicateAddNewRecord => 'Add new record';
+
+  @override
+  String get duplicateContinueDialogTitle => 'Callsign already recorded';
+
+  @override
+  String duplicateContinueDialogMessage(String callsign) {
+    return '$callsign is already recorded in this net. Continue adding it?';
+  }
+
+  @override
+  String get duplicateContinueAdd => 'Continue adding';
+
+  @override
+  String get duplicateUpdateDialogTitle => 'Callsign already recorded';
+
+  @override
+  String duplicateUpdateDialogMessage(String callsign) {
+    return '$callsign already has a record in this net. Choose how to proceed:';
+  }
+
+  @override
+  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
+      String rstRcvd, String qth) {
+    return 'Existing: $time $callsign $rstSent/$rstRcvd $qth';
+  }
+
+  @override
+  String get recordUpdated => 'Record updated';
 
   @override
   String get callsignHistoryFillSetting => 'Reuse callsign history';
@@ -1149,6 +1186,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String serverNetworkError(String url) {
     return 'The server at $url did not respond. Check the address and port, and make sure the server or reverse proxy is running.';
+  }
+
+  @override
+  String serverWebMixedContentError(String url) {
+    return 'This WebClient uses HTTPS, so the browser cannot connect to the HTTP server at $url. Enable HTTPS for the server.';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return 'The browser could not access $url. Confirm the server is online. If native clients can connect, add $origin to the server\'s CORS_ORIGINS or use a same-origin reverse proxy.';
   }
 
   @override
@@ -1373,6 +1420,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get excelUseSessionTitleAsHeaderHint =>
       'Use the current session name directly as the Excel header. If it is blank, the header template is used instead.';
+
+  @override
+  String get fileNameUseSessionTitle => 'Use current session name as file name';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      'Use the current session name directly as the export file name. If it is blank, the file name template is used instead.';
 
   @override
   String get themeColorPickerTitle => 'Choose theme color';
@@ -1781,6 +1835,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get paginationSettingHint => 'Show five records on each page.';
+
+  @override
+  String get recordEditorDialogSetting => 'Edit records in a dialog';
+
+  @override
+  String get recordEditorDialogSettingHint =>
+      'Open the full form in a dialog when editing a record, with dictionary suggestions. Turn off to edit inline in the table.';
 
   @override
   String get controllerDisplaySettingsHint =>
@@ -2409,6 +2470,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get templateSecondDescription => 'Two-digit second, for example 45';
+
+  @override
+  String get templateSessionDescription =>
+      'Current session name, for example 2024 Summer Net';
 
   @override
   String get templateExamplesTitle => 'Examples';
@@ -3709,6 +3774,16 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
+  String serverWebMixedContentError(String url) {
+    return 'This WebClient uses HTTPS, so the browser cannot connect to the HTTP server at $url. Enable HTTPS for the server.';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return 'The browser could not access $url. Confirm the server is online. If native clients can connect, add $origin to the server\'s CORS_ORIGINS or use a same-origin reverse proxy.';
+  }
+
+  @override
   String serverNetworkTimeout(String url) {
     return 'The connection to $url timed out. Check the network, firewall, and server status.';
   }
@@ -3930,6 +4005,13 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get excelUseSessionTitleAsHeaderHint =>
       'Use the current session name directly as the Excel header. If it is blank, the header template is used instead.';
+
+  @override
+  String get fileNameUseSessionTitle => 'Use current session name as file name';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      'Use the current session name directly as the export file name. If it is blank, the file name template is used instead.';
 
   @override
   String get themeColorPickerTitle => 'Choose theme color';

@@ -109,6 +109,26 @@ void main() {
     expect(formScroll, findsOneWidget);
     expect(tester.element(statusScroll), same(tester.element(formScroll)));
     expect(tester.getSize(statusBar).height, lessThanOrEqualTo(56));
+    final formWidth = tester.getSize(find.byType(LogForm)).width;
+    for (final label in const ['主控呼号 *', '来台呼号', '备注']) {
+      final field = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == label,
+      );
+      expect(field, findsOneWidget, reason: label);
+      expect(
+        tester.getSize(field).width,
+        closeTo(formWidth, 0.1),
+        reason: '$label should keep the full phone width',
+      );
+    }
+    final currentTitle = tester.getRect(find.text('当前记录'));
+    final ordinal =
+        tester.getRect(find.byKey(const Key('current-ordinal-badge')));
+    expect(
+      (currentTitle.center.dy - ordinal.center.dy).abs(),
+      lessThanOrEqualTo(8),
+    );
 
     final initialTop = tester.getTopLeft(statusBar).dy;
     await tester.drag(statusScroll, const Offset(0, -260));

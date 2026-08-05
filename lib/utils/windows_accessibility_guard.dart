@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 const _windowsAccessibilityOverride =
@@ -21,6 +22,10 @@ bool shouldGuardWindowsAccessibility({
   String? operatingSystemVersion,
   Map<String, String>? environment,
 }) {
+  // dart:io's Platform getters throw on Web. Callers may still inject a
+  // synthetic Windows platform in tests, so only short-circuit the real Web
+  // runtime when no override was supplied.
+  if (kIsWeb && operatingSystem == null) return false;
   final os = operatingSystem ?? Platform.operatingSystem;
   if (os != 'windows') return false;
 

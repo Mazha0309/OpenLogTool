@@ -384,6 +384,107 @@ void main() {
       expect(sequenceChanges, [2, 3]);
     });
 
+    test('optimistic atomic staging is visible and keeps revision baselines',
+        () {
+      final canonical = _draft(
+        version: 3,
+        values: const {
+          'qth': 'remote-qth',
+          'device': 'remote-radio',
+          'remarks': 'remote-remarks',
+        },
+        revisions: const {'qth': 4, 'device': 5, 'remarks': 8},
+      );
+      final staged = stageOptimisticLiveDraftAtomicPatch(
+        canonicalDraft: canonical,
+        localFields: _fields({
+          'qth': 'remote-qth',
+          'device': 'local-radio',
+          'remarks': 'local-remarks',
+        }),
+        dirtyFields: const {'device', 'remarks'},
+        baseRevisions: const {'device': 2, 'remarks': 7},
+        updates: const {
+          'qth': 'Shanghai',
+          'device': 'IC-705',
+        },
+      );
+
+      expect(staged.localFields['qth'], 'Shanghai');
+      expect(staged.localFields['device'], 'IC-705');
+      expect(staged.localFields['remarks'], 'local-remarks');
+      expect(staged.dirtyFields, {'qth', 'device', 'remarks'});
+      expect(staged.baseRevisions, {
+        'qth': 4,
+        'device': 2,
+        'remarks': 7,
+      });
+    });
+
+    test('optimistic staging clears dirty state when returning to canonical',
+        () {
+      final canonical = _draft(
+        version: 3,
+        values: const {'qth': 'remote-qth'},
+        revisions: const {'qth': 4},
+      );
+      final staged = stageOptimisticLiveDraftAtomicPatch(
+        canonicalDraft: canonical,
+        localFields: _fields({'qth': 'local-qth'}),
+        dirtyFields: const {'qth'},
+        baseRevisions: const {'qth': 2},
+        updates: const {'qth': 'remote-qth'},
+      );
+
+      expect(staged.localFields['qth'], 'remote-qth');
+      expect(staged.dirtyFields, isNot(contains('qth')));
+      expect(staged.baseRevisions, isNot(contains('qth')));
+    });
+
+    test('optimistic rollback preserves a newer edit and unrelated dirty state',
+        () {
+      final canonical = _draft(
+        version: 4,
+        values: const {
+          'qth': 'new-remote-qth',
+          'device': 'remote-radio',
+          'remarks': 'remote-remarks',
+        },
+        revisions: const {'qth': 5, 'device': 6, 'remarks': 8},
+      );
+      final restored = rollbackOptimisticLiveDraftAtomicPatch(
+        canonicalDraft: canonical,
+        beforeLocalFields: _fields({
+          'qth': 'old-remote-qth',
+          'device': 'old-local-radio',
+          'remarks': 'local-remarks',
+        }),
+        beforeDirtyFields: const {'device', 'remarks'},
+        beforeBaseRevisions: const {'device': 2, 'remarks': 7},
+        currentLocalFields: _fields({
+          'qth': 'Shanghai',
+          'device': 'newer-manual-radio',
+          'remarks': 'local-remarks',
+        }),
+        currentDirtyFields: const {'qth', 'device', 'remarks'},
+        currentBaseRevisions: const {
+          'qth': 5,
+          'device': 2,
+          'remarks': 7,
+        },
+        stagedValues: const {
+          'qth': 'Shanghai',
+          'device': 'IC-705',
+        },
+      );
+
+      expect(restored.localFields['qth'], 'new-remote-qth');
+      expect(restored.localFields['device'], 'newer-manual-radio');
+      expect(restored.localFields['remarks'], 'local-remarks');
+      expect(restored.dirtyFields, {'device', 'remarks'});
+      expect(restored.baseRevisions, {'device': 2, 'remarks': 7});
+    });
+
     test('success merge preserves unrelated dirty state', () {
       final before = _fields({
         'qth': 'old-qth',

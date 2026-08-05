@@ -279,6 +279,45 @@ void main() {
     expect(title.style?.color, theme.colorScheme.onPrimary);
   });
 
+  testWidgets('header shows a ticking current time', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ControllerDisplayScreen(
+          data: _data(),
+          showCloseButton: false,
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('controller-current-time')),
+      findsOneWidget,
+    );
+    final before = tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byKey(const Key('controller-current-time')),
+            matching: find.byType(Text),
+          ),
+        )
+        .data;
+    expect(before, matches(RegExp(r'^\d{2}:\d{2}:\d{2}$')));
+
+    await tester.pump(const Duration(seconds: 2));
+    final after = tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byKey(const Key('controller-current-time')),
+            matching: find.byType(Text),
+          ),
+        )
+        .data;
+    expect(after, matches(RegExp(r'^\d{2}:\d{2}:\d{2}$')));
+  });
+
   testWidgets('empty history keeps the generic previous-record heading',
       (tester) async {
     await tester.pumpWidget(

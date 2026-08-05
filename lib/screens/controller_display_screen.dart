@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:openlogtool/l10n/l10n.dart';
@@ -385,7 +387,7 @@ class _ControllerScaleControl extends StatelessWidget {
   }
 }
 
-class _ControllerHeader extends StatelessWidget {
+class _ControllerHeader extends StatefulWidget {
   const _ControllerHeader({
     required this.data,
     required this.detail,
@@ -401,8 +403,34 @@ class _ControllerHeader extends StatelessWidget {
   final VoidCallback onClose;
 
   @override
+  State<_ControllerHeader> createState() => _ControllerHeaderState();
+}
+
+class _ControllerHeaderState extends State<_ControllerHeader> {
+  Timer? _clockTimer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final now = DateTime.now();
+      if (now.second != _now.second) {
+        setState(() => _now = now);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final data = widget.data;
     final connected =
         data.connectionState == ControllerConnectionState.connected;
     final updatedAt = data.lastUpdatedAt == null
@@ -438,16 +466,33 @@ class _ControllerHeader extends StatelessWidget {
     Widget configureButton() => IconButton.filledTonal(
           key: const Key('configure-controller-display'),
           tooltip: context.l10n.configureControllerDisplay(
-            controllerDetailLabel(context.l10n, detail),
+            controllerDetailLabel(context.l10n, widget.detail),
           ),
-          onPressed: onConfigure,
+          onPressed: widget.onConfigure,
           icon: const Icon(Icons.tune),
         );
 
     Widget closeButton() => IconButton(
           tooltip: context.l10n.exitControllerScreen,
-          onPressed: onClose,
+          onPressed: widget.onClose,
           icon: const Icon(Icons.close_fullscreen),
+        );
+
+    Widget clock() => Container(
+          key: const Key('controller-current-time'),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.55),
+          ),
+          child: Text(
+            DateFormat('HH:mm:ss').format(_now),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onPrimaryContainer,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         );
 
     return Container(
@@ -460,6 +505,7 @@ class _ControllerHeader extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final veryNarrow = constraints.maxWidth < 340;
           if (constraints.maxWidth >= 640) {
             return Row(
               children: [
@@ -475,10 +521,12 @@ class _ControllerHeader extends StatelessWidget {
                     children: [title, const SizedBox(height: 2), summary],
                   ),
                 ),
+                clock(),
+                const SizedBox(width: 8),
                 statusChip(),
                 const SizedBox(width: 8),
                 configureButton(),
-                if (showCloseButton) ...[
+                if (widget.showCloseButton) ...[
                   const SizedBox(width: 4),
                   closeButton(),
                 ],
@@ -499,7 +547,7 @@ class _ControllerHeader extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(child: title),
                   configureButton(),
-                  if (showCloseButton) closeButton(),
+                  if (widget.showCloseButton) closeButton(),
                 ],
               ),
               const SizedBox(height: 8),
@@ -507,6 +555,10 @@ class _ControllerHeader extends StatelessWidget {
                 children: [
                   Expanded(child: summary),
                   const SizedBox(width: 8),
+                  if (!veryNarrow) ...[
+                    clock(),
+                    const SizedBox(width: 4),
+                  ],
                   statusChip(),
                 ],
               ),

@@ -11,6 +11,7 @@ import 'api/personal_dictionary.dart' as personal_dictionary;
 import 'models/log_entry.dart';
 import 'models/session.dart';
 import 'models/dict_item.dart';
+import 'platform_int.dart';
 
 class RustApi {
   static Future<void> init({required String dbPath}) async {
@@ -56,8 +57,8 @@ class RustApi {
   }) {
     return logs.getLogs(
       sessionId: sessionId,
-      page: page,
-      pageSize: pageSize,
+      page: toOptionalPlatformInt64(page),
+      pageSize: toOptionalPlatformInt64(pageSize),
       search: search,
     );
   }
@@ -70,7 +71,10 @@ class RustApi {
     required String callsign,
     int? limit,
   }) {
-    return logs.getRecentByCallsign(callsign: callsign, limit: limit);
+    return logs.getRecentByCallsign(
+      callsign: callsign,
+      limit: toOptionalPlatformInt64(limit),
+    );
   }
 
   static Future<LogEntry> updateLog({
@@ -190,7 +194,11 @@ class RustApi {
     required String query,
     int? limit,
   }) {
-    return dict.searchDict(dictType: dictType, query: query, limit: limit);
+    return dict.searchDict(
+      dictType: dictType,
+      query: query,
+      limit: toOptionalPlatformInt64(limit),
+    );
   }
 
   static Future<void> addDictItem({
@@ -392,7 +400,7 @@ class RustApi {
       accountId: accountId,
       sessionId: sessionId,
       membershipId: membershipId,
-      membershipVersion: membershipVersion,
+      membershipVersion: toPlatformInt64(membershipVersion),
       role: role,
     );
   }
@@ -407,7 +415,7 @@ class RustApi {
       serverInstanceId: serverInstanceId,
       accountId: accountId,
       sessionId: sessionId,
-      limit: limit,
+      limit: toOptionalPlatformInt64(limit),
     );
   }
 
@@ -437,7 +445,7 @@ class RustApi {
       accountId: accountId,
       sessionId: sessionId,
       mutationId: mutationId,
-      acceptedEventSeq: acceptedEventSeq,
+      acceptedEventSeq: toPlatformInt64(acceptedEventSeq),
     );
   }
 
@@ -493,7 +501,7 @@ class RustApi {
       serverInstanceId: serverInstanceId,
       accountId: accountId,
       sessionId: sessionId,
-      headSeq: headSeq,
+      headSeq: toPlatformInt64(headSeq),
     );
   }
 
@@ -632,7 +640,7 @@ class RustApi {
     return personal_cloud.savePersonalCloudBaseline(
       scopeHash: scopeHash,
       dataset: dataset,
-      remoteRevision: remoteRevision,
+      remoteRevision: toPlatformInt64(remoteRevision),
       snapshotJson: snapshotJson,
       checksum: checksum,
       claimOwner: claimOwner,

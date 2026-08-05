@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/log_entry.dart';
+import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/snackbar_log_provider.dart';
@@ -17,7 +18,7 @@ void main() {
   testWidgets('a successful provider add replaces the empty table immediately',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final logProvider = LogProvider(
       sessionListLoader: () async => [
@@ -74,7 +75,7 @@ void main() {
       'replacing an existing projection reconstructs rows and shows the newest record',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final old = _log(
       id: 'old-row',
@@ -111,7 +112,7 @@ void main() {
   testWidgets('keeps RST sent and received aligned with the newest row',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final logs = <LogEntry>[
       _log(
@@ -233,7 +234,7 @@ void main() {
   testWidgets('shows a canonical UTC log time in the device timezone',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final localTime = DateTime(2026, 7, 13, 20, 30);
     final logProvider = _StaticLogProvider([
@@ -268,7 +269,7 @@ void main() {
 
   testWidgets('default pagination keeps five newest RST records on first page',
       (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{'recordEditorDialogEnabled': false});
     final logProvider = _StaticLogProvider(
       List<LogEntry>.generate(
         6,
@@ -326,7 +327,7 @@ void main() {
   testWidgets('non-owned collaboration log exposes only a read-only hint',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final logProvider = _StaticLogProvider([
       _log(
@@ -396,10 +397,135 @@ void main() {
     );
   });
 
+  testWidgets('phone uses expandable record cards with an inline editor',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+    );
+    final logProvider = _StaticLogProvider([
+      _log(
+        id: 'mobile-log',
+        time: '20:31',
+        report: '59',
+        rstRcvd: '47',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: SettingsProvider(),
+          ),
+          ChangeNotifierProvider<SnackbarLogProvider>(
+            create: (_) => SnackbarLogProvider(),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: EdgeInsets.all(12),
+              child: LogTable(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DataTable), findsNothing);
+    expect(find.byKey(const Key('mobile-log-list')), findsOneWidget);
+    expect(find.byKey(const Key('mobile-log-card-mobile-log')), findsOneWidget);
+    expect(find.text('#1'), findsOneWidget);
+    expect(find.text('CALL_CELL'), findsOneWidget);
+    expect(find.text('59/47'), findsOneWidget);
+
+    await tester.tap(find.byType(ExpansionTile));
+    await tester.pumpAndSettle();
+    expect(find.text('QTH_CELL'), findsOneWidget);
+    expect(find.text('DEVICE_CELL'), findsOneWidget);
+    expect(find.byKey(const Key('mobile-edit-log-mobile-log')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('mobile-edit-log-mobile-log')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('mobile-log-editor-mobile-log')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('mobile-edit-field-callsign')),
+      'BG5NEW',
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('mobile-save-log-mobile-log')),
+    );
+    await tester.tap(find.byKey(const Key('mobile-save-log-mobile-log')));
+    await tester.pumpAndSettle();
+
+    expect(logProvider.updateCalls, 1);
+    expect(logProvider.updatedLog?.callsign, 'BG5NEW');
+    expect(find.byKey(const Key('mobile-log-editor-mobile-log')), findsNothing);
+  });
+
+  testWidgets('dialog editor opens by default and saves through the patch',
+      (tester) async {
+    final logProvider = _StaticLogProvider([
+      _log(
+        id: 'dialog-edit-log',
+        time: '20:31',
+        report: '59',
+        rstRcvd: '59',
+      ),
+    ]);
+    await _pumpLogTable(tester, logProvider, dialogEditor: true);
+
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    final editButton = tester
+        .widgetList<IconButton>(
+          find.descendant(
+            of: find.byWidget(table.rows.single.cells[12].child),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .first;
+    editButton.onPressed!();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(
+        find.byKey(const Key('record-editor-field-callsign')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('CALL_CELL'),
+      ),
+      findsWidgets,
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('record-editor-field-callsign')),
+      'BG5DIALOG',
+    );
+    await tester.tap(find.byKey(const Key('record-editor-save')));
+    await tester.pumpAndSettle();
+
+    expect(logProvider.updateCalls, 1);
+    expect(logProvider.updatedLog?.callsign, 'BG5DIALOG');
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
   testWidgets('runtime locale switch updates table and deletion copy',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final locale = ValueNotifier<Locale>(const Locale('zh', 'CN'));
     addTearDown(locale.dispose);
@@ -486,7 +612,7 @@ void main() {
 
   testWidgets('en_US localizes the empty table state', (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
 
     await _pumpLogTable(
@@ -506,7 +632,7 @@ void main() {
   testWidgets('failed save keeps editing controls and the entered value',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final logProvider = _StaticLogProvider([
       _log(
@@ -560,7 +686,7 @@ void main() {
   testWidgets('delete awaits completion and ignores repeated confirmation',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final deletion = Completer<void>();
     final logProvider = _StaticLogProvider([
@@ -605,7 +731,7 @@ void main() {
   testWidgets('failed delete keeps the record and dialog available to retry',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false},
+      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
     );
     final logProvider = _StaticLogProvider([
       _log(
@@ -649,13 +775,20 @@ Future<void> _pumpLogTable(
   WidgetTester tester,
   LogProvider logProvider, {
   Locale locale = const Locale('zh', 'CN'),
+  bool dialogEditor = false,
 }) async {
+  SharedPreferences.setMockInitialValues(
+    <String, Object>{'recordEditorDialogEnabled': dialogEditor},
+  );
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<LogProvider>.value(value: logProvider),
         ChangeNotifierProvider<SettingsProvider>.value(
           value: SettingsProvider(),
+        ),
+        ChangeNotifierProvider<DictionaryProvider>(
+          create: (_) => DictionaryProvider(),
         ),
         ChangeNotifierProvider<SnackbarLogProvider>(
           create: (_) => SnackbarLogProvider(),

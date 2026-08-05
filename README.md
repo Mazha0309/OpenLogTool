@@ -1,4 +1,4 @@
-# OpenLogTool - 业余无线电点名记录工具
+# OpenLogTool - 业余无线电点名记录与协作工具
 
 专为业余无线电爱好者设计的点名记录工具，支持跨平台运行。
 
@@ -64,6 +64,7 @@
 - Windows
 - macOS
 - Android
+- WebClient（Flutter Web + Rust WASM）
 
 ## 开始使用
 
@@ -72,16 +73,23 @@
 - Dart SDK 3.12+
 - Rust toolchain 1.91.1（仓库中的 `rust-toolchain.toml` 会固定版本）
 - Android 构建额外需要 Android NDK 28.2.13676358 与 cargo-ndk 4.1.2
+- WebClient 构建额外需要 `nightly-2026-07-26`、`rust-src`、
+  `wasm32-unknown-unknown`、wasm-pack 0.15.0 和
+  flutter_rust_bridge_codegen 2.12.0
 - Linux 构建需要 `libsecret-1-dev`，运行需要 `libsecret-1-0` 和可用的 Secret Service/keyring
 - Windows 构建需要 Visual Studio C++ ATL 组件
 
 ### Windows 崩溃诊断
 
-Windows 原生崩溃会先在
+Windows 原生崩溃会先在兼容目录
 `%LOCALAPPDATA%\OpenLogTool\CrashDumps` 写入 minidump，再交给 Windows
 错误报告处理。Windows 10 默认启用无障碍语义树兼容保护，以规避 Flutter
 在响应式布局重组语义节点时的原生崩溃。确实需要屏幕阅读器的用户可在启动前设置
 `OPENLOGTOOL_ENABLE_WINDOWS_ACCESSIBILITY=1`，重新启用完整 Windows 语义树。
+
+正式 Windows 便携包会在应用目录内携带 Visual C++ CRT 与 Universal CRT，
+不要求系统预先安装 VC++ Redistributable。便携包必须完整解压后运行，不能只复制
+`openlogtool.exe`；安装版会自动安装同一套完整文件。
 
 ### 构建
 
@@ -93,6 +101,7 @@ flutter build linux
 flutter build windows
 flutter build macos
 flutter build apk
+bash tool/build_web.sh
 ```
 
 Linux、Windows 和 macOS 的平台工程会在 Flutter 构建时自动编译并打包 Rust
@@ -103,12 +112,92 @@ cargo-ndk；macOS 的 Release 默认生成 universal App：
 # Android（在 Linux 或 macOS 上执行）
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo install --locked cargo-ndk --version 4.1.2
-flutter build apk --release
+flutter build apk --release --split-per-abi \
+  --target-platform=android-arm,android-arm64,android-x64
+# Universal 兼容包
+flutter build apk --release \
+  --target-platform=android-arm,android-arm64,android-x64
 
 # macOS universal Release
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 flutter build macos --release
+
+# WebClient（首次执行前安装一次）
+rustup toolchain install nightly-2026-07-26 \
+  --profile minimal \
+  --component rust-src \
+  --target wasm32-unknown-unknown
+cargo install --locked wasm-pack --version 0.15.0
+cargo install --locked flutter_rust_bridge_codegen --version 2.12.0
+bash tool/build_web.sh
 ```
+
+Android Release 会分别生成 `armeabi-v7a`、`arm64-v8a` 和 `x86_64`
+三个 APK。CI 发布时还会额外保留一个包含全部架构的 Universal APK 作为兼容
+兜底；手机下载与处理器匹配的独立文件即可获得更小体积。
+
+Android Release 使用 applicationId
+`com.mazha0309.openlogtool` 和固定签名证书（SHA-256：
+`086f88968be282b45a8253de5a48b5c0c45c33321285116fde5fde86bbe78942`）。
+Release CI 会校验证书并拒绝误用其他密钥的产物。签名私钥和口令只保存在受控
+离线备份及 GitHub Actions Secrets，不得写入仓库或 Release。
+
+### WebClient 数据与部署
+
+WebClient 与原生客户端共用同一套 Rust 数据核心、迁移和备份格式。浏览器端
+SQLite 优先使用 OPFS，并在不可用时回退到持久化 IndexedDB；数据按网站来源
+（协议、域名、端口）隔离，清除该网站数据会同时删除本地数据库。WebClient
+不再携带旧的 Dart/sqflite 数据库实现。
+
+Rust 工作线程依赖 `SharedArrayBuffer`。部署服务器必须返回
+`Cross-Origin-Opener-Policy: same-origin` 和
+`Cross-Origin-Embedder-Policy: credentialless`，WASM 还应使用
+`application/wasm` MIME 类型。除 `localhost` 外应通过 HTTPS 访问，否则浏览器
+不会提供安全上下文。
+
+仓库内置的 Nginx 镜像已包含这些响应头，Docker Compose 默认使用外部端口
+`5973`：
+
+```bash
+# 从源码构建 WebClient
+docker compose -f docker-compose.web.yml up -d --build
+# 本机访问：http://127.0.0.1:5973
+```
+
+可以覆盖外部端口，但容器内仍监听 80：
+
+```bash
+OPENLOGTOOL_WEB_PORT=8080 \
+  docker compose -f docker-compose.web.yml up -d --build
+```
+
+该容器只提供静态 WebClient，不包含 OpenLogTool Server。公网部署时应由现有的
+HTTPS 反向代理转发到 `127.0.0.1:5973`。GitHub Actions 会在每次推送和 PR
+自动构建 WebClient；普通构建可下载 Actions artifact，`v*` 标签发布时
+WebClient 压缩包会一并加入 GitHub Release。
+
+Release 中的 WebClient 压缩包是完整的预构建 Docker 部署包，不需要仓库源码，
+也不会在部署机器上重新编译 Flutter 或 Rust。下载并解压后直接运行：
+
+```bash
+tar -xzf OpenLogTool-*-WebClient.tar.gz
+cd OpenLogTool-*-WebClient
+docker compose up -d
+```
+
+发布包中已包含静态网页、Rust WASM、Dockerfile、Nginx 配置和
+`docker-compose.yml`，默认同样映射到外部端口 `5973`。
+
+浏览器连接 OpenLogTool Server 时还要遵守同源策略。如果 WebClient 与 API 使用
+不同 Origin（协议、域名或端口任一不同），服务端的 `CORS_ORIGINS` 必须包含
+WebClient 的完整 Origin，例如：
+
+```dotenv
+CORS_ORIGINS=https://log.example.com
+```
+
+修改后需重新创建服务端容器。原生客户端不受 CORS 限制；使用同源反向代理时也
+不需要额外配置。
 
 ### 迭代版本
 
@@ -136,7 +225,8 @@ Android 发布包允许连接局域网内的明文 HTTP 自建服务器，以匹
 
 - Flutter
 - Provider（状态管理）
-- Rust + SQLx + SQLite（本地数据与协作副本）
+- Rust + rusqlite + SQLite（原生端）
+- Rust + sqlite-wasm-rs（Web 持久化 SQLite）
 - flutter_rust_bridge
 - Excel（导出）
 

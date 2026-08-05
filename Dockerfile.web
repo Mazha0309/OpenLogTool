@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1.7
+
+FROM debian:bookworm-slim AS builder
+
+ARG FLUTTER_VERSION=3.44.7
+ARG RUST_VERSION=1.91.1
+ARG RUST_NIGHTLY=nightly-2026-07-26
+ARG FRB_CODEGEN_VERSION=2.12.0
+ARG WASM_PACK_VERSION=0.15.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/opt/flutter/bin:/root/.cargo/bin:${PATH}"
+ENV OPENLOGTOOL_WEB_RUST_TOOLCHAIN="${RUST_NIGHTLY}"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        clang \
+        curl \
+        git \
+        lld \
+        pkg-config \
+        unzip \
+        xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --fail --location --retry 3 --silent --show-error \
+        "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+        --output /tmp/flutter.tar.xz \
+    && tar -xJf /tmp/flutter.tar.xz -C /opt \
+    && rm /tmp/flutter.tar.xz \
+    && git config --global --add safe.directory /opt/flutter \
+    && flutter config --no-analytics --enable-web
+
+RUN curl --proto '=https' --tlsv1.2 --silent --show-error --fail \
+        https://sh.rustup.rs \
+        --output /tmp/rustup-init.sh \
+    && sh /tmp/rustup-init.sh -y --profile minimal \
+        --default-toolchain "${RUST_VERSION}" \
+    && rm /tmp/rustup-init.sh \
+    && rustup toolchain install "${RUST_NIGHTLY}" \
+        --profile minimal \
+        --component rust-src \
+        --target wasm32-unknown-unknown \
+    && cargo install --locked wasm-pack --version "${WASM_PACK_VERSION}" \
+    && cargo install --locked flutter_rust_bridge_codegen \
+        --version "${FRB_CODEGEN_VERSION}"
+
+WORKDIR /src
+COPY . .
+
+RUN flutter pub get \
+    && bash tool/build_web.sh --no-pub
+
+FROM nginx:1.29-alpine AS runtime
+
+COPY deploy/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /src/build/web /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1

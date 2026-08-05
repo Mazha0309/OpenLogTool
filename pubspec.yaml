@@ -1,7 +1,7 @@
 name: openlogtool
 description: OpenLogTool
 publish_to: 'none'
-version: 2.6.4-R+16
+version: 2.7.0-R+17
 license: AGPL-3.0
 homepage: https://github.com/Mazha0309/OpenLogTool
 repository: https://github.com/Mazha0309/OpenLogTool.git
@@ -15,25 +15,19 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  package_info_plus: ^9.0.0
-  crypto: ^3.0.3
   cupertino_icons: ^1.0.6
+  crypto: ^3.0.3
   shared_preferences: ^2.2.2
   flutter_secure_storage: ^10.3.1
   file_picker: ^8.0.0+1
   path_provider: ^2.1.3
   excel: ^4.0.6
   provider: ^6.1.1
-  flutter_svg: ^2.0.10
   intl: ^0.20.2
-  open_file: ^3.3.3
   path: ^1.9.0
   pub_semver: ^2.2.0
-  sqflite: ^2.4.0
-  sqflite_common_ffi: ^2.3.0
   http: ^1.2.0
   web_socket_channel: ^2.4.0
-  sqflite_common_ffi_web: ^0.4.3+1
   flutter_rust_bridge: 2.12.0
   lpinyin: ^2.0.3
   window_manager: ^0.5.2
@@ -50,7 +44,7 @@ dev_dependencies:
 flutter:
   generate: true
   assets:
-    - icon.png
+    - assets/images/app_icon_512.png
     - assets/dictionaries/
     - assets/fonts/
   fonts:

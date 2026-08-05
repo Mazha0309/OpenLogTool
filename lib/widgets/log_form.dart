@@ -120,6 +120,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalShortcut);
     _reportController.text = '59';
     _rstRcvdController.text = '59';
     _draftControllers = {
@@ -158,8 +159,38 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  bool _handleGlobalShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return false;
+    }
+    if (!HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) {
+      return false;
+    }
+    if (!mounted || _submissionInProgress) return false;
+    final collaboration = context.read<CollaborationProvider>();
+    if (widget.readOnly ||
+        (collaboration.liveDraftSnapshot != null &&
+            !collaboration.canEditLiveDraft)) {
+      return false;
+    }
+    final hasForeignLock = collaboration.liveDraftLocks.any(
+      (lock) =>
+          lock.expiresAt.isAfter(DateTime.now()) &&
+          collaboration.fieldLockedByAnotherUser(lock.field),
+    );
+    if (hasForeignLock || _historyReuseInProgress || _clearInProgress) {
+      return false;
+    }
+    unawaited(_submitForm());
+    return true;
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalShortcut);
     _lockExpiryTimer?.cancel();
     for (final timer in _inlineAiDebounce.values) {
       timer.cancel();
@@ -455,6 +486,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       _inlineAiGenerations[field] = (_inlineAiGenerations[field] ?? 0) + 1;
       _clearInlineAiSuggestion(field);
     }
+    if (field == 'callsign' && !focused) {
+      unawaited(_maybePromptDuplicateUpdate());
+    }
     final collaboration = context.read<CollaborationProvider>();
     if (collaboration.liveDraftSnapshot == null) return;
     focused
@@ -465,6 +499,100 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       return;
     }
     if (!focused) unawaited(_flushAndReleaseDraftField(field, collaboration));
+  }
+
+  Future<void> _maybePromptDuplicateUpdate() async {
+    if (!mounted) return;
+    final settingsProvider = context.read<SettingsProvider>();
+    if (!settingsProvider.duplicateCallsignWarningEnabled) return;
+    final collaboration = context.read<CollaborationProvider>();
+    if (collaboration.liveDraftSnapshot != null) return;
+    if (widget.readOnly || _historyReuseInProgress || _clearInProgress) {
+      return;
+    }
+    final callsign = _callsignController.text.trim().toUpperCase();
+    if (callsign.isEmpty) return;
+    final logProvider = context.read<LogProvider>();
+    final existing = logProvider.logs
+        .where((log) => log.callsign.trim().toUpperCase() == callsign)
+        .toList(growable: false);
+    if (existing.isEmpty || !mounted) return;
+    final l10n = context.l10n;
+    final continueAdding = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.duplicateContinueDialogTitle),
+        content: Text(l10n.duplicateContinueDialogMessage(callsign)),
+        actions: [
+          TextButton(
+            key: const Key('duplicate-continue-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('duplicate-continue-add'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.duplicateContinueAdd),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || continueAdding == true) return;
+    // 用户选择不继续，清空呼号让书记员重录或改录。
+    _callsignController.clear();
+    FocusScope.of(context).requestFocus(_callsignFocusNode);
+  }
+
+  Future<void> _updateExistingLog(
+    LogEntry existing,
+    String callsign,
+    ScaffoldMessengerState? messenger,
+    AppLocalizations l10n,
+  ) async {
+    final logProvider = context.read<LogProvider>();
+    final dictionaryProvider =
+        Provider.of<DictionaryProvider>(context, listen: false);
+    if (existing.sessionId == null || existing.id.isEmpty) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(l10n.operationFailed('missing id'))),
+      );
+      return;
+    }
+    // 保留旧记录的时间，只更新其余字段。
+    final patch = existing.copyWith(
+      controller: _controllerController.text.trim(),
+      callsign: callsign,
+      report: _reportController.text.trim(),
+      rstRcvd: _rstRcvdController.text.trim(),
+      qth: _qthController.text.trim(),
+      device: _deviceController.text.trim(),
+      power: _powerController.text.trim(),
+      antenna: _antennaController.text.trim(),
+      height: _heightController.text.trim(),
+    )..remarks = _remarksController.text.trim();
+    if (_deviceController.text.trim().isNotEmpty) {
+      await dictionaryProvider.addDevice(_deviceController.text.trim());
+    }
+    if (_antennaController.text.trim().isNotEmpty) {
+      await dictionaryProvider.addAntenna(_antennaController.text.trim());
+    }
+    if (_qthController.text.trim().isNotEmpty) {
+      await dictionaryProvider.addQth(_qthController.text.trim());
+    }
+    try {
+      await logProvider.updateLogById(existing.id, patch);
+    } catch (error) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(content: Text(l10n.operationFailed('$error'))),
+      );
+      return;
+    }
+    if (!mounted) return;
+    _resetForm();
+    messenger?.showSnackBar(
+      SnackBar(content: Text(l10n.recordUpdated)),
+    );
   }
 
   Future<void> _acquireDraftField(
@@ -567,7 +695,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       _unfocusDraftFields();
       setState(() => _historyReuseInProgress = true);
       try {
-        await collaboration.updateLiveDraftFieldsAtomically(values);
+        await collaboration.updateLiveDraftFieldsOptimistically(values);
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -580,8 +708,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         if (mounted) setState(() => _historyReuseInProgress = false);
       }
       if (!mounted) return;
-      // The provider adopts the canonical multi-field response and notifies
-      // this form. Let _syncSharedDraft drive the controllers so a newer edit
+      // The provider stages the batch immediately, then adopts the canonical
+      // response. Let _syncSharedDraft drive the controllers so a newer edit
       // made while the request was in flight is never overwritten here.
       return;
     }
@@ -662,6 +790,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       }
       if (!mounted) return;
       _applyClearedFieldsLocally();
+      FocusScope.of(context).requestFocus(_callsignFocusNode);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(context.l10n.enteredFieldsCleared),
@@ -733,27 +862,83 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           (log) => log.callsign.trim().toUpperCase() == normalizedCallsign,
         );
     if (settingsProvider.duplicateCallsignWarningEnabled && duplicate) {
-      final proceed = await showDialog<bool>(
+      final existing = logProvider.logs
+          .where(
+            (log) => log.callsign.trim().toUpperCase() == normalizedCallsign,
+          )
+          .toList(growable: false);
+      final latest = existing.isEmpty ? null : existing.last;
+      final action = await showDialog<_DuplicateAction>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: Text(l10n.duplicateCallsignTitle),
-              content: Text(
-                l10n.duplicateCallsignMessage(normalizedCallsign),
+              title: Text(l10n.duplicateUpdateDialogTitle),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.duplicateUpdateDialogMessage(normalizedCallsign)),
+                  if (latest != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(dialogContext)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        l10n.duplicateOldRecordSummary(
+                          formatLogTimeForDisplay(latest.time),
+                          latest.callsign,
+                          latest.report,
+                          latest.rstRcvd,
+                          latest.qth,
+                        ),
+                        style: Theme.of(dialogContext).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
+                  key: const Key('duplicate-save-cancel'),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, _DuplicateAction.cancel),
                   child: Text(l10n.cancel),
                 ),
+                TextButton(
+                  key: const Key('duplicate-save-add-new'),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, _DuplicateAction.add),
+                  child: Text(l10n.duplicateAddNewRecord),
+                ),
                 FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: Text(l10n.saveAnyway),
+                  key: const Key('duplicate-save-update-old'),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, _DuplicateAction.update),
+                  child: Text(l10n.duplicateUpdateOldRecord),
                 ),
               ],
             ),
           ) ??
-          false;
-      if (!proceed || !mounted) return;
+          _DuplicateAction.cancel;
+      if (!mounted) return;
+      if (action == _DuplicateAction.cancel) return;
+      if (action == _DuplicateAction.update) {
+        if (latest != null) {
+          await _updateExistingLog(
+            latest,
+            normalizedCallsign,
+            ScaffoldMessenger.maybeOf(context),
+            l10n,
+          );
+        }
+        return;
+      }
     }
 
     if (submittedFields['device']!.isNotEmpty) {
@@ -1047,6 +1232,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                 .clamp(1, 5);
         final calculatedFieldWidth =
             (availableWidth - (spacing * (fieldsPerRow - 1))) / fieldsPerRow;
+        final primaryFieldWidth =
+            isNarrow ? availableWidth : calculatedFieldWidth;
+        final clearButtonWidth = isNarrow
+            ? (availableWidth * 0.38).clamp(112.0, 144.0).toDouble()
+            : 180.0;
 
         return AbsorbPointer(
           key: const Key('history-reuse-guard'),
@@ -1064,7 +1254,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                   alignment: WrapAlignment.start,
                   children: [
                     SizedBox(
-                      width: calculatedFieldWidth,
+                      width: primaryFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _controllerController,
                         label: fieldLabel(
@@ -1087,7 +1277,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       ),
                     ),
                     SizedBox(
-                      width: calculatedFieldWidth,
+                      width: primaryFieldWidth,
                       child: CallsignHistoryField(
                         callsignController: _callsignController,
                         deviceController: _deviceController,
@@ -1246,7 +1436,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       ),
                     ),
                     SizedBox(
-                      width: calculatedFieldWidth,
+                      width: primaryFieldWidth,
                       child: _buildMaterialTextField(
                         controller: _remarksController,
                         label: fieldLabel('remarks', context.l10n.fieldRemarks),
@@ -1324,7 +1514,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                   key: const Key('log-form-actions'),
                   children: [
                     SizedBox(
-                      width: isNarrow ? 160 : 180,
+                      width: clearButtonWidth,
                       child: Tooltip(
                         message: context.l10n.clearEnteredFields,
                         child: SizedBox(
@@ -1358,23 +1548,32 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                           child: FilledButton.icon(
                             key: const Key('save-log-record'),
                             onPressed: canSubmit ? _submitForm : null,
-                            icon: Icon(
-                              _historyReuseInProgress
-                                  ? Icons.auto_fix_high
-                                  : readOnly || firstForeignLock != null
-                                      ? Icons.lock_outline
-                                      : Icons.add,
-                            ),
+                            icon: _submissionInProgress
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    _historyReuseInProgress
+                                        ? Icons.auto_fix_high
+                                        : readOnly || firstForeignLock != null
+                                            ? Icons.lock_outline
+                                            : Icons.add,
+                                  ),
                             label: Text(
-                              _historyReuseInProgress
-                                  ? context.l10n.reuseDatabaseInformation
-                                  : readOnly
-                                      ? context.l10n.sharedDraftReadOnly
-                                      : firstForeignLock != null
-                                          ? context.l10n.fieldLockedBy(
-                                              firstForeignLock.username,
-                                            )
-                                          : context.l10n.saveRecord,
+                              _submissionInProgress
+                                  ? context.l10n.savingRecord
+                                  : _historyReuseInProgress
+                                      ? context.l10n.reuseDatabaseInformation
+                                      : readOnly
+                                          ? context.l10n.sharedDraftReadOnly
+                                          : firstForeignLock != null
+                                              ? context.l10n.fieldLockedBy(
+                                                  firstForeignLock.username,
+                                                )
+                                              : context.l10n.saveRecord,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1396,17 +1595,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       },
     );
 
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
-          if (canSubmit) unawaited(_submitForm());
-        },
-        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
-          if (canSubmit) unawaited(_submitForm());
-        },
-      },
-      child: content,
-    );
+    return content;
   }
 
   Widget _buildMaterialTextField({
@@ -1669,3 +1858,5 @@ class _FormSuggestion {
   final String value;
   final bool isAi;
 }
+
+enum _DuplicateAction { add, update, cancel }

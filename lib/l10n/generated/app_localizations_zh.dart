@@ -491,6 +491,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saveRecord => '保存记录';
 
   @override
+  String get savingRecord => '正在保存';
+
+  @override
   String get clearEnteredFields => '清空已填内容';
 
   @override
@@ -950,7 +953,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get duplicateCallsignWarningSetting => '重复呼号提醒';
 
   @override
-  String get duplicateCallsignWarningHint => '同一场点名中再次录入相同呼号时先提醒，但仍允许保存。';
+  String get duplicateCallsignWarningHint =>
+      '输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。';
 
   @override
   String get duplicateCallsignTitle => '呼号已经记录过';
@@ -962,6 +966,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get saveAnyway => '仍然保存';
+
+  @override
+  String get duplicateUpdateOldRecord => '更新旧记录';
+
+  @override
+  String get duplicateAddNewRecord => '添加新记录';
+
+  @override
+  String get duplicateContinueDialogTitle => '呼号已记录过';
+
+  @override
+  String duplicateContinueDialogMessage(String callsign) {
+    return '$callsign 已在本次点名中记录过，继续添加吗？';
+  }
+
+  @override
+  String get duplicateContinueAdd => '继续添加';
+
+  @override
+  String get duplicateUpdateDialogTitle => '呼号已记录过';
+
+  @override
+  String duplicateUpdateDialogMessage(String callsign) {
+    return '$callsign 在本次点名中已有记录，选择处理方式：';
+  }
+
+  @override
+  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
+      String rstRcvd, String qth) {
+    return '原记录：$time $callsign $rstSent/$rstRcvd $qth';
+  }
+
+  @override
+  String get recordUpdated => '记录已更新';
 
   @override
   String get callsignHistoryFillSetting => '呼号历史一键复用';
@@ -1096,6 +1134,16 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String serverNetworkError(String url) {
     return '服务器 $url 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。';
+  }
+
+  @override
+  String serverWebMixedContentError(String url) {
+    return '当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 $url。请为服务器启用 HTTPS。';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return '浏览器无法访问服务器 $url。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 $origin，或使用同源反向代理。';
   }
 
   @override
@@ -1313,6 +1361,13 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get excelUseSessionTitleAsHeaderHint =>
       '开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。';
+
+  @override
+  String get fileNameUseSessionTitle => '文件名使用当前会话名';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      '开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。';
 
   @override
   String get themeColorPickerTitle => '选择主题颜色';
@@ -1704,6 +1759,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paginationSettingHint => '每 5 条记录分为一页显示。';
+
+  @override
+  String get recordEditorDialogSetting => '弹窗编辑记录';
+
+  @override
+  String get recordEditorDialogSettingHint =>
+      '编辑记录时以弹窗打开完整表单，支持词库联想。关闭后改为在表格内联编辑。';
 
   @override
   String get controllerDisplaySettingsHint => '配置主控设备入口、独立窗口和默认显示内容。';
@@ -2284,6 +2346,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get templateSecondDescription => '两位秒数，如：45';
+
+  @override
+  String get templateSessionDescription => '当前会话名称，如：2024年夏季点名';
 
   @override
   String get templateExamplesTitle => '使用示例';
@@ -3535,6 +3600,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String serverWebMixedContentError(String url) {
+    return '当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 $url。请为服务器启用 HTTPS。';
+  }
+
+  @override
+  String serverWebCrossOriginError(String url, String origin) {
+    return '浏览器无法访问服务器 $url。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 $origin，或使用同源反向代理。';
+  }
+
+  @override
   String serverNetworkTimeout(String url) {
     return '连接 $url 超时。请检查网络、防火墙和服务端状态。';
   }
@@ -3749,6 +3824,13 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get excelUseSessionTitleAsHeaderHint =>
       '开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。';
+
+  @override
+  String get fileNameUseSessionTitle => '文件名使用当前会话名';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      '开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。';
 
   @override
   String get themeColorPickerTitle => '选择主题颜色';

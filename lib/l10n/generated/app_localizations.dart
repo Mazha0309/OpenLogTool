@@ -940,6 +940,12 @@ abstract class AppLocalizations {
   /// **'保存记录'**
   String get saveRecord;
 
+  /// No description provided for @savingRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存'**
+  String get savingRecord;
+
   /// No description provided for @clearEnteredFields.
   ///
   /// In zh, this message translates to:
@@ -1777,7 +1783,7 @@ abstract class AppLocalizations {
   /// No description provided for @duplicateCallsignWarningHint.
   ///
   /// In zh, this message translates to:
-  /// **'同一场点名中再次录入相同呼号时先提醒，但仍允许保存。'**
+  /// **'输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。'**
   String get duplicateCallsignWarningHint;
 
   /// No description provided for @duplicateCallsignTitle.
@@ -1797,6 +1803,61 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'仍然保存'**
   String get saveAnyway;
+
+  /// No description provided for @duplicateUpdateOldRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新旧记录'**
+  String get duplicateUpdateOldRecord;
+
+  /// No description provided for @duplicateAddNewRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加新记录'**
+  String get duplicateAddNewRecord;
+
+  /// No description provided for @duplicateContinueDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'呼号已记录过'**
+  String get duplicateContinueDialogTitle;
+
+  /// No description provided for @duplicateContinueDialogMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'{callsign} 已在本次点名中记录过，继续添加吗？'**
+  String duplicateContinueDialogMessage(String callsign);
+
+  /// No description provided for @duplicateContinueAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续添加'**
+  String get duplicateContinueAdd;
+
+  /// No description provided for @duplicateUpdateDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'呼号已记录过'**
+  String get duplicateUpdateDialogTitle;
+
+  /// No description provided for @duplicateUpdateDialogMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'{callsign} 在本次点名中已有记录，选择处理方式：'**
+  String duplicateUpdateDialogMessage(String callsign);
+
+  /// No description provided for @duplicateOldRecordSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'原记录：{time} {callsign} {rstSent}/{rstRcvd} {qth}'**
+  String duplicateOldRecordSummary(
+      String time, String callsign, String rstSent, String rstRcvd, String qth);
+
+  /// No description provided for @recordUpdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录已更新'**
+  String get recordUpdated;
 
   /// No description provided for @callsignHistoryFillSetting.
   ///
@@ -2043,6 +2104,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'服务器 {url} 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。'**
   String serverNetworkError(String url);
+
+  /// No description provided for @serverWebMixedContentError.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 {url}。请为服务器启用 HTTPS。'**
+  String serverWebMixedContentError(String url);
+
+  /// No description provided for @serverWebCrossOriginError.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览器无法访问服务器 {url}。请确认服务器在线；若原生客户端能连接，请在服务端 CORS_ORIGINS 中加入 {origin}，或使用同源反向代理。'**
+  String serverWebCrossOriginError(String url, String origin);
 
   /// No description provided for @serverNetworkTimeout.
   ///
@@ -2409,6 +2482,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。'**
   String get excelUseSessionTitleAsHeaderHint;
+
+  /// No description provided for @fileNameUseSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名使用当前会话名'**
+  String get fileNameUseSessionTitle;
+
+  /// No description provided for @fileNameUseSessionTitleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。'**
+  String get fileNameUseSessionTitleHint;
 
   /// No description provided for @themeColorPickerTitle.
   ///
@@ -3100,6 +3185,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'每 5 条记录分为一页显示。'**
   String get paginationSettingHint;
+
+  /// No description provided for @recordEditorDialogSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹窗编辑记录'**
+  String get recordEditorDialogSetting;
+
+  /// No description provided for @recordEditorDialogSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑记录时以弹窗打开完整表单，支持词库联想。关闭后改为在表格内联编辑。'**
+  String get recordEditorDialogSettingHint;
 
   /// No description provided for @controllerDisplaySettingsHint.
   ///
@@ -4142,6 +4239,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'两位秒数，如：45'**
   String get templateSecondDescription;
+
+  /// No description provided for @templateSessionDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前会话名称，如：2024年夏季点名'**
+  String get templateSessionDescription;
 
   /// No description provided for @templateExamplesTitle.
   ///

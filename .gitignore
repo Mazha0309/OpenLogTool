@@ -47,6 +47,7 @@ app.*.map.json
 
 # Keystore files
 *.jks
+**/keystore.properties
 
 # Rust
 /rust/target/

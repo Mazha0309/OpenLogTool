@@ -407,6 +407,10 @@ class LogProvider with ChangeNotifier {
       // session's in-memory table.
       if (_currentSessionId == effectiveSessionId) {
         _mergeCanonicalLog(canonical);
+        await _reconcileCanonicalLogAfterWrite(
+          effectiveSessionId,
+          canonical,
+        );
       }
       await _notifyDataChanged();
       if (_onLogChanged != null) {
@@ -666,6 +670,25 @@ class LogProvider with ChangeNotifier {
       converted,
     ]..sort(_compareChronologically);
     _safeNotify();
+  }
+
+  /// Re-reads the durable projection after a successful insert.
+  ///
+  /// The Web bridge completes on a worker. Publishing its returned row
+  /// synchronously is useful for responsiveness, while the durable re-read
+  /// keeps the mounted table in step with the worker-backed SQLite projection.
+  /// If a backend returns a temporarily stale page, retain the already-confirmed
+  /// canonical row.
+  Future<void> _reconcileCanonicalLogAfterWrite(
+    String sessionId,
+    bridge.LogEntry canonical,
+  ) async {
+    if (_currentSessionId != sessionId) return;
+
+    await _loadLogs();
+    if (_currentSessionId != sessionId) return;
+    if (_logs.any((candidate) => candidate.id == canonical.syncId)) return;
+    _mergeCanonicalLog(canonical);
   }
 
   void _markPersonalDataChanged() {

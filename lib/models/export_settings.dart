@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class ExportSettings {
   String headerText;
   bool useSessionTitleAsHeader;
+  bool useSessionTitleAsFileName;
   String headerDateFormat;
   Color headerBackgroundColor;
   Color headerRowBackgroundColor;
@@ -18,6 +19,7 @@ class ExportSettings {
   ExportSettings({
     this.headerText = '{yyyy}-{MM}-{dd}日点名记录',
     this.useSessionTitleAsHeader = false,
+    this.useSessionTitleAsFileName = false,
     this.headerDateFormat = 'yyyy-MM-dd',
     this.headerBackgroundColor = const Color(0xFF1E84D2),
     this.headerRowBackgroundColor = const Color(0xFFCFE7FF),
@@ -35,6 +37,7 @@ class ExportSettings {
     return {
       'headerText': headerText,
       'useSessionTitleAsHeader': useSessionTitleAsHeader,
+      'useSessionTitleAsFileName': useSessionTitleAsFileName,
       'headerDateFormat': headerDateFormat,
       'headerBackgroundColor': headerBackgroundColor.toARGB32(),
       'headerRowBackgroundColor': headerRowBackgroundColor.toARGB32(),
@@ -61,6 +64,7 @@ class ExportSettings {
     return ExportSettings(
       headerText: json['headerText'] ?? '{yyyy}-{MM}-{dd}日点名记录',
       useSessionTitleAsHeader: json['useSessionTitleAsHeader'] == true,
+      useSessionTitleAsFileName: json['useSessionTitleAsFileName'] == true,
       headerDateFormat: json['headerDateFormat'] ?? 'yyyy-MM-dd',
       headerBackgroundColor:
           parseColor(json['headerBackgroundColor'], 0xFF1E84D2),
@@ -82,6 +86,7 @@ class ExportSettings {
   ExportSettings copyWith({
     String? headerText,
     bool? useSessionTitleAsHeader,
+    bool? useSessionTitleAsFileName,
     String? headerDateFormat,
     Color? headerBackgroundColor,
     Color? headerRowBackgroundColor,
@@ -98,6 +103,8 @@ class ExportSettings {
       headerText: headerText ?? this.headerText,
       useSessionTitleAsHeader:
           useSessionTitleAsHeader ?? this.useSessionTitleAsHeader,
+      useSessionTitleAsFileName:
+          useSessionTitleAsFileName ?? this.useSessionTitleAsFileName,
       headerDateFormat: headerDateFormat ?? this.headerDateFormat,
       headerBackgroundColor:
           headerBackgroundColor ?? this.headerBackgroundColor,

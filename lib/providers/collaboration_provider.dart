@@ -257,6 +257,85 @@ final class LiveDraftAtomicStateMerge {
   final Map<String, int> baseRevisions;
 }
 
+/// Projects an atomic update into the local draft before the server responds.
+///
+/// The original canonical revision is retained for fields that were already
+/// dirty, so the eventual atomic PATCH still performs the same conflict check
+/// as a non-optimistic update.
+@visibleForTesting
+LiveDraftAtomicStateMerge stageOptimisticLiveDraftAtomicPatch({
+  required LiveDraftDto canonicalDraft,
+  required LiveDraftFieldsDto localFields,
+  required Set<String> dirtyFields,
+  required Map<String, int> baseRevisions,
+  required Map<String, String> updates,
+}) {
+  final stagedValues = Map<String, String>.of(localFields.values);
+  final stagedDirtyFields = Set<String>.of(dirtyFields);
+  final stagedBaseRevisions = Map<String, int>.of(baseRevisions);
+  for (final field in liveDraftFieldNames) {
+    final value = updates[field];
+    if (value == null) continue;
+    stagedValues[field] = value;
+    if (value == canonicalDraft.fields[field]) {
+      stagedDirtyFields.remove(field);
+      stagedBaseRevisions.remove(field);
+      continue;
+    }
+    if (!stagedDirtyFields.contains(field) ||
+        !stagedBaseRevisions.containsKey(field)) {
+      stagedBaseRevisions[field] = canonicalDraft.fieldRevisions[field] ?? 0;
+    }
+    stagedDirtyFields.add(field);
+  }
+  return LiveDraftAtomicStateMerge(
+    localFields: LiveDraftFieldsDto(stagedValues),
+    dirtyFields: Set<String>.unmodifiable(stagedDirtyFields),
+    baseRevisions: Map<String, int>.unmodifiable(stagedBaseRevisions),
+  );
+}
+
+/// Removes only optimistic values that are still unchanged when a PATCH
+/// fails. A later local edit is preserved, while previously dirty values are
+/// restored with their original conflict baseline.
+@visibleForTesting
+LiveDraftAtomicStateMerge rollbackOptimisticLiveDraftAtomicPatch({
+  required LiveDraftDto canonicalDraft,
+  required LiveDraftFieldsDto beforeLocalFields,
+  required Set<String> beforeDirtyFields,
+  required Map<String, int> beforeBaseRevisions,
+  required LiveDraftFieldsDto currentLocalFields,
+  required Set<String> currentDirtyFields,
+  required Map<String, int> currentBaseRevisions,
+  required Map<String, String> stagedValues,
+}) {
+  final restoredValues = Map<String, String>.of(currentLocalFields.values);
+  final restoredDirtyFields = Set<String>.of(currentDirtyFields);
+  final restoredBaseRevisions = Map<String, int>.of(currentBaseRevisions);
+  for (final field in liveDraftFieldNames) {
+    final stagedValue = stagedValues[field];
+    if (stagedValue == null || currentLocalFields[field] != stagedValue) {
+      continue;
+    }
+    if (beforeDirtyFields.contains(field)) {
+      restoredValues[field] = beforeLocalFields[field];
+      restoredDirtyFields.add(field);
+      restoredBaseRevisions[field] = beforeBaseRevisions[field] ??
+          canonicalDraft.fieldRevisions[field] ??
+          0;
+    } else {
+      restoredValues[field] = canonicalDraft.fields[field];
+      restoredDirtyFields.remove(field);
+      restoredBaseRevisions.remove(field);
+    }
+  }
+  return LiveDraftAtomicStateMerge(
+    localFields: LiveDraftFieldsDto(restoredValues),
+    dirtyFields: Set<String>.unmodifiable(restoredDirtyFields),
+    baseRevisions: Map<String, int>.unmodifiable(restoredBaseRevisions),
+  );
+}
+
 /// Merges an accepted atomic PATCH without overwriting edits made while the
 /// request was in flight.
 @visibleForTesting
@@ -309,6 +388,22 @@ LiveDraftAtomicStateMerge mergeAcceptedLiveDraftAtomicPatch({
     dirtyFields: Set<String>.unmodifiable(dirtyFields),
     baseRevisions: Map<String, int>.unmodifiable(baseRevisions),
   );
+}
+
+final class _OptimisticLiveDraftRollback {
+  const _OptimisticLiveDraftRollback({
+    required this.draftId,
+    required this.beforeLocalFields,
+    required this.beforeDirtyFields,
+    required this.beforeBaseRevisions,
+    required this.stagedValues,
+  });
+
+  final String draftId;
+  final LiveDraftFieldsDto beforeLocalFields;
+  final Set<String> beforeDirtyFields;
+  final Map<String, int> beforeBaseRevisions;
+  final Map<String, String> stagedValues;
 }
 
 @visibleForTesting
@@ -2196,6 +2291,19 @@ class CollaborationProvider with ChangeNotifier {
     );
   }
 
+  /// Shows a multi-field update locally first, then synchronizes it with one
+  /// atomic server PATCH. If synchronization fails, only values from this
+  /// batch that have not changed again are rolled back.
+  Future<void> updateLiveDraftFieldsOptimistically(
+    Map<String, String> updates,
+  ) {
+    return _queueLiveDraftFieldsAtomicUpdate(
+      updates,
+      retryRevisionConflicts: true,
+      optimistic: true,
+    );
+  }
+
   /// Applies a version-checked multi-field update exactly once. This is used
   /// for externally generated suggestions: a conflict must return to review
   /// instead of rebasing the same values over a collaborator's newer edit.
@@ -2226,6 +2334,7 @@ class CollaborationProvider with ChangeNotifier {
     String? expectedDraftId,
     Map<String, String>? expectedValues,
     Map<String, int>? expectedRevisions,
+    bool optimistic = false,
   }) {
     if (updates.isEmpty) return Future<void>.value();
     for (final field in updates.keys) {
@@ -2236,16 +2345,102 @@ class CollaborationProvider with ChangeNotifier {
     if (!canEditLiveDraft) {
       return Future<void>.error(StateError('LIVE_DRAFT_READ_ONLY'));
     }
-    final requested = Map<String, String>.unmodifiable(updates);
+    if (_operationInProgress) {
+      return Future<void>.error(
+        StateError('COLLABORATION_OPERATION_IN_PROGRESS'),
+      );
+    }
+    final requested = Map<String, String>.unmodifiable({
+      for (final entry in updates.entries)
+        entry.key: optimistic && entry.key == 'time'
+            ? _normalizeLiveDraftTime(entry.value)
+            : entry.value,
+    });
+    _OptimisticLiveDraftRollback? rollback;
+    if (optimistic) {
+      final snapshot = _liveDraftSnapshot;
+      final local = _localLiveDraftFields;
+      if (snapshot == null || local == null) {
+        return Future<void>.error(StateError('LIVE_DRAFT_NOT_LOADED'));
+      }
+      final beforeDirtyFields = Set<String>.of(_dirtyLiveDraftFields);
+      final beforeBaseRevisions = Map<String, int>.of(
+        _liveDraftBaseRevisions,
+      );
+      final staged = stageOptimisticLiveDraftAtomicPatch(
+        canonicalDraft: snapshot.draft,
+        localFields: local,
+        dirtyFields: beforeDirtyFields,
+        baseRevisions: beforeBaseRevisions,
+        updates: requested,
+      );
+      rollback = _OptimisticLiveDraftRollback(
+        draftId: snapshot.draft.draftId,
+        beforeLocalFields: local,
+        beforeDirtyFields: beforeDirtyFields,
+        beforeBaseRevisions: beforeBaseRevisions,
+        stagedValues: requested,
+      );
+      _localLiveDraftFields = staged.localFields;
+      _dirtyLiveDraftFields = staged.dirtyFields;
+      _liveDraftBaseRevisions = staged.baseRevisions;
+      _safeNotify();
+    }
     return _serializeLiveDraft(
-      () => _updateLiveDraftFieldsAtomically(
-        requested,
-        retryRevisionConflicts: retryRevisionConflicts,
-        expectedDraftId: expectedDraftId,
-        expectedValues: expectedValues,
-        expectedRevisions: expectedRevisions,
-      ),
+      () async {
+        try {
+          await _updateLiveDraftFieldsAtomically(
+            requested,
+            retryRevisionConflicts: retryRevisionConflicts,
+            expectedDraftId: expectedDraftId,
+            expectedValues: expectedValues,
+            expectedRevisions: expectedRevisions,
+          );
+        } catch (error, stackTrace) {
+          if (rollback != null) {
+            await _rollbackOptimisticLiveDraftUpdate(rollback);
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+      },
     );
+  }
+
+  Future<void> _rollbackOptimisticLiveDraftUpdate(
+    _OptimisticLiveDraftRollback rollback,
+  ) async {
+    final snapshot = _liveDraftSnapshot;
+    final local = _localLiveDraftFields;
+    if (snapshot == null ||
+        local == null ||
+        snapshot.draft.draftId != rollback.draftId) {
+      return;
+    }
+    final hasUnchangedStagedValue = rollback.stagedValues.entries.any(
+      (entry) => local[entry.key] == entry.value,
+    );
+    if (!hasUnchangedStagedValue) return;
+    final restored = rollbackOptimisticLiveDraftAtomicPatch(
+      canonicalDraft: snapshot.draft,
+      beforeLocalFields: rollback.beforeLocalFields,
+      beforeDirtyFields: rollback.beforeDirtyFields,
+      beforeBaseRevisions: rollback.beforeBaseRevisions,
+      currentLocalFields: local,
+      currentDirtyFields: _dirtyLiveDraftFields,
+      currentBaseRevisions: _liveDraftBaseRevisions,
+      stagedValues: rollback.stagedValues,
+    );
+    _localLiveDraftFields = restored.localFields;
+    _dirtyLiveDraftFields = restored.dirtyFields;
+    _liveDraftBaseRevisions = restored.baseRevisions;
+    _safeNotify();
+    final context = _tryLiveDraftContext(requireEdit: false);
+    if (context == null) return;
+    try {
+      await _persistLiveDraftState(_guardFor(context));
+    } catch (_) {
+      // The original synchronization error remains the actionable failure.
+    }
   }
 
   void beginAutomaticLiveDraftTime(String value) {

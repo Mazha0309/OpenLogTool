@@ -60,4 +60,50 @@ void main() {
       'Connection failed: The server address must be a complete http(s) URL.',
     );
   });
+
+  test('web mixed-content errors explain that HTTPS is required', () {
+    const error = ServerApiException(
+      error: ApiErrorDto(
+        code: 'NETWORK_ERROR',
+        message: 'The server request failed',
+        requestId: 'client',
+      ),
+      statusCode: null,
+      retryable: true,
+    );
+
+    final message = localizedServerConnectionError(
+      l10n: AppLocalizationsZh(),
+      serverUrl: 'http://api.example.test',
+      error: error,
+      isWeb: true,
+      pageUri: Uri.parse('https://log.example.test/settings'),
+    );
+
+    expect(message, contains('WebClient 使用 HTTPS'));
+    expect(message, contains('HTTP 服务器'));
+  });
+
+  test('web cross-origin errors explain the server allowlist', () {
+    const error = ServerApiException(
+      error: ApiErrorDto(
+        code: 'NETWORK_ERROR',
+        message: 'The server request failed',
+        requestId: 'client',
+      ),
+      statusCode: null,
+      retryable: true,
+    );
+
+    final message = localizedServerConnectionError(
+      l10n: AppLocalizationsZh(),
+      serverUrl: 'https://api.example.test',
+      error: error,
+      isWeb: true,
+      pageUri: Uri.parse('https://log.example.test/settings'),
+    );
+
+    expect(message, contains('CORS_ORIGINS'));
+    expect(message, contains('https://log.example.test'));
+  });
 }

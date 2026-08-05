@@ -20,6 +20,8 @@ class SettingsProvider with ChangeNotifier {
       'controllerDeviceModeEnabled';
   static const String _primarySidebarExpandedKey = 'primarySidebarExpanded';
   static const String _limitWorkbenchWidthKey = 'limitWorkbenchWidth';
+  static const String _recordEditorDialogEnabledKey =
+      'recordEditorDialogEnabled';
   static const String _appLocalePreferenceKey = 'appLocalePreference';
 
   Color _themeColor = const Color(0xFF2196F3);
@@ -33,6 +35,7 @@ class SettingsProvider with ChangeNotifier {
   bool _controllerDeviceModeEnabled = false;
   bool _primarySidebarExpanded = true;
   bool _limitWorkbenchWidth = true;
+  bool _recordEditorDialogEnabled = true;
   AppLocalePreference _appLocalePreference = AppLocalePreference.system;
   ControllerDisplayPreferences _controllerDisplayPreferences =
       const ControllerDisplayPreferences();
@@ -52,6 +55,7 @@ class SettingsProvider with ChangeNotifier {
   bool get controllerDeviceModeEnabled => _controllerDeviceModeEnabled;
   bool get primarySidebarExpanded => _primarySidebarExpanded;
   bool get limitWorkbenchWidth => _limitWorkbenchWidth;
+  bool get recordEditorDialogEnabled => _recordEditorDialogEnabled;
   AppLocalePreference get appLocalePreference => _appLocalePreference;
   Locale? get locale => switch (_appLocalePreference) {
         AppLocalePreference.system => null,
@@ -100,6 +104,8 @@ class SettingsProvider with ChangeNotifier {
         prefs.getBool(_controllerDeviceModeEnabledKey) ?? false;
     _primarySidebarExpanded = prefs.getBool(_primarySidebarExpandedKey) ?? true;
     _limitWorkbenchWidth = prefs.getBool(_limitWorkbenchWidthKey) ?? true;
+    _recordEditorDialogEnabled =
+        prefs.getBool(_recordEditorDialogEnabledKey) ?? true;
     if (_localePreferenceRevision == localePreferenceRevision) {
       final storedLocalePreference = prefs.getString(_appLocalePreferenceKey);
       _appLocalePreference = AppLocalePreference.values.firstWhere(
@@ -191,6 +197,13 @@ class SettingsProvider with ChangeNotifier {
     _limitWorkbenchWidth = enabled;
     notifyListeners();
     await _saveSetting(_limitWorkbenchWidthKey, enabled);
+  }
+
+  Future<void> setRecordEditorDialogEnabled(bool enabled) async {
+    if (_recordEditorDialogEnabled == enabled) return;
+    _recordEditorDialogEnabled = enabled;
+    notifyListeners();
+    await _saveSetting(_recordEditorDialogEnabledKey, enabled);
   }
 
   Future<void> setAppLocalePreference(

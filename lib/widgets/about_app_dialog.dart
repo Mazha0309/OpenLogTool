@@ -175,7 +175,7 @@ class AboutAppDialog extends StatelessWidget {
       applicationIcon: Padding(
         padding: const EdgeInsets.all(8),
         child: Image.asset(
-          'icon.png',
+          'assets/images/app_icon_512.png',
           width: 56,
           height: 56,
           cacheWidth: 224,
@@ -247,7 +247,7 @@ class _AboutHeader extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Image.asset(
-                'icon.png',
+                'assets/images/app_icon_512.png',
                 fit: BoxFit.cover,
                 cacheWidth: 256,
                 cacheHeight: 256,

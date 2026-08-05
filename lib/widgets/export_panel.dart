@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -573,6 +575,16 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 20),
           _buildSwitchTile(
             context,
+            title: context.l10n.fileNameUseSessionTitle,
+            subtitle: context.l10n.fileNameUseSessionTitleHint,
+            value: settings.useSessionTitleAsFileName,
+            onChanged: (value) {
+              setState(() => settings.useSessionTitleAsFileName = value);
+            },
+          ),
+          const SizedBox(height: 20),
+          _buildSwitchTile(
+            context,
             title: context.l10n.excelUseSessionTitleAsHeader,
             subtitle: context.l10n.excelUseSessionTitleAsHeaderHint,
             value: settings.useSessionTitleAsHeader,
@@ -832,6 +844,8 @@ class _ExportPanelState extends State<ExportPanel> {
               context, '{mm}', context.l10n.templateMinuteDescription),
           _buildTemplateHelpItem(
               context, '{ss}', context.l10n.templateSecondDescription),
+          _buildTemplateHelpItem(
+              context, '{session}', context.l10n.templateSessionDescription),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 16),
@@ -1087,8 +1101,14 @@ class _ExportPanelState extends State<ExportPanel> {
     try {
       final jsonBytes = ExportService.generateJsonBytes(logs);
       final now = DateTime.now();
-      String filename =
-          ExportService.generateFileName(settings.fileNameTemplate, now);
+      final sessionProvider =
+          Provider.of<SessionProvider>(context, listen: false);
+      String filename = ExportService.generateFileName(
+        settings.fileNameTemplate,
+        now,
+        sessionTitle: sessionProvider.currentSession?.title,
+        useSessionTitle: settings.useSessionTitleAsFileName,
+      );
       if (!filename.endsWith('.json')) {
         filename += '.json';
       }
@@ -1149,8 +1169,12 @@ class _ExportPanelState extends State<ExportPanel> {
         return;
       }
 
-      String filename =
-          ExportService.generateFileName(settings.fileNameTemplate, now);
+      String filename = ExportService.generateFileName(
+        settings.fileNameTemplate,
+        now,
+        sessionTitle: sessionProvider.currentSession?.title,
+        useSessionTitle: settings.useSessionTitleAsFileName,
+      );
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';
       }
@@ -1193,12 +1217,15 @@ class _ExportPanelState extends State<ExportPanel> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: kIsWeb,
       );
 
       if (result == null || result.files.isEmpty) return;
 
-      final file = File(result.files.single.path!);
-      final content = await file.readAsString();
+      final selected = result.files.single;
+      final content = selected.bytes != null
+          ? utf8.decode(selected.bytes!)
+          : await File(selected.path!).readAsString();
 
       final importResult = parseJsonImport(content);
 

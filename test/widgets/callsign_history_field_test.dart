@@ -1,6 +1,7 @@
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
@@ -373,5 +374,181 @@ void main() {
     );
     await tester.pump();
     expect(focusNode.hasFocus, isFalse);
+  });
+
+  testWidgets('arrow keys navigate history and enter fills the highlight',
+      (tester) async {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    addTearDown(() {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    await tester.pumpWidget(
+      _localizedApp(
+        CallsignHistoryField(
+          callsignController: controllers[0],
+          deviceController: controllers[1],
+          antennaController: controllers[2],
+          qthController: controllers[3],
+          powerController: controllers[4],
+          heightController: controllers[5],
+          label: 'Callsign',
+          hintText: 'BA4AAA',
+          historyLoader: (_, __) async => [
+            _historyRecord(),
+            const bridge.LogEntry(
+              syncId: 'history-2',
+              sessionId: 'session-1',
+              time: '2026-07-11T08:15:00Z',
+              controller: 'BG5CRL',
+              callsign: 'BA4BBB',
+              rstSent: '57',
+              rstRcvd: '46',
+              qth: '杭州',
+              device: 'FT-991A',
+              power: '50W',
+              antenna: 'GP',
+              height: '8m',
+              createdAt: '2026-07-11T08:15:00Z',
+              updatedAt: '2026-07-11T08:15:00Z',
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextFormField));
+    await tester.enterText(find.byType(TextFormField), 'BA4AAA');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(controllers[0].text, 'BA4AAA');
+    expect(controllers[1].text, 'FT-991A');
+    expect(controllers[3].text, '杭州');
+  });
+
+  testWidgets('escape closes the history overlay and keeps focus',
+      (tester) async {
+    final focusNode = FocusNode();
+    final controllers = List.generate(6, (_) => TextEditingController());
+    addTearDown(() {
+      focusNode.dispose();
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    await tester.pumpWidget(
+      _localizedApp(
+        CallsignHistoryField(
+          callsignController: controllers[0],
+          deviceController: controllers[1],
+          antennaController: controllers[2],
+          qthController: controllers[3],
+          powerController: controllers[4],
+          heightController: controllers[5],
+          focusNode: focusNode,
+          label: 'Callsign',
+          hintText: 'BA4AAA',
+          historyLoader: (_, __) async => [_historyRecord()],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextFormField));
+    await tester.enterText(find.byType(TextFormField), 'BA4AAA');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('callsign-history-overlay')), findsNothing);
+    expect(focusNode.hasFocus, isTrue);
+  });
+
+  testWidgets('history overlay list can be scrolled on a phone viewport',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controllers = List.generate(6, (_) => TextEditingController());
+    addTearDown(() {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    final manyRecords = List.generate(
+      8,
+      (i) => bridge.LogEntry(
+        syncId: 'history-$i',
+        sessionId: 'session-1',
+        time: '2026-07-1${i % 9}T08:15:00Z',
+        controller: 'BG5CRL',
+        callsign: 'BA4AAA',
+        qth: 'QTH$i',
+        createdAt: '2026-07-1${i % 9}T08:15:00Z',
+        updatedAt: '2026-07-1${i % 9}T08:15:00Z',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _localizedApp(
+        Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: 300,
+            child: CallsignHistoryField(
+              callsignController: controllers[0],
+              deviceController: controllers[1],
+              antennaController: controllers[2],
+              qthController: controllers[3],
+              powerController: controllers[4],
+              heightController: controllers[5],
+              label: 'Callsign',
+              hintText: 'BA4AAA',
+              historyLoader: (_, __) async => manyRecords,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextFormField));
+    await tester.enterText(find.byType(TextFormField), 'BA4AAA');
+    await tester.pumpAndSettle();
+
+    final overlayFinder = find.byKey(const Key('callsign-history-overlay'));
+    expect(overlayFinder, findsOneWidget);
+    final scrollableFinder = find.descendant(
+      of: overlayFinder,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollableFinder, findsOneWidget);
+
+    await tester.drag(
+      scrollableFinder,
+      const Offset(0, -300),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pumpAndSettle();
+
+    expect(overlayFinder, findsOneWidget);
+    expect(
+      tester
+          .widget<Scrollable>(scrollableFinder)
+          .controller
+          ?.positions
+          .first
+          .pixels,
+      greaterThan(0),
+    );
   });
 }
