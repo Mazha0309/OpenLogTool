@@ -162,6 +162,34 @@ void main() {
     });
   }
 
+  testWidgets('Ctrl+Enter saves even when focus has left the form',
+      (tester) async {
+    final collaboration = _RecordingCollaborationProvider(
+      initialFields: const {
+        'time': '',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+        'rstSent': '59',
+        'rstRcvd': '59',
+      },
+    );
+    addTearDown(collaboration.dispose);
+
+    await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key('outside-log-form')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+
+    await _sendSaveShortcut(tester, LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(collaboration.commitCalls, 1);
+  });
+
   testWidgets(
     'clear fields keeps the controller callsign and updates collaboration atomically',
     (tester) async {
@@ -295,10 +323,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final shortcuts =
-        tester.widget<CallbackShortcuts>(find.byType(CallbackShortcuts));
-    shortcuts.bindings[
-        const SingleActivator(LogicalKeyboardKey.enter, meta: true)]!();
+    await _sendSaveShortcut(tester, LogicalKeyboardKey.controlLeft);
     await tester.pump();
     expect(readOnlyCollaboration.commitCalls, 0);
   });

@@ -120,6 +120,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalShortcut);
     _reportController.text = '59';
     _rstRcvdController.text = '59';
     _draftControllers = {
@@ -158,8 +159,38 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  bool _handleGlobalShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return false;
+    }
+    if (!HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) {
+      return false;
+    }
+    if (!mounted || _submissionInProgress) return false;
+    final collaboration = context.read<CollaborationProvider>();
+    if (widget.readOnly ||
+        (collaboration.liveDraftSnapshot != null &&
+            !collaboration.canEditLiveDraft)) {
+      return false;
+    }
+    final hasForeignLock = collaboration.liveDraftLocks.any(
+      (lock) =>
+          lock.expiresAt.isAfter(DateTime.now()) &&
+          collaboration.fieldLockedByAnotherUser(lock.field),
+    );
+    if (hasForeignLock || _historyReuseInProgress || _clearInProgress) {
+      return false;
+    }
+    unawaited(_submitForm());
+    return true;
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalShortcut);
     _lockExpiryTimer?.cancel();
     for (final timer in _inlineAiDebounce.values) {
       timer.cancel();
@@ -1411,17 +1442,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       },
     );
 
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
-          if (canSubmit) unawaited(_submitForm());
-        },
-        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
-          if (canSubmit) unawaited(_submitForm());
-        },
-      },
-      child: content,
-    );
+    return content;
   }
 
   Widget _buildMaterialTextField({
