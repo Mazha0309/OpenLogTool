@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +17,7 @@ import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/app_fonts.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/windows_accessibility_guard.dart';
 import 'package:openlogtool/bootstrap/rust_library_loader.dart';
@@ -64,6 +67,12 @@ Future<void> main(List<String> args) async {
     await RustApi.init(dbPath: dbPath);
   } catch (e) {
     debugPrint('Rust DB init: $e');
+  }
+
+  // Web：把 localStorage（SharedPreferences）旧数据一次性拷贝到 IndexedDB。
+  // 桌面端无需迁移，直接使用 SharedPreferences。
+  if (kIsWeb) {
+    unawaited(migrateLegacyLocalStorage(await openKeyValueStore()));
   }
 
   runApp(

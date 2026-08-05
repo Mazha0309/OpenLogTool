@@ -15,7 +15,7 @@ import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/personal_cloud_merge.dart';
 import 'package:openlogtool/utils/server_url.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 
 enum PersonalCloudSyncState {
   signedOut,
@@ -1530,13 +1530,14 @@ class PersonalCloudProvider with ChangeNotifier {
       _baselineLoaded = true;
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     if (_scope != scope) return;
     final prefix = _preferencePrefix(scope);
-    final revision = prefs.getInt('${prefix}revision');
-    final checksum = prefs.getString('${prefix}local_checksum');
-    final databaseRevision = prefs.getInt('${prefix}database_revision');
-    _localOwnerScope = prefs.getString('personal_cloud_v1_local_owner_scope');
+    final revision = await prefs.getInt('${prefix}revision');
+    final checksum = await prefs.getString('${prefix}local_checksum');
+    final databaseRevision = await prefs.getInt('${prefix}database_revision');
+    _localOwnerScope =
+        await prefs.getString('personal_cloud_v1_local_owner_scope');
     _baseline = revision == null || checksum == null || databaseRevision == null
         ? null
         : _PersonalCloudBaseline(
@@ -1570,7 +1571,7 @@ class PersonalCloudProvider with ChangeNotifier {
         clearPairingRequirement: clearPairingRequirement,
       );
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     if (_scope != scope) return;
     final prefix = _preferencePrefix(scope);
     final revisionSaved =
@@ -1637,11 +1638,11 @@ class PersonalCloudProvider with ChangeNotifier {
       _dictionaryBaselineLoaded = true;
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     if (_scope != scope) return;
     final prefix = '${_preferencePrefix(scope)}dictionary_';
-    final revision = prefs.getInt('${prefix}revision');
-    final checksum = prefs.getString('${prefix}local_checksum');
+    final revision = await prefs.getInt('${prefix}revision');
+    final checksum = await prefs.getString('${prefix}local_checksum');
     _dictionaryBaseline = revision == null || checksum == null
         ? null
         : _PersonalCloudBaseline(
@@ -1674,7 +1675,7 @@ class PersonalCloudProvider with ChangeNotifier {
         clearPairingRequirement: clearPairingRequirement,
       );
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     if (_scope != scope) return;
     final prefix = '${_preferencePrefix(scope)}dictionary_';
     final revisionSaved =
@@ -1702,7 +1703,7 @@ class PersonalCloudProvider with ChangeNotifier {
 
   Future<void> _claimLocalOwnership(String scope) async {
     final identity = _scopeIdentity(scope);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     if (_scope != scope) return;
     final saved = await prefs.setString(
       'personal_cloud_v1_local_owner_scope',

@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 import 'package:openlogtool/services/private_file_secure_values.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/utils/server_url.dart';
@@ -102,13 +103,17 @@ final class SharedPreferencesDeletionMarkerStore
   const SharedPreferencesDeletionMarkerStore();
 
   @override
-  Future<bool?> read(String key) async =>
-      (await SharedPreferences.getInstance()).getBool(_markerKey(key));
+  Future<bool?> read(String key) async {
+    final store = PrefsKeyValueStore(await SharedPreferences.getInstance());
+    final markerKey = _markerKey(key);
+    if (!(await store.containsKey(markerKey))) return null;
+    return store.getBool(markerKey);
+  }
 
   @override
   Future<void> mark(String key) async {
-    final written = await (await SharedPreferences.getInstance())
-        .setBool(_markerKey(key), true);
+    final store = PrefsKeyValueStore(await SharedPreferences.getInstance());
+    final written = await store.setBool(_markerKey(key), true);
     if (!written) {
       throw StateError('Unable to persist credential deletion marker');
     }
@@ -118,8 +123,8 @@ final class SharedPreferencesDeletionMarkerStore
   Future<void> unmark(String key) async {
     // Persist false rather than removing the key. A live private fallback uses
     // the absent state, while false makes a recovered keyring authoritative.
-    final written = await (await SharedPreferences.getInstance())
-        .setBool(_markerKey(key), false);
+    final store = PrefsKeyValueStore(await SharedPreferences.getInstance());
+    final written = await store.setBool(_markerKey(key), false);
     if (!written) {
       throw StateError('Unable to persist platform credential authority');
     }
@@ -127,10 +132,10 @@ final class SharedPreferencesDeletionMarkerStore
 
   @override
   Future<void> forget(String key) async {
-    final preferences = await SharedPreferences.getInstance();
+    final store = PrefsKeyValueStore(await SharedPreferences.getInstance());
     final markerKey = _markerKey(key);
-    if (!preferences.containsKey(markerKey)) return;
-    final removed = await preferences.remove(markerKey);
+    if (!(await store.containsKey(markerKey))) return;
+    final removed = await store.remove(markerKey);
     if (!removed) {
       throw StateError('Unable to persist private fallback authority');
     }
