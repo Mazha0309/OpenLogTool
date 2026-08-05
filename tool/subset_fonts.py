@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Subset Sarasa Gothic SC into a web woff2 (GB2312 common chars + ASCII)."""
+"""Subset Sarasa Gothic SC into a web ttf (GB2312 common chars + ASCII).
+
+Output is ttf (not woff2): Flutter Web's FontManifest only accepts ttf/otf,
+and CanvasKit/skwasm ignores CSS @font-face. The app loads the subset via
+FontLoader at startup (see lib/services/app_fonts.dart).
+"""
 
 import argparse, subprocess
 from pathlib import Path
@@ -17,6 +22,7 @@ def main() -> int:
     parser.add_argument("src", type=Path)
     parser.add_argument("dst", type=Path)
     args = parser.parse_args()
+    args.dst.parent.mkdir(parents=True, exist_ok=True)
 
     # GB2312 level-1 (3755 chars) encoded as unicode range
     # level-1 characters occupy rows 0xB0-0xD7, bytes 0xA1-0xFE in GB2312.
@@ -36,7 +42,6 @@ def main() -> int:
             str(args.src),
             f"--output-file={args.dst}",
             f"--text-file={textfile}",
-            "--flavor=woff2",
             "--layout-features=*",
             "--no-hinting",
         ],

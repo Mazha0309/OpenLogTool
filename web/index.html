@@ -17,12 +17,6 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <style>
-    @font-face {
-      font-family: 'SarasaGothicSC';
-      src: url('fonts/SarasaGothicSC-subset.woff2') format('woff2');
-      font-display: swap;
-      font-weight: 400;
-    }
     #loader { position: fixed; inset: 0; display: flex; align-items: center;
               justify-content: center; background: #faf8f2;
               font-family: sans-serif; color: #666; z-index: 9999; }
@@ -60,6 +54,9 @@
   <script src="flutter_bootstrap.js" async></script>
   <script>
     window.addEventListener('flutter-first-frame', function () {
+      document.body.classList.add('flt-app-ready');
+    });
+    window.addEventListener('error', function () {
       document.body.classList.add('flt-app-ready');
     });
   </script>

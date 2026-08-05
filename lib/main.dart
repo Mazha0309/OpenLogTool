@@ -14,6 +14,7 @@ import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
+import 'package:openlogtool/services/app_fonts.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/windows_accessibility_guard.dart';
 import 'package:openlogtool/bootstrap/rust_library_loader.dart';
@@ -24,6 +25,7 @@ import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await loadAppFonts();
 
   // 桌面子窗口只渲染主控屏，不初始化 Rust、本地数据库或主应用 Provider。
   final controllerWindow =
