@@ -1097,10 +1097,16 @@ jobs:
           app=build/ios/iphoneos/Runner.app
           executable="$app/Runner"
           test -x "$executable"
-          test -s ios/Runner/rustlibs/libopenlogtool_core.a
+          ls -la ios/Runner/rustlibs/ 2>&1 || true
+          if ! test -s ios/Runner/rustlibs/libopenlogtool_core.a; then
+            echo "rustlibs missing: $(find ios -name '*.a' 2>/dev/null | tr '\n' ' ')" >&2
+            exit 1
+          fi
           xcrun lipo "$executable" -verify_arch arm64
-          # 静态库应链接进可执行文件（符号可见）
-          nm "$executable" | grep -c 'frb_init_frb_dart_api_dl' >/dev/null
+          echo "=== nm symbol check ==="
+          nm "$executable" | grep -c 'frb_init_frb_dart_api_dl' || true
+          nm "$executable" | grep 'frb_init_frb_dart_api_dl' || echo "symbol NOT found in executable" >&2
+          nm ios/Runner/rustlibs/libopenlogtool_core.a | grep 'frb_init_frb_dart_api_dl' || true
           plutil -lint "$app/Info.plist"
 
       - name: Package iOS artifacts
