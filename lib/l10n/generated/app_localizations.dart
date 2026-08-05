@@ -3183,8 +3183,20 @@ abstract class AppLocalizations {
   /// No description provided for @paginationSettingHint.
   ///
   /// In zh, this message translates to:
-  /// **'每 5 条记录分为一页显示。'**
+  /// **'将记录分页显示，每页条数可配置。'**
   String get paginationSettingHint;
+
+  /// No description provided for @tablePageSizeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'每页记录数'**
+  String get tablePageSizeLabel;
+
+  /// No description provided for @tablePageSizeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存记录表格每页显示的数量'**
+  String get tablePageSizeHint;
 
   /// No description provided for @recordEditorDialogSetting.
   ///

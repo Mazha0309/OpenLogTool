@@ -1758,7 +1758,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paginationSetting => '分页显示记录';
 
   @override
-  String get paginationSettingHint => '每 5 条记录分为一页显示。';
+  String get paginationSettingHint => '将记录分页显示，每页条数可配置。';
+
+  @override
+  String get tablePageSizeLabel => '每页记录数';
+
+  @override
+  String get tablePageSizeHint => '已保存记录表格每页显示的数量';
 
   @override
   String get recordEditorDialogSetting => '弹窗编辑记录';

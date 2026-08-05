@@ -27,11 +27,21 @@ class _LogTableState extends State<LogTable> {
   int? _editingIndex;
   late Map<String, TextEditingController> _controllers;
   int _currentPage = 0;
-  static const int _itemsPerPage = 5;
+  int _itemsPerPage = 10;
   List<LogEntry> _lastSeenLogs = [];
   bool _editingSaveInProgress = false;
 
   final ScrollController _horizontalController = ScrollController();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // build() 已 watch SettingsProvider，设置变化时本方法会先于 build 重新执行。
+    final pageSize = context.read<SettingsProvider>().tablePageSize;
+    if (pageSize != _itemsPerPage) {
+      _itemsPerPage = pageSize;
+    }
+  }
 
   @override
   void initState() {

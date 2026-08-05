@@ -81,4 +81,41 @@ void main() {
     );
     settings.dispose();
   });
+
+  testWidgets('records per page can be changed from layout settings',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = SettingsProvider();
+    await tester.pumpWidget(
+      ChangeNotifierProvider<SettingsProvider>.value(
+        value: settings,
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: LayoutSettings(isNarrow: false, cardPadding: 16),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('每页记录数'), findsOneWidget);
+    expect(settings.tablePageSize, 10);
+
+    await tester.tap(find.byKey(const Key('table-page-size-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+
+    expect(settings.tablePageSize, 15);
+    expect(
+      (await SharedPreferences.getInstance()).getInt('tablePageSize'),
+      15,
+    );
+    settings.dispose();
+  });
 }

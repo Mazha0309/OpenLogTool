@@ -1834,7 +1834,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paginationSetting => 'Paginate records';
 
   @override
-  String get paginationSettingHint => 'Show five records on each page.';
+  String get paginationSettingHint =>
+      'Split records into pages with a configurable size.';
+
+  @override
+  String get tablePageSizeLabel => 'Records per page';
+
+  @override
+  String get tablePageSizeHint => 'How many saved records each page shows';
 
   @override
   String get recordEditorDialogSetting => 'Edit records in a dialog';

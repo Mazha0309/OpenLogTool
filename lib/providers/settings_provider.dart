@@ -23,6 +23,9 @@ class SettingsProvider with ChangeNotifier {
   static const String _recordEditorDialogEnabledKey =
       'recordEditorDialogEnabled';
   static const String _appLocalePreferenceKey = 'appLocalePreference';
+  static const String _tablePageSizeKey = 'tablePageSize';
+
+  static const List<int> tablePageSizeOptions = [5, 10, 15, 20, 25];
 
   Color _themeColor = const Color(0xFF2196F3);
   bool _isDarkMode = false;
@@ -37,6 +40,7 @@ class SettingsProvider with ChangeNotifier {
   bool _limitWorkbenchWidth = true;
   bool _recordEditorDialogEnabled = true;
   AppLocalePreference _appLocalePreference = AppLocalePreference.system;
+  int _tablePageSize = 10;
   ControllerDisplayPreferences _controllerDisplayPreferences =
       const ControllerDisplayPreferences();
   final Future<KeyValueStore> Function() _preferencesLoader;
@@ -57,6 +61,7 @@ class SettingsProvider with ChangeNotifier {
   bool get limitWorkbenchWidth => _limitWorkbenchWidth;
   bool get recordEditorDialogEnabled => _recordEditorDialogEnabled;
   AppLocalePreference get appLocalePreference => _appLocalePreference;
+  int get tablePageSize => _tablePageSize;
   Locale? get locale => switch (_appLocalePreference) {
         AppLocalePreference.system => null,
         AppLocalePreference.simplifiedChinese => const Locale('zh', 'CN'),
@@ -119,6 +124,11 @@ class SettingsProvider with ChangeNotifier {
         (preference) => preference.name == storedLocalePreference,
         orElse: () => AppLocalePreference.system,
       );
+    }
+    final storedTablePageSize = await prefs.getInt(_tablePageSizeKey);
+    if (storedTablePageSize != null &&
+        tablePageSizeOptions.contains(storedTablePageSize)) {
+      _tablePageSize = storedTablePageSize;
     }
     final controllerPreferencesJson =
         await prefs.getString(controllerDisplayPreferencesStorageKey);
@@ -222,6 +232,13 @@ class SettingsProvider with ChangeNotifier {
     await _saveSetting(_appLocalePreferenceKey, preference.name);
   }
 
+  Future<void> setTablePageSize(int value) async {
+    if (!tablePageSizeOptions.contains(value)) return;
+    _tablePageSize = value;
+    notifyListeners();
+    await _saveSetting(_tablePageSizeKey, value);
+  }
+
   Future<void> setControllerDisplayPreferences(
     ControllerDisplayPreferences preferences,
   ) async {
@@ -265,6 +282,7 @@ class SettingsProvider with ChangeNotifier {
     _primarySidebarExpanded = true;
     _limitWorkbenchWidth = true;
     _appLocalePreference = AppLocalePreference.system;
+    _tablePageSize = 10;
     _duplicateCallsignWarningEnabled = true;
     _controllerDisplayPreferences = const ControllerDisplayPreferences();
 
@@ -279,6 +297,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.remove(_primarySidebarExpandedKey);
     await prefs.remove(_limitWorkbenchWidthKey);
     await prefs.remove(_appLocalePreferenceKey);
+    await prefs.remove(_tablePageSizeKey);
     await prefs.remove(_duplicateCallsignWarningKey);
     await prefs.remove(controllerDisplayPreferencesStorageKey);
 

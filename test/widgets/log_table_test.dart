@@ -18,7 +18,10 @@ void main() {
   testWidgets('a successful provider add replaces the empty table immediately',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final logProvider = LogProvider(
       sessionListLoader: () async => [
@@ -75,7 +78,10 @@ void main() {
       'replacing an existing projection reconstructs rows and shows the newest record',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final old = _log(
       id: 'old-row',
@@ -112,7 +118,10 @@ void main() {
   testWidgets('keeps RST sent and received aligned with the newest row',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final logs = <LogEntry>[
       _log(
@@ -234,7 +243,10 @@ void main() {
   testWidgets('shows a canonical UTC log time in the device timezone',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final localTime = DateTime(2026, 7, 13, 20, 30);
     final logProvider = _StaticLogProvider([
@@ -267,12 +279,13 @@ void main() {
     expect(_textOf(tester, table.rows.single.cells[1].child), '20:30');
   });
 
-  testWidgets('default pagination keeps five newest RST records on first page',
+  testWidgets('default pagination keeps ten newest RST records on first page',
       (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{'recordEditorDialogEnabled': false});
+    SharedPreferences.setMockInitialValues(
+        <String, Object>{'recordEditorDialogEnabled': false});
     final logProvider = _StaticLogProvider(
       List<LogEntry>.generate(
-        6,
+        12,
         (index) => _log(
           id: 'log-${index + 1}',
           time: 'TIME_${index + 1}',
@@ -316,18 +329,97 @@ void main() {
           (scroll) => scroll.scrollDirection == Axis.vertical,
         );
     expect(verticalTableScroll.physics, isA<NeverScrollableScrollPhysics>());
-    expect(table.rows, hasLength(5));
-    expect(_textOf(tester, table.rows.first.cells[4].child), 'SENT_6');
-    expect(_textOf(tester, table.rows.first.cells[5].child), 'RCVD_6');
-    expect(_textOf(tester, table.rows.last.cells[4].child), 'SENT_2');
-    expect(find.text('SENT_1'), findsNothing);
+    expect(table.rows, hasLength(10));
+    expect(_textOf(tester, table.rows.first.cells[4].child), 'SENT_12');
+    expect(_textOf(tester, table.rows.first.cells[5].child), 'RCVD_12');
+    expect(_textOf(tester, table.rows.last.cells[4].child), 'SENT_3');
+    expect(find.text('SENT_2'), findsNothing);
     expect(find.text('1 / 2'), findsOneWidget);
+  });
+
+  testWidgets('table honors configurable page size', (tester) async {
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{
+        'recordEditorDialogEnabled': false,
+        'tablePageSize': 5,
+      },
+    );
+    final logProvider = _StaticLogProvider(
+      List<LogEntry>.generate(
+        12,
+        (index) => _log(
+          id: 'log-${index + 1}',
+          time: 'TIME_${index + 1}',
+          report: 'SENT_${index + 1}',
+          rstRcvd: 'RCVD_${index + 1}',
+        ),
+      ),
+    );
+    final settingsProvider = SettingsProvider();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: settingsProvider,
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(child: LogTable(readOnly: true)),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    var table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows, hasLength(5));
+    expect(_textOf(tester, table.rows.first.cells[4].child), 'SENT_12');
+    expect(_textOf(tester, table.rows.last.cells[4].child), 'SENT_8');
+    expect(find.text('SENT_1'), findsNothing);
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    await settingsProvider.setTablePageSize(10);
+    await tester.pump();
+
+    table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows, hasLength(10));
+    expect(_textOf(tester, table.rows.last.cells[4].child), 'SENT_3');
+    expect(find.text('SENT_2'), findsNothing);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    // 页数变小导致当前页越界时，回到最后一页（而不是显示空白切片）
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await tester.pump();
+    expect(find.text('2 / 2'), findsOneWidget);
+
+    await settingsProvider.setTablePageSize(5);
+    await tester.pump();
+
+    table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows, hasLength(5));
+    expect(find.text('2 / 3'), findsOneWidget);
+
+    await settingsProvider.setTablePageSize(25);
+    await tester.pump();
+
+    table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows, hasLength(12));
+    expect(find.byKey(const Key('log-pagination')), findsNothing);
+    expect(find.text('SENT_1'), findsOneWidget);
   });
 
   testWidgets('non-owned collaboration log exposes only a read-only hint',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final logProvider = _StaticLogProvider([
       _log(
@@ -404,7 +496,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final logProvider = _StaticLogProvider([
       _log(
@@ -525,7 +620,10 @@ void main() {
   testWidgets('runtime locale switch updates table and deletion copy',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final locale = ValueNotifier<Locale>(const Locale('zh', 'CN'));
     addTearDown(locale.dispose);
@@ -612,7 +710,10 @@ void main() {
 
   testWidgets('en_US localizes the empty table state', (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
 
     await _pumpLogTable(
@@ -632,7 +733,10 @@ void main() {
   testWidgets('failed save keeps editing controls and the entered value',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final logProvider = _StaticLogProvider([
       _log(
@@ -686,7 +790,10 @@ void main() {
   testWidgets('delete awaits completion and ignores repeated confirmation',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final deletion = Completer<void>();
     final logProvider = _StaticLogProvider([
@@ -731,7 +838,10 @@ void main() {
   testWidgets('failed delete keeps the record and dialog available to retry',
       (tester) async {
     SharedPreferences.setMockInitialValues(
-      <String, Object>{'paginationEnabled': false, 'recordEditorDialogEnabled': false},
+      <String, Object>{
+        'paginationEnabled': false,
+        'recordEditorDialogEnabled': false
+      },
     );
     final logProvider = _StaticLogProvider([
       _log(
