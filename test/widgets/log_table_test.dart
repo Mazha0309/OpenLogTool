@@ -413,6 +413,66 @@ void main() {
     expect(find.text('SENT_1'), findsOneWidget);
   });
 
+  testWidgets('enlarging page size snaps back from the last page',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{
+        'recordEditorDialogEnabled': false,
+        'tablePageSize': 5,
+      },
+    );
+    final logProvider = _StaticLogProvider(
+      List<LogEntry>.generate(
+        12,
+        (index) => _log(
+          id: 'log-${index + 1}',
+          time: 'TIME_${index + 1}',
+          report: 'SENT_${index + 1}',
+          rstRcvd: 'RCVD_${index + 1}',
+        ),
+      ),
+    );
+    final settingsProvider = SettingsProvider();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: settingsProvider,
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(child: LogTable(readOnly: true)),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 / 3'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await tester.pump();
+    expect(find.text('3 / 3'), findsOneWidget);
+
+    // 每页 5 条时在最后一页 (3/3)，改回 10 条/页后只剩 2 页，
+    // 当前页越界，应自动收回到最后一页 (2/2)。
+    await settingsProvider.setTablePageSize(10);
+    await tester.pump();
+
+    var table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(table.rows, hasLength(2));
+    expect(_textOf(tester, table.rows.first.cells[4].child), 'SENT_2');
+    expect(_textOf(tester, table.rows.last.cells[4].child), 'SENT_1');
+    expect(find.text('SENT_3'), findsNothing);
+  });
+
   testWidgets('non-owned collaboration log exposes only a read-only hint',
       (tester) async {
     SharedPreferences.setMockInitialValues(

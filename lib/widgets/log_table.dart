@@ -27,21 +27,10 @@ class _LogTableState extends State<LogTable> {
   int? _editingIndex;
   late Map<String, TextEditingController> _controllers;
   int _currentPage = 0;
-  int _itemsPerPage = 10;
   List<LogEntry> _lastSeenLogs = [];
   bool _editingSaveInProgress = false;
 
   final ScrollController _horizontalController = ScrollController();
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // build() 已 watch SettingsProvider，设置变化时本方法会先于 build 重新执行。
-    final pageSize = context.read<SettingsProvider>().tablePageSize;
-    if (pageSize != _itemsPerPage) {
-      _itemsPerPage = pageSize;
-    }
-  }
 
   @override
   void initState() {
@@ -450,8 +439,11 @@ class _LogTableState extends State<LogTable> {
             ),
             // 分页控件
             if (settingsProvider.paginationEnabled &&
-                logProvider.logs.length > _itemsPerPage)
-              _buildPaginationControls(logProvider.logs.length),
+                logProvider.logs.length > settingsProvider.tablePageSize)
+              _buildPaginationControls(
+                logProvider.logs.length,
+                settingsProvider.tablePageSize,
+              ),
           ],
         );
       },
@@ -474,16 +466,16 @@ class _LogTableState extends State<LogTable> {
 
     // 如果启用分页，只显示当前页的数据（按最新在上排序后的结果）
     if (settingsProvider.paginationEnabled) {
+      final pageSize = settingsProvider.tablePageSize;
       final totalPages =
-          (indexedLogs.length / _itemsPerPage).ceil().clamp(1, 1 << 30);
+          (indexedLogs.length / pageSize).ceil().clamp(1, 1 << 30);
       if (_currentPage >= totalPages) {
         // Logs got shorter (session switch / clear / undo) — snap back to a
         // valid page instead of showing an empty slice.
         _currentPage = totalPages - 1;
       }
-      final startIndex = _currentPage * _itemsPerPage;
-      final endIndex =
-          (startIndex + _itemsPerPage).clamp(0, indexedLogs.length);
+      final startIndex = _currentPage * pageSize;
+      final endIndex = (startIndex + pageSize).clamp(0, indexedLogs.length);
       return indexedLogs.sublist(startIndex, endIndex);
     }
     return indexedLogs;
@@ -508,8 +500,11 @@ class _LogTableState extends State<LogTable> {
           if (index != displayEntries.length - 1) const SizedBox(height: 10),
         ],
         if (settingsProvider.paginationEnabled &&
-            logProvider.logs.length > _itemsPerPage)
-          _buildPaginationControls(logProvider.logs.length),
+            logProvider.logs.length > settingsProvider.tablePageSize)
+          _buildPaginationControls(
+            logProvider.logs.length,
+            settingsProvider.tablePageSize,
+          ),
       ],
     );
   }
@@ -1322,8 +1317,8 @@ class _LogTableState extends State<LogTable> {
     );
   }
 
-  Widget _buildPaginationControls(int totalItems) {
-    final totalPages = (totalItems / _itemsPerPage).ceil();
+  Widget _buildPaginationControls(int totalItems, int itemsPerPage) {
+    final totalPages = (totalItems / itemsPerPage).ceil();
 
     return Container(
       key: const Key('log-pagination'),
