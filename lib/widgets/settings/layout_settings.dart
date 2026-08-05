@@ -95,6 +95,16 @@ class LayoutSettings extends StatelessWidget {
               onChanged: settingsProvider.setRecordEditorDialogEnabled,
             ),
           ),
+          SettingsActionTile(
+            icon: Icons.electric_bolt_outlined,
+            title: l10n.autoAppendPowerWSetting,
+            subtitle: l10n.autoAppendPowerWHint,
+            trailing: Switch(
+              key: const Key('auto-append-power-w-switch'),
+              value: settingsProvider.autoAppendPowerW,
+              onChanged: settingsProvider.setAutoAppendPowerW,
+            ),
+          ),
         ],
       ),
     );

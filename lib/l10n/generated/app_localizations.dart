@@ -352,6 +352,12 @@ abstract class AppLocalizations {
   /// **'打开悬浮窗'**
   String get openFloatingWindow;
 
+  /// No description provided for @openControllerTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开主控屏标签页'**
+  String get openControllerTab;
+
   /// No description provided for @openSecondDisplayWindow.
   ///
   /// In zh, this message translates to:
@@ -1786,6 +1792,18 @@ abstract class AppLocalizations {
   /// **'输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。'**
   String get duplicateCallsignWarningHint;
 
+  /// No description provided for @autoAppendPowerWSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'功率自动加 W'**
+  String get autoAppendPowerWSetting;
+
+  /// No description provided for @autoAppendPowerWHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存时若功率为纯数字（如 50、50.5）自动补上 W；已带单位或含中文的不动。'**
+  String get autoAppendPowerWHint;
+
   /// No description provided for @duplicateCallsignTitle.
   ///
   /// In zh, this message translates to:
@@ -1825,8 +1843,8 @@ abstract class AppLocalizations {
   /// No description provided for @duplicateContinueDialogMessage.
   ///
   /// In zh, this message translates to:
-  /// **'{callsign} 已在本次点名中记录过，继续添加吗？'**
-  String duplicateContinueDialogMessage(String callsign);
+  /// **'{callsign} 已在第 {ordinal} 位记录过，继续添加吗？'**
+  String duplicateContinueDialogMessage(String callsign, int ordinal);
 
   /// No description provided for @duplicateContinueAdd.
   ///
@@ -1849,9 +1867,9 @@ abstract class AppLocalizations {
   /// No description provided for @duplicateOldRecordSummary.
   ///
   /// In zh, this message translates to:
-  /// **'原记录：{time} {callsign} {rstSent}/{rstRcvd} {qth}'**
-  String duplicateOldRecordSummary(
-      String time, String callsign, String rstSent, String rstRcvd, String qth);
+  /// **'原记录（第 {ordinal} 位）：{time} {callsign} {rstSent}/{rstRcvd} {qth}'**
+  String duplicateOldRecordSummary(int ordinal, String time, String callsign,
+      String rstSent, String rstRcvd, String qth);
 
   /// No description provided for @recordUpdated.
   ///
@@ -3463,6 +3481,60 @@ abstract class AppLocalizations {
   /// **'冲突项保留云端值'**
   String get personalCloudKeepRemoteConflicts;
 
+  /// No description provided for @personalCloudResolveOneByOne.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐项处理'**
+  String get personalCloudResolveOneByOne;
+
+  /// No description provided for @personalCloudConflictDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐项处理冲突'**
+  String get personalCloudConflictDialogTitle;
+
+  /// No description provided for @personalCloudConflictApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用选择'**
+  String get personalCloudConflictApply;
+
+  /// No description provided for @personalCloudFieldConflictTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'字段 {field} 双方都有值且不同'**
+  String personalCloudFieldConflictTitle(String field);
+
+  /// No description provided for @personalCloudEntityConflictTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{entity} 冲突'**
+  String personalCloudEntityConflictTitle(String entity);
+
+  /// No description provided for @personalCloudEntitySession.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话'**
+  String get personalCloudEntitySession;
+
+  /// No description provided for @personalCloudEntityLog.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录'**
+  String get personalCloudEntityLog;
+
+  /// No description provided for @personalCloudKeepLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留本机'**
+  String get personalCloudKeepLocal;
+
+  /// No description provided for @personalCloudKeepRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留云端'**
+  String get personalCloudKeepRemote;
+
   /// No description provided for @personalCloudSyncNow.
   ///
   /// In zh, this message translates to:
@@ -4426,6 +4498,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'Excel 导入功能开发中'**
   String get excelImportComingSoon;
+
+  /// No description provided for @excelImportLlmProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在用 AI 解析 Excel 内容…'**
+  String get excelImportLlmProcessing;
+
+  /// No description provided for @excelImportPreviewTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入预览'**
+  String get excelImportPreviewTitle;
+
+  /// No description provided for @excelImportPreviewCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'共识别 {count} 条记录'**
+  String excelImportPreviewCount(int count);
+
+  /// No description provided for @excelImportConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认导入'**
+  String get excelImportConfirm;
+
+  /// No description provided for @excelImportSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已导入 {count} 条记录'**
+  String excelImportSuccess(int count);
+
+  /// No description provided for @excelImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入失败：{error}'**
+  String excelImportFailed(String error);
 
   /// No description provided for @pathCopied.
   ///

@@ -355,6 +355,59 @@ List<Map<String, Object?>> _mergeTable({
         if (row != null) result.add(Map<String, Object?>.from(row));
         continue;
       }
+      // 客户端新增 vs 服务端新增：
+      // - log 级改为字段级合并（非必要不替换）：本地非空保留本地、本地空用
+      //   远程；某字段双方非空且不同 → 产出 fieldConflict 冲突，由弹窗逐字段
+      //   选择（默认取本地）。
+      // - session 级保持整体二选一（弹窗手动选择）。
+      if (entityType == 'log') {
+        final merged = <String, Object?>{};
+        final conflictingFields = <String>[];
+        for (final key in {...localRow.keys, ...remoteRow.keys}) {
+          final localValue = localRow[key];
+          final remoteValue = remoteRow[key];
+          if (immutableFields.contains(key)) {
+            merged[key] = localValue;
+            continue;
+          }
+          if (_deepEqual(localValue, remoteValue)) {
+            merged[key] = localValue;
+            continue;
+          }
+          final localFilled = localValue != null && localValue != '';
+          final remoteFilled = remoteValue != null && remoteValue != '';
+          if (localFilled && remoteFilled) {
+            // 双方都有值且不同：默认取本地，冲突交由用户决定。
+            merged[key] = localValue;
+            conflictingFields.add(key);
+          } else {
+            merged[key] = localFilled ? localValue : remoteValue;
+          }
+        }
+        for (final field in conflictingFields) {
+          final conflict = _conflict(
+            dataset: dataset,
+            entityType: entityType,
+            entityId: id,
+            sessionId: sessionId,
+            kind: 'fieldConflict',
+            fieldGroup: field,
+            baseValue: null,
+            localValue: localRow[field],
+            remoteValue: remoteRow[field],
+          );
+          final choice = resolutions[conflict.conflictId];
+          if (choice == null) {
+            conflicts.add(conflict);
+          } else {
+            merged[field] = choice == PersonalCloudConflictChoice.remote
+                ? remoteRow[field]
+                : localRow[field];
+          }
+        }
+        result.add(merged);
+        continue;
+      }
       final conflict = _conflict(
         dataset: dataset,
         entityType: entityType,

@@ -151,6 +151,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openFloatingWindow => '打开悬浮窗';
 
   @override
+  String get openControllerTab => '打开主控屏标签页';
+
+  @override
   String get openSecondDisplayWindow => '打开第二屏窗口';
 
   @override
@@ -957,6 +960,12 @@ class AppLocalizationsZh extends AppLocalizations {
       '输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。';
 
   @override
+  String get autoAppendPowerWSetting => '功率自动加 W';
+
+  @override
+  String get autoAppendPowerWHint => '保存时若功率为纯数字（如 50、50.5）自动补上 W；已带单位或含中文的不动。';
+
+  @override
   String get duplicateCallsignTitle => '呼号已经记录过';
 
   @override
@@ -977,8 +986,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get duplicateContinueDialogTitle => '呼号已记录过';
 
   @override
-  String duplicateContinueDialogMessage(String callsign) {
-    return '$callsign 已在本次点名中记录过，继续添加吗？';
+  String duplicateContinueDialogMessage(String callsign, int ordinal) {
+    return '$callsign 已在第 $ordinal 位记录过，继续添加吗？';
   }
 
   @override
@@ -993,9 +1002,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
-      String rstRcvd, String qth) {
-    return '原记录：$time $callsign $rstSent/$rstRcvd $qth';
+  String duplicateOldRecordSummary(int ordinal, String time, String callsign,
+      String rstSent, String rstRcvd, String qth) {
+    return '原记录（第 $ordinal 位）：$time $callsign $rstSent/$rstRcvd $qth';
   }
 
   @override
@@ -1917,6 +1926,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get personalCloudKeepRemoteConflicts => '冲突项保留云端值';
 
   @override
+  String get personalCloudResolveOneByOne => '逐项处理';
+
+  @override
+  String get personalCloudConflictDialogTitle => '逐项处理冲突';
+
+  @override
+  String get personalCloudConflictApply => '应用选择';
+
+  @override
+  String personalCloudFieldConflictTitle(String field) {
+    return '字段 $field 双方都有值且不同';
+  }
+
+  @override
+  String personalCloudEntityConflictTitle(String entity) {
+    return '$entity 冲突';
+  }
+
+  @override
+  String get personalCloudEntitySession => '会话';
+
+  @override
+  String get personalCloudEntityLog => '记录';
+
+  @override
+  String get personalCloudKeepLocal => '保留本机';
+
+  @override
+  String get personalCloudKeepRemote => '保留云端';
+
+  @override
   String get personalCloudSyncNow => '同步个人快照';
 
   @override
@@ -2464,6 +2504,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get excelImportComingSoon => 'Excel 导入功能开发中';
+
+  @override
+  String get excelImportLlmProcessing => '正在用 AI 解析 Excel 内容…';
+
+  @override
+  String get excelImportPreviewTitle => '导入预览';
+
+  @override
+  String excelImportPreviewCount(int count) {
+    return '共识别 $count 条记录';
+  }
+
+  @override
+  String get excelImportConfirm => '确认导入';
+
+  @override
+  String excelImportSuccess(int count) {
+    return '已导入 $count 条记录';
+  }
+
+  @override
+  String excelImportFailed(String error) {
+    return '导入失败：$error';
+  }
 
   @override
   String get pathCopied => '路径已复制';

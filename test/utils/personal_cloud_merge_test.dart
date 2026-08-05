@@ -223,6 +223,8 @@ void main() {
     expect(logs.single['session_id'], sessions.single['session_id']);
     expect(logs.single['remarks'], 'remote edit');
   });
+
+  _appendLogMergeTests();
 }
 
 Map<String, PersonalCloudConflictChoice> _resolveAll(
@@ -296,3 +298,146 @@ Map<String, Object?> _dictionaryItem(String type, String raw) => {
       'pinyin': null,
       'abbreviation': null,
     };
+
+// ---- 2.9.0: log 级 concurrentCreate 字段级合并 ----
+
+Map<String, Object?> _mergedLog(Map<String, Object?> overrides) => {
+      ..._log(callsign: 'BG5AAA', remarks: null),
+      ...overrides,
+    };
+
+void _appendLogMergeTests() {
+  test('log concurrent creates merge fields without replacement', () {
+    final local = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'qth': '杭州', 'power': null})
+      ],
+    );
+    final remote = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'qth': null, 'power': '50W'})
+      ],
+    );
+
+    final result = mergePersonalCloudSnapshots(
+      dataset: PersonalCloudDataset.records,
+      base: _records(sessions: [_session()]),
+      local: local,
+      remote: remote,
+    );
+
+    expect(result.conflicts, isEmpty);
+    final merged = (result.snapshot['logs'] as List).single;
+    expect(merged['qth'], '杭州');
+    expect(merged['power'], '50W');
+  });
+
+  test('log field conflicts produce per-field fieldConflict entries', () {
+    final local = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'qth': '杭州'})
+      ],
+    );
+    final remote = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'qth': '广州'})
+      ],
+    );
+
+    final result = mergePersonalCloudSnapshots(
+      dataset: PersonalCloudDataset.records,
+      base: _records(sessions: [_session()]),
+      local: local,
+      remote: remote,
+    );
+
+    expect(result.conflicts, hasLength(1));
+    final conflict = result.conflicts.single;
+    expect(conflict.kind, 'fieldConflict');
+    expect(conflict.fieldGroup, 'qth');
+    expect(conflict.localValue, '杭州');
+    expect(conflict.remoteValue, '广州');
+    // 默认取本地。
+    expect((result.snapshot['logs'] as List).single['qth'], '杭州');
+  });
+
+  test('log field conflict resolutions pick the chosen value', () {
+    final local = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'qth': '杭州'})
+      ],
+    );
+    final remote = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'qth': '广州'})
+      ],
+    );
+
+    final preview = mergePersonalCloudSnapshots(
+      dataset: PersonalCloudDataset.records,
+      base: _records(sessions: [_session()]),
+      local: local,
+      remote: remote,
+    );
+    final conflict = preview.conflicts.single;
+    final result = mergePersonalCloudSnapshots(
+      dataset: PersonalCloudDataset.records,
+      base: _records(sessions: [_session()]),
+      local: local,
+      remote: remote,
+      resolutions: {conflict.conflictId: PersonalCloudConflictChoice.remote},
+    );
+
+    expect(result.conflicts, isEmpty);
+    expect((result.snapshot['logs'] as List).single['qth'], '广州');
+  });
+
+  test('immutable log fields are never treated as conflicts', () {
+    final local = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'created_at': 'A', 'qth': '杭州'})
+      ],
+    );
+    final remote = _records(
+      sessions: [_session()],
+      logs: [
+        _mergedLog({'created_at': 'B', 'qth': '广州'})
+      ],
+    );
+
+    final result = mergePersonalCloudSnapshots(
+      dataset: PersonalCloudDataset.records,
+      base: _records(sessions: [_session()]),
+      local: local,
+      remote: remote,
+    );
+
+    // 只有 qth 冲突；created_at 保留本地且不产生冲突。
+    expect(result.conflicts, hasLength(1));
+    expect(result.conflicts.single.fieldGroup, 'qth');
+    expect((result.snapshot['logs'] as List).single['created_at'], 'A');
+  });
+
+  test('session concurrent creates still require a manual choice', () {
+    final local = _records(sessions: [_session(title: 'Local')]);
+    final remote = _records(sessions: [_session(title: 'Remote')]);
+
+    final result = mergePersonalCloudSnapshots(
+      dataset: PersonalCloudDataset.records,
+      base: _records(),
+      local: local,
+      remote: remote,
+    );
+
+    expect(result.conflicts, hasLength(1));
+    expect(result.conflicts.single.kind, 'concurrentCreate');
+    expect(result.conflicts.single.entityType, 'session');
+  });
+}

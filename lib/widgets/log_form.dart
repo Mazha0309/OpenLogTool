@@ -14,6 +14,7 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
 import 'package:openlogtool/utils/log_time.dart';
+import 'package:openlogtool/utils/power_normalizer.dart';
 import 'package:openlogtool/services/ai_candidate_guard.dart';
 import 'package:openlogtool/services/ai_audio_recorder.dart';
 import 'package:openlogtool/services/ai_database_context.dart';
@@ -518,11 +519,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         .toList(growable: false);
     if (existing.isEmpty || !mounted) return;
     final l10n = context.l10n;
+    final ordinal = logProvider.logs.indexOf(existing.last) + 1;
     final continueAdding = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.duplicateContinueDialogTitle),
-        content: Text(l10n.duplicateContinueDialogMessage(callsign)),
+        content: Text(l10n.duplicateContinueDialogMessage(callsign, ordinal)),
         actions: [
           TextButton(
             key: const Key('duplicate-continue-cancel'),
@@ -552,6 +554,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     final logProvider = context.read<LogProvider>();
     final dictionaryProvider =
         Provider.of<DictionaryProvider>(context, listen: false);
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
     if (existing.sessionId == null || existing.id.isEmpty) {
       messenger?.showSnackBar(
         SnackBar(content: Text(l10n.operationFailed('missing id'))),
@@ -566,7 +570,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       rstRcvd: _rstRcvdController.text.trim(),
       qth: _qthController.text.trim(),
       device: _deviceController.text.trim(),
-      power: _powerController.text.trim(),
+      power: settingsProvider.autoAppendPowerW
+          ? normalizePower(_powerController.text.trim())
+          : _powerController.text.trim(),
       antenna: _antennaController.text.trim(),
       height: _heightController.text.trim(),
     )..remarks = _remarksController.text.trim();
@@ -852,7 +858,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     final submittedTime = resolveLogTimeForSubmission(enteredTime);
     final submittedFields = <String, String>{
       for (final entry in _draftControllers.entries)
-        entry.key: entry.key == 'time' ? submittedTime : entry.value.text,
+        entry.key: entry.key == 'time'
+            ? submittedTime
+            : entry.key == 'power' && settingsProvider.autoAppendPowerW
+                ? normalizePower(entry.value.text)
+                : entry.value.text,
     };
 
     final normalizedCallsign =
@@ -891,6 +901,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                       ),
                       child: Text(
                         l10n.duplicateOldRecordSummary(
+                          logProvider.logs.indexOf(latest) + 1,
                           formatLogTimeForDisplay(latest.time),
                           latest.callsign,
                           latest.report,

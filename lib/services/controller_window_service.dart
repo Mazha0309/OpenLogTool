@@ -9,6 +9,9 @@ import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:openlogtool/services/web_controller_bridge.dart'
+    if (dart.library.io) 'package:openlogtool/services/web_controller_bridge_stub.dart'
+    as web_bridge;
 
 enum ControllerWindowMode { floating, secondDisplay }
 
@@ -502,6 +505,11 @@ class ControllerWindowSnapshotCache {
 class ControllerWindowService {
   ControllerWindowService._();
 
+  /// Web 端在主标签页打开主控屏；其他平台 no-op。
+  static void openWebTab(String sessionId) {
+    web_bridge.openWebControllerTab(sessionId);
+  }
+
   static final Map<ControllerWindowMode, _ControllerChildProcess> _children =
       <ControllerWindowMode, _ControllerChildProcess>{};
   static final Map<ControllerWindowMode, Future<_ControllerChildProcess>>
@@ -634,6 +642,11 @@ class ControllerWindowService {
     required ControllerDisplayPreferences preferences,
     required ControllerWindowAppearance appearance,
   }) async {
+    if (kIsWeb) {
+      // Web 端把显示数据推送到主控屏新标签页。
+      web_bridge.pushControllerDisplay(data);
+      return;
+    }
     if (!supportsControllerDesktopWindows) return;
     final activeModes = <ControllerWindowMode>{
       ..._opening.keys,

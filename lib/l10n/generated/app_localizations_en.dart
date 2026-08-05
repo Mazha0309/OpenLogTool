@@ -153,6 +153,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openFloatingWindow => 'Open floating window';
 
   @override
+  String get openControllerTab => 'Open controller in a new tab';
+
+  @override
   String get openSecondDisplayWindow => 'Open second-display window';
 
   @override
@@ -1002,6 +1005,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Check immediately after entering a callsign for an existing record in this net, and ask whether to update the old record or add a new one.';
 
   @override
+  String get autoAppendPowerWSetting => 'Auto-append W to power';
+
+  @override
+  String get autoAppendPowerWHint =>
+      'Append W to a plain numeric power (e.g. 50, 50.5) when saving; leave values that already carry a unit or contain Chinese untouched.';
+
+  @override
   String get duplicateCallsignTitle => 'Callsign already recorded';
 
   @override
@@ -1022,8 +1032,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get duplicateContinueDialogTitle => 'Callsign already recorded';
 
   @override
-  String duplicateContinueDialogMessage(String callsign) {
-    return '$callsign is already recorded in this net. Continue adding it?';
+  String duplicateContinueDialogMessage(String callsign, int ordinal) {
+    return '$callsign was already logged at position $ordinal. Continue adding it?';
   }
 
   @override
@@ -1038,9 +1048,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
-      String rstRcvd, String qth) {
-    return 'Existing: $time $callsign $rstSent/$rstRcvd $qth';
+  String duplicateOldRecordSummary(int ordinal, String time, String callsign,
+      String rstSent, String rstRcvd, String qth) {
+    return 'Existing (#$ordinal): $time $callsign $rstSent/$rstRcvd $qth';
   }
 
   @override
@@ -2009,6 +2019,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get personalCloudKeepRemoteConflicts => 'Keep cloud values';
 
   @override
+  String get personalCloudResolveOneByOne => 'Resolve one by one';
+
+  @override
+  String get personalCloudConflictDialogTitle => 'Resolve conflicts';
+
+  @override
+  String get personalCloudConflictApply => 'Apply choices';
+
+  @override
+  String personalCloudFieldConflictTitle(String field) {
+    return 'Field $field differs on both sides';
+  }
+
+  @override
+  String personalCloudEntityConflictTitle(String entity) {
+    return '$entity conflict';
+  }
+
+  @override
+  String get personalCloudEntitySession => 'Session';
+
+  @override
+  String get personalCloudEntityLog => 'Record';
+
+  @override
+  String get personalCloudKeepLocal => 'Keep device';
+
+  @override
+  String get personalCloudKeepRemote => 'Keep cloud';
+
+  @override
   String get personalCloudSyncNow => 'Sync personal snapshot';
 
   @override
@@ -2594,6 +2635,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get excelImportComingSoon => 'Excel import is not available yet';
+
+  @override
+  String get excelImportLlmProcessing => 'Parsing Excel with AI…';
+
+  @override
+  String get excelImportPreviewTitle => 'Import preview';
+
+  @override
+  String excelImportPreviewCount(int count) {
+    return '$count records recognized';
+  }
+
+  @override
+  String get excelImportConfirm => 'Import';
+
+  @override
+  String excelImportSuccess(int count) {
+    return 'Imported $count records';
+  }
+
+  @override
+  String excelImportFailed(String error) {
+    return 'Import failed: $error';
+  }
 
   @override
   String get pathCopied => 'Path copied';
