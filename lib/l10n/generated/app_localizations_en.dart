@@ -1863,6 +1863,24 @@ class AppLocalizationsEn extends AppLocalizations {
       'Restore appearance, language, layout, and export preferences without affecting records or sign-in state.';
 
   @override
+  String get logsTitle => 'Logs';
+
+  @override
+  String get logsView => 'View logs';
+
+  @override
+  String get logsEmpty => 'No logs yet';
+
+  @override
+  String get logsCopy => 'Copy';
+
+  @override
+  String get logsClose => 'Close';
+
+  @override
+  String get logsCopied => 'Logs copied';
+
+  @override
   String get snackbarLogTitle => 'In-app message log';
 
   @override

@@ -3228,6 +3228,42 @@ abstract class AppLocalizations {
   /// **'恢复外观、语言、布局和导出偏好，不影响记录与登录状态。'**
   String get restoreDefaultSettingsHint;
 
+  /// No description provided for @logsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志'**
+  String get logsTitle;
+
+  /// No description provided for @logsView.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看日志'**
+  String get logsView;
+
+  /// No description provided for @logsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'（暂无日志）'**
+  String get logsEmpty;
+
+  /// No description provided for @logsCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制'**
+  String get logsCopy;
+
+  /// No description provided for @logsClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get logsClose;
+
+  /// No description provided for @logsCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志已复制'**
+  String get logsCopied;
+
   /// No description provided for @snackbarLogTitle.
   ///
   /// In zh, this message translates to:

@@ -6,6 +6,7 @@ import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/widgets/about_app_dialog.dart';
 import 'package:openlogtool/widgets/font_picker_dialog.dart';
+import 'package:openlogtool/widgets/log_viewer_dialog.dart';
 import 'package:openlogtool/widgets/settings/controller_display_settings.dart';
 import 'package:openlogtool/widgets/settings/ai_recognition_settings.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
@@ -306,6 +307,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showResetConfirmation(context),
           ),
+          SettingsActionTile(
+            key: const Key('view-logs-entry'),
+            icon: Icons.article_outlined,
+            title: context.l10n.logsTitle,
+            subtitle: context.l10n.logsView,
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showLogViewer(context),
+          ),
         ],
       ),
     );
@@ -376,6 +385,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
         buildNumber: appInfoProvider.buildNumber,
         commitHash: appInfoProvider.commitHash,
       ),
+    );
+  }
+
+  void _showLogViewer(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => const LogViewerDialog(),
     );
   }
 

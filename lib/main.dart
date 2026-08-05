@@ -15,6 +15,7 @@ import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/services/app_logger.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/app_fonts.dart';
 import 'package:openlogtool/services/key_value_store.dart';
@@ -28,6 +29,15 @@ import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppLogger.instance.init();
+  FlutterError.onError = (details) {
+    AppLogger.instance.error('Flutter error', details.exception, details.stack);
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.instance.error('Platform error', error, stack);
+    return true;
+  };
   try {
     await loadAppFonts();
   } catch (e) {

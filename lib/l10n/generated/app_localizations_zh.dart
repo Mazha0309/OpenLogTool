@@ -1783,6 +1783,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restoreDefaultSettingsHint => '恢复外观、语言、布局和导出偏好，不影响记录与登录状态。';
 
   @override
+  String get logsTitle => '日志';
+
+  @override
+  String get logsView => '查看日志';
+
+  @override
+  String get logsEmpty => '（暂无日志）';
+
+  @override
+  String get logsCopy => '复制';
+
+  @override
+  String get logsClose => '关闭';
+
+  @override
+  String get logsCopied => '日志已复制';
+
+  @override
   String get snackbarLogTitle => '底部消息日志';
 
   @override
