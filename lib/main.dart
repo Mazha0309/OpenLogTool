@@ -36,6 +36,11 @@ Future<void> main(List<String> args) async {
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     AppLogger.instance.error('Platform error', error, stack);
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'platform',
+    ));
     return true;
   };
   try {

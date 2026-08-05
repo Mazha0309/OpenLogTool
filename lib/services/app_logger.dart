@@ -51,9 +51,14 @@ class AppLogger {
       final defaultDir = home == null
           ? Directory.systemTemp
           : Directory('$home/.local/share/openlogtool/logs');
-      await _setupFile(logDirOverride ?? defaultDir);
+      try {
+        await _setupFile(logDirOverride ?? defaultDir);
+      } catch (e) {
+        debugPrint('AppLogger file setup failed, logging to memory only: $e');
+      }
     }
-    info('OpenLogTool logging initialized (web=$kIsWeb)');
+    info(
+        'OpenLogTool logging initialized (web=$kIsWeb, file=${_file != null})');
   }
 
   Future<void> _setupFile(Directory dir) async {
@@ -99,10 +104,10 @@ class AppLogger {
   }
 
   void debug(String message, [Object? error, StackTrace? stack]) =>
-      _logger.fine('$message${error != null ? ' | $error' : ''}', error, stack);
+      _logger.fine(message, error, stack);
   void info(String message) => _logger.info(message);
-  void warn(String message, [Object? error, StackTrace? stack]) => _logger
-      .warning('$message${error != null ? ' | $error' : ''}', error, stack);
-  void error(String message, [Object? error, StackTrace? stack]) => _logger
-      .severe('$message${error != null ? ' | $error' : ''}', error, stack);
+  void warn(String message, [Object? error, StackTrace? stack]) =>
+      _logger.warning(message, error, stack);
+  void error(String message, [Object? error, StackTrace? stack]) =>
+      _logger.severe(message, error, stack);
 }
