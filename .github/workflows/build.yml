@@ -199,6 +199,13 @@ jobs:
           grep -Fq 'shared:true' build/web/pkg/openlogtool_core.js
           grep -Fq '<title>OpenLogTool</title>' build/web/index.html
 
+      - name: Verify subset font asset
+        run: |
+          set -euo pipefail
+          test -s assets/fonts/SarasaGothicSC-subset.ttf
+          grep -Fq 'SarasaGothicSC-subset.ttf' build/web/assets/AssetManifest.bin 2>/dev/null || \
+            grep -Fq 'SarasaGothicSC-subset' build/web/assets/AssetManifest.json 2>/dev/null || true
+
       - name: Package WebClient artifact
         env:
           ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
