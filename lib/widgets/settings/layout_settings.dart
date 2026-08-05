@@ -65,6 +65,16 @@ class LayoutSettings extends StatelessWidget {
               onChanged: settingsProvider.setDuplicateCallsignWarningEnabled,
             ),
           ),
+          SettingsActionTile(
+            icon: Icons.open_in_full_outlined,
+            title: l10n.recordEditorDialogSetting,
+            subtitle: l10n.recordEditorDialogSettingHint,
+            trailing: Switch(
+              key: const Key('record-editor-dialog-toggle'),
+              value: settingsProvider.recordEditorDialogEnabled,
+              onChanged: settingsProvider.setRecordEditorDialogEnabled,
+            ),
+          ),
         ],
       ),
     );

@@ -107,52 +107,59 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   Widget _buildCompactSettings(BuildContext context) {
     final selected = _compactCategory;
-    return Column(
-      key: const Key('settings-compact-layout'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Offstage(
-          offstage: selected != null,
-          child: TickerMode(
-            enabled: selected == null,
-            child: _buildCategoryNavigation(
-              context,
-              selected: null,
-              onSelected: (category) {
-                setState(() => _compactCategory = category);
-              },
+    return PopScope(
+      canPop: selected == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        setState(() => _compactCategory = null);
+      },
+      child: Column(
+        key: const Key('settings-compact-layout'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Offstage(
+            offstage: selected != null,
+            child: TickerMode(
+              enabled: selected == null,
+              child: _buildCategoryNavigation(
+                context,
+                selected: null,
+                onSelected: (category) {
+                  setState(() => _compactCategory = category);
+                },
+              ),
             ),
           ),
-        ),
-        Offstage(
-          offstage: selected == null,
-          child: TickerMode(
-            enabled: selected != null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: TextButton.icon(
-                    key: const Key('settings-category-back'),
-                    onPressed: () => setState(() => _compactCategory = null),
-                    icon: const Icon(Icons.arrow_back),
-                    label: Text(
-                      MaterialLocalizations.of(context).backButtonTooltip,
+          Offstage(
+            offstage: selected == null,
+            child: TickerMode(
+              enabled: selected != null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      key: const Key('settings-category-back'),
+                      onPressed: () => setState(() => _compactCategory = null),
+                      icon: const Icon(Icons.arrow_back),
+                      label: Text(
+                        MaterialLocalizations.of(context).backButtonTooltip,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                _buildCategoryStack(
-                  context,
-                  selected: selected ?? _SettingsCategory.appearance,
-                  compact: true,
-                ),
-              ],
+                  const SizedBox(height: AppSpace.xs),
+                  _buildCategoryStack(
+                    context,
+                    selected: selected ?? _SettingsCategory.appearance,
+                    compact: true,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

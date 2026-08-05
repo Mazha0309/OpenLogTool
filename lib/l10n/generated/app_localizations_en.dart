@@ -1796,6 +1796,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paginationSettingHint => 'Show five records on each page.';
 
   @override
+  String get recordEditorDialogSetting => 'Edit records in a dialog';
+
+  @override
+  String get recordEditorDialogSettingHint =>
+      'Open the full form in a dialog when editing a record, with dictionary suggestions. Turn off to edit inline in the table.';
+
+  @override
   String get controllerDisplaySettingsHint =>
       'Configure controller-device access, separate windows, and default display content.';
 

@@ -6,6 +6,7 @@ import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/utils/log_time.dart';
+import 'package:openlogtool/widgets/record_editor_dialog.dart';
 
 class LogTable extends StatefulWidget {
   const LogTable({
@@ -47,11 +48,22 @@ class _LogTableState extends State<LogTable> {
     super.dispose();
   }
 
-  void _startEditing(int index, LogEntry log) {
+  Future<void> _startEditing(int index, LogEntry log) async {
     final logProvider = context.read<LogProvider>();
     if (widget.readOnly ||
         widget.conflictedLogIds.contains(log.id) ||
         !logProvider.canMutateLog(log)) {
+      return;
+    }
+    final settingsProvider = context.read<SettingsProvider>();
+    if (settingsProvider.recordEditorDialogEnabled) {
+      final patch = await showRecordEditorDialog(
+        context,
+        log: log,
+        readOnly: false,
+      );
+      if (patch == null || !mounted) return;
+      await _applyEditingPatch(logProvider, log, patch);
       return;
     }
     setState(() {
@@ -79,6 +91,44 @@ class _LogTableState extends State<LogTable> {
         '_createdAt': TextEditingController(text: log.createdAt),
       };
     });
+  }
+
+  Future<void> _applyEditingPatch(
+    LogProvider logProvider,
+    LogEntry original,
+    LogEntry patch,
+  ) async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final time = patch.time;
+    if (!isValidLogTimeInput(time)) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(context.l10n.logTimeInvalid)),
+      );
+      return;
+    }
+    final currentIndex =
+        logProvider.logs.indexWhere((candidate) => candidate.id == original.id);
+    final current = currentIndex < 0 ? null : logProvider.logs[currentIndex];
+    if (widget.readOnly ||
+        widget.conflictedLogIds.contains(original.id) ||
+        current == null ||
+        !logProvider.canMutateLog(current)) {
+      return;
+    }
+    final finalPatch = patch.copyWith(
+      id: original.id,
+      sessionId: original.sessionId,
+      createdAt: original.createdAt,
+    );
+    try {
+      await logProvider.updateLogById(original.id, finalPatch);
+    } catch (error) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+      );
+    }
   }
 
   void _cancelEditing() {

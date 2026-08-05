@@ -3119,6 +3119,18 @@ abstract class AppLocalizations {
   /// **'每 5 条记录分为一页显示。'**
   String get paginationSettingHint;
 
+  /// No description provided for @recordEditorDialogSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹窗编辑记录'**
+  String get recordEditorDialogSetting;
+
+  /// No description provided for @recordEditorDialogSettingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑记录时以弹窗打开完整表单，支持词库联想。关闭后改为在表格内联编辑。'**
+  String get recordEditorDialogSettingHint;
+
   /// No description provided for @controllerDisplaySettingsHint.
   ///
   /// In zh, this message translates to:

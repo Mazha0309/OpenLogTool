@@ -1719,6 +1719,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paginationSettingHint => '每 5 条记录分为一页显示。';
 
   @override
+  String get recordEditorDialogSetting => '弹窗编辑记录';
+
+  @override
+  String get recordEditorDialogSettingHint =>
+      '编辑记录时以弹窗打开完整表单，支持词库联想。关闭后改为在表格内联编辑。';
+
+  @override
   String get controllerDisplaySettingsHint => '配置主控设备入口、独立窗口和默认显示内容。';
 
   @override

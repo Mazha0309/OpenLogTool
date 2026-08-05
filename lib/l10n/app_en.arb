@@ -511,6 +511,8 @@
   "layoutSettingsHint": "Adjust Net Desk width, pagination, and logging assistance.",
   "paginationSetting": "Paginate records",
   "paginationSettingHint": "Show five records on each page.",
+  "recordEditorDialogSetting": "Edit records in a dialog",
+  "recordEditorDialogSettingHint": "Open the full form in a dialog when editing a record, with dictionary suggestions. Turn off to edit inline in the table.",
   "controllerDisplaySettingsHint": "Configure controller-device access, separate windows, and default display content.",
   "serverSettingsHint": "Configure the collaboration server and manage the current account and sign-in devices.",
   "settingsSupportTitle": "App information & settings maintenance",

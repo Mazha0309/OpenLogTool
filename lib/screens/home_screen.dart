@@ -69,6 +69,18 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _selectedIndex = destination);
   }
 
+  Future<bool> _handleSystemBack() async {
+    if (FocusManager.instance.primaryFocus?.hasFocus ?? false) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      return true;
+    }
+    if (_selectedIndex != 0) {
+      setState(() => _selectedIndex = 0);
+      return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final primarySidebarExpanded = context.select<SettingsProvider, bool>(
@@ -86,85 +98,92 @@ class _HomeScreenState extends State<HomeScreen> {
       const DataWorkspacePage(),
       const SettingsPage(),
     ];
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _destinations[_selectedIndex].selectedIcon,
-              size: 21,
-              color: Theme.of(context).colorScheme.primary,
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _handleSystemBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _destinations[_selectedIndex].selectedIcon,
+                size: 21,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Text(_destinations[_selectedIndex].label(context.l10n)),
+            ],
+          ),
+          centerTitle: false,
+          actions: [
+            _AppBarSyncStatus(
+              onPressed: () => _onItemTapped(1),
             ),
-            const SizedBox(width: 10),
-            Text(_destinations[_selectedIndex].label(context.l10n)),
+            const SizedBox(width: 8),
           ],
         ),
-        centerTitle: false,
-        actions: [
-          _AppBarSyncStatus(
-            onPressed: () => _onItemTapped(1),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final content = IndexedStack(
-            index: _selectedIndex,
-            children: pages,
-          );
-          final showSidebar = constraints.maxWidth >= 720;
-          final isDesktop = constraints.maxWidth >= 1200;
-          // Keep the page stack at a stable element position when crossing the
-          // mobile/sidebar breakpoint. Reparenting the focused TextField while
-          // Windows is dispatching WM_SIZE can tear down its native IME
-          // connection in the middle of that callback.
-          return Row(
-            children: [
-              if (showSidebar)
-                PrimaryNavigationRail(
-                  isDesktop: isDesktop,
-                  expanded: primarySidebarExpanded,
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: _onItemTapped,
-                  onExpandedChanged: context
-                      .read<SettingsProvider>()
-                      .setPrimarySidebarExpanded,
-                  destinations: [
-                    for (final destination in _destinations)
-                      NavigationRailDestination(
-                        icon: Icon(destination.icon),
-                        selectedIcon: Icon(destination.selectedIcon),
-                        label: Text(destination.label(context.l10n)),
-                      ),
-                  ],
-                )
-              else
-                const SizedBox.shrink(),
-              Expanded(
-                key: const ValueKey('home-page-stack'),
-                child: content,
-              ),
-            ],
-          );
-        },
-      ),
-      bottomNavigationBar: MediaQuery.sizeOf(context).width < 720
-          ? NavigationBar(
-              key: const Key('mobile-navigation'),
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _onItemTapped,
-              destinations: [
-                for (final destination in _destinations)
-                  NavigationDestination(
-                    icon: Icon(destination.icon),
-                    selectedIcon: Icon(destination.selectedIcon),
-                    label: destination.label(context.l10n),
-                  ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final content = IndexedStack(
+              index: _selectedIndex,
+              children: pages,
+            );
+            final showSidebar = constraints.maxWidth >= 720;
+            final isDesktop = constraints.maxWidth >= 1200;
+            // Keep the page stack at a stable element position when crossing the
+            // mobile/sidebar breakpoint. Reparenting the focused TextField while
+            // Windows is dispatching WM_SIZE can tear down its native IME
+            // connection in the middle of that callback.
+            return Row(
+              children: [
+                if (showSidebar)
+                  PrimaryNavigationRail(
+                    isDesktop: isDesktop,
+                    expanded: primarySidebarExpanded,
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _onItemTapped,
+                    onExpandedChanged: context
+                        .read<SettingsProvider>()
+                        .setPrimarySidebarExpanded,
+                    destinations: [
+                      for (final destination in _destinations)
+                        NavigationRailDestination(
+                          icon: Icon(destination.icon),
+                          selectedIcon: Icon(destination.selectedIcon),
+                          label: Text(destination.label(context.l10n)),
+                        ),
+                    ],
+                  )
+                else
+                  const SizedBox.shrink(),
+                Expanded(
+                  key: const ValueKey('home-page-stack'),
+                  child: content,
+                ),
               ],
-            )
-          : null,
+            );
+          },
+        ),
+        bottomNavigationBar: MediaQuery.sizeOf(context).width < 720
+            ? NavigationBar(
+                key: const Key('mobile-navigation'),
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: _onItemTapped,
+                destinations: [
+                  for (final destination in _destinations)
+                    NavigationDestination(
+                      icon: Icon(destination.icon),
+                      selectedIcon: Icon(destination.selectedIcon),
+                      label: destination.label(context.l10n),
+                    ),
+                ],
+              )
+            : null,
+      ),
     );
   }
 }
