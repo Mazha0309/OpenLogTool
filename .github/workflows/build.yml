@@ -653,6 +653,49 @@ jobs:
             exit 1
           fi
 
+      - name: Install RPM tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Package .deb
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist pkgdeb/DEBIAN pkgdeb/opt/openlogtool \
+            pkgdeb/usr/share/applications \
+            pkgdeb/usr/share/icons/hicolor/256x256/apps
+          cp deploy/linux/DEBIAN/control pkgdeb/DEBIAN/control
+          sed -i "s/^Version: .*/Version: $VERSION_NAME/" pkgdeb/DEBIAN/control
+          cp -r build/linux/x64/release/bundle/* pkgdeb/opt/openlogtool/
+          cp deploy/linux/openlogtool.desktop pkgdeb/usr/share/applications/
+          cp assets/images/app_icon_512.png \
+            pkgdeb/usr/share/icons/hicolor/256x256/apps/openlogtool.png
+          chmod 755 pkgdeb/opt/openlogtool/openlogtool
+          deb="dist/OpenLogTool-$VERSION_NAME-Linux-x86_64.deb"
+          dpkg-deb --root-owner-group --build pkgdeb "$deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb" | grep -Fq './opt/openlogtool/openlogtool'
+
+      - name: Package .rpm
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          rpmver="${VERSION_NAME%-R}"
+          sed "s/^Version: .*/Version: $rpmver/" deploy/linux/openlogtool.spec \
+            > /tmp/openlogtool.spec
+          mkdir -p dist /tmp/rpmbuild/SOURCES
+          cp -r build/linux/x64/release/bundle /tmp/rpmbuild/SOURCES/bundle
+          cp deploy/linux/openlogtool.desktop /tmp/rpmbuild/SOURCES/
+          cp assets/images/app_icon_512.png /tmp/rpmbuild/SOURCES/
+          rpmbuild -bb /tmp/openlogtool.spec \
+            --define "_topdir /tmp/rpmbuild" \
+            --define "VERSION_NAME $VERSION_NAME"
+          rpmfile=$(find /tmp/rpmbuild/RPMS -type f -name '*.rpm' | head -n 1)
+          test -n "$rpmfile"
+          rpm -qpl "$rpmfile" | grep -Fx '/opt/openlogtool/openlogtool'
+          cp "$rpmfile" "dist/OpenLogTool-$VERSION_NAME-Linux-x86_64.rpm"
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -660,6 +703,8 @@ jobs:
           path: |
             build/linux/x64/release/*.tar.gz
             build/linux/x64/release/*.AppImage
+            dist/*.deb
+            dist/*.rpm
           if-no-files-found: error
           retention-days: 14
 
@@ -1118,6 +1163,8 @@ jobs:
           test "$(find artifacts -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 4
           compgen -G 'artifacts/*.tar.gz' >/dev/null
           compgen -G 'artifacts/*.AppImage' >/dev/null
+          compgen -G 'artifacts/*.deb' >/dev/null
+          compgen -G 'artifacts/*.rpm' >/dev/null
           compgen -G 'artifacts/*.exe' >/dev/null
           compgen -G 'artifacts/*Windows*.zip' >/dev/null
           compgen -G 'artifacts/*.dmg' >/dev/null
