@@ -1002,6 +1002,74 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  build-ios:
+    name: Build and verify iOS
+    needs: [version, quality]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 55
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust and iOS targets
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool-ios
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Generate build version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+        run: dart tool/gen_version.dart
+
+      - name: Build iOS release (no codesign)
+        run: flutter build ios --release --no-codesign --no-pub
+
+      - name: Verify iOS app bundle
+        run: |
+          set -euo pipefail
+          app=build/ios/iphoneos/Runner.app
+          executable="$app/Runner"
+          test -x "$executable"
+          test -s ios/Runner/rustlibs/libopenlogtool_core.a
+          xcrun lipo "$executable" -verify_arch arm64
+          # 静态库应链接进可执行文件（符号可见）
+          nm "$executable" | grep -c 'frb_init_frb_dart_api_dl' >/dev/null
+          plutil -lint "$app/Info.plist"
+
+      - name: Package iOS artifacts
+        run: |
+          mkdir -p dist
+          cd build/ios/iphoneos
+          zip -qr "$GITHUB_WORKSPACE/dist/OpenLogTool-ios.zip" Runner.app
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-ios
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Publish cross-platform release
     needs:
@@ -1010,6 +1078,7 @@ jobs:
       - build-linux
       - build-windows
       - build-macos
+      - build-ios
       - build-web
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
@@ -1053,6 +1122,7 @@ jobs:
           compgen -G 'artifacts/*Windows*.zip' >/dev/null
           compgen -G 'artifacts/*.dmg' >/dev/null
           compgen -G 'artifacts/*macOS*.zip' >/dev/null
+          compgen -G 'artifacts/*-ios.zip' >/dev/null
           compgen -G 'artifacts/*WebClient*.tar.gz' >/dev/null
           find artifacts -maxdepth 1 -type f -printf '%f\n' | sort
 
