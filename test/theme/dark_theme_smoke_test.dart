@@ -14,13 +14,13 @@ void main() {
     expect(scheme.surface.computeLuminance(), lessThan(0.5));
     expect(scheme.surfaceContainerLow.computeLuminance(), lessThan(0.5));
     expect(scheme.surfaceContainerHighest.computeLuminance(), lessThan(0.5));
-    expect(dark.scaffoldBackgroundColor?.computeLuminance(), lessThan(0.5));
+    expect(dark.scaffoldBackgroundColor!.computeLuminance(), lessThan(0.5));
     expect(
-      dark.appBarTheme.backgroundColor?.computeLuminance(),
+      dark.appBarTheme.backgroundColor!.computeLuminance(),
       lessThan(0.5),
     );
     expect(
-      dark.navigationRailTheme.backgroundColor?.computeLuminance(),
+      dark.navigationRailTheme.backgroundColor!.computeLuminance(),
       lessThan(0.5),
     );
   });
