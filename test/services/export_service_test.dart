@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/services/export_service.dart';
 
@@ -64,6 +66,40 @@ void main() {
         useSessionTitle: false,
       );
       expect(name, '2026年夏季点名_2026');
+    });
+  });
+
+  group('ExportService web download metadata', () {
+    test('web download uses exact filename and json mime', () {
+      final meta = ExportService.webDownloadMeta(
+        '点名记录_2026-08-05.json',
+        Uint8List.fromList([1, 2, 3]),
+        mimeType: 'application/json',
+      );
+      expect(meta.filename, '点名记录_2026-08-05.json');
+      expect(meta.mimeType, 'application/json');
+      expect(meta.bytes, [1, 2, 3]);
+    });
+
+    test('appends extension when filename lacks it', () {
+      final meta = ExportService.webDownloadMeta(
+        '点名记录',
+        Uint8List.fromList([1]),
+        mimeType: 'application/json',
+        extension: '.json',
+      );
+      expect(meta.filename, '点名记录.json');
+    });
+
+    test('does not append extension when already present', () {
+      final meta = ExportService.webDownloadMeta(
+        '点名记录.xlsx',
+        Uint8List.fromList([1]),
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        extension: '.xlsx',
+      );
+      expect(meta.filename, '点名记录.xlsx');
     });
   });
 }
