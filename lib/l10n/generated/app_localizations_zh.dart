@@ -1363,6 +1363,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。';
 
   @override
+  String get fileNameUseSessionTitle => '文件名使用当前会话名';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      '开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。';
+
+  @override
   String get themeColorPickerTitle => '选择主题颜色';
 
   @override
@@ -3817,6 +3824,13 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get excelUseSessionTitleAsHeaderHint =>
       '开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。';
+
+  @override
+  String get fileNameUseSessionTitle => '文件名使用当前会话名';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      '开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。';
 
   @override
   String get themeColorPickerTitle => '选择主题颜色';

@@ -34,5 +34,36 @@ void main() {
       final name = ExportService.generateFileName('点名记录', now);
       expect(name, '点名记录');
     });
+
+    test('uses the session title directly when the switch is on', () {
+      final name = ExportService.generateFileName(
+        '点名记录_{yyyy}-{MM}-{dd}',
+        now,
+        sessionTitle: '2026年夏季点名',
+        useSessionTitle: true,
+      );
+      expect(name, '2026年夏季点名');
+    });
+
+    test('falls back to the template when the switch is on but title is blank',
+        () {
+      final name = ExportService.generateFileName(
+        '{yyyy}-{MM}-{dd}',
+        now,
+        sessionTitle: '   ',
+        useSessionTitle: true,
+      );
+      expect(name, '2026-08-05');
+    });
+
+    test('uses the template when the switch is off', () {
+      final name = ExportService.generateFileName(
+        '{session}_{yyyy}',
+        now,
+        sessionTitle: '2026年夏季点名',
+        useSessionTitle: false,
+      );
+      expect(name, '2026年夏季点名_2026');
+    });
   });
 }

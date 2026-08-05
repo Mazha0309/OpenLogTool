@@ -468,6 +468,8 @@
   "retry": "重试",
   "excelUseSessionTitleAsHeader": "抬头使用当前会话名",
   "excelUseSessionTitleAsHeaderHint": "开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。",
+  "fileNameUseSessionTitle": "文件名使用当前会话名",
+  "fileNameUseSessionTitleHint": "开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。",
   "themeColorPickerTitle": "选择主题颜色",
   "themeColorPresets": "预设颜色",
   "themeColorCustom": "自定义颜色",

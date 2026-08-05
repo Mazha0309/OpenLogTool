@@ -1422,6 +1422,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Use the current session name directly as the Excel header. If it is blank, the header template is used instead.';
 
   @override
+  String get fileNameUseSessionTitle => 'Use current session name as file name';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      'Use the current session name directly as the export file name. If it is blank, the file name template is used instead.';
+
+  @override
   String get themeColorPickerTitle => 'Choose theme color';
 
   @override
@@ -3998,6 +4005,13 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get excelUseSessionTitleAsHeaderHint =>
       'Use the current session name directly as the Excel header. If it is blank, the header template is used instead.';
+
+  @override
+  String get fileNameUseSessionTitle => 'Use current session name as file name';
+
+  @override
+  String get fileNameUseSessionTitleHint =>
+      'Use the current session name directly as the export file name. If it is blank, the file name template is used instead.';
 
   @override
   String get themeColorPickerTitle => 'Choose theme color';

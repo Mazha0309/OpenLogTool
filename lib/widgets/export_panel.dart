@@ -575,6 +575,16 @@ class _ExportPanelState extends State<ExportPanel> {
           const SizedBox(height: 20),
           _buildSwitchTile(
             context,
+            title: context.l10n.fileNameUseSessionTitle,
+            subtitle: context.l10n.fileNameUseSessionTitleHint,
+            value: settings.useSessionTitleAsFileName,
+            onChanged: (value) {
+              setState(() => settings.useSessionTitleAsFileName = value);
+            },
+          ),
+          const SizedBox(height: 20),
+          _buildSwitchTile(
+            context,
             title: context.l10n.excelUseSessionTitleAsHeader,
             subtitle: context.l10n.excelUseSessionTitleAsHeaderHint,
             value: settings.useSessionTitleAsHeader,
@@ -1097,6 +1107,7 @@ class _ExportPanelState extends State<ExportPanel> {
         settings.fileNameTemplate,
         now,
         sessionTitle: sessionProvider.currentSession?.title,
+        useSessionTitle: settings.useSessionTitleAsFileName,
       );
       if (!filename.endsWith('.json')) {
         filename += '.json';
@@ -1162,6 +1173,7 @@ class _ExportPanelState extends State<ExportPanel> {
         settings.fileNameTemplate,
         now,
         sessionTitle: sessionProvider.currentSession?.title,
+        useSessionTitle: settings.useSessionTitleAsFileName,
       );
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';

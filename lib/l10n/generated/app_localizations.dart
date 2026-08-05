@@ -2483,6 +2483,18 @@ abstract class AppLocalizations {
   /// **'开启后，Excel 抬头将直接使用当前会话名；会话名为空时继续使用抬头模板。'**
   String get excelUseSessionTitleAsHeaderHint;
 
+  /// No description provided for @fileNameUseSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名使用当前会话名'**
+  String get fileNameUseSessionTitle;
+
+  /// No description provided for @fileNameUseSessionTitleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，导出文件名将直接使用当前会话名；会话名为空时继续使用文件名模板。'**
+  String get fileNameUseSessionTitleHint;
+
   /// No description provided for @themeColorPickerTitle.
   ///
   /// In zh, this message translates to:

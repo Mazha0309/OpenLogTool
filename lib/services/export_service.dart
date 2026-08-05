@@ -98,11 +98,18 @@ class ExportService {
 
   /// 从模板和当前时间生成导出文件名。
   /// 模板支持 {yyyy} {MM} {dd} {HH} {mm} {ss} 以及可选的 {session}（会话名）。
+  /// [useSessionTitle] 开启且会话名非空时，文件名直接使用会话名。
   static String generateFileName(
     String template,
     DateTime now, {
     String? sessionTitle,
+    bool useSessionTitle = false,
   }) {
+    final normalizedSessionTitle = sessionTitle?.trim() ?? '';
+    if (useSessionTitle && normalizedSessionTitle.isNotEmpty) {
+      return normalizedSessionTitle;
+    }
+
     String filename = template;
     filename = filename.replaceAll('{yyyy}', now.year.toString());
     filename =

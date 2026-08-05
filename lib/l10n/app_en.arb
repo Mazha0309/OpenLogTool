@@ -406,6 +406,8 @@
   "retry": "Retry",
   "excelUseSessionTitleAsHeader": "Use current session name as header",
   "excelUseSessionTitleAsHeaderHint": "Use the current session name directly as the Excel header. If it is blank, the header template is used instead.",
+  "fileNameUseSessionTitle": "Use current session name as file name",
+  "fileNameUseSessionTitleHint": "Use the current session name directly as the export file name. If it is blank, the file name template is used instead.",
   "themeColorPickerTitle": "Choose theme color",
   "themeColorPresets": "Preset colors",
   "themeColorCustom": "Custom color",
