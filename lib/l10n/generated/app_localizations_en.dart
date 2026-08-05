@@ -2019,6 +2019,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get personalCloudKeepRemoteConflicts => 'Keep cloud values';
 
   @override
+  String get personalCloudResolveOneByOne => 'Resolve one by one';
+
+  @override
+  String get personalCloudConflictDialogTitle => 'Resolve conflicts';
+
+  @override
+  String get personalCloudConflictApply => 'Apply choices';
+
+  @override
+  String personalCloudFieldConflictTitle(String field) {
+    return 'Field $field differs on both sides';
+  }
+
+  @override
+  String personalCloudEntityConflictTitle(String entity) {
+    return '$entity conflict';
+  }
+
+  @override
+  String get personalCloudEntitySession => 'Session';
+
+  @override
+  String get personalCloudEntityLog => 'Record';
+
+  @override
+  String get personalCloudKeepLocal => 'Keep device';
+
+  @override
+  String get personalCloudKeepRemote => 'Keep cloud';
+
+  @override
   String get personalCloudSyncNow => 'Sync personal snapshot';
 
   @override

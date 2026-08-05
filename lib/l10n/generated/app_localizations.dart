@@ -3481,6 +3481,60 @@ abstract class AppLocalizations {
   /// **'冲突项保留云端值'**
   String get personalCloudKeepRemoteConflicts;
 
+  /// No description provided for @personalCloudResolveOneByOne.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐项处理'**
+  String get personalCloudResolveOneByOne;
+
+  /// No description provided for @personalCloudConflictDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐项处理冲突'**
+  String get personalCloudConflictDialogTitle;
+
+  /// No description provided for @personalCloudConflictApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用选择'**
+  String get personalCloudConflictApply;
+
+  /// No description provided for @personalCloudFieldConflictTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'字段 {field} 双方都有值且不同'**
+  String personalCloudFieldConflictTitle(String field);
+
+  /// No description provided for @personalCloudEntityConflictTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{entity} 冲突'**
+  String personalCloudEntityConflictTitle(String entity);
+
+  /// No description provided for @personalCloudEntitySession.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话'**
+  String get personalCloudEntitySession;
+
+  /// No description provided for @personalCloudEntityLog.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录'**
+  String get personalCloudEntityLog;
+
+  /// No description provided for @personalCloudKeepLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留本机'**
+  String get personalCloudKeepLocal;
+
+  /// No description provided for @personalCloudKeepRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留云端'**
+  String get personalCloudKeepRemote;
+
   /// No description provided for @personalCloudSyncNow.
   ///
   /// In zh, this message translates to:

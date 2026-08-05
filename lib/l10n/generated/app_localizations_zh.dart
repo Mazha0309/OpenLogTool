@@ -1926,6 +1926,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get personalCloudKeepRemoteConflicts => '冲突项保留云端值';
 
   @override
+  String get personalCloudResolveOneByOne => '逐项处理';
+
+  @override
+  String get personalCloudConflictDialogTitle => '逐项处理冲突';
+
+  @override
+  String get personalCloudConflictApply => '应用选择';
+
+  @override
+  String personalCloudFieldConflictTitle(String field) {
+    return '字段 $field 双方都有值且不同';
+  }
+
+  @override
+  String personalCloudEntityConflictTitle(String entity) {
+    return '$entity 冲突';
+  }
+
+  @override
+  String get personalCloudEntitySession => '会话';
+
+  @override
+  String get personalCloudEntityLog => '记录';
+
+  @override
+  String get personalCloudKeepLocal => '保留本机';
+
+  @override
+  String get personalCloudKeepRemote => '保留云端';
+
+  @override
   String get personalCloudSyncNow => '同步个人快照';
 
   @override
