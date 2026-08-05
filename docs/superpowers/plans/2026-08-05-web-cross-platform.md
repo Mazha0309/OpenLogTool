@@ -672,20 +672,15 @@ flutter build web --wasm --no-pub
 
 （--wasm 启用 skwasm 渲染 + 按需加载；若 CI 中已有 --wasm 则保持，仅确认。）
 
-- [ ] **Step 3: 字体子集化接入 CI**
+- [ ] **Step 3: 校验子集字体产物存在**
 
-在 workflow 的 web job 中，`flutter build web` 之前插入字体子集化步骤：
+CI 不重生成子集字体——子集 ttf 已作为源码资产提交（与 9.7MB 完整字体一样），在 web job 的 `flutter build web` 前校验产物存在：
 
 ```yaml
-      - name: Subset web fonts
+      - name: Verify subset font asset
         run: |
-          pip install fonttools brotli 2>&1 | tail -1
-          python3 tool/subset_fonts.py \
-            assets/fonts/SarasaGothicSC-Regular.ttf \
-            web/fonts/SarasaGothicSC-subset.woff2
+          test -s assets/fonts/SarasaGothicSC-subset.ttf
 ```
-
-（注意：web/fonts/ 目录需在仓库中保留占位或由该步骤创建，`mkdir -p web/fonts` 后运行脚本；脚本内 textfile 与 dst 同目录需存在。）
 
 - [ ] **Step 4: 加载进度条完善（可选）**
 
@@ -695,7 +690,7 @@ flutter build web --wasm --no-pub
 
 ```bash
 git add .github/workflows/build.yml
-git commit -m "build: wasm web build with subset fonts and loader"
+git commit -m "build: wasm web build with loader"
 ```
 
 ---
