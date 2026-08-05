@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/personal_cloud_provider.dart';
@@ -13,7 +16,10 @@ import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/services/app_logger.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
+import 'package:openlogtool/services/app_fonts.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/windows_accessibility_guard.dart';
 import 'package:openlogtool/bootstrap/rust_library_loader.dart';
@@ -23,7 +29,27 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 Future<void> main(List<String> args) async {
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
+  await AppLogger.instance.init();
+  FlutterError.onError = (details) {
+    AppLogger.instance.error('Flutter error', details.exception, details.stack);
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.instance.error('Platform error', error, stack);
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'platform',
+    ));
+    return true;
+  };
+  try {
+    await loadAppFonts();
+  } catch (e) {
+    debugPrint('Failed to load app fonts, falling back to system fonts: $e');
+  }
 
   // 桌面子窗口只渲染主控屏，不初始化 Rust、本地数据库或主应用 Provider。
   final controllerWindow =
@@ -58,6 +84,13 @@ Future<void> main(List<String> args) async {
     await RustApi.init(dbPath: dbPath);
   } catch (e) {
     debugPrint('Rust DB init: $e');
+  }
+
+  // Web：把 localStorage（SharedPreferences）旧数据一次性拷贝到 IndexedDB。
+  // 桌面端无需迁移，直接使用 SharedPreferences。
+  // 首次启动等待迁移完成，避免 provider 先读 IndexedDB 读到默认值。
+  if (kIsWeb) {
+    await migrateLegacyLocalStorage(await openKeyValueStore());
   }
 
   runApp(

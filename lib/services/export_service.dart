@@ -8,6 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/utils/log_time.dart';
+import 'package:openlogtool/services/export_web_download.dart'
+    if (dart.library.io) 'package:openlogtool/services/export_web_download_stub.dart'
+    as web_dl;
 
 class ExportSaveResult {
   final String? path;
@@ -18,6 +21,19 @@ class ExportSaveResult {
     this.path,
     this.usedSaf = false,
     this.cancelled = false,
+  });
+}
+
+/// Web 端浏览器原生下载的元数据。
+class WebDownloadMeta {
+  final String filename;
+  final String mimeType;
+  final List<int> bytes;
+
+  const WebDownloadMeta({
+    required this.filename,
+    required this.mimeType,
+    required this.bytes,
   });
 }
 
@@ -63,6 +79,7 @@ class ExportService {
 
   /// 保存二进制数据到文件。
   /// Android 上如需 SAF，使用 [FilePicker.saveFile]；其余平台直接写文件。
+  /// Web 上使用浏览器原生下载（Blob + AnchorElement），不走 file_picker。
   static Future<ExportSaveResult> saveFile({
     required String configuredPath,
     required String filename,
@@ -70,6 +87,17 @@ class ExportService {
     required String dialogTitle,
     required List<String> allowedExtensions,
   }) async {
+    if (kIsWeb) {
+      final ext = allowedExtensions.firstOrNull;
+      final mime = mimeTypeForExtension(ext);
+      return downloadOnWeb(webDownloadMeta(
+        filename,
+        bytes,
+        mimeType: mime,
+        extension: ext == null ? null : '.$ext',
+      ));
+    }
+
     if (await shouldUseSaf(configuredPath)) {
       final result = await FilePicker.platform.saveFile(
         dialogTitle: dialogTitle,
@@ -95,6 +123,37 @@ class ExportService {
     await file.writeAsBytes(bytes);
     return ExportSaveResult(path: file.path, usedSaf: false);
   }
+
+  /// 根据扩展名返回下载 MIME 类型（大小写不敏感）。
+  static String mimeTypeForExtension(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'json':
+        return 'application/json';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  /// 组装 Web 下载元数据；[extension] 缺失时自动补全扩展名。
+  static WebDownloadMeta webDownloadMeta(
+    String filename,
+    List<int> bytes, {
+    required String mimeType,
+    String? extension,
+  }) {
+    var name = filename;
+    if (extension != null && !name.endsWith(extension)) {
+      name = '$name$extension';
+    }
+    return WebDownloadMeta(filename: name, mimeType: mimeType, bytes: bytes);
+  }
+
+  /// Web 端浏览器原生下载（绕过 file_picker 的文件名/返回 bug）。
+  /// 实际实现按平台条件导入：Web 用 Blob + AnchorElement，dart:io 为占位。
+  static Future<ExportSaveResult> downloadOnWeb(WebDownloadMeta meta) =>
+      web_dl.downloadOnWeb(meta);
 
   /// 从模板和当前时间生成导出文件名。
   /// 模板支持 {yyyy} {MM} {dd} {HH} {mm} {ss} 以及可选的 {session}（会话名）。

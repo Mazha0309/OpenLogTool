@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 import 'package:openlogtool/src/bridge/api/sessions.dart' as session_api;
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
@@ -146,11 +146,11 @@ class SessionProvider with ChangeNotifier {
   }
 
   Future<void> _init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _databaseRevision = prefs.getInt(_databaseRevisionKey) ?? 0;
+    final prefs = await openKeyValueStore();
+    _databaseRevision = await prefs.getInt(_databaseRevisionKey) ?? 0;
     _databaseReplacementPending =
-        prefs.getBool(_databaseReplacementPendingKey) ?? false;
-    final storedId = prefs.getString(_key);
+        await prefs.getBool(_databaseReplacementPendingKey);
+    final storedId = await prefs.getString(_key);
 
     if (storedId != null && storedId.isNotEmpty) {
       try {
@@ -449,7 +449,7 @@ class SessionProvider with ChangeNotifier {
     _currentSessionId = null;
     _safeNotify();
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await openKeyValueStore();
       await prefs.remove(_key);
     } catch (error, stackTrace) {
       debugPrint(
@@ -524,7 +524,7 @@ class SessionProvider with ChangeNotifier {
     _databaseRevision = nextDatabaseRevision;
     _safeNotify();
 
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     final revisionSaved =
         await prefs.setInt(_databaseRevisionKey, nextDatabaseRevision);
     if (!revisionSaved) {
@@ -560,7 +560,7 @@ class SessionProvider with ChangeNotifier {
       _safeNotify();
     }
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await openKeyValueStore();
       final saved = await prefs.setBool(_databaseReplacementPendingKey, true);
       if (!saved) {
         throw StateError(
@@ -590,9 +590,9 @@ class SessionProvider with ChangeNotifier {
       _clearDatabaseReplacementSentinel();
 
   Future<void> _clearDatabaseReplacementSentinel() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     final removed = await prefs.remove(_databaseReplacementPendingKey);
-    if (!removed && prefs.containsKey(_databaseReplacementPendingKey)) {
+    if (!removed && await prefs.containsKey(_databaseReplacementPendingKey)) {
       throw StateError('LOCAL_DATABASE_REPLACEMENT_SENTINEL_CLEAR_FAILED');
     }
     if (_databaseReplacementPending) {
@@ -630,7 +630,7 @@ class SessionProvider with ChangeNotifier {
     if (_currentSessionId == sessionId) {
       _currentSession = null;
       _currentSessionId = null;
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await openKeyValueStore();
       await prefs.remove(_key);
     }
   }
@@ -645,7 +645,7 @@ class SessionProvider with ChangeNotifier {
     final writer = _currentSessionIdWriter;
     final saved = writer != null
         ? await writer(sessionId)
-        : await (await SharedPreferences.getInstance()).setString(
+        : await (await openKeyValueStore()).setString(
             _key,
             sessionId,
           );

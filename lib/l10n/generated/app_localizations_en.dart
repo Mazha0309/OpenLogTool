@@ -1834,7 +1834,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paginationSetting => 'Paginate records';
 
   @override
-  String get paginationSettingHint => 'Show five records on each page.';
+  String get paginationSettingHint =>
+      'Split records into pages with a configurable size.';
+
+  @override
+  String get tablePageSizeLabel => 'Records per page';
+
+  @override
+  String get tablePageSizeHint => 'How many saved records each page shows';
 
   @override
   String get recordEditorDialogSetting => 'Edit records in a dialog';
@@ -1861,6 +1868,24 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get restoreDefaultSettingsHint =>
       'Restore appearance, language, layout, and export preferences without affecting records or sign-in state.';
+
+  @override
+  String get logsTitle => 'Logs';
+
+  @override
+  String get logsView => 'View logs';
+
+  @override
+  String get logsEmpty => 'No logs yet';
+
+  @override
+  String get logsCopy => 'Copy';
+
+  @override
+  String get logsClose => 'Close';
+
+  @override
+  String get logsCopied => 'Logs copied';
 
   @override
   String get snackbarLogTitle => 'In-app message log';

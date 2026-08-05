@@ -10,6 +10,7 @@ import 'package:openlogtool/screens/data_workspace_page.dart';
 import 'package:openlogtool/screens/session_hub_page.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
+import 'package:openlogtool/services/url_sync.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
@@ -26,6 +27,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
+  /// 启动时 URL 已指定页面：优先恢复 URL，而不是跳转 sessions。
+  bool _restoredFromUrl = false;
+
+  /// 首帧完成前路由回调只改字段，不调用 setState。
+  bool _syncReady = false;
+
   static const _destinations = <_AppDestination>[
     _AppDestination(_AppSection.workbench, Icons.radio_outlined, Icons.radio),
     _AppDestination(_AppSection.sessions, Icons.groups_outlined, Icons.groups),
@@ -37,7 +44,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
+    UrlSync.init(onRouteChanged: _onRouteChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncReady = true;
+      _initSession();
+    });
+  }
+
+  void _onRouteChanged(SyncRoute route) {
+    if (!mounted) return;
+    if (route.page != null) _restoredFromUrl = true;
+    final index = homeIndexForPage(route.page);
+    final currentSessionId = context.read<SessionProvider>().currentSessionId;
+    if (route.session != null && route.session != currentSessionId) {
+      _restoreSessionFromUrl(route.session!);
+    }
+    if (index == _selectedIndex && route.session == null) return;
+    if (_syncReady) {
+      setState(() => _selectedIndex = index);
+    } else {
+      _selectedIndex = index;
+    }
+  }
+
+  /// 浏览器后退/分享链接带 session 参数时，切换回对应会话。
+  Future<void> _restoreSessionFromUrl(String sessionId) async {
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    try {
+      await logs.reloadForSession(sessionId, propagateErrors: true);
+      await sessions.switchToSession(sessionId);
+    } catch (e) {
+      debugPrint('[HomeScreen] URL session restore failed: $e');
+    }
   }
 
   @override
@@ -53,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final lp = context.read<LogProvider>();
     await sp.ready;
     if (!mounted) return;
-    if (sp.currentSessionId == null) {
+    if (!_restoredFromUrl && sp.currentSessionId == null) {
       setState(() => _selectedIndex = 1);
       return;
     }
@@ -62,11 +101,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onItemTapped(int index) {
     FocusManager.instance.primaryFocus?.unfocus();
+    final sessionProvider = context.read<SessionProvider>();
     final destination =
-        index == 0 && context.read<SessionProvider>().currentSessionId == null
-            ? 1
-            : index;
+        index == 0 && sessionProvider.currentSessionId == null ? 1 : index;
+    if (destination == _selectedIndex) return;
     setState(() => _selectedIndex = destination);
+    UrlSync.push(
+      pageForHomeIndex(destination),
+      destination == 0 ? sessionProvider.currentSessionId : null,
+    );
   }
 
   Future<bool> _handleSystemBack() async {
@@ -93,6 +136,10 @@ class _HomeScreenState extends State<HomeScreen> {
       SessionHubPage(
         onSessionOpened: () {
           if (mounted) setState(() => _selectedIndex = 0);
+          UrlSync.push(
+            pageForHomeIndex(0),
+            context.read<SessionProvider>().currentSessionId,
+          );
         },
       ),
       const DataWorkspacePage(),

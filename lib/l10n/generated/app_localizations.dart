@@ -3183,8 +3183,20 @@ abstract class AppLocalizations {
   /// No description provided for @paginationSettingHint.
   ///
   /// In zh, this message translates to:
-  /// **'每 5 条记录分为一页显示。'**
+  /// **'将记录分页显示，每页条数可配置。'**
   String get paginationSettingHint;
+
+  /// No description provided for @tablePageSizeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'每页记录数'**
+  String get tablePageSizeLabel;
+
+  /// No description provided for @tablePageSizeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存记录表格每页显示的数量'**
+  String get tablePageSizeHint;
 
   /// No description provided for @recordEditorDialogSetting.
   ///
@@ -3227,6 +3239,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'恢复外观、语言、布局和导出偏好，不影响记录与登录状态。'**
   String get restoreDefaultSettingsHint;
+
+  /// No description provided for @logsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志'**
+  String get logsTitle;
+
+  /// No description provided for @logsView.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看日志'**
+  String get logsView;
+
+  /// No description provided for @logsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'（暂无日志）'**
+  String get logsEmpty;
+
+  /// No description provided for @logsCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制'**
+  String get logsCopy;
+
+  /// No description provided for @logsClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get logsClose;
+
+  /// No description provided for @logsCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志已复制'**
+  String get logsCopied;
 
   /// No description provided for @snackbarLogTitle.
   ///

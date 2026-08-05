@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenLogTool
+Name[zh_CN]=OpenLogTool
+Comment=Amateur radio net logging and collaboration client
+Exec=/opt/openlogtool/openlogtool
+Icon=openlogtool
+Terminal=false
+Categories=Utility;HamRadio;
+StartupWMClass=com.mazha0309.openlogtool

@@ -19,7 +19,7 @@ import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/log_time.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 
 enum CollaborationState {
   localOnly,
@@ -3813,7 +3813,7 @@ class CollaborationProvider with ChangeNotifier {
     required String credentialKind,
     required String credentialValue,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     final fingerprint = sha256
         .convert(
           utf8.encode(
@@ -3827,7 +3827,7 @@ class CollaborationProvider with ChangeNotifier {
         )
         .toString();
     final storageKey = '$_pendingJoinPrefix$fingerprint';
-    final storedId = prefs.getString(storageKey);
+    final storedId = await prefs.getString(storageKey);
     if (storedId != null &&
         RegExp(
           r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
@@ -3835,10 +3835,9 @@ class CollaborationProvider with ChangeNotifier {
         ).hasMatch(storedId)) {
       return (id: storedId, storageKey: storageKey);
     }
-    final legacyFingerprint = prefs.getString(
-      _legacyPendingJoinFingerprintKey,
-    );
-    final legacyId = prefs.getString(_legacyPendingJoinIdKey);
+    final legacyFingerprint =
+        await prefs.getString(_legacyPendingJoinFingerprintKey);
+    final legacyId = await prefs.getString(_legacyPendingJoinIdKey);
     final validLegacyId = legacyId != null &&
         RegExp(
           r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
@@ -3858,9 +3857,9 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<void> _clearPendingJoin(String storageKey) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     final removed = await prefs.remove(storageKey);
-    if (!removed && prefs.containsKey(storageKey)) {
+    if (!removed && await prefs.containsKey(storageKey)) {
       throw StateError('PENDING_JOIN_CLEAR_FAILED');
     }
   }
@@ -3885,8 +3884,8 @@ class CollaborationProvider with ChangeNotifier {
         )
         .toString();
     final storageKey = '$_pendingMutationPrefix$fingerprint';
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString(storageKey);
+    final prefs = await openKeyValueStore();
+    final stored = await prefs.getString(storageKey);
     if (stored != null &&
         RegExp(
           r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
@@ -3902,9 +3901,9 @@ class CollaborationProvider with ChangeNotifier {
   }
 
   Future<void> _confirmPendingMutation(String storageKey) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await openKeyValueStore();
     final removed = await prefs.remove(storageKey);
-    if (!removed && prefs.containsKey(storageKey)) {
+    if (!removed && await prefs.containsKey(storageKey)) {
       throw StateError('PENDING_MUTATION_CLEAR_FAILED');
     }
   }

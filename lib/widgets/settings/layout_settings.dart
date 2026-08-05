@@ -48,6 +48,26 @@ class LayoutSettings extends StatelessWidget {
             ),
           ),
           SettingsActionTile(
+            icon: Icons.format_list_numbered_outlined,
+            title: l10n.tablePageSizeLabel,
+            subtitle: l10n.tablePageSizeHint,
+            trailing: DropdownButton<int>(
+              key: const Key('table-page-size-select'),
+              value: settingsProvider.tablePageSize,
+              items: SettingsProvider.tablePageSizeOptions
+                  .map(
+                    (n) => DropdownMenuItem(
+                      value: n,
+                      child: Text('$n'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) settingsProvider.setTablePageSize(v);
+              },
+            ),
+          ),
+          SettingsActionTile(
             icon: Icons.manage_search_outlined,
             title: l10n.callsignHistoryFillSetting,
             subtitle: l10n.callsignHistoryFillHint,

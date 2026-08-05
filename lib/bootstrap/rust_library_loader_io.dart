@@ -9,6 +9,10 @@ ExternalLibrary bundledRustLibrary() {
     return ExternalLibrary.open('libopenlogtool_core.so');
   }
 
+  if (Platform.isIOS) {
+    return ExternalLibrary.process(iKnowHowToUseIt: true);
+  }
+
   final executableDirectory = p.dirname(Platform.resolvedExecutable);
   final libraryPath = switch (Platform.operatingSystem) {
     'linux' => p.join(

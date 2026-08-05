@@ -185,7 +185,7 @@ ThemeData buildAppTheme({
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
     ),
-    fontFamily: fontFamily,
+    fontFamily: fontFamily ?? 'SarasaGothicSC',
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: colorScheme.surfaceContainerLow,
       elevation: 0,

@@ -6,15 +6,15 @@ import 'package:openlogtool/services/ai_credential_store.dart';
 import 'package:openlogtool/services/ai_recognition/models.dart';
 import 'package:openlogtool/services/ai_recognition/providers.dart';
 import 'package:openlogtool/services/text_assistant.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 
 /// On-device AI configuration. Provider profiles are ordinary exportable JSON;
 /// credentials are referenced by ID and live only in [AiCredentialStore].
 final class AiRecognitionSettingsProvider with ChangeNotifier {
   AiRecognitionSettingsProvider({
-    Future<SharedPreferences> Function()? preferencesLoader,
+    Future<KeyValueStore> Function()? preferencesLoader,
     AiCredentialStore? credentialStore,
-  })  : _preferencesLoader = preferencesLoader ?? SharedPreferences.getInstance,
+  })  : _preferencesLoader = preferencesLoader ?? openKeyValueStore,
         _credentialStore = credentialStore ?? AiCredentialStore() {
     unawaited(_load());
   }
@@ -22,7 +22,7 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
   static const int schemaVersion = 1;
   static const String _storageKey = 'openlogtool.ai.settings.v1';
 
-  final Future<SharedPreferences> Function() _preferencesLoader;
+  final Future<KeyValueStore> Function() _preferencesLoader;
   final AiCredentialStore _credentialStore;
   final Completer<void> _initialized = Completer<void>();
   Future<void> _mutationTail = Future<void>.value();
@@ -65,7 +65,7 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
     try {
       final preferences = await _preferencesLoader();
       if (_disposed) return;
-      final encoded = preferences.getString(_storageKey);
+      final encoded = await preferences.getString(_storageKey);
       if (encoded != null) _restore(jsonDecode(encoded));
     } catch (error) {
       _loadError = error;
@@ -458,7 +458,7 @@ final class AiRecognitionSettingsProvider with ChangeNotifier {
       });
 
   Future<void> _enqueuePreferenceOperation(
-    Future<void> Function(SharedPreferences preferences) operation,
+    Future<void> Function(KeyValueStore preferences) operation,
   ) {
     final result = Completer<void>();
     _saveTail = _saveTail.then((_) async {

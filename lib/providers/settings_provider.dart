@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:openlogtool/config/app_config.dart';
 import 'package:openlogtool/models/controller_display.dart';
 import 'package:openlogtool/models/export_settings.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 
 enum AppLocalePreference { system, simplifiedChinese, english }
 
@@ -23,6 +23,9 @@ class SettingsProvider with ChangeNotifier {
   static const String _recordEditorDialogEnabledKey =
       'recordEditorDialogEnabled';
   static const String _appLocalePreferenceKey = 'appLocalePreference';
+  static const String _tablePageSizeKey = 'tablePageSize';
+
+  static const List<int> tablePageSizeOptions = [5, 10, 15, 20, 25];
 
   Color _themeColor = const Color(0xFF2196F3);
   bool _isDarkMode = false;
@@ -37,9 +40,10 @@ class SettingsProvider with ChangeNotifier {
   bool _limitWorkbenchWidth = true;
   bool _recordEditorDialogEnabled = true;
   AppLocalePreference _appLocalePreference = AppLocalePreference.system;
+  int _tablePageSize = 10;
   ControllerDisplayPreferences _controllerDisplayPreferences =
       const ControllerDisplayPreferences();
-  final Future<SharedPreferences> Function() _preferencesLoader;
+  final Future<KeyValueStore> Function() _preferencesLoader;
   final Future<List<String>> Function() _systemFontsLoader;
   var _localePreferenceRevision = 0;
   var _disposed = false;
@@ -57,6 +61,7 @@ class SettingsProvider with ChangeNotifier {
   bool get limitWorkbenchWidth => _limitWorkbenchWidth;
   bool get recordEditorDialogEnabled => _recordEditorDialogEnabled;
   AppLocalePreference get appLocalePreference => _appLocalePreference;
+  int get tablePageSize => _tablePageSize;
   Locale? get locale => switch (_appLocalePreference) {
         AppLocalePreference.system => null,
         AppLocalePreference.simplifiedChinese => const Locale('zh', 'CN'),
@@ -66,9 +71,9 @@ class SettingsProvider with ChangeNotifier {
       _controllerDisplayPreferences;
 
   SettingsProvider({
-    Future<SharedPreferences> Function()? preferencesLoader,
+    Future<KeyValueStore> Function()? preferencesLoader,
     Future<List<String>> Function()? systemFontsLoader,
-  })  : _preferencesLoader = preferencesLoader ?? SharedPreferences.getInstance,
+  })  : _preferencesLoader = preferencesLoader ?? openKeyValueStore,
         _systemFontsLoader = systemFontsLoader ?? AppConfig.getSystemFonts {
     _loadSettings();
   }
@@ -78,15 +83,15 @@ class SettingsProvider with ChangeNotifier {
     final prefs = await _preferencesLoader();
     if (_disposed) return;
 
-    _isDarkMode = prefs.getBool(_isDarkModeKey) ?? false;
-    _fontFamily = prefs.getString(_fontFamilyKey) ?? '';
+    _isDarkMode = await prefs.getBool(_isDarkModeKey);
+    _fontFamily = await prefs.getString(_fontFamilyKey) ?? '';
 
-    final colorValue = prefs.getInt(_themeColorKey);
+    final colorValue = await prefs.getInt(_themeColorKey);
     if (colorValue != null) {
       _themeColor = Color(colorValue);
     }
 
-    final exportSettingsJson = prefs.getString(_exportSettingsKey);
+    final exportSettingsJson = await prefs.getString(_exportSettingsKey);
     if (exportSettingsJson != null) {
       try {
         _exportSettings =
@@ -96,25 +101,37 @@ class SettingsProvider with ChangeNotifier {
       }
     }
 
-    _callSignQthLinkEnabled = prefs.getBool(_callSignQthLinkKey) ?? true;
-    _paginationEnabled = prefs.getBool(_paginationEnabledKey) ?? true;
-    _duplicateCallsignWarningEnabled =
-        prefs.getBool(_duplicateCallsignWarningKey) ?? true;
+    _callSignQthLinkEnabled =
+        await prefs.getBool(_callSignQthLinkKey, defaultValue: true);
+    _paginationEnabled =
+        await prefs.getBool(_paginationEnabledKey, defaultValue: true);
+    _duplicateCallsignWarningEnabled = await prefs.getBool(
+      _duplicateCallsignWarningKey,
+      defaultValue: true,
+    );
     _controllerDeviceModeEnabled =
-        prefs.getBool(_controllerDeviceModeEnabledKey) ?? false;
-    _primarySidebarExpanded = prefs.getBool(_primarySidebarExpandedKey) ?? true;
-    _limitWorkbenchWidth = prefs.getBool(_limitWorkbenchWidthKey) ?? true;
+        await prefs.getBool(_controllerDeviceModeEnabledKey);
+    _primarySidebarExpanded =
+        await prefs.getBool(_primarySidebarExpandedKey, defaultValue: true);
+    _limitWorkbenchWidth =
+        await prefs.getBool(_limitWorkbenchWidthKey, defaultValue: true);
     _recordEditorDialogEnabled =
-        prefs.getBool(_recordEditorDialogEnabledKey) ?? true;
+        await prefs.getBool(_recordEditorDialogEnabledKey, defaultValue: true);
     if (_localePreferenceRevision == localePreferenceRevision) {
-      final storedLocalePreference = prefs.getString(_appLocalePreferenceKey);
+      final storedLocalePreference =
+          await prefs.getString(_appLocalePreferenceKey);
       _appLocalePreference = AppLocalePreference.values.firstWhere(
         (preference) => preference.name == storedLocalePreference,
         orElse: () => AppLocalePreference.system,
       );
     }
+    final storedTablePageSize = await prefs.getInt(_tablePageSizeKey);
+    if (storedTablePageSize != null &&
+        tablePageSizeOptions.contains(storedTablePageSize)) {
+      _tablePageSize = storedTablePageSize;
+    }
     final controllerPreferencesJson =
-        prefs.getString(controllerDisplayPreferencesStorageKey);
+        await prefs.getString(controllerDisplayPreferencesStorageKey);
     if (controllerPreferencesJson != null) {
       try {
         _controllerDisplayPreferences = ControllerDisplayPreferences.fromJson(
@@ -215,6 +232,13 @@ class SettingsProvider with ChangeNotifier {
     await _saveSetting(_appLocalePreferenceKey, preference.name);
   }
 
+  Future<void> setTablePageSize(int value) async {
+    if (!tablePageSizeOptions.contains(value)) return;
+    _tablePageSize = value;
+    notifyListeners();
+    await _saveSetting(_tablePageSizeKey, value);
+  }
+
   Future<void> setControllerDisplayPreferences(
     ControllerDisplayPreferences preferences,
   ) async {
@@ -258,6 +282,7 @@ class SettingsProvider with ChangeNotifier {
     _primarySidebarExpanded = true;
     _limitWorkbenchWidth = true;
     _appLocalePreference = AppLocalePreference.system;
+    _tablePageSize = 10;
     _duplicateCallsignWarningEnabled = true;
     _controllerDisplayPreferences = const ControllerDisplayPreferences();
 
@@ -272,6 +297,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.remove(_primarySidebarExpandedKey);
     await prefs.remove(_limitWorkbenchWidthKey);
     await prefs.remove(_appLocalePreferenceKey);
+    await prefs.remove(_tablePageSizeKey);
     await prefs.remove(_duplicateCallsignWarningKey);
     await prefs.remove(controllerDisplayPreferencesStorageKey);
 

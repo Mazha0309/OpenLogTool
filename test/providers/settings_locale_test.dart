@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -89,7 +90,7 @@ void main() {
       'appLocalePreference': AppLocalePreference.english.name,
     });
     final prefs = await SharedPreferences.getInstance();
-    final preferences = Completer<SharedPreferences>();
+    final preferences = Completer<KeyValueStore>();
     final fonts = Completer<List<String>>();
     final settings = SettingsProvider(
       preferencesLoader: () => preferences.future,
@@ -104,7 +105,7 @@ void main() {
     expect(settings.appLocalePreference, AppLocalePreference.system);
     expect(notifications, 1);
 
-    preferences.complete(prefs);
+    preferences.complete(PrefsKeyValueStore(prefs));
     await saving;
     expect(settings.appLocalePreference, AppLocalePreference.system);
     expect(
@@ -123,7 +124,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final fonts = Completer<List<String>>();
     final settings = SettingsProvider(
-      preferencesLoader: () async => prefs,
+      preferencesLoader: () async => PrefsKeyValueStore(prefs),
       systemFontsLoader: () => fonts.future,
     );
     await _waitForInitialLoad(settings);

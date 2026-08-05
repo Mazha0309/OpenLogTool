@@ -5,7 +5,7 @@ import 'package:openlogtool/services/scoped_token_store.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/utils/server_url.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:openlogtool/services/key_value_store.dart';
 
 typedef ServerApiFactory = ServerApi Function({
   required Uri baseUri,
@@ -99,8 +99,8 @@ class ServerProvider with ChangeNotifier {
 
   Future<void> loadSettings() async {
     final startedAtRevision = _contextRevision;
-    final prefs = await SharedPreferences.getInstance();
-    final storedServerUrl = prefs.getString('server_url') ?? '';
+    final prefs = await openKeyValueStore();
+    final storedServerUrl = await prefs.getString('server_url') ?? '';
     // v0 stored credentials in SharedPreferences. Authentication now lives only
     // in the platform credential store.
     await prefs.remove('server_token');
@@ -182,7 +182,7 @@ class ServerProvider with ChangeNotifier {
     notifyListeners();
     await _tokenStoreScopes.clearRetired(oldTokenStore);
     _lastUrlSave = _lastUrlSave.then((_) async {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await openKeyValueStore();
       await prefs.setString('server_url', normalized);
     });
     await _lastUrlSave;

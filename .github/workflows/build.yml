@@ -199,6 +199,13 @@ jobs:
           grep -Fq 'shared:true' build/web/pkg/openlogtool_core.js
           grep -Fq '<title>OpenLogTool</title>' build/web/index.html
 
+      - name: Verify subset font asset
+        run: |
+          set -euo pipefail
+          test -s assets/fonts/SarasaGothicSC-subset.ttf
+          grep -Fq 'SarasaGothicSC-subset.ttf' build/web/assets/AssetManifest.bin 2>/dev/null || \
+            grep -Fq 'SarasaGothicSC-subset' build/web/assets/AssetManifest.json 2>/dev/null || true
+
       - name: Package WebClient artifact
         env:
           ARTIFACT_VERSION: ${{ needs.version.outputs.artifact_version }}
@@ -647,6 +654,50 @@ jobs:
             exit 1
           fi
 
+      - name: Install RPM tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Package .deb
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist pkgdeb/DEBIAN pkgdeb/opt/openlogtool \
+            pkgdeb/usr/share/applications \
+            pkgdeb/usr/share/icons/hicolor/256x256/apps
+          cp deploy/linux/DEBIAN/control pkgdeb/DEBIAN/control
+          sed -i "s/^Version: .*/Version: $VERSION_NAME/" pkgdeb/DEBIAN/control
+          grep -Fq "Version: $VERSION_NAME" pkgdeb/DEBIAN/control
+          cp -r build/linux/x64/release/bundle/* pkgdeb/opt/openlogtool/
+          cp deploy/linux/openlogtool.desktop pkgdeb/usr/share/applications/
+          cp assets/images/app_icon_512.png \
+            pkgdeb/usr/share/icons/hicolor/256x256/apps/openlogtool.png
+          chmod 755 pkgdeb/opt/openlogtool/openlogtool
+          deb="dist/OpenLogTool-$VERSION_NAME-Linux-x86_64.deb"
+          dpkg-deb --root-owner-group --build pkgdeb "$deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb" | grep -Fq './opt/openlogtool/openlogtool'
+
+      - name: Package .rpm
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          rpmver="${VERSION_NAME%-R}"
+          sed "s/^Version: .*/Version: $rpmver/" deploy/linux/openlogtool.spec \
+            > /tmp/openlogtool.spec
+          grep -Fq "Version: $rpmver" /tmp/openlogtool.spec
+          mkdir -p dist /tmp/rpmbuild/SOURCES
+          cp -r build/linux/x64/release/bundle /tmp/rpmbuild/SOURCES/bundle
+          cp deploy/linux/openlogtool.desktop /tmp/rpmbuild/SOURCES/
+          cp assets/images/app_icon_512.png /tmp/rpmbuild/SOURCES/
+          rpmbuild -bb /tmp/openlogtool.spec \
+            --define "_topdir /tmp/rpmbuild"
+          rpmfile=$(find /tmp/rpmbuild/RPMS -type f -name '*.rpm' | head -n 1)
+          test -n "$rpmfile"
+          rpm -qpl "$rpmfile" | grep -Fx '/opt/openlogtool/openlogtool'
+          cp "$rpmfile" "dist/OpenLogTool-$VERSION_NAME-Linux-x86_64.rpm"
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -654,6 +705,8 @@ jobs:
           path: |
             build/linux/x64/release/*.tar.gz
             build/linux/x64/release/*.AppImage
+            dist/*.deb
+            dist/*.rpm
           if-no-files-found: error
           retention-days: 14
 
@@ -996,6 +1049,74 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  build-ios:
+    name: Build and verify iOS
+    needs: [version, quality]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 55
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust and iOS targets
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: rust -> target
+          shared-key: openlogtool-ios
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Generate build version
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_BUILD_NUMBER: ${{ github.run_number }}
+        run: dart tool/gen_version.dart
+
+      - name: Build iOS release (no codesign)
+        run: flutter build ios --release --no-codesign --no-pub
+
+      - name: Verify iOS app bundle
+        run: |
+          set -euo pipefail
+          app=build/ios/iphoneos/Runner.app
+          executable="$app/Runner"
+          test -x "$executable"
+          test -s ios/Runner/rustlibs/libopenlogtool_core.a
+          xcrun lipo "$executable" -verify_arch arm64
+          # 静态库应链接进可执行文件（符号可见）
+          nm "$executable" | grep -c 'frb_init_frb_dart_api_dl' >/dev/null
+          plutil -lint "$app/Info.plist"
+
+      - name: Package iOS artifacts
+        run: |
+          mkdir -p dist
+          cd build/ios/iphoneos
+          zip -qr "$GITHUB_WORKSPACE/dist/OpenLogTool-ios.zip" Runner.app
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openlogtool-${{ needs.version.outputs.artifact_version }}-ios
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Publish cross-platform release
     needs:
@@ -1004,6 +1125,7 @@ jobs:
       - build-linux
       - build-windows
       - build-macos
+      - build-ios
       - build-web
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
@@ -1043,10 +1165,13 @@ jobs:
           test "$(find artifacts -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 4
           compgen -G 'artifacts/*.tar.gz' >/dev/null
           compgen -G 'artifacts/*.AppImage' >/dev/null
+          compgen -G 'artifacts/*.deb' >/dev/null
+          compgen -G 'artifacts/*.rpm' >/dev/null
           compgen -G 'artifacts/*.exe' >/dev/null
           compgen -G 'artifacts/*Windows*.zip' >/dev/null
           compgen -G 'artifacts/*.dmg' >/dev/null
           compgen -G 'artifacts/*macOS*.zip' >/dev/null
+          compgen -G 'artifacts/*-ios.zip' >/dev/null
           compgen -G 'artifacts/*WebClient*.tar.gz' >/dev/null
           find artifacts -maxdepth 1 -type f -printf '%f\n' | sort
 
