@@ -1783,7 +1783,7 @@ abstract class AppLocalizations {
   /// No description provided for @duplicateCallsignWarningHint.
   ///
   /// In zh, this message translates to:
-  /// **'同一场点名中再次录入相同呼号时先提醒，但仍允许保存。'**
+  /// **'输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。'**
   String get duplicateCallsignWarningHint;
 
   /// No description provided for @duplicateCallsignTitle.
@@ -1803,6 +1803,43 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'仍然保存'**
   String get saveAnyway;
+
+  /// No description provided for @duplicateUpdateOldRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新旧记录'**
+  String get duplicateUpdateOldRecord;
+
+  /// No description provided for @duplicateAddNewRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加新记录'**
+  String get duplicateAddNewRecord;
+
+  /// No description provided for @duplicateUpdateDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'呼号已记录过'**
+  String get duplicateUpdateDialogTitle;
+
+  /// No description provided for @duplicateUpdateDialogMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'{callsign} 在本次点名中已有记录，选择处理方式：'**
+  String duplicateUpdateDialogMessage(String callsign);
+
+  /// No description provided for @duplicateOldRecordSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'原记录：{time} {callsign} {rstSent}/{rstRcvd} {qth}'**
+  String duplicateOldRecordSummary(
+      String time, String callsign, String rstSent, String rstRcvd, String qth);
+
+  /// No description provided for @recordUpdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录已更新'**
+  String get recordUpdated;
 
   /// No description provided for @callsignHistoryFillSetting.
   ///

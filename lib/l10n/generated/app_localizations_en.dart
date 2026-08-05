@@ -999,7 +999,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get duplicateCallsignWarningHint =>
-      'Warn before saving the same callsign again in this net, while still allowing it.';
+      'Check immediately after entering a callsign for an existing record in this net, and ask whether to update the old record or add a new one.';
 
   @override
   String get duplicateCallsignTitle => 'Callsign already recorded';
@@ -1011,6 +1011,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get saveAnyway => 'Save anyway';
+
+  @override
+  String get duplicateUpdateOldRecord => 'Update old record';
+
+  @override
+  String get duplicateAddNewRecord => 'Add new record';
+
+  @override
+  String get duplicateUpdateDialogTitle => 'Callsign already recorded';
+
+  @override
+  String duplicateUpdateDialogMessage(String callsign) {
+    return '$callsign already has a record in this net. Choose how to proceed:';
+  }
+
+  @override
+  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
+      String rstRcvd, String qth) {
+    return 'Existing: $time $callsign $rstSent/$rstRcvd $qth';
+  }
+
+  @override
+  String get recordUpdated => 'Record updated';
 
   @override
   String get callsignHistoryFillSetting => 'Reuse callsign history';

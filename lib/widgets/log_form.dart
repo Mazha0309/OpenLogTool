@@ -486,6 +486,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       _inlineAiGenerations[field] = (_inlineAiGenerations[field] ?? 0) + 1;
       _clearInlineAiSuggestion(field);
     }
+    if (field == 'callsign' && !focused) {
+      unawaited(_maybePromptDuplicateUpdate());
+    }
     final collaboration = context.read<CollaborationProvider>();
     if (collaboration.liveDraftSnapshot == null) return;
     focused
@@ -496,6 +499,130 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       return;
     }
     if (!focused) unawaited(_flushAndReleaseDraftField(field, collaboration));
+  }
+
+  Future<void> _maybePromptDuplicateUpdate() async {
+    if (!mounted) return;
+    final settingsProvider = context.read<SettingsProvider>();
+    if (!settingsProvider.duplicateCallsignWarningEnabled) return;
+    final collaboration = context.read<CollaborationProvider>();
+    if (collaboration.liveDraftSnapshot != null) return;
+    if (widget.readOnly || _historyReuseInProgress || _clearInProgress) {
+      return;
+    }
+    final callsign = _callsignController.text.trim().toUpperCase();
+    if (callsign.isEmpty) return;
+    final logProvider = context.read<LogProvider>();
+    final existing = logProvider.logs
+        .where((log) => log.callsign.trim().toUpperCase() == callsign)
+        .toList(growable: false);
+    if (existing.isEmpty || !mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final l10n = context.l10n;
+    final latest = existing.last;
+    final action = await showDialog<_DuplicateAction>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.duplicateUpdateDialogTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.duplicateUpdateDialogMessage(callsign)),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(dialogContext)
+                    .colorScheme
+                    .surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                l10n.duplicateOldRecordSummary(
+                  formatLogTimeForDisplay(latest.time),
+                  latest.callsign,
+                  latest.report,
+                  latest.rstRcvd,
+                  latest.qth,
+                ),
+                style: Theme.of(dialogContext).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, _DuplicateAction.add),
+            child: Text(l10n.duplicateAddNewRecord),
+          ),
+          FilledButton(
+            key: const Key('duplicate-update-old-record'),
+            onPressed: () =>
+                Navigator.pop(dialogContext, _DuplicateAction.update),
+            child: Text(l10n.duplicateUpdateOldRecord),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == _DuplicateAction.update) {
+      await _updateExistingLog(latest, callsign, messenger, l10n);
+    }
+  }
+
+  Future<void> _updateExistingLog(
+    LogEntry existing,
+    String callsign,
+    ScaffoldMessengerState? messenger,
+    AppLocalizations l10n,
+  ) async {
+    final logProvider = context.read<LogProvider>();
+    final dictionaryProvider =
+        Provider.of<DictionaryProvider>(context, listen: false);
+    if (existing.sessionId == null || existing.id.isEmpty) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(l10n.operationFailed('missing id'))),
+      );
+      return;
+    }
+    // 保留旧记录的时间，只更新其余字段。
+    final patch = existing.copyWith(
+      controller: _controllerController.text.trim(),
+      callsign: callsign,
+      report: _reportController.text.trim(),
+      rstRcvd: _rstRcvdController.text.trim(),
+      qth: _qthController.text.trim(),
+      device: _deviceController.text.trim(),
+      power: _powerController.text.trim(),
+      antenna: _antennaController.text.trim(),
+      height: _heightController.text.trim(),
+    )..remarks = _remarksController.text.trim();
+    if (_deviceController.text.trim().isNotEmpty) {
+      await dictionaryProvider.addDevice(_deviceController.text.trim());
+    }
+    if (_antennaController.text.trim().isNotEmpty) {
+      await dictionaryProvider.addAntenna(_antennaController.text.trim());
+    }
+    if (_qthController.text.trim().isNotEmpty) {
+      await dictionaryProvider.addQth(_qthController.text.trim());
+    }
+    try {
+      await logProvider.updateLogById(existing.id, patch);
+    } catch (error) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(content: Text(l10n.operationFailed('$error'))),
+      );
+      return;
+    }
+    if (!mounted) return;
+    _resetForm();
+    messenger?.showSnackBar(
+      SnackBar(content: Text(l10n.recordUpdated)),
+    );
   }
 
   Future<void> _acquireDraftField(
@@ -1705,3 +1832,5 @@ class _FormSuggestion {
   final String value;
   final bool isAi;
 }
+
+enum _DuplicateAction { add, update }

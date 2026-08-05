@@ -953,7 +953,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get duplicateCallsignWarningSetting => '重复呼号提醒';
 
   @override
-  String get duplicateCallsignWarningHint => '同一场点名中再次录入相同呼号时先提醒，但仍允许保存。';
+  String get duplicateCallsignWarningHint =>
+      '输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。';
 
   @override
   String get duplicateCallsignTitle => '呼号已经记录过';
@@ -965,6 +966,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get saveAnyway => '仍然保存';
+
+  @override
+  String get duplicateUpdateOldRecord => '更新旧记录';
+
+  @override
+  String get duplicateAddNewRecord => '添加新记录';
+
+  @override
+  String get duplicateUpdateDialogTitle => '呼号已记录过';
+
+  @override
+  String duplicateUpdateDialogMessage(String callsign) {
+    return '$callsign 在本次点名中已有记录，选择处理方式：';
+  }
+
+  @override
+  String duplicateOldRecordSummary(String time, String callsign, String rstSent,
+      String rstRcvd, String qth) {
+    return '原记录：$time $callsign $rstSent/$rstRcvd $qth';
+  }
+
+  @override
+  String get recordUpdated => '记录已更新';
 
   @override
   String get callsignHistoryFillSetting => '呼号历史一键复用';
