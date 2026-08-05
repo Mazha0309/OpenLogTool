@@ -834,6 +834,8 @@ class _ExportPanelState extends State<ExportPanel> {
               context, '{mm}', context.l10n.templateMinuteDescription),
           _buildTemplateHelpItem(
               context, '{ss}', context.l10n.templateSecondDescription),
+          _buildTemplateHelpItem(
+              context, '{session}', context.l10n.templateSessionDescription),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 16),
@@ -1089,8 +1091,13 @@ class _ExportPanelState extends State<ExportPanel> {
     try {
       final jsonBytes = ExportService.generateJsonBytes(logs);
       final now = DateTime.now();
-      String filename =
-          ExportService.generateFileName(settings.fileNameTemplate, now);
+      final sessionProvider =
+          Provider.of<SessionProvider>(context, listen: false);
+      String filename = ExportService.generateFileName(
+        settings.fileNameTemplate,
+        now,
+        sessionTitle: sessionProvider.currentSession?.title,
+      );
       if (!filename.endsWith('.json')) {
         filename += '.json';
       }
@@ -1151,8 +1158,11 @@ class _ExportPanelState extends State<ExportPanel> {
         return;
       }
 
-      String filename =
-          ExportService.generateFileName(settings.fileNameTemplate, now);
+      String filename = ExportService.generateFileName(
+        settings.fileNameTemplate,
+        now,
+        sessionTitle: sessionProvider.currentSession?.title,
+      );
       if (!filename.endsWith('.xlsx')) {
         filename += '.xlsx';
       }

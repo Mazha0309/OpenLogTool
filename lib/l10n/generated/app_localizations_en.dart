@@ -2465,6 +2465,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get templateSecondDescription => 'Two-digit second, for example 45';
 
   @override
+  String get templateSessionDescription =>
+      'Current session name, for example 2024 Summer Net';
+
+  @override
   String get templateExamplesTitle => 'Examples';
 
   @override

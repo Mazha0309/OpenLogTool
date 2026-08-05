@@ -804,6 +804,7 @@
   "templateHourDescription": "两位小时（24 小时制），如：14",
   "templateMinuteDescription": "两位分钟，如：30",
   "templateSecondDescription": "两位秒数，如：45",
+  "templateSessionDescription": "当前会话名称，如：2024年夏季点名",
   "templateExamplesTitle": "使用示例",
   "templateFileNameExampleOne": "文件名：点名记录_{yyyy}-{MM}-{dd}",
   "@templateFileNameExampleOne": {"placeholders": {"MM": {"type": "String"}, "dd": {"type": "String"}, "yyyy": {"type": "String"}}},

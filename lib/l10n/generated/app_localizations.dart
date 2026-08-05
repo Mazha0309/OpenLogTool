@@ -4228,6 +4228,12 @@ abstract class AppLocalizations {
   /// **'两位秒数，如：45'**
   String get templateSecondDescription;
 
+  /// No description provided for @templateSessionDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前会话名称，如：2024年夏季点名'**
+  String get templateSessionDescription;
+
   /// No description provided for @templateExamplesTitle.
   ///
   /// In zh, this message translates to:

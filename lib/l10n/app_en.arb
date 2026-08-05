@@ -720,6 +720,7 @@
   "templateHourDescription": "Two-digit hour (24-hour clock), for example 14",
   "templateMinuteDescription": "Two-digit minute, for example 30",
   "templateSecondDescription": "Two-digit second, for example 45",
+  "templateSessionDescription": "Current session name, for example 2024 Summer Net",
   "templateExamplesTitle": "Examples",
   "templateFileNameExampleOne": "Filename: Net_Log_{yyyy}-{MM}-{dd}",
   "templateFileNameExampleOneResult": "Net_Log_2024-03-28.xlsx",

@@ -2341,6 +2341,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get templateSecondDescription => '两位秒数，如：45';
 
   @override
+  String get templateSessionDescription => '当前会话名称，如：2024年夏季点名';
+
+  @override
   String get templateExamplesTitle => '使用示例';
 
   @override

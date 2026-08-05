@@ -97,7 +97,12 @@ class ExportService {
   }
 
   /// 从模板和当前时间生成导出文件名。
-  static String generateFileName(String template, DateTime now) {
+  /// 模板支持 {yyyy} {MM} {dd} {HH} {mm} {ss} 以及可选的 {session}（会话名）。
+  static String generateFileName(
+    String template,
+    DateTime now, {
+    String? sessionTitle,
+  }) {
     String filename = template;
     filename = filename.replaceAll('{yyyy}', now.year.toString());
     filename =
@@ -108,6 +113,11 @@ class ExportService {
         filename.replaceAll('{mm}', now.minute.toString().padLeft(2, '0'));
     filename =
         filename.replaceAll('{ss}', now.second.toString().padLeft(2, '0'));
+    if (sessionTitle != null && sessionTitle.isNotEmpty) {
+      filename = filename.replaceAll('{session}', sessionTitle);
+    } else {
+      filename = filename.replaceAll('{session}', 'session');
+    }
     return filename;
   }
 
