@@ -44,6 +44,7 @@
   "localControllerDisplay": "Local controller display",
   "localControllerDisplayHint": "Keep logging in the main window while a separate read-only window serves the controller.",
   "openFloatingWindow": "Open floating window",
+  "openControllerTab": "Open controller in a new tab",
   "openSecondDisplayWindow": "Open second-display window",
   "historySessions": "Session history",
   "historySessionsHint": "View and switch to past net sessions. Closed sessions open read-only.",

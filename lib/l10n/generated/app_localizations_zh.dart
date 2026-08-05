@@ -151,6 +151,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openFloatingWindow => '打开悬浮窗';
 
   @override
+  String get openControllerTab => '打开主控屏标签页';
+
+  @override
   String get openSecondDisplayWindow => '打开第二屏窗口';
 
   @override

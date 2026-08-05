@@ -352,6 +352,12 @@ abstract class AppLocalizations {
   /// **'打开悬浮窗'**
   String get openFloatingWindow;
 
+  /// No description provided for @openControllerTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开主控屏标签页'**
+  String get openControllerTab;
+
   /// No description provided for @openSecondDisplayWindow.
   ///
   /// In zh, this message translates to:

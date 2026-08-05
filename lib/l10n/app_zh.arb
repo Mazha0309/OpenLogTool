@@ -50,6 +50,7 @@
   "localControllerDisplay": "本机主控显示",
   "localControllerDisplayHint": "书记员继续使用主窗口，主控内容在独立只读窗口显示。",
   "openFloatingWindow": "打开悬浮窗",
+  "openControllerTab": "打开主控屏标签页",
   "openSecondDisplayWindow": "打开第二屏窗口",
   "historySessions": "历史会话",
   "historySessionsHint": "查看和切换过去的点名会话；已关闭会话将以只读方式打开。",

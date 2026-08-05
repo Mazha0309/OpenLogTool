@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/controller_display.dart';
@@ -47,7 +48,7 @@ class SessionHubPage extends StatelessWidget {
       fontFamily: settings.fontFamily,
       locale: settings.locale,
     );
-    if (displayData != null && supportsControllerDesktopWindows) {
+    if (displayData != null && (supportsControllerDesktopWindows || kIsWeb)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ControllerWindowService.updateOpenWindows(
           data: displayData,
@@ -113,7 +114,8 @@ class SessionHubPage extends StatelessWidget {
                           settings: settings,
                         ),
                 ),
-                if (session != null && supportsControllerDesktopWindows) ...[
+                if (session != null &&
+                    (supportsControllerDesktopWindows || kIsWeb)) ...[
                   const SizedBox(height: 16),
                   SettingsSectionCard(
                     key: const Key('local-controller-display-section'),
@@ -126,30 +128,41 @@ class SessionHubPage extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        OutlinedButton.icon(
-                          key: const Key('open-controller-floating-window'),
-                          onPressed: () => _openDesktopWindow(
-                            context,
-                            ControllerWindowMode.floating,
-                            displayData!,
-                            settings,
-                            appearance,
+                        if (kIsWeb)
+                          OutlinedButton.icon(
+                            key: const Key('open-controller-web-tab'),
+                            onPressed: () => ControllerWindowService.openWebTab(
+                              session.sessionId,
+                            ),
+                            icon: const Icon(Icons.tab_outlined),
+                            label: Text(context.l10n.openControllerTab),
+                          )
+                        else ...[
+                          OutlinedButton.icon(
+                            key: const Key('open-controller-floating-window'),
+                            onPressed: () => _openDesktopWindow(
+                              context,
+                              ControllerWindowMode.floating,
+                              displayData!,
+                              settings,
+                              appearance,
+                            ),
+                            icon: const Icon(Icons.picture_in_picture_alt),
+                            label: Text(context.l10n.openFloatingWindow),
                           ),
-                          icon: const Icon(Icons.picture_in_picture_alt),
-                          label: Text(context.l10n.openFloatingWindow),
-                        ),
-                        OutlinedButton.icon(
-                          key: const Key('open-controller-second-window'),
-                          onPressed: () => _openDesktopWindow(
-                            context,
-                            ControllerWindowMode.secondDisplay,
-                            displayData!,
-                            settings,
-                            appearance,
+                          OutlinedButton.icon(
+                            key: const Key('open-controller-second-window'),
+                            onPressed: () => _openDesktopWindow(
+                              context,
+                              ControllerWindowMode.secondDisplay,
+                              displayData!,
+                              settings,
+                              appearance,
+                            ),
+                            icon: const Icon(Icons.monitor),
+                            label: Text(context.l10n.openSecondDisplayWindow),
                           ),
-                          icon: const Icon(Icons.monitor),
-                          label: Text(context.l10n.openSecondDisplayWindow),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -377,6 +390,13 @@ class SessionHubPage extends StatelessWidget {
       ],
     );
   }
+
+  static ControllerDisplayDto displayDataFor(
+    String sessionTitle,
+    LogProvider logs,
+    CollaborationProvider collaboration,
+  ) =>
+      _displayData(sessionTitle, logs, collaboration);
 
   static ControllerDisplayDto _displayData(
     String sessionTitle,

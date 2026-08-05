@@ -16,6 +16,7 @@ import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
+import 'package:openlogtool/screens/web_controller_tab_page.dart';
 import 'package:openlogtool/services/app_logger.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/app_fonts.dart';
@@ -169,7 +170,16 @@ class MyApp extends StatelessWidget {
         fontFamily: appearance.fontFamily,
       ),
       themeMode: appearance.dark ? ThemeMode.dark : ThemeMode.light,
-      home: const HomeScreen(),
+      home: kIsWeb && _isControllerTab()
+          ? const WebControllerTabPage()
+          : const HomeScreen(),
     );
+  }
+
+  /// 浏览器 URL 带 ?page=controller 时进入独立主控屏标签页。
+  static bool _isControllerTab() {
+    if (!kIsWeb) return false;
+    final uri = Uri.base;
+    return uri.queryParameters['page'] == 'controller';
   }
 }
