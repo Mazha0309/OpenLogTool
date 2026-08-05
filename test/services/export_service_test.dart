@@ -91,6 +91,16 @@ void main() {
       expect(meta.filename, '点名记录.json');
     });
 
+    test('mime type mapping is case-insensitive', () {
+      expect(ExportService.mimeTypeForExtension('JSON'), 'application/json');
+      expect(ExportService.mimeTypeForExtension('xlsx'),
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      expect(ExportService.mimeTypeForExtension('csv'),
+          'application/octet-stream');
+      expect(
+          ExportService.mimeTypeForExtension(null), 'application/octet-stream');
+    });
+
     test('does not append extension when already present', () {
       final meta = ExportService.webDownloadMeta(
         '点名记录.xlsx',

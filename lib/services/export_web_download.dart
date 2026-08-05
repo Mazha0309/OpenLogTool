@@ -18,6 +18,9 @@ Future<ExportSaveResult> downloadOnWeb(WebDownloadMeta meta) async {
   web.document.body?.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  web.URL.revokeObjectURL(url);
+  // MDN 建议延迟 revoke，避免个别浏览器在同步 click 后立即 revoke 导致下载失败。
+  Future.delayed(const Duration(seconds: 1), () {
+    web.URL.revokeObjectURL(url);
+  });
   return ExportSaveResult(path: meta.filename, usedSaf: true);
 }

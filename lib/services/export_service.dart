@@ -89,12 +89,7 @@ class ExportService {
   }) async {
     if (kIsWeb) {
       final ext = allowedExtensions.firstOrNull;
-      final mime = switch (ext) {
-        'json' => 'application/json',
-        'xlsx' =>
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        _ => 'application/octet-stream',
-      };
+      final mime = mimeTypeForExtension(ext);
       return downloadOnWeb(webDownloadMeta(
         filename,
         bytes,
@@ -127,6 +122,18 @@ class ExportService {
     final file = File(p.join(exportPath, filename));
     await file.writeAsBytes(bytes);
     return ExportSaveResult(path: file.path, usedSaf: false);
+  }
+
+  /// 根据扩展名返回下载 MIME 类型（大小写不敏感）。
+  static String mimeTypeForExtension(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'json':
+        return 'application/json';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   /// 组装 Web 下载元数据；[extension] 缺失时自动补全扩展名。
