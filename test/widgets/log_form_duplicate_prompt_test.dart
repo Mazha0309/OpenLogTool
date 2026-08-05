@@ -124,6 +124,39 @@ void main() {
     expect(logProvider.updateCalls, 0);
     expect(find.byKey(const Key('duplicate-save-update-old')), findsNothing);
   });
+
+  testWidgets('cancelling the duplicate save dialog does nothing',
+      (tester) async {
+    final logProvider = _StaticLogProvider([_oldLog()]);
+    addTearDown(logProvider.dispose);
+    await tester.pumpWidget(_app(logProvider));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '主控呼号 *'),
+      'BG5CTRL',
+    );
+    await _enterCallsign(tester, 'BA4AAA');
+    await tester.tap(find.byKey(const Key('outside-log-form')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('呼号已记录过'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('duplicate-continue-add')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('save-log-record')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('duplicate-save-cancel')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('duplicate-save-cancel')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(logProvider.updateCalls, 0);
+    expect(find.byKey(const Key('duplicate-save-update-old')), findsNothing);
+    expect(find.byKey(const Key('save-log-record')), findsOneWidget);
+  });
 }
 
 LogEntry _oldLog() => LogEntry(

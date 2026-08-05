@@ -905,6 +905,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
               ),
               actions: [
                 TextButton(
+                  key: const Key('duplicate-save-cancel'),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, _DuplicateAction.cancel),
+                  child: Text(l10n.cancel),
+                ),
+                TextButton(
                   key: const Key('duplicate-save-add-new'),
                   onPressed: () =>
                       Navigator.pop(dialogContext, _DuplicateAction.add),
@@ -919,8 +925,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
               ],
             ),
           ) ??
-          _DuplicateAction.add;
+          _DuplicateAction.cancel;
       if (!mounted) return;
+      if (action == _DuplicateAction.cancel) return;
       if (action == _DuplicateAction.update) {
         if (latest != null) {
           await _updateExistingLog(
@@ -1852,4 +1859,4 @@ class _FormSuggestion {
   final bool isAi;
 }
 
-enum _DuplicateAction { add, update }
+enum _DuplicateAction { add, update, cancel }
