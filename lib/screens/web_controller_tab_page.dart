@@ -8,7 +8,9 @@ import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/screens/controller_display_screen.dart';
 import 'package:openlogtool/screens/session_hub_page.dart';
-import 'package:openlogtool/services/web_controller_bridge.dart';
+import 'package:openlogtool/services/web_controller_bridge.dart'
+    if (dart.library.io) 'package:openlogtool/services/web_controller_bridge_stub.dart'
+    as web_bridge;
 import 'package:provider/provider.dart';
 
 /// Web 主控屏独立标签页（?page=controller）。
@@ -29,7 +31,7 @@ class _WebControllerTabPageState extends State<WebControllerTabPage> {
   void initState() {
     super.initState();
     if (kIsWeb) {
-      listenControllerDisplay(onData: (data) {
+      web_bridge.listenControllerDisplay(onData: (data) {
         if (mounted) setState(() => _pushedData = data);
       });
     }
