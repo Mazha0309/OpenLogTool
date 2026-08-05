@@ -327,6 +327,8 @@
   "confirm": "确认",
   "duplicateCallsignWarningSetting": "重复呼号提醒",
   "duplicateCallsignWarningHint": "输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。",
+  "autoAppendPowerWSetting": "功率自动加 W",
+  "autoAppendPowerWHint": "保存时若功率为纯数字（如 50、50.5）自动补上 W；已带单位或含中文的不动。",
   "duplicateCallsignTitle": "呼号已经记录过",
   "duplicateCallsignMessage": "{callsign} 已在本次点名中记录过，仍要保存吗？",
   "@duplicateCallsignMessage": {"placeholders": {"callsign": {"type": "String"}}},

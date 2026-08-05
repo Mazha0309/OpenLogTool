@@ -140,6 +140,40 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('saving appends W to a plain numeric power', (tester) async {
+    final logProvider = _StaticLogProvider(const []);
+    addTearDown(logProvider.dispose);
+    await tester.pumpWidget(_app(logProvider));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '主控呼号 *'),
+      'BG5CTRL',
+    );
+    await _enterCallsign(tester, 'BG5FBT');
+    await tester.enterText(find.widgetWithText(TextFormField, '功率'), '50');
+    await tester.tap(find.byKey(const Key('save-log-record')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(logProvider.addCalls, 1);
+    expect(logProvider.addedLog!.power, '50 W');
+
+    // 已带单位的功率原样保存。
+    await tester.enterText(find.widgetWithText(TextFormField, '功率'), '5kW');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '主控呼号 *'),
+      'BG5CTRL',
+    );
+    await _enterCallsign(tester, 'BG7XYZ');
+    await tester.tap(find.byKey(const Key('save-log-record')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(logProvider.addCalls, 2);
+    expect(logProvider.addedLog!.power, '5kW');
+  });
+
   testWidgets('saving a duplicate as new record adds without touching old',
       (tester) async {
     final logProvider = _StaticLogProvider([_oldLog()]);
@@ -281,7 +315,9 @@ class _StaticLogProvider extends LogProvider {
 
   final List<LogEntry> _logs;
   int updateCalls = 0;
+  int addCalls = 0;
   LogEntry? updatedLog;
+  LogEntry? addedLog;
 
   @override
   List<LogEntry> get logs => _logs;
@@ -293,7 +329,10 @@ class _StaticLogProvider extends LogProvider {
   }
 
   @override
-  Future<void> addLog(LogEntry log, {String? sessionId}) async {}
+  Future<void> addLog(LogEntry log, {String? sessionId}) async {
+    addCalls += 1;
+    addedLog = log;
+  }
 }
 
 class _NoopDictionaryProvider extends DictionaryProvider {

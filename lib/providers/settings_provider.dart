@@ -18,6 +18,7 @@ class SettingsProvider with ChangeNotifier {
       'duplicateCallsignWarningEnabled';
   static const String _controllerDeviceModeEnabledKey =
       'controllerDeviceModeEnabled';
+  static const String _autoAppendPowerWKey = 'autoAppendPowerW';
   static const String _primarySidebarExpandedKey = 'primarySidebarExpanded';
   static const String _limitWorkbenchWidthKey = 'limitWorkbenchWidth';
   static const String _recordEditorDialogEnabledKey =
@@ -36,6 +37,7 @@ class SettingsProvider with ChangeNotifier {
   bool _paginationEnabled = true;
   bool _duplicateCallsignWarningEnabled = true;
   bool _controllerDeviceModeEnabled = false;
+  bool _autoAppendPowerW = true;
   bool _primarySidebarExpanded = true;
   bool _limitWorkbenchWidth = true;
   bool _recordEditorDialogEnabled = true;
@@ -56,6 +58,7 @@ class SettingsProvider with ChangeNotifier {
   bool get callSignQthLinkEnabled => _callSignQthLinkEnabled;
   bool get paginationEnabled => _paginationEnabled;
   bool get duplicateCallsignWarningEnabled => _duplicateCallsignWarningEnabled;
+  bool get autoAppendPowerW => _autoAppendPowerW;
   bool get controllerDeviceModeEnabled => _controllerDeviceModeEnabled;
   bool get primarySidebarExpanded => _primarySidebarExpanded;
   bool get limitWorkbenchWidth => _limitWorkbenchWidth;
@@ -109,6 +112,8 @@ class SettingsProvider with ChangeNotifier {
       _duplicateCallsignWarningKey,
       defaultValue: true,
     );
+    _autoAppendPowerW =
+        await prefs.getBool(_autoAppendPowerWKey, defaultValue: true);
     _controllerDeviceModeEnabled =
         await prefs.getBool(_controllerDeviceModeEnabledKey);
     _primarySidebarExpanded =
@@ -196,6 +201,12 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setAutoAppendPowerW(bool enabled) async {
+    _autoAppendPowerW = enabled;
+    await _saveSetting(_autoAppendPowerWKey, enabled);
+    notifyListeners();
+  }
+
   Future<void> setControllerDeviceModeEnabled(bool enabled) async {
     _controllerDeviceModeEnabled = enabled;
     await _saveSetting(_controllerDeviceModeEnabledKey, enabled);
@@ -278,6 +289,7 @@ class SettingsProvider with ChangeNotifier {
     _exportSettings = ExportSettings();
     _callSignQthLinkEnabled = true;
     _paginationEnabled = true;
+    _autoAppendPowerW = true;
     _controllerDeviceModeEnabled = false;
     _primarySidebarExpanded = true;
     _limitWorkbenchWidth = true;
@@ -299,6 +311,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.remove(_appLocalePreferenceKey);
     await prefs.remove(_tablePageSizeKey);
     await prefs.remove(_duplicateCallsignWarningKey);
+    await prefs.remove(_autoAppendPowerWKey);
     await prefs.remove(controllerDisplayPreferencesStorageKey);
 
     notifyListeners();

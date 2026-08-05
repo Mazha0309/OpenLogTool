@@ -286,6 +286,8 @@
   "confirm": "Confirm",
   "duplicateCallsignWarningSetting": "Duplicate callsign warning",
   "duplicateCallsignWarningHint": "Check immediately after entering a callsign for an existing record in this net, and ask whether to update the old record or add a new one.",
+  "autoAppendPowerWSetting": "Auto-append W to power",
+  "autoAppendPowerWHint": "Append W to a plain numeric power (e.g. 50, 50.5) when saving; leave values that already carry a unit or contain Chinese untouched.",
   "duplicateCallsignTitle": "Callsign already recorded",
   "duplicateCallsignMessage": "{callsign} is already recorded in this net. Save it again?",
   "saveAnyway": "Save anyway",

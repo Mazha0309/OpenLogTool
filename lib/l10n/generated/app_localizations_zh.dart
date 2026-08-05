@@ -957,6 +957,12 @@ class AppLocalizationsZh extends AppLocalizations {
       '输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。';
 
   @override
+  String get autoAppendPowerWSetting => '功率自动加 W';
+
+  @override
+  String get autoAppendPowerWHint => '保存时若功率为纯数字（如 50、50.5）自动补上 W；已带单位或含中文的不动。';
+
+  @override
   String get duplicateCallsignTitle => '呼号已经记录过';
 
   @override

@@ -1786,6 +1786,18 @@ abstract class AppLocalizations {
   /// **'输入完呼号后立即检查同一场点名中的既有记录，弹窗询问是更新旧记录还是新增记录。'**
   String get duplicateCallsignWarningHint;
 
+  /// No description provided for @autoAppendPowerWSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'功率自动加 W'**
+  String get autoAppendPowerWSetting;
+
+  /// No description provided for @autoAppendPowerWHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存时若功率为纯数字（如 50、50.5）自动补上 W；已带单位或含中文的不动。'**
+  String get autoAppendPowerWHint;
+
   /// No description provided for @duplicateCallsignTitle.
   ///
   /// In zh, this message translates to:

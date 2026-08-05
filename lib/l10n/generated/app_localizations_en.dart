@@ -1002,6 +1002,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Check immediately after entering a callsign for an existing record in this net, and ask whether to update the old record or add a new one.';
 
   @override
+  String get autoAppendPowerWSetting => 'Auto-append W to power';
+
+  @override
+  String get autoAppendPowerWHint =>
+      'Append W to a plain numeric power (e.g. 50, 50.5) when saving; leave values that already carry a unit or contain Chinese untouched.';
+
+  @override
   String get duplicateCallsignTitle => 'Callsign already recorded';
 
   @override

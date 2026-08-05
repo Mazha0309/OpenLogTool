@@ -74,6 +74,29 @@ void main() {
     );
     restored.dispose();
   });
+
+  test('auto-append-W defaults on, preserves opt-out, and resets on', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final settings = SettingsProvider();
+    await _waitForInitialLoad(settings);
+
+    expect(settings.autoAppendPowerW, isTrue);
+    await settings.setAutoAppendPowerW(false);
+    expect(settings.autoAppendPowerW, isFalse);
+    settings.dispose();
+
+    final restored = SettingsProvider();
+    await _waitForInitialLoad(restored);
+    expect(restored.autoAppendPowerW, isFalse);
+
+    await restored.resetToDefaults();
+    expect(restored.autoAppendPowerW, isTrue);
+    expect(
+      (await SharedPreferences.getInstance()).containsKey('autoAppendPowerW'),
+      isFalse,
+    );
+    restored.dispose();
+  });
 }
 
 Future<void> _waitForInitialLoad(SettingsProvider settings) {
