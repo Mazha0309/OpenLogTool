@@ -22,157 +22,128 @@
 
 ---
 
-### Task 1: Web 字体默认更纱黑体 + 字体子集化工具
+### Task 1: Web 字体默认更纱黑体 + 字体子集化（FontLoader 方案）
 
 **Files:**
-- Modify: `web/index.html`
-- Modify: `lib/theme/app_theme.dart`（或主题构建所在文件，见下）
-- Create: `tool/subset_fonts.py`
-- Test: `test/theme/theme_test.dart`（新建）
+- Modify: `pubspec.yaml`（移除 fonts 声明，保留 assets 目录）
+- Create: `lib/services/app_fonts.dart`（FontLoader 分平台加载）
+- Modify: `lib/main.dart`（main 开头 await loadAppFonts）
+- Modify: `tool/subset_fonts.py`（输出 ttf 而非 woff2）
+- Modify: `web/index.html`（仅保留 #loader + flutter-first-frame；不加 @font-face）
+- Modify: `lib/theme/app_theme.dart`（fontFamily 默认 'SarasaGothicSC'）
+- Test: `test/theme/theme_test.dart`、`test/services/app_fonts_test.dart`
 
-背景：`assets/fonts/SarasaGothicSC-Regular.ttf`（9.7MB）已注册在 pubspec fonts 中，但 Web 构建会整体加载导致首屏极慢且常失败回退系统字体。方案：构建时生成 CJK 子集 woff2 到 `web/fonts/`，index.html 用 @font-face 声明，主题默认 fontFamily 指向 SarasaGothicSC。
+背景与方案：CanvasKit/skwasm 渲染器不读取 CSS @font-face，Flutter Web 的 FontManifest 只认 pubspec fonts 声明（且只支持 ttf/otf）。因此 @font-face + woff2 方案对 wasm 部署无效。改为：
+- 子集化输出 ttf（GB2312 一级 + 符号，约 1.5MB）到 `assets/fonts/SarasaGothicSC-subset.ttf`，与完整 ttf 同目录（都在 assets/fonts/ 打包，惰性下载）。
+- **移除 pubspec fonts 声明**（SarasaGothicSC 不再由 FontManifest 自动加载）。
+- 应用启动时 `loadAppFonts()`：Web 用 FontLoader 加载子集 ttf；桌面加载完整 ttf。首屏只下载子集。
+- index.html 不加 @font-face（避免与引擎注入冲突）；#loader 进度条保留，加 window.onerror 兜底。
 
-- [ ] **Step 1: 找到主题构建函数**
+- [ ] **Step 1: 修改子集化脚本输出 ttf**
 
-运行 `grep -rn "buildAppTheme" lib/ --include="*.dart" | grep -v generated` 确认 `buildAppTheme` 定义文件（应在 lib/theme/ 下）。记录文件路径，后续 Step 5 修改它。
+`tool/subset_fonts.py` 中 pyftsubset 参数去掉 `--flavor=woff2`（FontLoader 需要 ttf），并在 main() 开头加 `args.dst.parent.mkdir(parents=True, exist_ok=True)`。GB2312 一级 + COMMON 逻辑保持不变。docstring 改为描述 ttf 输出。
 
-- [ ] **Step 2: 创建字体子集化脚本**
-
-创建 `tool/subset_fonts.py`：
-
-```python
-#!/usr/bin/env python3
-"""Subset Sarasa Gothic SC into a web woff2 (GB2312 common chars + ASCII)."""
-import argparse, subprocess
-from pathlib import Path
-
-COMMON = (
-    " !\"#$%&'()*+,-./0123456789:;<=>?@"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
-    "abcdefghijklmnopqrstuvwxyz{|}~"
-    "，。、；：？！“”‘’（）【】《》〈〉—…·％°℃＋－×÷＝＜＞￥★☆①②③④⑤⑥⑦⑧⑨⑩"
-)
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("src", type=Path)
-    parser.add_argument("dst", type=Path)
-    args = parser.parse_args()
-
-    # GB2312 level-1 (3755 chars) encoded as unicode range
-    # level-1 characters occupy rows 0xB0-0xD7, bytes 0xA1-0xFE in GB2312.
-    chars = set(COMMON)
-    for row in range(0xB0, 0xD8):
-        for col in range(0xA1, 0xFF):
-            gb = bytes([row, col])
-            try:
-                chars.add(gb.decode("gb2312"))
-            except UnicodeDecodeError:
-                pass
-    # GB2312 level-2 (rows 0xD8-0xF7) — skip for size; add on demand later.
-    textfile = args.dst.with_suffix(".txt")
-    textfile.write_text("".join(sorted(chars)), encoding="utf-8")
-    subprocess.run([
-        "pyftsubset", str(args.src),
-        f"--output-file={args.dst}",
-        f"--text-file={textfile}",
-        "--flavor=woff2",
-        "--layout-features=*",
-        "--no-hinting",
-    ], check=True)
-    print(f"subset done: {args.dst}")
-    return 0
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-```
-
-- [ ] **Step 3: 本地生成子集字体**
+- [ ] **Step 2: 生成子集 ttf 并清理旧产物**
 
 ```bash
-pip install fonttools brotli 2>&1 | tail -1
-python3 tool/subset_fonts.py assets/fonts/SarasaGothicSC-Regular.ttf web/fonts/SarasaGothicSC-subset.woff2
-ls -la web/fonts/
+python3 tool/subset_fonts.py assets/fonts/SarasaGothicSC-Regular.ttf assets/fonts/SarasaGothicSC-subset.ttf
+ls -la assets/fonts/
+git rm -r web/fonts/ 2>/dev/null || rm -rf web/fonts/
 ```
-预期：生成 `web/fonts/SarasaGothicSC-subset.woff2`，体积 ≤ 1MB（GB2312 一级 3755 字 + 常用符号；若 >1.5MB 属异常，检查 pip 安装的 fonttools 是否包含 brotli）。
+预期：生成 `assets/fonts/SarasaGothicSC-subset.ttf`（约 1.5MB，≤2MB 可接受）；`web/fonts/` 目录删除（woff2 方案废弃）。
 
-- [ ] **Step 4: 修改 web/index.html 加载字体与进度条**
+- [ ] **Step 3: pubspec 移除 fonts 声明**
 
-在 `<head>` 内、`<base>` 标签之后插入：
+`pubspec.yaml`：删除 `fonts:` 块（SarasaGothicSC 声明），**保留** `assets: - assets/fonts/`（两个 ttf 都随包发布、惰性下载）。`flutter pub get` 后 `flutter gen-l10n` 无影响（若 pubspec 其他部分引用 fontFamily 均无碍）。
+
+- [ ] **Step 4: 创建 loadAppFonts**
+
+创建 `lib/services/app_fonts.dart`：
+
+```dart
+import 'dart:ui';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
+
+/// 应用启动时按平台加载 SarasaGothicSC：
+/// Web 加载子集 ttf（首屏只下载子集），桌面加载完整 ttf。
+/// 字体文件在 assets/fonts/ 下（随包发布、惰性下载）。
+Future<void> loadAppFonts() async {
+  final asset = kIsWeb
+      ? 'assets/fonts/SarasaGothicSC-subset.ttf'
+      : 'assets/fonts/SarasaGothicSC-Regular.ttf';
+  final data = await rootBundle.load(asset);
+  final loader = FontLoader('SarasaGothicSC')..addFont(data);
+  await loader.load();
+}
+
+/// 平台选择字体资产路径（可测试纯函数）。
+String appFontAssetPath({required bool isWeb}) =>
+    isWeb
+        ? 'assets/fonts/SarasaGothicSC-subset.ttf'
+        : 'assets/fonts/SarasaGothicSC-Regular.ttf';
+```
+
+- [ ] **Step 5: main.dart 接入**
+
+`lib/main.dart` 的 `main()` 中、`WidgetsFlutterBinding.ensureInitialized()` 之后调用：
+
+```dart
+import 'package:openlogtool/services/app_fonts.dart';
+// ...
+await loadAppFonts();
+```
+
+- [ ] **Step 6: 主题默认字体**
+
+`lib/theme/app_theme.dart` 的 `buildAppTheme` 中 `fontFamily: fontFamily ?? 'SarasaGothicSC'`（如已由上一轮改动存在则跳过）。
+
+- [ ] **Step 7: 更新测试**
+
+`test/theme/theme_test.dart` 保持（断言默认 fontFamily）；新建 `test/services/app_fonts_test.dart`：
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:openlogtool/services/app_fonts.dart';
+
+void main() {
+  test('web uses subset font asset', () {
+    expect(appFontAssetPath(isWeb: true),
+        'assets/fonts/SarasaGothicSC-subset.ttf');
+  });
+
+  test('desktop uses full font asset', () {
+    expect(appFontAssetPath(isWeb: false),
+        'assets/fonts/SarasaGothicSC-Regular.ttf');
+  });
+}
+```
+
+- [ ] **Step 8: index.html 清理**
+
+`web/index.html`：删除上一轮加的 `@font-face` 样式块（保留 `#loader` + `flutter-first-frame` 逻辑；`#loader` 加 `window.onerror` 兜底：页面 JS 加载失败时也移除 loader）：
 
 ```html
-<style>
-  @font-face {
-    font-family: 'SarasaGothicSC';
-    src: url('fonts/SarasaGothicSC-subset.woff2') format('woff2');
-    font-display: swap;
-    font-weight: 400;
-  }
-  #loader { position: fixed; inset: 0; display: flex; align-items: center;
-            justify-content: center; background: #faf8f2;
-            font-family: sans-serif; color: #666; z-index: 9999; }
-  #loader::after { content: '加载中…'; }
-  .flt-app-ready #loader { display: none; }
-</style>
-```
-
-并在 `<body>` 内第一行加 `<div id="loader"></div>`。将 `flutter_bootstrap.js` 的加载脚本改为启动完成后隐藏 loader（Flutter 3.22+ 支持 `_flutter.loader.loaderId` 回调，改为）：
-
-```html
-<script src="flutter_bootstrap.js" id="flutter-bootstrap" async></script>
 <script>
   window.addEventListener('flutter-first-frame', function () {
+    document.body.classList.add('flt-app-ready');
+  });
+  window.addEventListener('error', function () {
     document.body.classList.add('flt-app-ready');
   });
 </script>
 ```
 
-- [ ] **Step 5: 主题默认字体**
+- [ ] **Step 9: 测试 + analyze + 构建验证**
 
-在 `buildAppTheme` 返回的 `ThemeData` 中设置 `fontFamily: 'SarasaGothicSC'`（若 ThemeData 已指定其他字体则替换）。修改示例（以 lib/theme/app_theme.dart 为例，按 Step 1 实际文件）：
+运行：`flutter test test/theme/theme_test.dart test/services/app_fonts_test.dart`（PASS）、`flutter analyze`（No issues）、`flutter build web --wasm`（成功；`build/web/assets/FontManifest.json` 中不应再有 SarasaGothicSC 条目）。
 
-```dart
-ThemeData buildAppTheme(ColorScheme colorScheme) {
-  return ThemeData(
-    colorScheme: colorScheme,
-    fontFamily: 'SarasaGothicSC',
-    // ... 其余现有参数保持不变
-  );
-}
-```
-
-- [ ] **Step 6: 新建主题测试**
-
-创建 `test/theme/theme_test.dart`：
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:openlogtool/theme/app_theme.dart' as theme;
-
-void main() {
-  test('default theme uses SarasaGothicSC as the font family', () {
-    final t = theme.buildAppTheme(ColorScheme.fromSeed(seedColor: Colors.blue));
-    expect(t.fontFamily, 'SarasaGothicSC');
-  });
-}
-```
-
-（若 buildAppTheme 实际签名不同，按真实签名调整调用。）
-
-- [ ] **Step 7: 运行测试与 analyze**
-
-运行：`flutter test test/theme/theme_test.dart`（预期 PASS）然后 `flutter analyze`（预期 No issues）。
-
-- [ ] **Step 8: 提交**
+- [ ] **Step 10: 提交**
 
 ```bash
-git add web/index.html web/fonts/ tool/subset_fonts.py test/theme/theme_test.dart lib/theme/
-git commit -m "feat: default to subset Sarasa Gothic SC font on web"
+git add pubspec.yaml lib/services/app_fonts.dart lib/main.dart lib/theme/app_theme.dart tool/subset_fonts.py assets/fonts/ web/index.html test/theme/theme_test.dart test/services/app_fonts_test.dart
+git commit -m "feat: default to subset Sarasa Gothic SC font on web (FontLoader)"
 ```
-
----
-
 ### Task 2: Web 导出修复（原生浏览器下载）
 
 **Files:**
