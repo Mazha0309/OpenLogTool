@@ -156,6 +156,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openControllerTab => 'Open controller in a new tab';
 
   @override
+  String get openControllerInApp => 'Open controller in this tab';
+
+  @override
   String get openSecondDisplayWindow => 'Open second-display window';
 
   @override

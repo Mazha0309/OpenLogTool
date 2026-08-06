@@ -154,6 +154,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openControllerTab => '打开主控屏标签页';
 
   @override
+  String get openControllerInApp => '当前标签页打开主控屏';
+
+  @override
   String get openSecondDisplayWindow => '打开第二屏窗口';
 
   @override

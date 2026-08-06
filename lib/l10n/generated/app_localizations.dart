@@ -358,6 +358,12 @@ abstract class AppLocalizations {
   /// **'打开主控屏标签页'**
   String get openControllerTab;
 
+  /// No description provided for @openControllerInApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前标签页打开主控屏'**
+  String get openControllerInApp;
+
   /// No description provided for @openSecondDisplayWindow.
   ///
   /// In zh, this message translates to:

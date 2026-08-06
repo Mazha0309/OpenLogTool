@@ -2,23 +2,16 @@ import 'dart:convert';
 import 'dart:js_interop';
 
 import 'package:openlogtool/models/controller_display.dart';
+import 'package:openlogtool/services/url_sync.dart' show buildSyncQuery;
 import 'package:web/web.dart' as web;
 
 /// 主控屏数据推送频道名（新标签页与主窗口共享）。
 const String controllerBroadcastChannelName = 'openlogtool-controller';
 
-/// 主控屏新标签页 URL（基于当前页面路径，带 page/session 参数）。
-String controllerTabUrl(String sessionId) {
-  final params = <String, String>{
-    'page': 'controller',
-    if (sessionId.isNotEmpty) 'session': sessionId,
-  };
-  final query = params.entries
-      .map((e) =>
-          '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-      .join('&');
-  return query;
-}
+/// 主控屏新标签页 URL（带 page/session 参数，须以 ? 开头否则会被浏览器
+/// 当作相对路径）。
+String controllerTabUrl(String sessionId) =>
+    buildSyncQuery('controller', sessionId);
 
 /// 在主标签页打开主控屏。
 void openWebControllerTab(String sessionId) {
