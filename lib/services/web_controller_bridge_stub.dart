@@ -5,6 +5,10 @@ import 'package:openlogtool/services/url_sync.dart' show buildSyncQuery;
 /// controllerTabUrl 是纯函数，保留真实 URL 以便测试。
 const String controllerBroadcastChannelName = 'openlogtool-controller';
 
+bool isControllerTabRoute() => false;
+
+String? controllerTabSessionId() => null;
+
 String controllerTabUrl(String sessionId) =>
     buildSyncQuery('controller', sessionId);
 

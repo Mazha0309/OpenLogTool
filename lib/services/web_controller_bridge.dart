@@ -8,6 +8,19 @@ import 'package:web/web.dart' as web;
 /// 主控屏数据推送频道名（新标签页与主窗口共享）。
 const String controllerBroadcastChannelName = 'openlogtool-controller';
 
+/// 当前 URL 是否是主控屏标签页（?page=controller）。
+/// 注意：不能依赖 Uri.base——index.html 的 <base> 标签会使它丢失 query。
+bool isControllerTabRoute() {
+  final uri = Uri.parse(web.window.location.href);
+  return uri.queryParameters['page'] == 'controller';
+}
+
+/// 主控屏标签页的会话参数（URL 无 session 时返回 null）。
+String? controllerTabSessionId() {
+  final uri = Uri.parse(web.window.location.href);
+  return uri.queryParameters['session'];
+}
+
 /// 主控屏新标签页 URL（带 page/session 参数，须以 ? 开头否则会被浏览器
 /// 当作相对路径）。
 String controllerTabUrl(String sessionId) =>

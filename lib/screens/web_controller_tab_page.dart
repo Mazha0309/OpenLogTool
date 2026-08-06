@@ -30,10 +30,26 @@ class _WebControllerTabPageState extends State<WebControllerTabPage> {
   @override
   void initState() {
     super.initState();
+    _restoreSessionFromUrl();
     if (kIsWeb) {
       web_bridge.listenControllerDisplay(onData: (data) {
         if (mounted) setState(() => _pushedData = data);
       });
+    }
+  }
+
+  /// 新标签页是全新应用实例：按 URL 的 session 参数恢复会话，
+  /// 否则主控屏没有数据可显示。
+  Future<void> _restoreSessionFromUrl() async {
+    final sessionId = web_bridge.controllerTabSessionId();
+    if (sessionId == null || sessionId.isEmpty) return;
+    final sessions = context.read<SessionProvider>();
+    final logs = context.read<LogProvider>();
+    try {
+      await logs.reloadForSession(sessionId, propagateErrors: true);
+      await sessions.switchToSession(sessionId);
+    } catch (e) {
+      debugPrint('[WebControllerTabPage] session restore failed: $e');
     }
   }
 
