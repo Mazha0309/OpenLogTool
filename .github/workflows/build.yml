@@ -220,6 +220,9 @@ jobs:
           install -m 0644 \
             deploy/web/release/Dockerfile \
             "$bundle_dir/Dockerfile"
+          install -m 0755 \
+            deploy/web/release/docker-entrypoint.sh \
+            "$bundle_dir/docker-entrypoint.sh"
           install -m 0644 \
             deploy/web/release/docker-compose.yml \
             "$bundle_dir/docker-compose.yml"
