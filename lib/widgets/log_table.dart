@@ -31,6 +31,8 @@ class _LogTableState extends State<LogTable> {
   bool _editingSaveInProgress = false;
 
   final ScrollController _horizontalController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -44,6 +46,7 @@ class _LogTableState extends State<LogTable> {
       controller.dispose();
     }
     _horizontalController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -263,170 +266,219 @@ class _LogTableState extends State<LogTable> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final sourceLogs = _searchQuery.isEmpty
+            ? logProvider.logs
+            : _filterLogs(logProvider.logs, _searchQuery);
         final displayEntries = _visibleLogEntries(
           logProvider,
           settingsProvider,
+          sourceLogs: sourceLogs,
         );
+        final searchField = _buildSearchField(context);
         if (constraints.maxWidth < _mobileBreakpoint) {
-          return _buildMobileRecords(
-            context,
-            logProvider,
-            settingsProvider,
-            displayEntries,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              searchField,
+              if (sourceLogs.isEmpty && _searchQuery.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      context.l10n.logTableSearchNoMatches,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                )
+              else
+                _buildMobileRecords(
+                  context,
+                  logProvider,
+                  settingsProvider,
+                  displayEntries,
+                  totalLogs: sourceLogs.length,
+                ),
+            ],
           );
         }
         final visibleRows = displayEntries.length;
-        final contentHeight = (48.0 + visibleRows * 56.0).clamp(104.0, 400.0);
-        final enableInnerVerticalScroll = !settingsProvider.paginationEnabled &&
-            48.0 + logProvider.logs.length * 56.0 > 400.0;
+        final totalContentHeight = 48.0 + visibleRows * 56.0;
+        // 分页开启时表格高度尽量匹配整页内容（页大小变化时高度随之变化），
+        // 并设一个上限，超出部分靠内部纵向滚动；分页关闭时同样允许滚动。
+        final pageSize = settingsProvider.tablePageSize;
+        final contentCap = settingsProvider.paginationEnabled
+            ? (48.0 + pageSize * 56.0).clamp(104.0, 700.0)
+            : 560.0;
         final maxHeight = constraints.maxHeight.isFinite
             ? constraints.maxHeight
-            : contentHeight;
+            : totalContentHeight.clamp(104.0, contentCap);
+        // 内容超出容器高度时始终启用内部纵向滚动（分页开启时行数多也可能
+        // 超高），否则数据会被截断且无法滚动。
+        final enableInnerVerticalScroll = totalContentHeight > maxHeight;
         final colors = Theme.of(context).colorScheme;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(
-              height: maxHeight,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: DecoratedBox(
-                  key: const Key('log-table-surface'),
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    border: Border.all(color: colors.outlineVariant),
-                    borderRadius: BorderRadius.circular(14),
+            searchField,
+            if (sourceLogs.isEmpty && _searchQuery.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    context.l10n.logTableSearchNoMatches,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (notification) => true,
-                    child: Scrollbar(
-                      controller: horizontalController,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
+                ),
+              )
+            else
+              _buildDesktopTableContainer(
+                maxHeight: maxHeight,
+                expandToRemaining: constraints.maxHeight.isFinite,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: DecoratedBox(
+                    key: const Key('log-table-surface'),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      border: Border.all(color: colors.outlineVariant),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notification) => true,
+                      child: Scrollbar(
                         controller: horizontalController,
-                        child: ConstrainedBox(
-                          constraints:
-                              BoxConstraints(minWidth: constraints.maxWidth),
-                          child: SingleChildScrollView(
-                            physics: enableInnerVerticalScroll
-                                ? const ClampingScrollPhysics()
-                                : const NeverScrollableScrollPhysics(),
-                            child: DataTable(
-                              // LogProvider replaces its visible projection
-                              // after every durable add/update/delete or
-                              // collaboration reconciliation. Give that
-                              // projection its own element identity so Flutter
-                              // cannot retain stale row render state across a
-                              // synchronous provider refresh.
-                              key: ObjectKey(logProvider.logs),
-                              columnSpacing: 16,
-                              horizontalMargin: 16,
-                              headingRowHeight: 48,
-                              dataRowMinHeight: 56,
-                              dataRowMaxHeight: 56,
-                              headingRowColor: WidgetStatePropertyAll(
-                                colors.surfaceContainerHighest,
-                              ),
-                              headingTextStyle: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: colors.onSurface,
-                                fontSize: 13,
-                              ),
-                              dataTextStyle: TextStyle(
-                                color: colors.onSurface,
-                                fontSize: 13,
-                              ),
-                              dividerThickness: 1,
-                              border: TableBorder(
-                                horizontalInside: BorderSide(
-                                  color: colors.outlineVariant,
+                        thumbVisibility: true,
+                        trackVisibility: true,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          controller: horizontalController,
+                          child: ConstrainedBox(
+                            constraints:
+                                BoxConstraints(minWidth: constraints.maxWidth),
+                            child: SingleChildScrollView(
+                              physics: enableInnerVerticalScroll
+                                  ? const ClampingScrollPhysics()
+                                  : const NeverScrollableScrollPhysics(),
+                              child: DataTable(
+                                // LogProvider replaces its visible projection
+                                // after every durable add/update/delete or
+                                // collaboration reconciliation. Give that
+                                // projection its own element identity so Flutter
+                                // cannot retain stale row render state across a
+                                // synchronous provider refresh.
+                                key: ObjectKey(logProvider.logs),
+                                columnSpacing: 16,
+                                horizontalMargin: 16,
+                                headingRowHeight: 48,
+                                dataRowMinHeight: 56,
+                                dataRowMaxHeight: 56,
+                                headingRowColor: WidgetStatePropertyAll(
+                                  colors.surfaceContainerHighest,
                                 ),
-                              ),
-                              columns: [
-                                DataColumn(
-                                  label:
-                                      _buildCenteredCell(const Text('#'), 60),
+                                headingTextStyle: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.onSurface,
+                                  fontSize: 13,
                                 ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldTime),
-                                    100,
+                                dataTextStyle: TextStyle(
+                                  color: colors.onSurface,
+                                  fontSize: 13,
+                                ),
+                                dividerThickness: 1,
+                                border: TableBorder(
+                                  horizontalInside: BorderSide(
+                                    color: colors.outlineVariant,
                                   ),
                                 ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldController),
-                                    120,
+                                columns: [
+                                  DataColumn(
+                                    label:
+                                        _buildCenteredCell(const Text('#'), 60),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldCallsign),
-                                    120,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldTime),
+                                      100,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldRstSent),
-                                    60,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldController),
+                                      120,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldRstRcvd),
-                                    60,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldCallsign),
+                                      120,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldQth),
-                                    150,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldRstSent),
+                                      60,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldDevice),
-                                    150,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldRstRcvd),
+                                      60,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldPower),
-                                    80,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldQth),
+                                      150,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldAntenna),
-                                    150,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldDevice),
+                                      150,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldHeight),
-                                    80,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldPower),
+                                      80,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldRemarks),
-                                    120,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldAntenna),
+                                      150,
+                                    ),
                                   ),
-                                ),
-                                DataColumn(
-                                  label: _buildCenteredCell(
-                                    Text(context.l10n.fieldActions),
-                                    120,
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldHeight),
+                                      80,
+                                    ),
                                   ),
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldRemarks),
+                                      120,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: _buildCenteredCell(
+                                      Text(context.l10n.fieldActions),
+                                      120,
+                                    ),
+                                  ),
+                                ],
+                                rows: _buildTableRows(
+                                  context,
+                                  logProvider,
+                                  displayEntries,
                                 ),
-                              ],
-                              rows: _buildTableRows(
-                                context,
-                                logProvider,
-                                displayEntries,
                               ),
                             ),
                           ),
@@ -436,12 +488,11 @@ class _LogTableState extends State<LogTable> {
                   ),
                 ),
               ),
-            ),
             // 分页控件
             if (settingsProvider.paginationEnabled &&
-                logProvider.logs.length > settingsProvider.tablePageSize)
+                sourceLogs.length > settingsProvider.tablePageSize)
               _buildPaginationControls(
-                logProvider.logs.length,
+                sourceLogs.length,
                 settingsProvider.tablePageSize,
               ),
           ],
@@ -452,9 +503,10 @@ class _LogTableState extends State<LogTable> {
 
   List<MapEntry<int, LogEntry>> _visibleLogEntries(
     LogProvider logProvider,
-    SettingsProvider settingsProvider,
-  ) {
-    final logs = logProvider.logs;
+    SettingsProvider settingsProvider, {
+    List<LogEntry>? sourceLogs,
+  }) {
+    final logs = sourceLogs ?? logProvider.logs;
     final indexedLogs = logs.asMap().entries.toList().reversed.toList();
 
     // Reset page when underlying log list is replaced (e.g. session switch).
@@ -481,12 +533,91 @@ class _LogTableState extends State<LogTable> {
     return indexedLogs;
   }
 
+  /// 按搜索词过滤记录：匹配呼号、时间、RST、QTH、设备、功率、天线、高度、
+  /// 备注与主控（大小写不敏感）。
+  List<LogEntry> _filterLogs(List<LogEntry> logs, String query) {
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty) return logs;
+    return logs
+        .where((log) => [
+              log.callsign,
+              log.time,
+              log.report,
+              log.rstRcvd,
+              log.qth,
+              log.device,
+              log.power,
+              log.antenna,
+              log.height,
+              log.remarks,
+              log.controller,
+            ].any((value) => value.toLowerCase().contains(needle)))
+        .toList(growable: false);
+  }
+
+  /// 表格高度容器：父约束有限时占满剩余空间（配合外层搜索框），
+  /// 无限时用计算出的 [maxHeight]。
+  Widget _buildDesktopTableContainer({
+    required double maxHeight,
+    required bool expandToRemaining,
+    required Widget child,
+  }) {
+    if (expandToRemaining) {
+      return Expanded(
+        child: SizedBox(height: double.infinity, child: child),
+      );
+    }
+    return SizedBox(height: maxHeight, child: child);
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    final l10n = context.l10n;
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        key: const Key('log-table-search'),
+        controller: _searchController,
+        onChanged: (value) => setState(() {
+          _searchQuery = value;
+          _currentPage = 0;
+        }),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: l10n.logTableSearchHint,
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  key: const Key('log-table-search-clear'),
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: l10n.logTableSearchClear,
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                      _currentPage = 0;
+                    });
+                  },
+                ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: colors.outlineVariant),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMobileRecords(
     BuildContext context,
     LogProvider logProvider,
     SettingsProvider settingsProvider,
-    List<MapEntry<int, LogEntry>> displayEntries,
-  ) {
+    List<MapEntry<int, LogEntry>> displayEntries, {
+    required int totalLogs,
+  }) {
     return Column(
       key: const Key('mobile-log-list'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -500,9 +631,9 @@ class _LogTableState extends State<LogTable> {
           if (index != displayEntries.length - 1) const SizedBox(height: 10),
         ],
         if (settingsProvider.paginationEnabled &&
-            logProvider.logs.length > settingsProvider.tablePageSize)
+            totalLogs > settingsProvider.tablePageSize)
           _buildPaginationControls(
-            logProvider.logs.length,
+            totalLogs,
             settingsProvider.tablePageSize,
           ),
       ],

@@ -456,6 +456,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSavedRecords => '暂无已保存记录';
 
   @override
+  String get logTableSearchHint => '搜索呼号 / QTH / 备注…';
+
+  @override
+  String get logTableSearchClear => '清除搜索';
+
+  @override
+  String get logTableSearchNoMatches => '没有匹配的记录';
+
+  @override
   String get addFirstRecordHint => '在上方表单中添加第一条记录。';
 
   @override

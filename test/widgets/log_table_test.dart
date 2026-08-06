@@ -338,6 +338,10 @@ void main() {
   });
 
   testWidgets('table honors configurable page size', (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues(
       <String, Object>{
         'recordEditorDialogEnabled': false,
@@ -939,8 +943,9 @@ void main() {
       isNotNull,
     );
   });
-}
 
+  _searchTests();
+}
 Future<void> _pumpLogTable(
   WidgetTester tester,
   LogProvider logProvider, {
@@ -1066,4 +1071,159 @@ class _StaticLogProvider extends LogProvider {
     ];
     notifyListeners();
   }
+}
+
+void _searchTests() {
+  testWidgets('desktop search filters rows and pagination', (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'recordEditorDialogEnabled': false},
+    );
+    final logProvider = _StaticLogProvider(
+      List<LogEntry>.generate(
+        12,
+        (index) => _log(
+          id: 'log-${index + 1}',
+          time: 'TIME_${index + 1}',
+          report: 'SENT_${index + 1}',
+          rstRcvd: 'RCVD_${index + 1}',
+        ),
+      ),
+    );
+    final settingsProvider = SettingsProvider();
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: settingsProvider,
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LogTable(readOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('log-table-search')), findsOneWidget);
+    expect(find.text('SENT_12'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('log-table-search')), 'SENT_12');
+    await tester.pump();
+
+    var table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows, hasLength(1));
+    expect(
+      find.descendant(
+        of: find.byType(DataTable),
+        matching: find.text('SENT_12'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('SENT_11'), findsNothing);
+    // 过滤后不足一页时不显示分页控件。
+    expect(find.byKey(const Key('log-pagination')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('log-table-search-clear')));
+    await tester.pump();
+    table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows, hasLength(10));
+    expect(find.text('SENT_12'), findsOneWidget);
+  });
+
+  testWidgets('search with no matches shows a hint', (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'recordEditorDialogEnabled': false},
+    );
+    final logProvider = _StaticLogProvider(
+      [_log(id: 'log-1', time: 'T1', report: 'S1', rstRcvd: 'R1')],
+    );
+    final settingsProvider = SettingsProvider();
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: settingsProvider,
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LogTable(readOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('log-table-search')),
+      'NOPE_NOPE',
+    );
+    await tester.pump();
+
+    expect(find.text('没有匹配的记录'), findsOneWidget);
+    expect(find.byType(DataTable), findsNothing);
+  });
+
+  testWidgets('mobile search filters cards', (tester) async {
+    tester.view.physicalSize = const Size(500, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'recordEditorDialogEnabled': false},
+    );
+    final logProvider = _StaticLogProvider(
+      List<LogEntry>.generate(
+        6,
+        (index) => _log(
+          id: 'log-${index + 1}',
+          time: 'TIME_${index + 1}',
+          report: 'SENT_${index + 1}',
+          rstRcvd: 'RCVD_${index + 1}',
+        ),
+      ),
+    );
+    final settingsProvider = SettingsProvider();
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: settingsProvider,
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LogTable(readOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('mobile-log-list')), findsOneWidget);
+    expect(find.byKey(const Key('log-table-search')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('log-table-search')),
+      'SENT_3',
+    );
+    await tester.pump();
+
+    expect(find.text('SENT_3'), findsOneWidget);
+    expect(find.text('SENT_2'), findsNothing);
+  });
 }

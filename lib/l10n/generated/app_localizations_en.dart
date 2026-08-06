@@ -466,6 +466,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noSavedRecords => 'No saved records';
 
   @override
+  String get logTableSearchHint => 'Search callsign / QTH / remarks…';
+
+  @override
+  String get logTableSearchClear => 'Clear search';
+
+  @override
+  String get logTableSearchNoMatches => 'No matching records';
+
+  @override
   String get addFirstRecordHint => 'Add the first record using the form above.';
 
   @override

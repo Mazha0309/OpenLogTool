@@ -874,6 +874,24 @@ abstract class AppLocalizations {
   /// **'暂无已保存记录'**
   String get noSavedRecords;
 
+  /// No description provided for @logTableSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索呼号 / QTH / 备注…'**
+  String get logTableSearchHint;
+
+  /// No description provided for @logTableSearchClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除搜索'**
+  String get logTableSearchClear;
+
+  /// No description provided for @logTableSearchNoMatches.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的记录'**
+  String get logTableSearchNoMatches;
+
   /// No description provided for @addFirstRecordHint.
   ///
   /// In zh, this message translates to:
