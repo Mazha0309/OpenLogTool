@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/server_api.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
+    show AnyhowException;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum CollaborationTransportPhase {
@@ -1559,39 +1561,14 @@ final class CollaborationSyncCoordinator {
     return Duration(milliseconds: _random.nextInt(ceilingMs + 1));
   }
 
-  CollaborationSyncException _normalizeError(Object error) {
-    if (error is CollaborationSyncException) return error;
-    if (error is ServerApiException) {
-      return CollaborationSyncException(
-        code: error.code,
-        message: error.message,
-        retryable: error.retryable,
-        retryAfter: _retryAfter(error.details),
-        cause: error,
-      );
-    }
-    if (error is FormatException) {
-      return CollaborationSyncException(
-        code: 'INVALID_SYNC_RESPONSE',
-        message: error.message,
-        cause: error,
-      );
-    }
-    return CollaborationSyncException(
-      code: 'SYNC_TRANSPORT_FAILED',
-      message: error.toString(),
-      retryable: true,
-      cause: error,
-    );
-  }
+  CollaborationSyncException _normalizeError(Object error) =>
+      normalizeCollaborationSyncError(error);
 
-  Duration? _retryAfter(Object? details) {
-    if (details is! Map) return null;
-    final value = details['retryAfterSeconds'];
-    if (value is int && value >= 0) return Duration(seconds: value);
-    return null;
-  }
-
+  /// 统一把同步错误归类为 [CollaborationSyncException]（公开以便测试）。
+///
+/// 特别地，本地数据库抛出的 [AnyhowException]（如绑定被标记 revoked 后继续
+/// 操作）必须归类为 MEMBERSHIP_REVOKED 而非可重试的 SYNC_TRANSPORT_FAILED，
+/// 否则同步引擎会对一个已撤销的会话无限重试。
   bool _isRevocation(CollaborationSyncException error) => const {
         'MEMBERSHIP_REVOKED',
         'SESSION_DELETED',
@@ -1758,4 +1735,49 @@ String? _optionalString(JsonObject object, String field) {
   if (value == null) return null;
   if (value is String) return value;
   throw FormatException('$field must be a string');
+}
+
+CollaborationSyncException normalizeCollaborationSyncError(Object error) {
+  if (error is CollaborationSyncException) return error;
+  if (error is ServerApiException) {
+    return CollaborationSyncException(
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      retryAfter: retryAfterFromServer(error.details),
+      cause: error,
+    );
+  }
+  if (error is FormatException) {
+    return CollaborationSyncException(
+      code: 'INVALID_SYNC_RESPONSE',
+      message: error.message,
+      cause: error,
+    );
+  }
+  // 本地数据库报出成员资格已被撤销（绑定被标记 revoked 后继续操作）。
+  // 必须归类为 MEMBERSHIP_REVOKED 而非传输错误，否则会被当作可重试的
+  // SYNC_TRANSPORT_FAILED 无限重试。
+  if (error is AnyhowException &&
+      error.message.contains('COLLABORATION_MEMBERSHIP_REVOKED')) {
+    return CollaborationSyncException(
+      code: 'MEMBERSHIP_REVOKED',
+      message: 'Collaboration access was revoked',
+      retryable: false,
+      cause: error,
+    );
+  }
+  return CollaborationSyncException(
+    code: 'SYNC_TRANSPORT_FAILED',
+    message: error.toString(),
+    retryable: true,
+    cause: error,
+  );
+}
+
+Duration? retryAfterFromServer(Object? details) {
+  if (details is! Map) return null;
+  final value = details['retryAfterSeconds'];
+  if (value is int && value >= 0) return Duration(seconds: value);
+  return null;
 }
