@@ -18,7 +18,10 @@ import 'package:provider/provider.dart';
 /// 首次打开从数据库读取会话数据渲染；之后由主窗口通过
 /// BroadcastChannel 推送实时显示数据。
 class WebControllerTabPage extends StatefulWidget {
-  const WebControllerTabPage({super.key});
+  const WebControllerTabPage({super.key, this.sessionId});
+
+  /// URL 中的会话参数（main.dart 在 PathUrlStrategy 规范化 URL 前捕获）。
+  final String? sessionId;
 
   @override
   State<WebControllerTabPage> createState() => _WebControllerTabPageState();
@@ -41,7 +44,7 @@ class _WebControllerTabPageState extends State<WebControllerTabPage> {
   /// 新标签页是全新应用实例：按 URL 的 session 参数恢复会话，
   /// 否则主控屏没有数据可显示。
   Future<void> _restoreSessionFromUrl() async {
-    final sessionId = web_bridge.controllerTabSessionId();
+    final sessionId = widget.sessionId;
     if (sessionId == null || sessionId.isEmpty) return;
     final sessions = context.read<SessionProvider>();
     final logs = context.read<LogProvider>();

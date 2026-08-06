@@ -15,6 +15,17 @@ bool isControllerTabRoute() {
   return uri.queryParameters['page'] == 'controller';
 }
 
+/// 捕获当前 URL 的主控屏标签页参数。
+/// 必须在 usePathUrlStrategy() 之前调用：Flutter 的 PathUrlStrategy 初始化时
+/// 会把 URL 规范化（replaceState），随后 query 就丢了。
+({bool isController, String? sessionId}) controllerTabRouteSnapshot() {
+  final uri = Uri.parse(web.window.location.href);
+  return (
+    isController: uri.queryParameters['page'] == 'controller',
+    sessionId: uri.queryParameters['session'],
+  );
+}
+
 /// 主控屏标签页的会话参数（URL 无 session 时返回 null）。
 String? controllerTabSessionId() {
   final uri = Uri.parse(web.window.location.href);

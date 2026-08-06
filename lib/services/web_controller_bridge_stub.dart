@@ -7,6 +7,9 @@ const String controllerBroadcastChannelName = 'openlogtool-controller';
 
 bool isControllerTabRoute() => false;
 
+({bool isController, String? sessionId}) controllerTabRouteSnapshot() =>
+    (isController: false, sessionId: null);
+
 String? controllerTabSessionId() => null;
 
 String controllerTabUrl(String sessionId) =>
