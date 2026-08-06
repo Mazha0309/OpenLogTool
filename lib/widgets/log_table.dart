@@ -306,18 +306,13 @@ class _LogTableState extends State<LogTable> {
         }
         final visibleRows = displayEntries.length;
         final totalContentHeight = 48.0 + visibleRows * 56.0;
-        // 分页开启时表格高度尽量匹配整页内容（页大小变化时高度随之变化），
-        // 并设一个上限，超出部分靠内部纵向滚动；分页关闭时同样允许滚动。
-        final pageSize = settingsProvider.tablePageSize;
-        final contentCap = settingsProvider.paginationEnabled
-            ? (48.0 + pageSize * 56.0).clamp(104.0, 700.0)
-            : 560.0;
+        // 父容器无界时表格完全展开（整页/全部记录都铺开，由外层页面滚动）；
+        // 父容器有界（如固定高度容器）时表格占满可用高度，内容超高才内部滚动。
         final maxHeight = constraints.maxHeight.isFinite
             ? constraints.maxHeight
-            : totalContentHeight.clamp(104.0, contentCap);
-        // 内容超出容器高度时始终启用内部纵向滚动（分页开启时行数多也可能
-        // 超高），否则数据会被截断且无法滚动。
-        final enableInnerVerticalScroll = totalContentHeight > maxHeight;
+            : totalContentHeight;
+        final enableInnerVerticalScroll =
+            constraints.maxHeight.isFinite && totalContentHeight > maxHeight;
         final colors = Theme.of(context).colorScheme;
 
         return Column(
