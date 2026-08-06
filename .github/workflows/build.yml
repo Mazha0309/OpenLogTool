@@ -1125,7 +1125,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: openlogtool-${{ needs.version.outputs.artifact_version }}-ios
-          path: dist/*.zip
+          path: dist/*.ipa
           if-no-files-found: error
           retention-days: 14
 
@@ -1183,7 +1183,7 @@ jobs:
           compgen -G 'artifacts/*Windows*.zip' >/dev/null
           compgen -G 'artifacts/*.dmg' >/dev/null
           compgen -G 'artifacts/*macOS*.zip' >/dev/null
-          compgen -G 'artifacts/*-ios.zip' >/dev/null
+          compgen -G 'artifacts/*-ios.ipa' >/dev/null
           compgen -G 'artifacts/*WebClient*.tar.gz' >/dev/null
           find artifacts -maxdepth 1 -type f -printf '%f\n' | sort
 
