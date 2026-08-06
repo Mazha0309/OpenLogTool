@@ -1114,9 +1114,12 @@ jobs:
 
       - name: Package iOS artifacts
         run: |
-          mkdir -p dist
-          cd build/ios/iphoneos
-          zip -qr "$GITHUB_WORKSPACE/dist/OpenLogTool-ios.zip" Runner.app
+          set -euo pipefail
+          # 无签名 ipa（Payload 结构）。签名/安装方式由使用者自行处理
+          # （自签证书或 sideload 工具），格式与正式 ipa 一致。
+          mkdir -p dist Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr "dist/OpenLogTool-ios.ipa" Payload
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
