@@ -10,13 +10,15 @@ final class _VersionSpec {
   final String rustVersion;
 
   static _VersionSpec parse(String value) {
+    // BUILD 部分可选：Android/Linux 的实际构建号由 CI 的 run_number 生成，
+    // 本地不再手动维护递增的构建号。
     final match = RegExp(
-      r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-R\+([1-9]\d*)$',
+      r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-R(\+([1-9]\d*))?$',
     ).firstMatch(value);
     if (match == null) {
       throw FormatException(
-        '版本号必须使用 MAJOR.MINOR.PATCH-R+BUILD 格式，'
-        '例如 2.6.3-R+15；收到：$value',
+        '版本号必须使用 MAJOR.MINOR.PATCH-R[+BUILD] 格式，'
+        '例如 2.9.1-R 或 2.9.1-R+20；收到：$value',
       );
     }
     return _VersionSpec(

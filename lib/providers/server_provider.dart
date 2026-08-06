@@ -4,6 +4,9 @@ import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/services/scoped_token_store.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
+import 'package:openlogtool/services/deployed_config_stub.dart'
+    if (dart.library.js_interop) 'package:openlogtool/services/deployed_config.dart'
+    as deployed;
 import 'package:openlogtool/utils/server_url.dart';
 import 'package:openlogtool/services/key_value_store.dart';
 
@@ -101,18 +104,23 @@ class ServerProvider with ChangeNotifier {
     final startedAtRevision = _contextRevision;
     final prefs = await openKeyValueStore();
     final storedServerUrl = await prefs.getString('server_url') ?? '';
+    // 首次使用（未设置过服务器地址）时，Web 部署可用环境变量注入的默认值
+    // （index.html meta 由部署方替换）；设置过则以用户为准。
+    final effectiveServerUrl = storedServerUrl.isNotEmpty
+        ? storedServerUrl
+        : deployed.deployedDefaultServerUrl() ?? '';
     // v0 stored credentials in SharedPreferences. Authentication now lives only
     // in the platform credential store.
     await prefs.remove('server_token');
     await prefs.remove('server_username');
     if (_contextRevision != startedAtRevision) return;
-    if (_serverUrl != storedServerUrl) {
+    if (_serverUrl != effectiveServerUrl) {
       // Preserve the exact persisted origin because collaboration bindings use
       // it as an identity value. Canonicalization is only for comparisons and
       // credential keys, never an implicit migration of an active binding.
-      _serverUrl = storedServerUrl;
+      _serverUrl = effectiveServerUrl;
       final oldTokenStore = _replaceAuthContext(
-        tokenStoreServerUrl: storedServerUrl,
+        tokenStoreServerUrl: effectiveServerUrl,
       );
       final installedTokenStore = _tokenStore;
       await _tokenStoreScopes.clearRetired(oldTokenStore);

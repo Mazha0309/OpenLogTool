@@ -28,6 +28,9 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="OpenLogTool amateur radio net logging and collaboration client.">
   <meta name="theme-color" content="#2196F3">
+  <!-- 部署时用环境变量替换：APP_DEFAULT_SERVER_URL 为空时保持占位符，
+       Flutter 侧检测到占位符会忽略，避免本地构建误用。 -->
+  <meta name="openlogtool-default-server" content="__APP_DEFAULT_SERVER_URL__">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">

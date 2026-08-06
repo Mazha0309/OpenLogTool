@@ -358,6 +358,12 @@ abstract class AppLocalizations {
   /// **'打开主控屏标签页'**
   String get openControllerTab;
 
+  /// No description provided for @openControllerInApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前标签页打开主控屏'**
+  String get openControllerInApp;
+
   /// No description provided for @openSecondDisplayWindow.
   ///
   /// In zh, this message translates to:
@@ -867,6 +873,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无已保存记录'**
   String get noSavedRecords;
+
+  /// No description provided for @logTableSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索呼号 / QTH / 备注…'**
+  String get logTableSearchHint;
+
+  /// No description provided for @logTableSearchClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除搜索'**
+  String get logTableSearchClear;
+
+  /// No description provided for @logTableSearchNoMatches.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的记录'**
+  String get logTableSearchNoMatches;
 
   /// No description provided for @addFirstRecordHint.
   ///

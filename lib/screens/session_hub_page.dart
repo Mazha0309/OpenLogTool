@@ -128,7 +128,13 @@ class SessionHubPage extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        if (kIsWeb)
+                        if (kIsWeb) ...[
+                          OutlinedButton.icon(
+                            key: const Key('open-controller-in-app'),
+                            onPressed: () => _openInAppController(context),
+                            icon: const Icon(Icons.fullscreen),
+                            label: Text(context.l10n.openControllerInApp),
+                          ),
                           OutlinedButton.icon(
                             key: const Key('open-controller-web-tab'),
                             onPressed: () => ControllerWindowService.openWebTab(
@@ -136,8 +142,8 @@ class SessionHubPage extends StatelessWidget {
                             ),
                             icon: const Icon(Icons.tab_outlined),
                             label: Text(context.l10n.openControllerTab),
-                          )
-                        else ...[
+                          ),
+                        ] else ...[
                           OutlinedButton.icon(
                             key: const Key('open-controller-floating-window'),
                             onPressed: () => _openDesktopWindow(

@@ -17,6 +17,9 @@ import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/screens/web_controller_tab_page.dart';
+import 'package:openlogtool/services/web_controller_bridge.dart'
+    if (dart.library.io) 'package:openlogtool/services/web_controller_bridge_stub.dart'
+    as web_bridge;
 import 'package:openlogtool/services/app_logger.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/app_fonts.dart';
@@ -29,7 +32,15 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+/// 主控屏标签页的初始参数快照。
+/// 必须在 usePathUrlStrategy() 之前捕获：PathUrlStrategy 初始化时会把
+/// 浏览器 URL 规范化（replaceState），随后 query 参数（?page=controller）
+/// 会被丢弃，动态读取将拿不到。
+late final ({bool isController, String? sessionId}) controllerTabRoute;
+
 Future<void> main(List<String> args) async {
+  // 先于 usePathUrlStrategy 捕获主控屏标签页参数。
+  controllerTabRoute = web_bridge.controllerTabRouteSnapshot();
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   await AppLogger.instance.init();
@@ -170,16 +181,9 @@ class MyApp extends StatelessWidget {
         fontFamily: appearance.fontFamily,
       ),
       themeMode: appearance.dark ? ThemeMode.dark : ThemeMode.light,
-      home: kIsWeb && _isControllerTab()
-          ? const WebControllerTabPage()
+      home: kIsWeb && controllerTabRoute.isController
+          ? WebControllerTabPage(sessionId: controllerTabRoute.sessionId)
           : const HomeScreen(),
     );
-  }
-
-  /// 浏览器 URL 带 ?page=controller 时进入独立主控屏标签页。
-  static bool _isControllerTab() {
-    if (!kIsWeb) return false;
-    final uri = Uri.base;
-    return uri.queryParameters['page'] == 'controller';
   }
 }

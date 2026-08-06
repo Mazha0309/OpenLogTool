@@ -2,23 +2,40 @@ import 'dart:convert';
 import 'dart:js_interop';
 
 import 'package:openlogtool/models/controller_display.dart';
+import 'package:openlogtool/services/url_sync.dart' show buildSyncQuery;
 import 'package:web/web.dart' as web;
 
 /// 主控屏数据推送频道名（新标签页与主窗口共享）。
 const String controllerBroadcastChannelName = 'openlogtool-controller';
 
-/// 主控屏新标签页 URL（基于当前页面路径，带 page/session 参数）。
-String controllerTabUrl(String sessionId) {
-  final params = <String, String>{
-    'page': 'controller',
-    if (sessionId.isNotEmpty) 'session': sessionId,
-  };
-  final query = params.entries
-      .map((e) =>
-          '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-      .join('&');
-  return query;
+/// 当前 URL 是否是主控屏标签页（?page=controller）。
+/// 注意：不能依赖 Uri.base——index.html 的 <base> 标签会使它丢失 query。
+bool isControllerTabRoute() {
+  final uri = Uri.parse(web.window.location.href);
+  return uri.queryParameters['page'] == 'controller';
 }
+
+/// 捕获当前 URL 的主控屏标签页参数。
+/// 必须在 usePathUrlStrategy() 之前调用：Flutter 的 PathUrlStrategy 初始化时
+/// 会把 URL 规范化（replaceState），随后 query 就丢了。
+({bool isController, String? sessionId}) controllerTabRouteSnapshot() {
+  final uri = Uri.parse(web.window.location.href);
+  return (
+    isController: uri.queryParameters['page'] == 'controller',
+    sessionId: uri.queryParameters['session'],
+  );
+}
+
+/// 主控屏标签页的会话参数（URL 无 session 时返回 null）。
+String? controllerTabSessionId() {
+  final uri = Uri.parse(web.window.location.href);
+  return uri.queryParameters['session'];
+}
+
+/// 主控屏新标签页 URL（带 page/session 参数，须以 ? 开头否则会被浏览器
+/// 当作相对路径）。
+String controllerTabUrl(String sessionId) =>
+    buildSyncQuery('controller', sessionId);
 
 /// 在主标签页打开主控屏。
 void openWebControllerTab(String sessionId) {

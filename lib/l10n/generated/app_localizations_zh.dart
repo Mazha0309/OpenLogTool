@@ -154,6 +154,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openControllerTab => '打开主控屏标签页';
 
   @override
+  String get openControllerInApp => '当前标签页打开主控屏';
+
+  @override
   String get openSecondDisplayWindow => '打开第二屏窗口';
 
   @override
@@ -451,6 +454,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noSavedRecords => '暂无已保存记录';
+
+  @override
+  String get logTableSearchHint => '搜索呼号 / QTH / 备注…';
+
+  @override
+  String get logTableSearchClear => '清除搜索';
+
+  @override
+  String get logTableSearchNoMatches => '没有匹配的记录';
 
   @override
   String get addFirstRecordHint => '在上方表单中添加第一条记录。';

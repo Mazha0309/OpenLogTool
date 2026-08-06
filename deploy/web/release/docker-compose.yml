@@ -7,3 +7,5 @@ services:
     restart: unless-stopped
     ports:
       - "${OPENLOGTOOL_WEB_PORT:-5973}:80"
+    environment:
+      - APP_DEFAULT_SERVER_URL=${APP_DEFAULT_SERVER_URL:-}
