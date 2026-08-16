@@ -86,6 +86,88 @@ pub async fn list_session_summaries() -> anyhow::Result<Vec<SessionSummary>> {
     list_session_summaries_from_pool(get_db()?).await
 }
 
+/// Closes active local-only Sessions after two hours without a persisted
+/// record or Session change.
+///
+/// Collaboration replicas are deliberately excluded because their canonical
+/// lifecycle belongs to the server. The cutoff is rechecked in the same
+/// transaction as each close so a concurrent record write wins over the
+/// maintenance sweep.
+pub async fn close_inactive_local_sessions() -> anyhow::Result<Vec<Session>> {
+    let closed_at = chrono::Utc::now();
+    let cutoff = closed_at - chrono::Duration::hours(2);
+    close_inactive_local_sessions_from_pool(
+        get_db()?,
+        &cutoff.to_rfc3339(),
+        &closed_at.to_rfc3339(),
+    )
+    .await
+}
+
+async fn close_inactive_local_sessions_from_pool(
+    pool: &SqlitePool,
+    cutoff: &str,
+    closed_at: &str,
+) -> anyhow::Result<Vec<Session>> {
+    chrono::DateTime::parse_from_rfc3339(cutoff)
+        .map_err(|_| anyhow::anyhow!("SESSION_INACTIVITY_CUTOFF_INVALID"))?;
+    chrono::DateTime::parse_from_rfc3339(closed_at)
+        .map_err(|_| anyhow::anyhow!("SESSION_INACTIVITY_CLOSE_TIME_INVALID"))?;
+
+    let mut tx = pool.begin().await?;
+    let candidate_ids: Vec<(String,)> = sqlx::query_as(
+        "SELECT sessions.session_id
+         FROM sessions
+         WHERE sessions.status = 'active'
+           AND sessions.deleted_at IS NULL
+           AND julianday(sessions.updated_at) < julianday(?)
+           AND NOT EXISTS (
+               SELECT 1 FROM collaboration_bindings binding
+               WHERE binding.session_id = sessions.session_id
+           )
+         ORDER BY sessions.updated_at ASC, sessions.session_id ASC",
+    )
+    .bind(cutoff)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let mut closed = Vec::with_capacity(candidate_ids.len());
+    for (session_id,) in candidate_ids {
+        let result = sqlx::query(
+            "UPDATE sessions
+             SET status = 'closed', closed_at = ?, updated_at = ?
+             WHERE session_id = ?
+               AND status = 'active'
+               AND deleted_at IS NULL
+               AND julianday(updated_at) < julianday(?)
+               AND NOT EXISTS (
+                   SELECT 1 FROM collaboration_bindings binding
+                   WHERE binding.session_id = sessions.session_id
+               )",
+        )
+        .bind(closed_at)
+        .bind(closed_at)
+        .bind(&session_id)
+        .bind(cutoff)
+        .execute(&mut *tx)
+        .await?;
+        if result.rows_affected() != 1 {
+            continue;
+        }
+        closed.push(
+            sqlx::query_as::<_, SessionRow>(
+                "SELECT * FROM sessions WHERE session_id = ? AND deleted_at IS NULL",
+            )
+            .bind(&session_id)
+            .fetch_one(&mut *tx)
+            .await?
+            .into_session(),
+        );
+    }
+    tx.commit().await?;
+    Ok(closed)
+}
+
 async fn list_session_summaries_from_pool(
     pool: &SqlitePool,
 ) -> anyhow::Result<Vec<SessionSummary>> {
@@ -791,7 +873,8 @@ impl SessionSummaryRow {
 #[cfg(test)]
 mod tests {
     use super::{
-        close_session_locally_from_pool, convert_collaboration_session_to_local_from_pool,
+        close_inactive_local_sessions_from_pool, close_session_locally_from_pool,
+        convert_collaboration_session_to_local_from_pool,
         copy_collaboration_session_to_local_from_pool, hard_delete_session_from_pool,
         list_session_summaries_from_pool, reopen_local_session_from_pool,
         start_local_session_from_pool, stop_collaboration_session_locally_from_pool,
@@ -986,6 +1069,56 @@ mod tests {
 
         assert!(!local.has_collaboration_binding);
         assert!(shared.has_collaboration_binding);
+    }
+
+    #[tokio::test]
+    async fn inactivity_sweep_closes_only_local_sessions_older_than_two_hours() {
+        let pool = setup().await;
+        for id in [
+            "stale-local",
+            "boundary-local",
+            "recent-local",
+            "stale-shared",
+        ] {
+            insert_session(&pool, id, "active").await;
+        }
+        insert_session(&pool, "already-closed", "closed").await;
+        insert_collaboration_binding(&pool, "stale-shared").await;
+        for (id, updated_at) in [
+            ("stale-local", "2026-07-13T09:59:59Z"),
+            ("boundary-local", "2026-07-13T10:00:00Z"),
+            ("recent-local", "2026-07-13T10:00:01Z"),
+            ("stale-shared", "2026-07-13T09:00:00Z"),
+        ] {
+            sqlx::query("UPDATE sessions SET updated_at = ? WHERE session_id = ?")
+                .bind(updated_at)
+                .bind(id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        let closed = close_inactive_local_sessions_from_pool(
+            &pool,
+            "2026-07-13T10:00:00Z",
+            "2026-07-13T12:00:00Z",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(closed.len(), 1);
+        assert_eq!(closed[0].session_id, "stale-local");
+        assert_eq!(closed[0].status, "closed");
+        assert_eq!(closed[0].closed_at.as_deref(), Some("2026-07-13T12:00:00Z"));
+        let states: Vec<(String, String)> =
+            sqlx::query_as("SELECT session_id, status FROM sessions ORDER BY session_id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert!(states.contains(&("boundary-local".to_string(), "active".to_string())));
+        assert!(states.contains(&("recent-local".to_string(), "active".to_string())));
+        assert!(states.contains(&("stale-shared".to_string(), "active".to_string())));
+        assert!(states.contains(&("already-closed".to_string(), "closed".to_string())));
     }
 
     #[tokio::test]

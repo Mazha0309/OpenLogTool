@@ -5,6 +5,7 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/src/bridge/models/session.dart' as session_bridge;
 import 'package:openlogtool/utils/log_time.dart';
+import 'package:openlogtool/services/app_logger.dart';
 
 typedef LogMutationGuard = String? Function(old.LogEntry log);
 typedef SessionListLoader = Future<List<session_bridge.Session>> Function();
@@ -231,8 +232,12 @@ class LogProvider with ChangeNotifier {
               session.deletedAt == null,
         );
       } catch (error, stackTrace) {
-        debugPrint(
-          '[LogProvider] session state load failed: $error\n$stackTrace',
+        AppLogger.instance.log(
+          AppLogLevel.error,
+          'Could not load writable state for session $sessionId',
+          source: 'LogProvider',
+          error: error,
+          stackTrace: stackTrace,
         );
         if (stateGeneration != _sessionStateGeneration ||
             _currentSessionId != sessionId) {
@@ -360,8 +365,19 @@ class LogProvider with ChangeNotifier {
       );
       loaded.sort(_compareChronologically);
       _logs = loaded;
+      AppLogger.instance.log(
+        AppLogLevel.debug,
+        'Loaded ${loaded.length} records for session $sid',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
-      debugPrint('[LogProvider] _loadLogs failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not load records for session ${sid ?? '(none)'}',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       if (generation != _loadGeneration || _currentSessionId != sid) return;
       if (propagateErrors) {
         // A session whose records could not be loaded must never remain
@@ -416,8 +432,19 @@ class LogProvider with ChangeNotifier {
       if (_onLogChanged != null) {
         await _onLogChanged!(_toOldLog(canonical), false);
       }
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Saved record ${canonical.syncId} in session $effectiveSessionId',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
-      debugPrint('[LogProvider] addLog failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not save a record in session $effectiveSessionId',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -436,8 +463,19 @@ class LogProvider with ChangeNotifier {
         _mergeCanonicalLog(canonical);
       }
       await _notifyDataChanged();
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Updated record $syncId',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
-      debugPrint('[LogProvider] updateLog failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not update record $syncId',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -472,8 +510,19 @@ class LogProvider with ChangeNotifier {
       if (_onLogChanged != null) {
         await _onLogChanged!(log, true);
       }
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Deleted record $syncId',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
-      debugPrint('[LogProvider] deleteLog failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not delete record $syncId',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -500,8 +549,19 @@ class LogProvider with ChangeNotifier {
         await _onLogChanged!(log, false);
       }
       await _notifyDataChanged();
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Restored record ${log.id}',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
-      debugPrint('[LogProvider] undoLastLog failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not restore record ${log.id}',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       _undoStack.add(log);
       _safeNotify();
       rethrow;
@@ -541,11 +601,23 @@ class LogProvider with ChangeNotifier {
       _logs.clear();
       _safeNotify();
       await _notifyDataChanged();
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Cleared ${snapshot.length} records from session '
+        '${_currentSessionId ?? '(none)'}',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
       if (durableRowsChanged && !revisionMarked) {
         _markPersonalDataChanged();
       }
-      debugPrint('[LogProvider] clearAllLogs failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not clear records from session ${_currentSessionId ?? '(none)'}',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       await _loadLogs();
       rethrow;
     }
@@ -566,7 +638,13 @@ class LogProvider with ChangeNotifier {
         _safeNotify();
       }
     } catch (e, st) {
-      debugPrint('[LogProvider] closeSession failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not close session $sessionId',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -583,7 +661,13 @@ class LogProvider with ChangeNotifier {
       _pendingCanonicalLogs.removeWhere((_, log) => log.sessionId == sessionId);
       _safeNotify();
     } catch (e, st) {
-      debugPrint('[LogProvider] hardDeleteSession failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not permanently delete session $sessionId',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -637,11 +721,23 @@ class LogProvider with ChangeNotifier {
       await _loadLogs();
       _safeNotify();
       await _notifyDataChanged();
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Imported ${importedLogs.length} records into session '
+        '$effectiveSessionId',
+        source: 'LogProvider',
+      );
     } catch (e, st) {
       if (durableRowsChanged && !revisionMarked) {
         _markPersonalDataChanged();
       }
-      debugPrint('[LogProvider] importLogs failed: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not import records into session $effectiveSessionId',
+        source: 'LogProvider',
+        error: e,
+        stackTrace: st,
+      );
       await _loadLogs();
       rethrow;
     }

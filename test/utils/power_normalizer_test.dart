@@ -3,9 +3,9 @@ import 'package:openlogtool/utils/power_normalizer.dart';
 
 void main() {
   test('appends W to pure integers and decimals', () {
-    expect(normalizePower('50'), '50 W');
-    expect(normalizePower('50.5'), '50.5 W');
-    expect(normalizePower(' 100 '), '100 W');
+    expect(normalizePower('50'), '50W');
+    expect(normalizePower('50.5'), '50.5W');
+    expect(normalizePower(' 100 '), '100W');
   });
 
   test('leaves values that already carry a unit untouched', () {

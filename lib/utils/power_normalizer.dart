@@ -6,7 +6,7 @@
 String normalizePower(String raw) {
   final trimmed = raw.trim();
   if (RegExp(r'^\d+(\.\d+)?$').hasMatch(trimmed)) {
-    return '$trimmed W';
+    return '${trimmed}W';
   }
   return trimmed;
 }

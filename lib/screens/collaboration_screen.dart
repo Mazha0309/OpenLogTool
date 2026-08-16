@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -719,7 +720,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       if (!opened) throw StateError('URL_LAUNCH_REJECTED');
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.publicShareOpenFailed)),
       );
     }
@@ -1224,7 +1225,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.operationFailed('$error'))),
         );
       }
@@ -1330,7 +1331,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
           final disposition = await collaboration.commitCurrentLiveDraft();
           if (disposition == LiveDraftCommitDisposition.queuedOffline) {
             if (mounted) {
-              messenger.showSnackBar(
+              messenger.showLoggedSnackBar(
                 SnackBar(
                   content: Text(
                     context.l10n.closeCollaborationQueuedOffline,
@@ -1344,13 +1345,13 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
       }
       await collaboration.closeCurrentSession();
       if (mounted) {
-        messenger.showSnackBar(
+        messenger.showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.closeSessionQueued)),
         );
       }
     } catch (error) {
       if (mounted) {
-        messenger.showSnackBar(
+        messenger.showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.operationFailed('$error'))),
         );
       }
@@ -1660,11 +1661,11 @@ class _CollaborationScreenState extends State<CollaborationScreen> {
     try {
       await operation();
       if (mounted && success != null) {
-        messenger.showSnackBar(SnackBar(content: Text(success)));
+        messenger.showLoggedSnackBar(SnackBar(content: Text(success)));
       }
     } catch (error) {
       if (mounted) {
-        messenger.showSnackBar(
+        messenger.showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.operationFailed('$error'))),
         );
       }

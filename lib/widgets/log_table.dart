@@ -29,6 +29,9 @@ class _LogTableState extends State<LogTable> {
   int _currentPage = 0;
   List<LogEntry> _lastSeenLogs = [];
   bool _editingSaveInProgress = false;
+  bool _sessionContextInitialized = false;
+  String? _lastSeenSessionId;
+  bool _lastHadLogs = false;
 
   final ScrollController _horizontalController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -38,6 +41,37 @@ class _LogTableState extends State<LogTable> {
   void initState() {
     super.initState();
     _controllers = {};
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final logProvider = Provider.of<LogProvider>(context);
+    final sessionId = logProvider.currentSessionId;
+    final hasLogs = logProvider.logs.isNotEmpty;
+    if (!_sessionContextInitialized) {
+      _sessionContextInitialized = true;
+      _lastSeenSessionId = sessionId;
+      _lastHadLogs = hasLogs;
+      return;
+    }
+    final sessionChanged = sessionId != _lastSeenSessionId;
+    final becameEmpty = _lastHadLogs && !hasLogs;
+    _lastSeenSessionId = sessionId;
+    _lastHadLogs = hasLogs;
+    if (!sessionChanged && !becameEmpty) return;
+
+    _currentPage = 0;
+    _editingIndex = null;
+    _editingSaveInProgress = false;
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    _controllers = {};
+    if (_searchQuery.isNotEmpty) {
+      _searchQuery = '';
+      _searchController.clear();
+    }
   }
 
   @override
@@ -104,7 +138,7 @@ class _LogTableState extends State<LogTable> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final time = patch.time;
     if (!isValidLogTimeInput(time)) {
-      messenger?.showSnackBar(
+      messenger?.showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.logTimeInvalid)),
       );
       return;
@@ -127,7 +161,7 @@ class _LogTableState extends State<LogTable> {
       await logProvider.updateLogById(original.id, finalPatch);
     } catch (error) {
       if (!mounted) return;
-      messenger?.showSnackBar(
+      messenger?.showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.operationFailed('$error'))),
       );
     }
@@ -164,7 +198,7 @@ class _LogTableState extends State<LogTable> {
     final time = _controllers['time']?.text ?? '';
     if (!isValidLogTimeInput(time)) {
       setState(() => _editingSaveInProgress = false);
-      messenger?.showSnackBar(
+      messenger?.showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.logTimeInvalid)),
       );
       return;
@@ -192,7 +226,7 @@ class _LogTableState extends State<LogTable> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _editingSaveInProgress = false);
-      messenger?.showSnackBar(
+      messenger?.showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.operationFailed('$error'))),
       );
       return;
@@ -266,13 +300,14 @@ class _LogTableState extends State<LogTable> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final sourceLogs = _searchQuery.isEmpty
-            ? logProvider.logs
-            : _filterLogs(logProvider.logs, _searchQuery);
+        final allLogs = logProvider.logs;
+        final sourceEntries = _searchQuery.isEmpty
+            ? allLogs.asMap().entries.toList(growable: false)
+            : _filterLogEntries(allLogs, _searchQuery);
         final displayEntries = _visibleLogEntries(
-          logProvider,
           settingsProvider,
-          sourceLogs: sourceLogs,
+          allLogs: allLogs,
+          sourceEntries: sourceEntries,
         );
         final searchField = _buildSearchField(context);
         if (constraints.maxWidth < _mobileBreakpoint) {
@@ -280,7 +315,7 @@ class _LogTableState extends State<LogTable> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               searchField,
-              if (sourceLogs.isEmpty && _searchQuery.trim().isNotEmpty)
+              if (sourceEntries.isEmpty && _searchQuery.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Center(
@@ -299,7 +334,7 @@ class _LogTableState extends State<LogTable> {
                   logProvider,
                   settingsProvider,
                   displayEntries,
-                  totalLogs: sourceLogs.length,
+                  totalLogs: sourceEntries.length,
                 ),
             ],
           );
@@ -319,7 +354,7 @@ class _LogTableState extends State<LogTable> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             searchField,
-            if (sourceLogs.isEmpty && _searchQuery.trim().isNotEmpty)
+            if (sourceEntries.isEmpty && _searchQuery.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
@@ -485,9 +520,9 @@ class _LogTableState extends State<LogTable> {
               ),
             // 分页控件
             if (settingsProvider.paginationEnabled &&
-                sourceLogs.length > settingsProvider.tablePageSize)
+                sourceEntries.length > settingsProvider.tablePageSize)
               _buildPaginationControls(
-                sourceLogs.length,
+                sourceEntries.length,
                 settingsProvider.tablePageSize,
               ),
           ],
@@ -497,17 +532,16 @@ class _LogTableState extends State<LogTable> {
   }
 
   List<MapEntry<int, LogEntry>> _visibleLogEntries(
-    LogProvider logProvider,
     SettingsProvider settingsProvider, {
-    List<LogEntry>? sourceLogs,
+    required List<LogEntry> allLogs,
+    required List<MapEntry<int, LogEntry>> sourceEntries,
   }) {
-    final logs = sourceLogs ?? logProvider.logs;
-    final indexedLogs = logs.asMap().entries.toList().reversed.toList();
+    final indexedLogs = sourceEntries.reversed.toList(growable: false);
 
     // Reset page when underlying log list is replaced (e.g. session switch).
     // Use identity comparison because LogProvider rebuilds the list on every load.
-    if (!identical(_lastSeenLogs, logs)) {
-      _lastSeenLogs = logs;
+    if (!identical(_lastSeenLogs, allLogs)) {
+      _lastSeenLogs = allLogs;
       _currentPage = 0;
     }
 
@@ -530,22 +564,27 @@ class _LogTableState extends State<LogTable> {
 
   /// 按搜索词过滤记录：匹配呼号、时间、RST、QTH、设备、功率、天线、高度、
   /// 备注与主控（大小写不敏感）。
-  List<LogEntry> _filterLogs(List<LogEntry> logs, String query) {
+  List<MapEntry<int, LogEntry>> _filterLogEntries(
+    List<LogEntry> logs,
+    String query,
+  ) {
     final needle = query.trim().toLowerCase();
-    if (needle.isEmpty) return logs;
-    return logs
-        .where((log) => [
-              log.callsign,
-              log.time,
-              log.report,
-              log.rstRcvd,
-              log.qth,
-              log.device,
-              log.power,
-              log.antenna,
-              log.height,
-              log.remarks,
-              log.controller,
+    final indexedLogs = logs.asMap().entries;
+    if (needle.isEmpty) return indexedLogs.toList(growable: false);
+    return indexedLogs
+        .where((entry) => [
+              entry.value.callsign,
+              entry.value.time,
+              formatLogTimeForDisplay(entry.value.time),
+              entry.value.report,
+              entry.value.rstRcvd,
+              entry.value.qth,
+              entry.value.device,
+              entry.value.power,
+              entry.value.antenna,
+              entry.value.height,
+              entry.value.remarks,
+              entry.value.controller,
             ].any((value) => value.toLowerCase().contains(needle)))
         .toList(growable: false);
   }
@@ -577,6 +616,9 @@ class _LogTableState extends State<LogTable> {
           _searchQuery = value;
           _currentPage = 0;
         }),
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         decoration: InputDecoration(
           isDense: true,
           hintText: l10n.logTableSearchHint,
@@ -1544,7 +1586,7 @@ class _DeleteLogDialogState extends State<_DeleteLogDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _deleting = false);
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.operationFailed('$error'))),
       );
       return;

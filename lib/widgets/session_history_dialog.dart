@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
@@ -92,7 +93,7 @@ void showReopenedSessionLogsUnavailable(
 }) {
   if (!context.mounted) return;
   final l10n = context.l10n;
-  ScaffoldMessenger.of(context).showSnackBar(
+  ScaffoldMessenger.of(context).showLoggedSnackBar(
     SnackBar(
       content: Text(
         l10n.historySessionReopenedLogsUnavailable(sessionTitle),
@@ -134,7 +135,7 @@ Future<void> _retryReopenedSessionLogs(
     return;
   }
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
+  ScaffoldMessenger.of(context).showLoggedSnackBar(
     SnackBar(content: Text(context.l10n.historySessionSwitched(sessionTitle))),
   );
 }
@@ -222,7 +223,7 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
       await logs.reloadForSession(session.sessionId, propagateErrors: true);
       await sessions.switchToSession(session.sessionId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.historySessionSwitched(session.title)),
         ),
@@ -240,7 +241,7 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
       debugPrint('[SessionHistory] open failed: $error\n$stackTrace');
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.historySessionOpenFailed('$error')),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -284,7 +285,7 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
       );
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.historySessionOpenFailed('$error')),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -324,7 +325,7 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
         return;
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.historySessionReopened(session.title)),
         ),
@@ -333,7 +334,7 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(localSessionReopenErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -371,14 +372,14 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
           .read<SessionProvider>()
           .closeSessionLocally(session.sessionId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.historySessionClosed)),
       );
       _reload();
     } catch (error) {
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(historySessionCloseErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -401,14 +402,14 @@ class _SessionHistoryPanelState extends State<SessionHistoryPanel> {
       await sessions.deleteSessionLocally(session.sessionId);
       await logs.forgetDeletedSession(session.sessionId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.historySessionDeleted)),
       );
       _reload();
     } catch (error) {
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.historySessionDeleteFailed('$error')),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -890,7 +891,7 @@ Future<void> showSessionHistoryDialog(
   }
   final messenger = ScaffoldMessenger.of(context);
   final message = context.l10n.historySessionSwitched(selected.title);
-  messenger.showSnackBar(
+  messenger.showLoggedSnackBar(
     SnackBar(
       content: Text(message),
     ),
@@ -948,7 +949,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content:
               Text(context.l10n.historySessionOpenFailed(error.toString())),
@@ -988,13 +989,13 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
         _busySessionId = null;
         _sessions = widget.loadSessions();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.historySessionClosed)),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(historySessionCloseErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -1022,7 +1023,7 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
         _busySessionId = null;
         _sessions = widget.loadSessions();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(localSessionReopenErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -1048,13 +1049,13 @@ class _SessionHistoryDialogState extends State<SessionHistoryDialog> {
         _busySessionId = null;
         _sessions = widget.loadSessions();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.historySessionDeleted)),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() => _busySessionId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content:
               Text(context.l10n.historySessionDeleteFailed(error.toString())),

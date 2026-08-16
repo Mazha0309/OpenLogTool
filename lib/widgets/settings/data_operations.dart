@@ -10,7 +10,6 @@ class DataOperations extends StatefulWidget {
   final DatabaseOperationCallback onViewDatabaseLog;
   final DatabaseOperationCallback onExportDatabase;
   final DatabaseOperationCallback onImportDatabase;
-  final DatabaseOperationCallback onViewSnackbarLog;
   final DatabaseOperationCallback onClearAllData;
 
   const DataOperations({
@@ -20,7 +19,6 @@ class DataOperations extends StatefulWidget {
     required this.onViewDatabaseLog,
     required this.onExportDatabase,
     required this.onImportDatabase,
-    required this.onViewSnackbarLog,
     required this.onClearAllData,
   });
 
@@ -65,14 +63,6 @@ class _DataOperationsState extends State<DataOperations> {
                 title: context.l10n.databaseStatusTitle,
                 subtitle: context.l10n.databaseStatusHint,
                 onTap: widget.onViewDatabaseLog,
-              ),
-              _buildTile(
-                context,
-                operation: 'snackbar-log',
-                icon: Icons.message_outlined,
-                title: context.l10n.snackbarLogTitle,
-                subtitle: context.l10n.snackbarLogHint,
-                onTap: widget.onViewSnackbarLog,
               ),
             ],
           ),

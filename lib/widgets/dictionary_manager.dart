@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -113,7 +114,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       if (!mounted) return;
       final imported = counts.entries.where((entry) => entry.value > 0);
       if (imported.isEmpty) {
-        messenger.showSnackBar(
+        messenger.showLoggedSnackBar(
           SnackBar(content: Text(l10n.libraryImportEmpty)),
         );
         return;
@@ -127,12 +128,12 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           )
           .join(l10n.listSeparator);
       _pages.clear();
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryImportSucceeded(summary))),
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryImportFailed('$error'))),
       );
     } finally {
@@ -168,12 +169,12 @@ class _DictionaryManagerState extends State<DictionaryManager> {
         await File(result).writeAsBytes(bytes, flush: true);
       }
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryExportSucceeded)),
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryExportFailed('$error'))),
       );
     } finally {
@@ -188,7 +189,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     if (library.items.any((item) => item.raw == value)) {
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemAlreadyExists(value))),
       );
       return;
@@ -199,12 +200,12 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       await library.onAdd(value);
       if (!mounted) return;
       controller.clear();
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemAdded(value))),
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemAddFailed('$error'))),
       );
     } finally {
@@ -230,7 +231,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     if (library.items.any((candidate) => candidate.raw == renamed)) {
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemAlreadyExists(renamed))),
       );
       return;
@@ -239,12 +240,12 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     try {
       await library.onRename(item.raw, renamed);
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemRenamed(renamed))),
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemRenameFailed('$error'))),
       );
     } finally {
@@ -292,12 +293,12 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     try {
       await library.onDelete(item.raw);
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemDeleted(item.raw))),
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryItemDeleteFailed('$error'))),
       );
     } finally {
@@ -347,14 +348,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       _searchControllers[library.type]?.clear();
       _queries.remove(library.type);
       _pages.remove(library.type);
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(
           content: Text(l10n.libraryCleared(_libraryName(library.type))),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(l10n.libraryClearFailed('$error'))),
       );
     } finally {
@@ -423,7 +424,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
     if (settings == null ||
         !settings.textAssistantEnabled ||
         settings.textAssistantConfig == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.aiDictionaryNeedsAssistant)),
       );
       return;
@@ -464,7 +465,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       Navigator.of(context, rootNavigator: true).pop();
       progressOpen = false;
       if (suggestions.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.aiDictionaryNoSuggestions)),
         );
         return;
@@ -483,7 +484,7 @@ class _DictionaryManagerState extends State<DictionaryManager> {
           );
       if (!mounted) return;
       _pages.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(
             context.l10n.aiDictionaryApplied(selected.length),
@@ -494,14 +495,14 @@ class _DictionaryManagerState extends State<DictionaryManager> {
       if (!mounted) return;
       if (progressOpen) Navigator.of(context, rootNavigator: true).pop();
       if (error.kind != AiRecognitionErrorKind.cancelled) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.aiDictionaryFailed('$error'))),
         );
       }
     } catch (error) {
       if (!mounted) return;
       if (progressOpen) Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.aiDictionaryFailed('$error'))),
       );
     } finally {

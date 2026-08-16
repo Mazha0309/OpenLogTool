@@ -7,7 +7,6 @@ import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge_log;
 import 'package:openlogtool/src/bridge/models/session.dart' as bridge_session;
 import 'package:openlogtool/widgets/log_table.dart';
@@ -581,9 +580,6 @@ void main() {
           ChangeNotifierProvider<SettingsProvider>.value(
             value: SettingsProvider(),
           ),
-          ChangeNotifierProvider<SnackbarLogProvider>(
-            create: (_) => SnackbarLogProvider(),
-          ),
         ],
         child: const MaterialApp(
           locale: Locale('zh', 'CN'),
@@ -706,9 +702,6 @@ void main() {
           ChangeNotifierProvider<LogProvider>.value(value: logProvider),
           ChangeNotifierProvider<SettingsProvider>.value(
             value: SettingsProvider(),
-          ),
-          ChangeNotifierProvider<SnackbarLogProvider>(
-            create: (_) => SnackbarLogProvider(),
           ),
         ],
         child: ValueListenableBuilder<Locale>(
@@ -946,6 +939,7 @@ void main() {
 
   _searchTests();
 }
+
 Future<void> _pumpLogTable(
   WidgetTester tester,
   LogProvider logProvider, {
@@ -964,9 +958,6 @@ Future<void> _pumpLogTable(
         ),
         ChangeNotifierProvider<DictionaryProvider>(
           create: (_) => DictionaryProvider(),
-        ),
-        ChangeNotifierProvider<SnackbarLogProvider>(
-          create: (_) => SnackbarLogProvider(),
         ),
       ],
       child: MaterialApp(
@@ -1031,9 +1022,14 @@ LogEntry _log({
     );
 
 class _StaticLogProvider extends LogProvider {
-  _StaticLogProvider(List<LogEntry> initialLogs) : _logs = initialLogs;
+  _StaticLogProvider(
+    List<LogEntry> initialLogs, {
+    String? sessionId,
+  })  : _logs = initialLogs,
+        _testSessionId = sessionId;
 
   List<LogEntry> _logs;
+  String? _testSessionId;
   int? updatedIndex;
   LogEntry? updatedLog;
   Object? updateError;
@@ -1045,7 +1041,16 @@ class _StaticLogProvider extends LogProvider {
   @override
   List<LogEntry> get logs => _logs;
 
+  @override
+  String? get currentSessionId => _testSessionId;
+
   void replaceLogs(List<LogEntry> logs) {
+    _logs = logs;
+    notifyListeners();
+  }
+
+  void replaceSession(String sessionId, List<LogEntry> logs) {
+    _testSessionId = sessionId;
     _logs = logs;
     notifyListeners();
   }
@@ -1114,11 +1119,13 @@ void _searchTests() {
     expect(find.byKey(const Key('log-table-search')), findsOneWidget);
     expect(find.text('SENT_12'), findsOneWidget);
 
-    await tester.enterText(find.byKey(const Key('log-table-search')), 'SENT_12');
+    await tester.enterText(
+        find.byKey(const Key('log-table-search')), 'SENT_12');
     await tester.pump();
 
     var table = tester.widget<DataTable>(find.byType(DataTable));
     expect(table.rows, hasLength(1));
+    expect(_textOf(tester, table.rows.single.cells.first.child), '12');
     expect(
       find.descendant(
         of: find.byType(DataTable),
@@ -1177,6 +1184,114 @@ void _searchTests() {
     expect(find.byType(DataTable), findsNothing);
   });
 
+  testWidgets('search matches the displayed local time', (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'recordEditorDialogEnabled': false},
+    );
+    final visibleTime = DateTime(2026, 7, 13, 20, 30);
+    final logProvider = _StaticLogProvider([
+      _log(
+        id: 'visible-time',
+        time: visibleTime.toUtc().toIso8601String(),
+        report: 'VISIBLE_TIME_RESULT',
+        rstRcvd: '59',
+      ),
+      _log(
+        id: 'other-time',
+        time: '07:45',
+        report: 'OTHER_TIME_RESULT',
+        rstRcvd: '59',
+      ),
+    ]);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: SettingsProvider(),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LogTable(readOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('log-table-search')),
+      '20:30',
+    );
+    await tester.pump();
+
+    expect(find.text('VISIBLE_TIME_RESULT'), findsOneWidget);
+    expect(find.text('OTHER_TIME_RESULT'), findsNothing);
+  });
+
+  testWidgets('switching sessions clears the previous search state',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'recordEditorDialogEnabled': false},
+    );
+    final logProvider = _StaticLogProvider(
+      [
+        _log(
+          id: 'old-session-log',
+          time: '08:00',
+          report: 'ONLY_OLD_SESSION',
+          rstRcvd: '59',
+        ),
+      ],
+      sessionId: 'session-a',
+    );
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LogProvider>.value(value: logProvider),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: SettingsProvider(),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LogTable(readOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('log-table-search')),
+      'ONLY_OLD_SESSION',
+    );
+    await tester.pump();
+
+    logProvider.replaceSession('session-b', [
+      _log(
+        id: 'new-session-log',
+        time: '08:01',
+        report: 'VISIBLE_NEW_SESSION',
+        rstRcvd: '59',
+      ),
+    ]);
+    await tester.pump();
+
+    final searchField =
+        tester.widget<TextField>(find.byKey(const Key('log-table-search')));
+    expect(searchField.controller!.text, isEmpty);
+    expect(find.text('VISIBLE_NEW_SESSION'), findsOneWidget);
+  });
+
   testWidgets('mobile search filters cards', (tester) async {
     tester.view.physicalSize = const Size(500, 900);
     tester.view.devicePixelRatio = 1;
@@ -1224,6 +1339,7 @@ void _searchTests() {
     await tester.pump();
 
     expect(find.text('SENT_3'), findsOneWidget);
+    expect(find.text('#3'), findsOneWidget);
     expect(find.text('SENT_2'), findsNothing);
   });
 }

@@ -175,6 +175,28 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('current_session_id'), otherActive.sessionId);
   });
+
+  test('startup inactivity maintenance adopts an atomically closed session',
+      () async {
+    var sweeps = 0;
+    final provider = SessionProvider(
+      sessionListLoader: () async => [source],
+      inactiveLocalSessionCloser: () async {
+        sweeps += 1;
+        return const [automaticallyClosed];
+      },
+      enableAutomaticInactivityClose: true,
+    );
+    addTearDown(provider.dispose);
+
+    await provider.ready;
+
+    expect(sweeps, 1);
+    expect(provider.currentSessionId, source.sessionId);
+    expect(provider.currentSession, same(automaticallyClosed));
+    expect(provider.currentSession?.status, 'closed');
+    expect(provider.dataRevision, 1);
+  });
 }
 
 const source = Session(
@@ -217,4 +239,13 @@ const otherActive = Session(
   status: 'active',
   createdAt: '2026-07-14T00:00:00Z',
   updatedAt: '2026-07-14T00:01:00Z',
+);
+
+const automaticallyClosed = Session(
+  sessionId: 'collaboration-session',
+  title: 'Sunday net',
+  status: 'closed',
+  createdAt: '2026-07-13T00:00:00Z',
+  updatedAt: '2026-07-13T02:01:00Z',
+  closedAt: '2026-07-13T02:01:00Z',
 );

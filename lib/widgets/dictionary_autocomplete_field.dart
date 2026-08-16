@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
 import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
+import 'package:openlogtool/widgets/autocomplete_options_list.dart';
 
 class DictionaryAutocompleteField extends StatelessWidget {
   final TextEditingController controller;
@@ -91,25 +92,30 @@ class DictionaryAutocompleteField extends StatelessWidget {
         FocusNode fieldFocusNode,
         VoidCallback onFieldSubmitted,
       ) {
-        return TextFormField(
+        return AppAutocompleteKeyboardSubmit(
           controller: fieldController,
-          focusNode: fieldFocusNode,
-          enabled: enabled,
-          validator: validator,
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hintText,
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: isCompact ? 10 : 14,
+          onSubmitted: onFieldSubmitted,
+          child: TextFormField(
+            controller: fieldController,
+            focusNode: fieldFocusNode,
+            enabled: enabled,
+            validator: validator,
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hintText,
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: isCompact ? 10 : 14,
+              ),
             ),
+            onChanged: onChanged,
+            onFieldSubmitted: (_) => onFieldSubmitted(),
+            textInputAction: textInputAction ?? TextInputAction.next,
+            textCapitalization: textCapitalization,
+            inputFormatters: inputFormatters,
+            onTapOutside: (_) => fieldFocusNode.unfocus(),
           ),
-          onChanged: onChanged,
-          textInputAction: textInputAction ?? TextInputAction.next,
-          textCapitalization: textCapitalization,
-          inputFormatters: inputFormatters,
-          onTapOutside: (_) => fieldFocusNode.unfocus(),
         );
       },
       optionsViewBuilder: (
@@ -118,6 +124,8 @@ class DictionaryAutocompleteField extends StatelessWidget {
         Iterable<_DictionaryOption> options,
       ) {
         final theme = Theme.of(context);
+        final optionList = options.toList(growable: false);
+        final highlightedIndex = AutocompleteHighlightedOption.of(context);
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
@@ -125,12 +133,11 @@ class DictionaryAutocompleteField extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260, maxWidth: 320),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (BuildContext context, int index) {
-                  final item = options.elementAt(index);
+              child: AppAutocompleteOptionsList<_DictionaryOption>(
+                options: optionList,
+                highlightedIndex: highlightedIndex,
+                onSelected: onSelected,
+                optionBuilder: (context, item) {
                   return ListTile(
                     dense: true,
                     title: Text(item.value),
@@ -149,7 +156,6 @@ class DictionaryAutocompleteField extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           )
                         : null,
-                    onTap: () => onSelected(item),
                   );
                 },
               ),

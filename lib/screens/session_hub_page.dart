@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/controller_display.dart';
@@ -530,13 +531,13 @@ class SessionHubPage extends StatelessWidget {
         propagateErrors: true,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.sessionCreated(title))),
       );
       onSessionOpened?.call();
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.createSessionFailed('$error')),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -580,12 +581,12 @@ class SessionHubPage extends StatelessWidget {
         propagateErrors: true,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.historySessionClosed)),
       );
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(historySessionCloseErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -610,12 +611,12 @@ class SessionHubPage extends StatelessWidget {
       await sessions.deleteSessionLocally(sessionId);
       await logs.forgetDeletedSession(sessionId);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.historySessionDeleted)),
       );
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.historySessionDeleteFailed('$error')),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -651,13 +652,13 @@ class SessionHubPage extends StatelessWidget {
     try {
       await collaboration.reopenCurrentSession();
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.reopenSessionQueued)),
       );
       onSessionOpened?.call();
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.operationFailed('$error')),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -686,7 +687,7 @@ class SessionHubPage extends StatelessWidget {
         await context.read<SessionProvider>().renameCurrentSession(title);
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(
             collaborationSession
@@ -697,7 +698,7 @@ class SessionHubPage extends StatelessWidget {
       );
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.renameSessionFailed(error.toString())),
         ),
@@ -723,7 +724,7 @@ class SessionHubPage extends StatelessWidget {
       await sessions.reopenLocalSession(sessionId);
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(localSessionReopenErrorText(context, error)),
           backgroundColor: Theme.of(context).colorScheme.error,
@@ -761,7 +762,7 @@ class SessionHubPage extends StatelessWidget {
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final message = context.l10n.historySessionReopened(sessionTitle);
-    messenger.showSnackBar(
+    messenger.showLoggedSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -786,7 +787,7 @@ class SessionHubPage extends StatelessWidget {
       );
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(
             context.l10n.controllerWindowOpenFailed(error.toString()),

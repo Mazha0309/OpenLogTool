@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/live_draft.dart';
@@ -314,8 +315,9 @@ void main() {
     expect(calls, 1);
     final suggestion = find.byKey(const Key('inline-ai-suggestion-device'));
     expect(suggestion, findsOneWidget);
-    await tester.tap(suggestion);
-    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
     expect(_fieldController(tester, 'Radio').text, 'FT-991A');
   });
 }

@@ -7,7 +7,6 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge_log;
 import 'package:openlogtool/src/bridge/models/session.dart';
@@ -62,7 +61,6 @@ void main() {
               create: (_) => DictionaryProvider(autoload: false),
             ),
             ChangeNotifierProvider(create: (_) => SettingsProvider()),
-            ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
           ],
           child: const MaterialApp(
             locale: Locale('zh', 'CN'),
@@ -160,7 +158,6 @@ void main() {
             create: (_) => DictionaryProvider(autoload: false),
           ),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
-          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ],
         child: const MaterialApp(
           locale: Locale('zh', 'CN'),

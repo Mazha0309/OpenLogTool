@@ -421,6 +421,9 @@ void main() {
 
     expect(provider.isLoggedIn, isFalse);
     expect(sessions[serverUrl], isNull);
+    expect(provider.lastErrorCode, 'AUTH_EXPIRED');
+    expect(provider.authenticationNoticeCode, 'AUTH_EXPIRED');
+    expect(provider.authenticationNoticeRevision, 1);
     provider.dispose();
   });
 
@@ -754,19 +757,25 @@ const _serverInfoJson = {
   'serverTime': _now,
   'environment': 'test',
 };
-const _authJson = {
-  'accessToken': 'access-token',
-  'accessTokenExpiresIn': 900,
-  'refreshToken': 'refresh-token',
-  'refreshTokenExpiresAt': '2026-08-13T00:00:00.000Z',
-  'user': _userJson,
-};
+Map<String, Object?> get _authJson => {
+      'accessToken': 'access-token',
+      'accessTokenExpiresIn': 900,
+      'refreshToken': 'refresh-token',
+      'refreshTokenExpiresAt': DateTime.now()
+          .add(const Duration(days: 30))
+          .toUtc()
+          .toIso8601String(),
+      'user': _userJson,
+    };
 
 Map<String, Object?> _authJsonFor(String username) => {
       'accessToken': 'access-$username',
       'accessTokenExpiresIn': 900,
       'refreshToken': 'refresh-$username',
-      'refreshTokenExpiresAt': '2026-08-13T00:00:00.000Z',
+      'refreshTokenExpiresAt': DateTime.now()
+          .add(const Duration(days: 30))
+          .toUtc()
+          .toIso8601String(),
       'user': {
         'id': 'user-$username',
         'username': username,

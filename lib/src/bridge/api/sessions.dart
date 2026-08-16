@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import '../models/session.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `close_session_locally_from_pool`, `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `into_summary`, `list_session_summaries_from_pool`, `reopen_local_session_from_pool`, `replace_collaboration_session_locally_from_pool`, `replace_collaboration_session_locally_in_tx`, `start_local_session_from_pool`, `stop_collaboration_session_locally_from_pool`
+// These functions are ignored because they are not marked as `pub`: `close_inactive_local_sessions_from_pool`, `close_session_locally_from_pool`, `convert_collaboration_session_to_local_from_pool`, `copy_collaboration_session_to_local_from_pool`, `hard_delete_session_from_pool`, `into_session`, `into_summary`, `list_session_summaries_from_pool`, `reopen_local_session_from_pool`, `replace_collaboration_session_locally_from_pool`, `replace_collaboration_session_locally_in_tx`, `start_local_session_from_pool`, `stop_collaboration_session_locally_from_pool`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LocalCopyLogRow`, `LocalReplacementStatus`, `SessionRow`, `SessionSummaryRow`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `from_row`, `from_row`, `from_row`
 
@@ -29,6 +29,16 @@ Future<List<Session>> listSessions() =>
 
 Future<List<SessionSummary>> listSessionSummaries() =>
     RustLib.instance.api.crateApiSessionsListSessionSummaries();
+
+/// Closes active local-only Sessions after two hours without a persisted
+/// record or Session change.
+///
+/// Collaboration replicas are deliberately excluded because their canonical
+/// lifecycle belongs to the server. The cutoff is rechecked in the same
+/// transaction as each close so a concurrent record write wins over the
+/// maintenance sweep.
+Future<List<Session>> closeInactiveLocalSessions() =>
+    RustLib.instance.api.crateApiSessionsCloseInactiveLocalSessions();
 
 Future<void> closeSession({required String sessionId}) =>
     RustLib.instance.api.crateApiSessionsCloseSession(sessionId: sessionId);

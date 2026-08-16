@@ -5,6 +5,7 @@ import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
+import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/screens/data_workspace_page.dart';
 import 'package:openlogtool/screens/session_hub_page.dart';
@@ -26,6 +27,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  ServerProvider? _serverProvider;
+  int _observedAuthenticationNoticeRevision = 0;
 
   /// 启动时 URL 已指定页面：优先恢复 URL，而不是跳转 sessions。
   bool _restoredFromUrl = false;
@@ -48,6 +51,49 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncReady = true;
       _initSession();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final server = context.read<ServerProvider>();
+    if (identical(server, _serverProvider)) return;
+    _serverProvider?.removeListener(_handleServerStateChanged);
+    _serverProvider = server..addListener(_handleServerStateChanged);
+    _handleServerStateChanged();
+  }
+
+  void _handleServerStateChanged() {
+    final server = _serverProvider;
+    if (server == null) return;
+    final revision = server.authenticationNoticeRevision;
+    final code = server.authenticationNoticeCode;
+    if (revision <= _observedAuthenticationNoticeRevision || code == null) {
+      return;
+    }
+    _observedAuthenticationNoticeRevision = revision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _serverProvider?.authenticationNoticeRevision != revision ||
+          _serverProvider?.authenticationNoticeCode != code) {
+        return;
+      }
+      final message = code == 'TOKEN_STORAGE_UNAVAILABLE'
+          ? context.l10n.authStorageUnavailableNotice
+          : context.l10n.authSessionExpiredNotice;
+      context.showLoggedSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: context.l10n.navSettings,
+            onPressed: () => _onItemTapped(3),
+          ),
+        ),
+        source: 'Authentication',
+        type: 'error',
+      );
     });
   }
 
@@ -81,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _serverProvider?.removeListener(_handleServerStateChanged);
     ControllerWindowService.closeAll().catchError((Object error) {
       debugPrint('[ControllerWindow] close failed: $error');
     });
@@ -132,6 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = <Widget>[
       _WorkbenchPage(
         onOpenSessions: () => _onItemTapped(1),
+        saveShortcutEnabled: _selectedIndex == 0,
       ),
       SessionHubPage(
         onSessionOpened: () {
@@ -253,13 +301,18 @@ class _AppDestination {
 }
 
 class _WorkbenchPage extends StatelessWidget {
-  const _WorkbenchPage({required this.onOpenSessions});
+  const _WorkbenchPage({
+    required this.onOpenSessions,
+    required this.saveShortcutEnabled,
+  });
 
   final VoidCallback onOpenSessions;
+  final bool saveShortcutEnabled;
 
   @override
   Widget build(BuildContext context) => AddRecordPage(
         onOpenSessions: onOpenSessions,
+        saveShortcutEnabled: saveShortcutEnabled,
       );
 }
 
@@ -587,9 +640,11 @@ class AddRecordPage extends StatelessWidget {
   const AddRecordPage({
     super.key,
     this.onOpenSessions,
+    this.saveShortcutEnabled = true,
   });
 
   final VoidCallback? onOpenSessions;
+  final bool saveShortcutEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -736,6 +791,7 @@ class AddRecordPage extends StatelessWidget {
           child: LogForm(
             key: ValueKey('log-form-$currentSessionId'),
             readOnly: readOnly,
+            saveShortcutEnabled: saveShortcutEnabled,
           ),
         ),
         const SizedBox(height: 16),
