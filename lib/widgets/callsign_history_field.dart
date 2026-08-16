@@ -68,16 +68,24 @@ class CallsignHistoryField extends StatefulWidget {
   State<CallsignHistoryField> createState() => _CallsignHistoryFieldState();
 }
 
-class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
+class _CallsignHistoryFieldState extends State<CallsignHistoryField>
+    with WidgetsBindingObserver {
+  static const int _historyLimit = 10;
+
   List<bridge.LogEntry> _history = [];
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
-  BuildContext? _overlayContext;
+  final GlobalKey _overlayPanelKey = GlobalKey();
   final FocusNode _ownFocusNode = FocusNode();
+  late final FocusOnKeyEventCallback _historyKeyHandler;
+  FocusNode? _keyHandlerNode;
+  FocusOnKeyEventCallback? _previousKeyHandler;
+  Timer? _focusLossTimer;
   bool _isSelecting = false;
   int _historyRequestGeneration = 0;
   int _highlightIndex = -1;
   final ScrollController _listController = ScrollController();
+  List<GlobalKey> _historyItemKeys = const [];
 
   FocusNode get _effFocus => widget.focusNode ?? _ownFocusNode;
   bool get _canUseHistory => widget.enabled && widget.historyEnabled;
@@ -85,37 +93,59 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _historyKeyHandler = _handleKeyEvent;
+    _attachKeyHandler(_effFocus);
     _effFocus.addListener(_onFocusChanged);
     widget.callsignController.addListener(_onCallsignChanged);
-    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
 
-  bool _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    if (!_effFocus.hasFocus) return false;
-    if (_overlayEntry == null || _history.isEmpty) return false;
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final isKeyPress = event is KeyDownEvent || event is KeyRepeatEvent;
+    if (!isKeyPress ||
+        !node.hasFocus ||
+        _overlayEntry == null ||
+        _history.isEmpty ||
+        _isSelecting) {
+      return _previousKeyHandler?.call(node, event) ?? KeyEventResult.ignored;
+    }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowDown) {
       _moveHighlight(1);
-      return true;
+      return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       _moveHighlight(-1);
-      return true;
+      return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
       if (_highlightIndex >= 0 && _highlightIndex < _history.length) {
         unawaited(_fillFromRecord(_history[_highlightIndex]));
-        return true;
+        return KeyEventResult.handled;
       }
-      return false;
+      return _previousKeyHandler?.call(node, event) ?? KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.escape) {
       _hideOverlay();
-      return true;
+      return KeyEventResult.handled;
     }
-    return false;
+    return _previousKeyHandler?.call(node, event) ?? KeyEventResult.ignored;
+  }
+
+  void _attachKeyHandler(FocusNode node) {
+    _keyHandlerNode = node;
+    _previousKeyHandler = node.onKeyEvent;
+    node.onKeyEvent = _historyKeyHandler;
+  }
+
+  void _detachKeyHandler() {
+    final node = _keyHandlerNode;
+    if (node != null && identical(node.onKeyEvent, _historyKeyHandler)) {
+      node.onKeyEvent = _previousKeyHandler;
+    }
+    _keyHandlerNode = null;
+    _previousKeyHandler = null;
   }
 
   @override
@@ -123,7 +153,9 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     super.didUpdateWidget(oldWidget);
     final oldFocus = oldWidget.focusNode ?? _ownFocusNode;
     if (oldFocus != _effFocus) {
+      _detachKeyHandler();
       oldFocus.removeListener(_onFocusChanged);
+      _attachKeyHandler(_effFocus);
       _effFocus.addListener(_onFocusChanged);
     }
     if (oldWidget.callsignController != widget.callsignController) {
@@ -141,13 +173,23 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    WidgetsBinding.instance.removeObserver(this);
+    _focusLossTimer?.cancel();
+    _detachKeyHandler();
     _listController.dispose();
     _hideOverlay();
     widget.callsignController.removeListener(_onCallsignChanged);
     _effFocus.removeListener(_onFocusChanged);
     if (widget.focusNode == null) _ownFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (_overlayEntry == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _overlayEntry?.markNeedsBuild();
+    });
   }
 
   void _moveHighlight(int delta) {
@@ -157,20 +199,44 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     if (next == _highlightIndex) return;
     _highlightIndex = next;
     _overlayEntry?.markNeedsBuild();
-    if (!_listController.hasClients) return;
-    const itemExtent = 62.0;
-    final target = itemExtent * _highlightIndex;
-    if (target < _listController.position.pixels ||
-        target >
-            _listController.position.pixels +
-                _listController.position.viewportDimension -
-                itemExtent) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final itemContext = next < _historyItemKeys.length
+          ? _historyItemKeys[next].currentContext
+          : null;
+      if (itemContext != null) {
+        unawaited(
+          Scrollable.ensureVisible(
+            itemContext,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          ),
+        );
+        return;
+      }
+      if (!_listController.hasClients) return;
+      const itemExtent = 58.0;
+      final position = _listController.position;
+      final itemTop = next * itemExtent;
+      final itemBottom = itemTop + itemExtent;
+      var target = position.pixels;
+      if (itemTop < position.pixels) {
+        target = itemTop;
+      } else if (itemBottom > position.pixels + position.viewportDimension) {
+        target = itemBottom - position.viewportDimension;
+      }
+      target = target.clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if (target == position.pixels) return;
       _listController.animateTo(
-        math.max(0, target - _listController.position.viewportDimension / 3),
+        target,
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
       );
-    }
+    });
   }
 
   void _onCallsignChanged() {
@@ -189,6 +255,8 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   }
 
   void _onFocusChanged() {
+    _focusLossTimer?.cancel();
+    _focusLossTimer = null;
     if (!_canUseHistory) {
       _hideOverlay();
       return;
@@ -207,10 +275,11 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     }
     if (_effFocus.hasFocus &&
         _history.isNotEmpty &&
-        _history.first.callsign.toUpperCase() == callsign) {
+        _history.first.callsign.trim().toUpperCase() == callsign) {
       _showOverlay();
     } else if (!_effFocus.hasFocus) {
-      Future.delayed(const Duration(milliseconds: 300), () {
+      _focusLossTimer = Timer(const Duration(milliseconds: 300), () {
+        _focusLossTimer = null;
         if (!mounted) return;
         if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
       });
@@ -234,7 +303,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     }
     try {
       final loader = widget.historyLoader ?? _loadHistoryFromDatabase;
-      final rows = await loader(callsign, 3);
+      final rows = await loader(callsign, _historyLimit);
       if (!mounted || !_canUseHistory) return;
       if (requestGeneration != _historyRequestGeneration) return;
       if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
@@ -251,7 +320,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
       setState(() => _history = rows);
       if (_effFocus.hasFocus &&
           _history.isNotEmpty &&
-          _history.first.callsign.toUpperCase() == current &&
+          _history.first.callsign.trim().toUpperCase() == current &&
           _overlayEntry == null) {
         _showOverlay();
       } else if (_history.isEmpty) {
@@ -312,55 +381,72 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
     _hideOverlay();
     if (!_canUseHistory || _history.isEmpty) return;
     _highlightIndex = 0;
-
     final overlay = Overlay.of(context);
-    final overlayBox = overlay.context.findRenderObject() as RenderBox;
-    final fieldBox = context.findRenderObject() as RenderBox;
-    final overlaySize = overlayBox.size;
-    final fieldSize = fieldBox.size;
-    final fieldOrigin = fieldBox.localToGlobal(
-      Offset.zero,
-      ancestor: overlayBox,
+    final list = List<bridge.LogEntry>.unmodifiable(_history);
+    _historyItemKeys = List<GlobalKey>.generate(
+      list.length,
+      (index) => GlobalKey(debugLabel: 'callsign-history-item-$index'),
+      growable: false,
     );
-    const screenMargin = 8.0;
-    const anchorGap = 4.0;
-    final mediaQuery = MediaQuery.of(context);
-    final view = View.of(context);
-    final rawBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
-    final bottomInset = math.max(
-      mediaQuery.viewInsets.bottom,
-      rawBottomInset,
-    );
-    final panelWidth = math.min(320.0, overlaySize.width - screenMargin * 2);
-    final maxLeft = overlaySize.width - screenMargin - panelWidth;
-    final panelLeft = fieldOrigin.dx.clamp(screenMargin, maxLeft).toDouble();
-    final desiredHeight = math.min(260.0, 42.0 + _history.length * 58.0);
-    final visibleTop = mediaQuery.padding.top + screenMargin;
-    final visibleBottom = overlaySize.height -
-        bottomInset -
-        mediaQuery.padding.bottom -
-        screenMargin;
-    final belowSpace = math.max(
-      0.0,
-      visibleBottom - (fieldOrigin.dy + fieldSize.height + anchorGap),
-    );
-    final aboveSpace = math.max(
-      0.0,
-      fieldOrigin.dy - anchorGap - visibleTop,
-    );
-    final openBelow = belowSpace >= math.min(desiredHeight, 120.0) ||
-        belowSpace >= aboveSpace;
-    final availableHeight = openBelow ? belowSpace : aboveSpace;
-    final panelHeight = math.min(desiredHeight, availableHeight);
-    final followerOffset = Offset(
-      panelLeft - fieldOrigin.dx,
-      openBelow ? fieldSize.height + anchorGap : -panelHeight - anchorGap,
-    );
-    final list = _history;
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) {
-        _overlayContext = ctx;
+        final overlayObject = overlay.context.findRenderObject();
+        final fieldObject = context.findRenderObject();
+        if (overlayObject is! RenderBox ||
+            fieldObject is! RenderBox ||
+            !overlayObject.attached ||
+            !fieldObject.attached) {
+          return const SizedBox.shrink();
+        }
+        final overlaySize = overlayObject.size;
+        final fieldSize = fieldObject.size;
+        final fieldOrigin = fieldObject.localToGlobal(
+          Offset.zero,
+          ancestor: overlayObject,
+        );
+        const screenMargin = 8.0;
+        const anchorGap = 4.0;
+        final mediaQuery = MediaQuery.of(ctx);
+        final view = View.of(ctx);
+        final rawBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+        final bottomInset = math.max(
+          mediaQuery.viewInsets.bottom,
+          rawBottomInset,
+        );
+        final availableWidth = math.max(
+          0.0,
+          overlaySize.width - screenMargin * 2,
+        );
+        final panelWidth = math.min(320.0, availableWidth);
+        final maxLeft = math.max(
+          screenMargin,
+          overlaySize.width - screenMargin - panelWidth,
+        );
+        final panelLeft =
+            fieldOrigin.dx.clamp(screenMargin, maxLeft).toDouble();
+        final desiredHeight = math.min(260.0, 42.0 + list.length * 58.0);
+        final visibleTop = mediaQuery.padding.top + screenMargin;
+        final visibleBottom = overlaySize.height -
+            bottomInset -
+            mediaQuery.padding.bottom -
+            screenMargin;
+        final belowSpace = math.max(
+          0.0,
+          visibleBottom - (fieldOrigin.dy + fieldSize.height + anchorGap),
+        );
+        final aboveSpace = math.max(
+          0.0,
+          fieldOrigin.dy - anchorGap - visibleTop,
+        );
+        final openBelow = belowSpace >= math.min(desiredHeight, 120.0) ||
+            belowSpace >= aboveSpace;
+        final availableHeight = openBelow ? belowSpace : aboveSpace;
+        final panelHeight = math.min(desiredHeight, availableHeight);
+        final followerOffset = Offset(
+          panelLeft - fieldOrigin.dx,
+          openBelow ? fieldSize.height + anchorGap : -panelHeight - anchorGap,
+        );
         return Positioned(
           width: panelWidth,
           child: CompositedTransformFollower(
@@ -374,6 +460,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
                 borderRadius: BorderRadius.circular(10),
                 surfaceTintColor: Colors.transparent,
                 child: Container(
+                  key: _overlayPanelKey,
                   constraints: BoxConstraints(maxHeight: panelHeight),
                   decoration: BoxDecoration(
                     color: Theme.of(ctx).colorScheme.surface,
@@ -418,98 +505,128 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
                         ),
                       ),
                       Flexible(
-                        child: ListView.builder(
+                        child: Scrollbar(
                           controller: _listController,
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: list.length,
-                          itemBuilder: (_, i) {
-                            final log = list[i];
-                            final details = [
-                              if (log.qth != null && log.qth!.isNotEmpty)
-                                log.qth,
-                              if (log.device != null && log.device!.isNotEmpty)
-                                log.device,
-                              if (log.antenna != null &&
-                                  log.antenna!.isNotEmpty)
-                                log.antenna,
-                            ].join(' · ');
-                            final selected = i == _highlightIndex;
-                            return InkWell(
-                              onTap: () async => _fillFromRecord(log),
-                              onHover: (hovered) {
-                                if (hovered && _highlightIndex != i) {
-                                  _highlightIndex = i;
-                                  _overlayEntry?.markNeedsBuild();
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? Theme.of(ctx)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.14)
-                                      : null,
-                                  border: i < list.length - 1
-                                      ? Border(
-                                          bottom: BorderSide(
-                                              color: Theme.of(ctx)
-                                                  .colorScheme
-                                                  .outlineVariant
-                                                  .withAlpha(80)))
-                                      : null,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.history,
-                                        size: 14,
-                                        color:
-                                            Theme.of(ctx).colorScheme.primary),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _formatTime(log.time),
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
+                          child: ListView.builder(
+                            key: const Key('callsign-history-list'),
+                            controller: _listController,
+                            primary: false,
+                            physics: const ClampingScrollPhysics(),
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.manual,
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: list.length,
+                            itemBuilder: (_, i) {
+                              final log = list[i];
+                              final details = [
+                                if (log.qth != null && log.qth!.isNotEmpty)
+                                  log.qth,
+                                if (log.device != null &&
+                                    log.device!.isNotEmpty)
+                                  log.device,
+                                if (log.antenna != null &&
+                                    log.antenna!.isNotEmpty)
+                                  log.antenna,
+                              ].join(' · ');
+                              final selected = i == _highlightIndex;
+                              return Semantics(
+                                key: _historyItemKeys[i],
+                                selected: selected,
+                                button: true,
+                                child: InkWell(
+                                  onTap: () => unawaited(_fillFromRecord(log)),
+                                  onHover: (hovered) {
+                                    if (hovered && _highlightIndex != i) {
+                                      _highlightIndex = i;
+                                      _overlayEntry?.markNeedsBuild();
+                                    }
+                                  },
+                                  child: Container(
+                                    constraints:
+                                        const BoxConstraints(minHeight: 58),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: selected
+                                          ? Theme.of(ctx)
+                                              .colorScheme
+                                              .primary
+                                              .withValues(alpha: 0.14)
+                                          : null,
+                                      border: i < list.length - 1
+                                          ? Border(
+                                              bottom: BorderSide(
                                                 color: Theme.of(ctx)
                                                     .colorScheme
-                                                    .primary),
-                                          ),
-                                          if (details.isNotEmpty)
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.only(top: 2),
-                                              child: Text(details,
-                                                  style: TextStyle(
+                                                    .outlineVariant
+                                                    .withAlpha(80),
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.history,
+                                          size: 14,
+                                          color:
+                                              Theme.of(ctx).colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                _formatTime(log.time),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Theme.of(ctx)
+                                                      .colorScheme
+                                                      .primary,
+                                                ),
+                                              ),
+                                              if (details.isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                    top: 2,
+                                                  ),
+                                                  child: Text(
+                                                    details,
+                                                    style: TextStyle(
                                                       fontSize: 11,
                                                       color: Theme.of(ctx)
                                                           .colorScheme
-                                                          .onSurfaceVariant),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis),
-                                            ),
-                                        ],
-                                      ),
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.chevron_right,
+                                          size: 16,
+                                          color: Theme.of(ctx)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ],
                                     ),
-                                    Icon(Icons.chevron_right,
-                                        size: 16,
-                                        color: Theme.of(ctx)
-                                            .colorScheme
-                                            .onSurfaceVariant),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ],
@@ -527,7 +644,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
   void _hideOverlay() {
     final entry = _overlayEntry;
     _overlayEntry = null;
-    _overlayContext = null;
+    _historyItemKeys = const [];
     if (entry == null) return;
     try {
       entry.remove();
@@ -564,7 +681,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField> {
         textCapitalization: TextCapitalization.characters,
         inputFormatters: const [ImeSafeUpperCaseTextFormatter()],
         onTapOutside: (event) {
-          final overlayContext = _overlayContext;
+          final overlayContext = _overlayPanelKey.currentContext;
           if (overlayContext != null) {
             final renderObject = overlayContext.findRenderObject();
             if (renderObject is RenderBox && renderObject.attached) {

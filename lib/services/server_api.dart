@@ -7,6 +7,7 @@ import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/models/personal_cloud_dto.dart';
 import 'package:openlogtool/models/personal_dictionary_snapshot_dto.dart';
+import 'package:openlogtool/services/app_logger.dart';
 
 /// Persistence boundary for authentication state.
 ///
@@ -1035,20 +1036,51 @@ final class ServerApi {
       request.body = jsonEncode(body);
     }
 
+    final stopwatch = Stopwatch()..start();
     try {
-      return await (() async {
+      final response = await (() async {
         final streamed = await _httpClient.send(request);
         return http.Response.fromStream(streamed);
       })()
           .timeout(timeout);
-    } on TimeoutException catch (error) {
+      final level = response.statusCode >= 500
+          ? AppLogLevel.error
+          : response.statusCode >= 400
+              ? AppLogLevel.warning
+              : AppLogLevel.debug;
+      final errorCode = response.statusCode >= 400
+          ? _apiErrorFromResponse(response)?.code ?? 'HTTP_ERROR'
+          : null;
+      AppLogger.instance.log(
+        level,
+        '$method $path -> ${response.statusCode} '
+        '(${stopwatch.elapsedMilliseconds} ms)'
+        '${errorCode == null ? '' : ' code=$errorCode'}',
+        source: 'ServerApi',
+      );
+      return response;
+    } on TimeoutException catch (error, stackTrace) {
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        '$method $path timed out after ${stopwatch.elapsedMilliseconds} ms',
+        source: 'ServerApi',
+        error: error,
+        stackTrace: stackTrace,
+      );
       throw _clientException(
         code: 'NETWORK_TIMEOUT',
         message: 'The server request timed out',
         retryable: true,
         cause: error,
       );
-    } on http.ClientException catch (error) {
+    } on http.ClientException catch (error, stackTrace) {
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        '$method $path failed after ${stopwatch.elapsedMilliseconds} ms',
+        source: 'ServerApi',
+        error: error,
+        stackTrace: stackTrace,
+      );
       throw _clientException(
         code: 'NETWORK_ERROR',
         message: 'The server request failed',

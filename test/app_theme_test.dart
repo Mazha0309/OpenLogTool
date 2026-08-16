@@ -30,7 +30,7 @@ void main() {
       expect(theme.cardTheme.color, colors.surfaceContainerLow);
       expect(
         (cardShape.borderRadius as BorderRadius).topLeft.x,
-        14,
+        AppRadius.surface,
       );
 
       final dialogShape = theme.dialogTheme.shape! as RoundedRectangleBorder;

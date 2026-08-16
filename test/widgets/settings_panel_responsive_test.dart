@@ -5,7 +5,6 @@ import 'package:openlogtool/providers/app_info_provider.dart';
 import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/widgets/settings/layout_settings.dart';
 import 'package:openlogtool/widgets/settings/theme_settings.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
@@ -94,6 +93,19 @@ void main() {
     expect(find.byKey(const Key('about-app-dialog')), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const Key('about-close')));
+    await tester.pumpAndSettle();
+
+    final logsEntry = find.byKey(const Key('view-logs-entry'));
+    await tester.scrollUntilVisible(
+      logsEntry,
+      160,
+      scrollable: pageScrollable,
+    );
+    expect(logsEntry.hitTestable(), findsOneWidget);
+    await tester.tap(logsEntry);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('log-viewer-dialog')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('log-viewer-close')));
     await tester.pumpAndSettle();
 
     final restoreEntry =
@@ -324,21 +336,18 @@ class _SettingsProviders {
       : settings = SettingsProvider(),
         server = ServerProvider(autoLoadSettings: false),
         appInfo = AppInfoProvider(),
-        aiRecognition = AiRecognitionSettingsProvider(),
-        snackbarLog = SnackbarLogProvider();
+        aiRecognition = AiRecognitionSettingsProvider();
 
   final SettingsProvider settings;
   final ServerProvider server;
   final AppInfoProvider appInfo;
   final AiRecognitionSettingsProvider aiRecognition;
-  final SnackbarLogProvider snackbarLog;
 
   void dispose() {
     settings.dispose();
     server.dispose();
     appInfo.dispose();
     aiRecognition.dispose();
-    snackbarLog.dispose();
   }
 }
 
@@ -364,9 +373,6 @@ class _SettingsPanelHarness extends StatelessWidget {
         ),
         ChangeNotifierProvider<AiRecognitionSettingsProvider>.value(
           value: providers.aiRecognition,
-        ),
-        ChangeNotifierProvider<SnackbarLogProvider>.value(
-          value: providers.snackbarLog,
         ),
       ],
       child: Consumer<SettingsProvider>(

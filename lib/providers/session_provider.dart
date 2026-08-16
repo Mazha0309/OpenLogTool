@@ -4,6 +4,8 @@ import 'package:openlogtool/services/key_value_store.dart';
 import 'package:openlogtool/src/bridge/api/sessions.dart' as session_api;
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
+import 'package:openlogtool/src/bridge/frb_generated.dart';
+import 'package:openlogtool/services/app_logger.dart';
 
 typedef LocalSessionReopener = Future<Session> Function(String sessionId);
 typedef LocalSessionStarter = Future<Session> Function(String title);
@@ -25,6 +27,7 @@ typedef SessionSummaryLoader = Future<List<SessionSummary>> Function();
 typedef SessionCollaborationBindingChecker = Future<bool> Function(
   String sessionId,
 );
+typedef InactiveLocalSessionCloser = Future<List<Session>> Function();
 
 @immutable
 class SessionListEntry {
@@ -39,6 +42,7 @@ class SessionListEntry {
 
 class SessionProvider with ChangeNotifier {
   static const _key = 'current_session_id';
+  static const _inactivityCheckInterval = Duration(minutes: 1);
   static const _databaseRevisionKey = 'local_database_replacement_revision';
   static const _databaseReplacementPendingKey =
       'local_database_replacement_pending';
@@ -54,7 +58,12 @@ class SessionProvider with ChangeNotifier {
   final SessionListLoader _sessionListLoader;
   final SessionSummaryLoader? _sessionSummaryLoader;
   final SessionCollaborationBindingChecker _sessionBindingChecker;
+  final InactiveLocalSessionCloser _inactiveLocalSessionCloser;
+  final bool _inactivityCloserRequiresRust;
+  final bool _automaticInactivityCloseEnabled;
   bool _disposed = false;
+  bool _inactivityCheckRunning = false;
+  Timer? _inactivityTimer;
   String? _currentSessionId;
   Session? _currentSession;
   int _databaseRevision = 0;
@@ -87,6 +96,8 @@ class SessionProvider with ChangeNotifier {
     SessionListLoader? sessionListLoader,
     SessionSummaryLoader? sessionSummaryLoader,
     SessionCollaborationBindingChecker? sessionBindingChecker,
+    InactiveLocalSessionCloser? inactiveLocalSessionCloser,
+    bool? enableAutomaticInactivityClose,
   })  : _localSessionStarter = localSessionStarter ??
             ((title) => session_api.startLocalSession(title: title)),
         _localSessionReopener = localSessionReopener ??
@@ -120,14 +131,28 @@ class SessionProvider with ChangeNotifier {
                 await RustApi.getSessionCollaborationBinding(
                   sessionId: sessionId,
                 ) !=
-                null) {
+                null),
+        _inactiveLocalSessionCloser = inactiveLocalSessionCloser ??
+            (() => session_api.closeInactiveLocalSessions()),
+        _inactivityCloserRequiresRust = inactiveLocalSessionCloser == null,
+        // Lifecycle maintenance is enabled explicitly by the production app
+        // root. Isolated widget/provider tests and alternate embedders do not
+        // have to initialize Rust merely by constructing this provider.
+        _automaticInactivityCloseEnabled =
+            enableAutomaticInactivityClose ?? false {
     final completer = Completer<void>();
     _initCompleter = completer;
     scheduleMicrotask(() async {
       try {
         await _init();
       } catch (e, st) {
-        debugPrint('[Session] init failed: $e\n$st');
+        AppLogger.instance.log(
+          AppLogLevel.error,
+          'Session provider initialization failed',
+          source: 'SessionProvider',
+          error: e,
+          stackTrace: st,
+        );
       } finally {
         if (!completer.isCompleted) completer.complete();
       }
@@ -137,6 +162,8 @@ class SessionProvider with ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
     super.dispose();
   }
 
@@ -162,15 +189,75 @@ class SessionProvider with ChangeNotifier {
           _currentSession = match.first;
           _currentSessionId = match.first.sessionId;
         } else {
-          debugPrint(
-              '[Session] stored session $storedId no longer exists, clearing');
+          AppLogger.instance.log(
+            AppLogLevel.warning,
+            'Stored current session $storedId no longer exists; clearing it',
+            source: 'SessionProvider',
+          );
           await prefs.remove(_key);
         }
       } catch (_) {}
     }
 
+    if (_automaticInactivityCloseEnabled &&
+        (!_inactivityCloserRequiresRust || RustLib.instance.initialized)) {
+      await _runInactivityCheck();
+      if (!_disposed) {
+        _inactivityTimer = Timer.periodic(
+          _inactivityCheckInterval,
+          (_) => unawaited(_runInactivityCheck()),
+        );
+      }
+    }
+
     // Don't auto-create — wait for user to create via dialog
     _safeNotify();
+  }
+
+  /// Runs the same inactivity maintenance used at startup and once per minute.
+  /// Rust performs the two-hour cutoff check and close atomically; this layer
+  /// only reconciles the selected Session and personal-cloud dirty revision.
+  Future<List<Session>> closeInactiveLocalSessionsNow() async {
+    await ready;
+    return _runInactivityCheck();
+  }
+
+  Future<List<Session>> _runInactivityCheck() async {
+    if (_disposed || _inactivityCheckRunning) return const [];
+    _inactivityCheckRunning = true;
+    try {
+      final closed = await _inactiveLocalSessionCloser();
+      if (closed.isEmpty || _disposed) return closed;
+
+      final currentId = _currentSessionId;
+      if (currentId != null) {
+        for (final session in closed) {
+          if (session.sessionId == currentId &&
+              _currentSessionId == currentId) {
+            _currentSession = session;
+            break;
+          }
+        }
+      }
+      _markPersonalDataChanged();
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Closed ${closed.length} inactive local session(s)',
+        source: 'SessionProvider',
+      );
+      return closed;
+    } catch (error, stackTrace) {
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Inactive-session maintenance failed',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return const [];
+    } finally {
+      _inactivityCheckRunning = false;
+    }
   }
 
   Future<String> getOrCreateSessionId() async {
@@ -217,14 +304,27 @@ class SessionProvider with ChangeNotifier {
       try {
         await _persistCurrentSessionId(session.sessionId);
       } catch (error, stackTrace) {
-        debugPrint(
-          '[Session] failed to persist new session selection: '
-          '$error\n$stackTrace',
+        AppLogger.instance.log(
+          AppLogLevel.warning,
+          'Could not persist the new current-session selection',
+          source: 'SessionProvider',
+          error: error,
+          stackTrace: stackTrace,
         );
       }
-      debugPrint('[Session] new session ready: ${session.sessionId}');
+      AppLogger.instance.log(
+        AppLogLevel.info,
+        'Started local session ${session.sessionId}',
+        source: 'SessionProvider',
+      );
     } catch (e, st) {
-      debugPrint('[Session] startNewSession ERROR: $e\n$st');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Could not start a local session',
+        source: 'SessionProvider',
+        error: e,
+        stackTrace: st,
+      );
       rethrow;
     }
   }
@@ -308,9 +408,12 @@ class SessionProvider with ChangeNotifier {
     } catch (error, stackTrace) {
       // Persistence only controls which session is restored on next launch.
       // The committed database state remains authoritative for this process.
-      debugPrint(
-        '[Session] failed to persist reopened session selection: '
-        '$error\n$stackTrace',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Could not persist the reopened current-session selection',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
@@ -338,9 +441,11 @@ class SessionProvider with ChangeNotifier {
       throw StateError('LOCAL_SESSION_COPY_INVALID');
     }
     if (_currentSessionId != sourceSessionId) {
-      debugPrint(
-        '[Session] local collaboration copy committed after the user selected '
-        'another session; preserving the newer selection',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'A local collaboration copy completed after the current session '
+        'changed; preserving the newer selection',
+        source: 'SessionProvider',
       );
       return local;
     }
@@ -352,9 +457,12 @@ class SessionProvider with ChangeNotifier {
     try {
       await _persistCurrentSessionId(local.sessionId);
     } catch (error, stackTrace) {
-      debugPrint(
-        '[Session] failed to persist local collaboration copy selection: '
-        '$error\n$stackTrace',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Could not persist the local-copy session selection',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
     return local;
@@ -375,9 +483,11 @@ class SessionProvider with ChangeNotifier {
       throw StateError('LOCAL_SESSION_CONVERSION_INVALID');
     }
     if (_currentSessionId != sourceSessionId) {
-      debugPrint(
-        '[Session] collaboration conversion committed after the user selected '
-        'another session; preserving the newer selection',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Collaboration conversion completed after the current session '
+        'changed; preserving the newer selection',
+        source: 'SessionProvider',
       );
       return local;
     }
@@ -389,9 +499,12 @@ class SessionProvider with ChangeNotifier {
     try {
       await _persistCurrentSessionId(local.sessionId);
     } catch (error, stackTrace) {
-      debugPrint(
-        '[Session] failed to persist converted local Session selection: '
-        '$error\n$stackTrace',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Could not persist the converted local-session selection',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
     return local;
@@ -412,9 +525,11 @@ class SessionProvider with ChangeNotifier {
       throw StateError('LOCAL_SESSION_CONVERSION_INVALID');
     }
     if (_currentSessionId != sourceSessionId) {
-      debugPrint(
-        '[Session] local collaboration stop committed after the user selected '
-        'another session; preserving the newer selection',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Stopping local collaboration completed after the current session '
+        'changed; preserving the newer selection',
+        source: 'SessionProvider',
       );
       return local;
     }
@@ -452,9 +567,12 @@ class SessionProvider with ChangeNotifier {
       final prefs = await openKeyValueStore();
       await prefs.remove(_key);
     } catch (error, stackTrace) {
-      debugPrint(
-        '[Session] failed to clear deleted session selection: '
-        '$error\n$stackTrace',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Could not clear the deleted current-session selection',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
@@ -469,9 +587,12 @@ class SessionProvider with ChangeNotifier {
     try {
       await _persistCurrentSessionId(session.sessionId);
     } catch (error, stackTrace) {
-      debugPrint(
-        '[Session] failed to persist $operation selection: '
-        '$error\n$stackTrace',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Could not persist current-session selection after $operation',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }
@@ -539,10 +660,13 @@ class SessionProvider with ChangeNotifier {
     } catch (error, stackTrace) {
       // The database replacement has already committed. A preference failure
       // must not put the in-memory providers back on stale database rows.
-      debugPrint(
-        '[Session] failed to persist database replacement selection after '
-        'the safety revision was saved: '
-        '$error\n$stackTrace',
+      AppLogger.instance.log(
+        AppLogLevel.warning,
+        'Could not persist the current-session selection after database '
+        'replacement',
+        source: 'SessionProvider',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }

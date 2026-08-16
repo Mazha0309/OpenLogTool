@@ -8,7 +8,6 @@ import 'package:http/testing.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/providers/server_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/services/secure_token_store.dart';
 import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/widgets/settings/server_account_settings.dart';
@@ -35,7 +34,6 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ServerProvider>.value(value: provider),
-          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),
@@ -144,7 +142,6 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ServerProvider>.value(value: provider),
-          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),
@@ -262,7 +259,6 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ServerProvider>.value(value: provider),
-          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),
@@ -381,7 +377,6 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ServerProvider>.value(value: provider),
-          ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ],
         child: const MaterialApp(
           locale: Locale('en', 'US'),

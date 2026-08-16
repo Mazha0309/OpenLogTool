@@ -570,6 +570,38 @@ async fn migrate_v7(pool: &SqlitePool) -> anyhow::Result<()> {
     .execute(&mut *tx)
     .await?;
 
+    // Releases before inactivity-based lifecycle management did not advance a
+    // Session's updated_at when its Logs changed. Re-assert the latest known
+    // activity on every idempotent v7 pass so existing databases cannot have
+    // an actively used Session closed from a stale creation timestamp.
+    let activity_tables: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*)
+         FROM sqlite_master
+         WHERE type = 'table' AND name IN ('sessions', 'logs')",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if activity_tables.0 == 2 {
+        sqlx::query(
+            "UPDATE sessions
+             SET updated_at = (
+                 SELECT logs.updated_at
+                 FROM logs
+                 WHERE logs.session_id = sessions.session_id
+                 ORDER BY julianday(logs.updated_at) DESC
+                 LIMIT 1
+             )
+             WHERE EXISTS (
+                 SELECT 1
+                 FROM logs
+                 WHERE logs.session_id = sessions.session_id
+                   AND julianday(logs.updated_at) > julianday(sessions.updated_at)
+             )",
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
     tx.commit().await?;
     Ok(())
 }

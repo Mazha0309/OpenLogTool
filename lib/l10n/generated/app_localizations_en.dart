@@ -1895,7 +1895,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get logsTitle => 'Logs';
 
   @override
-  String get logsView => 'View logs';
+  String get logsView =>
+      'Review persistent diagnostics, errors, and in-app messages';
 
   @override
   String get logsEmpty => 'No logs yet';
@@ -1910,15 +1911,58 @@ class AppLocalizationsEn extends AppLocalizations {
   String get logsCopied => 'Logs copied';
 
   @override
-  String get snackbarLogTitle => 'In-app message log';
+  String logsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persistent logs',
+      one: '1 persistent log',
+      zero: 'No persistent logs',
+    );
+    return '$_temp0';
+  }
 
   @override
-  String get snackbarLogHint =>
-      'Review bottom-of-screen messages shown during this run';
+  String get logsSearchHint => 'Search messages, sources, errors, or stacks';
 
   @override
-  String get snackbarLogEmpty =>
-      'No in-app messages have been recorded during this run';
+  String get logsLevelAll => 'All';
+
+  @override
+  String get logsLevelDebug => 'Debug';
+
+  @override
+  String get logsLevelInfo => 'Info';
+
+  @override
+  String get logsLevelWarning => 'Warning';
+
+  @override
+  String get logsLevelError => 'Error';
+
+  @override
+  String get logsClear => 'Clear';
+
+  @override
+  String get logsClearTitle => 'Clear diagnostic logs';
+
+  @override
+  String get logsClearConfirmation =>
+      'Delete all diagnostic logs saved on this device? Check-in records will not be affected.';
+
+  @override
+  String get logsCleared => 'Diagnostic logs cleared';
+
+  @override
+  String get logsNoFilterResults => 'No logs match the current filters';
+
+  @override
+  String get authSessionExpiredNotice =>
+      'Your server sign-in has expired. Sign in again; local data and the server address were preserved.';
+
+  @override
+  String get authStorageUnavailableNotice =>
+      'Persistent sign-in credentials could not be read. Check the system credential store and sign in again.';
 
   @override
   String get resetSettingsTitle => 'Restore default settings';

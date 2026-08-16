@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
@@ -222,7 +223,7 @@ class _AiRecognitionSettingsState extends State<AiRecognitionSettings> {
         client.close();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.textAssistantTestSucceeded)),
       );
     });
@@ -443,7 +444,7 @@ class _AiRecognitionSettingsState extends State<AiRecognitionSettings> {
       await operation();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.aiSettingsFailed('$error'))),
       );
     } finally {
@@ -1062,7 +1063,7 @@ class _AiProfileEditorDialogState extends State<_AiProfileEditorDialog> {
       );
     } catch (error) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.aiSettingsFailed('$error'))),
       );
     }

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -142,7 +143,7 @@ class AboutAppDialog extends StatelessWidget {
     ].join('\n');
     await Clipboard.setData(ClipboardData(text: information));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showLoggedSnackBar(
       SnackBar(content: Text(context.l10n.aboutVersionInfoCopied)),
     );
   }
@@ -161,7 +162,7 @@ class AboutAppDialog extends StatelessWidget {
       launchUrl(uri, mode: LaunchMode.externalApplication);
 
   void _showLinkError(BuildContext context, String error) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showLoggedSnackBar(
       SnackBar(content: Text(context.l10n.aboutLinkOpenFailed(error))),
     );
   }
@@ -407,7 +408,7 @@ class _UpdateCheckButtonState extends State<_UpdateCheckButton> {
       setState(() => _checking = false);
 
       if (!result.updateAvailable) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showLoggedSnackBar(
           SnackBar(
             content: Text(context.l10n.aboutUpToDate(result.latestVersion)),
           ),
@@ -419,7 +420,7 @@ class _UpdateCheckButtonState extends State<_UpdateCheckButton> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _checking = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(content: Text(context.l10n.aboutUpdateCheckFailed)),
       );
     }

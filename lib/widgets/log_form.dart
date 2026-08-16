@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,7 +22,9 @@ import 'package:openlogtool/services/ai_database_context.dart';
 import 'package:openlogtool/services/ai_recognition_runtime.dart';
 import 'package:openlogtool/services/ai_recognition/providers.dart';
 import 'package:openlogtool/services/text_assistant_tasks.dart';
+import 'package:openlogtool/services/app_logger.dart';
 import 'package:openlogtool/widgets/ai_recognition_control.dart';
+import 'package:openlogtool/widgets/autocomplete_options_list.dart';
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 
@@ -31,6 +34,7 @@ class LogForm extends StatefulWidget {
   const LogForm({
     super.key,
     this.readOnly = false,
+    this.saveShortcutEnabled = true,
     this.aiAudioRecorder,
     this.aiRecognitionExecutor,
     this.aiTranscriptionExecutor,
@@ -39,6 +43,7 @@ class LogForm extends StatefulWidget {
   });
 
   final bool readOnly;
+  final bool saveShortcutEnabled;
   final AiAudioRecorder? aiAudioRecorder;
   final AiRecognitionExecutor? aiRecognitionExecutor;
   final AiTranscriptionExecutor? aiTranscriptionExecutor;
@@ -82,6 +87,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   final _rstRcvdController = TextEditingController();
   final _remarksController = TextEditingController();
   final Map<String, Timer> _draftDebounce = {};
+  Timer? _duplicateCallsignDebounce;
+  bool _duplicatePromptInProgress = false;
+  String? _lastDuplicatePromptedCallsign;
   late final Map<String, TextEditingController> _draftControllers;
   late final Map<String, FocusNode> _draftFocusNodes;
   late final Map<String, VoidCallback> _draftControllerListeners;
@@ -170,7 +178,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         !HardwareKeyboard.instance.isMetaPressed) {
       return false;
     }
-    if (!mounted || _submissionInProgress) return false;
+    if (!mounted ||
+        !widget.saveShortcutEnabled ||
+        _submissionInProgress ||
+        ModalRoute.of(context)?.isCurrent == false) {
+      return false;
+    }
     final collaboration = context.read<CollaborationProvider>();
     if (widget.readOnly ||
         (collaboration.liveDraftSnapshot != null &&
@@ -193,6 +206,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleGlobalShortcut);
     _lockExpiryTimer?.cancel();
+    _duplicateCallsignDebounce?.cancel();
     for (final timer in _inlineAiDebounce.values) {
       timer.cancel();
     }
@@ -297,6 +311,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   void _onDraftFieldChanged(String field) {
     if (!mounted) return;
     if (_refreshingInlineAiOptions) return;
+    if (field == 'callsign') {
+      _duplicateCallsignDebounce?.cancel();
+      _duplicateCallsignDebounce = null;
+      final callsign = _callsignController.text.trim().toUpperCase();
+      if (_lastDuplicatePromptedCallsign != callsign) {
+        _lastDuplicatePromptedCallsign = null;
+      }
+    }
     if (_aiFieldRevisions.containsKey(field)) {
       _aiFieldRevisions[field] = _aiFieldRevisions[field]! + 1;
     }
@@ -304,6 +326,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (_hasActiveUpperCaseComposition(field)) {
       _draftDebounce.remove(field)?.cancel();
       return;
+    }
+    if (field == 'callsign') {
+      _scheduleDuplicateCallsignCheck();
     }
     if (_inlineAiFields.contains(field)) {
       _scheduleInlineAiSuggestion(field);
@@ -488,6 +513,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       _clearInlineAiSuggestion(field);
     }
     if (field == 'callsign' && !focused) {
+      _duplicateCallsignDebounce?.cancel();
+      _duplicateCallsignDebounce = null;
       unawaited(_maybePromptDuplicateUpdate());
     }
     final collaboration = context.read<CollaborationProvider>();
@@ -502,17 +529,43 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (!focused) unawaited(_flushAndReleaseDraftField(field, collaboration));
   }
 
-  Future<void> _maybePromptDuplicateUpdate() async {
-    if (!mounted) return;
+  void _scheduleDuplicateCallsignCheck() {
+    final callsign = _callsignController.text.trim().toUpperCase();
+    if (callsign.isEmpty) return;
+    _duplicateCallsignDebounce = Timer(
+      const Duration(milliseconds: 700),
+      () {
+        _duplicateCallsignDebounce = null;
+        if (!mounted ||
+            _callsignController.text.trim().toUpperCase() != callsign) {
+          return;
+        }
+        unawaited(_maybePromptDuplicateUpdate(expectedCallsign: callsign));
+      },
+    );
+  }
+
+  Future<void> _maybePromptDuplicateUpdate({String? expectedCallsign}) async {
+    if (!mounted || _duplicatePromptInProgress) return;
     final settingsProvider = context.read<SettingsProvider>();
     if (!settingsProvider.duplicateCallsignWarningEnabled) return;
     final collaboration = context.read<CollaborationProvider>();
-    if (collaboration.liveDraftSnapshot != null) return;
-    if (widget.readOnly || _historyReuseInProgress || _clearInProgress) {
+    if (collaboration.liveDraftSnapshot != null &&
+        !collaboration.canEditLiveDraft) {
+      return;
+    }
+    if (widget.readOnly ||
+        _historyReuseInProgress ||
+        _submissionInProgress ||
+        _clearInProgress) {
       return;
     }
     final callsign = _callsignController.text.trim().toUpperCase();
-    if (callsign.isEmpty) return;
+    if (callsign.isEmpty ||
+        (expectedCallsign != null && callsign != expectedCallsign) ||
+        _lastDuplicatePromptedCallsign == callsign) {
+      return;
+    }
     final logProvider = context.read<LogProvider>();
     final existing = logProvider.logs
         .where((log) => log.callsign.trim().toUpperCase() == callsign)
@@ -520,28 +573,51 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (existing.isEmpty || !mounted) return;
     final l10n = context.l10n;
     final ordinal = logProvider.logs.indexOf(existing.last) + 1;
-    final continueAdding = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.duplicateContinueDialogTitle),
-        content: Text(l10n.duplicateContinueDialogMessage(callsign, ordinal)),
-        actions: [
-          TextButton(
-            key: const Key('duplicate-continue-cancel'),
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            key: const Key('duplicate-continue-add'),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.duplicateContinueAdd),
-          ),
-        ],
-      ),
-    );
+    _duplicatePromptInProgress = true;
+    _lastDuplicatePromptedCallsign = callsign;
+    bool? continueAdding;
+    try {
+      continueAdding = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(l10n.duplicateContinueDialogTitle),
+          content: Text(l10n.duplicateContinueDialogMessage(callsign, ordinal)),
+          actions: [
+            TextButton(
+              key: const Key('duplicate-continue-cancel'),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('duplicate-continue-add'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(l10n.duplicateContinueAdd),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _duplicatePromptInProgress = false;
+    }
     if (!mounted || continueAdding == true) return;
     // 用户选择不继续，清空呼号让书记员重录或改录。
-    _callsignController.clear();
+    if (collaboration.liveDraftSnapshot != null) {
+      try {
+        await collaboration.updateLiveDraftFieldsAtomically(
+          const {'callsign': ''},
+        );
+        if (!mounted) return;
+        _syncSharedDraft(collaboration);
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.maybeOf(context)?.showLoggedSnackBar(
+          SnackBar(content: Text(context.l10n.operationFailed('$error'))),
+        );
+        return;
+      }
+    } else {
+      _callsignController.clear();
+    }
     FocusScope.of(context).requestFocus(_callsignFocusNode);
   }
 
@@ -557,7 +633,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     final settingsProvider =
         Provider.of<SettingsProvider>(context, listen: false);
     if (existing.sessionId == null || existing.id.isEmpty) {
-      messenger?.showSnackBar(
+      messenger?.showLoggedSnackBar(
         SnackBar(content: Text(l10n.operationFailed('missing id'))),
       );
       return;
@@ -589,14 +665,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       await logProvider.updateLogById(existing.id, patch);
     } catch (error) {
       if (!mounted) return;
-      messenger?.showSnackBar(
+      messenger?.showLoggedSnackBar(
         SnackBar(content: Text(l10n.operationFailed('$error'))),
       );
       return;
     }
     if (!mounted) return;
     _resetForm();
-    messenger?.showSnackBar(
+    messenger?.showLoggedSnackBar(
       SnackBar(content: Text(l10n.recordUpdated)),
     );
   }
@@ -687,7 +763,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         if (holder != null &&
             holder.expiresAt.isAfter(DateTime.now()) &&
             collaboration.fieldLockedByAnotherUser(field)) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showLoggedSnackBar(
             SnackBar(
                 content: Text(context.l10n.fieldLockedBy(holder.username))),
           );
@@ -704,7 +780,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         await collaboration.updateLiveDraftFieldsOptimistically(values);
       } catch (error) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showLoggedSnackBar(
             SnackBar(
                 content: Text(context.l10n.operationFailed(error.toString()))),
           );
@@ -751,9 +827,15 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     try {
       await _submitValidatedForm(collaboration);
     } catch (error, stackTrace) {
-      debugPrint('[LogForm] submit failed: $error\n$stackTrace');
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Record form submission failed',
+        source: 'LogForm',
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.operationFailed('$error'))),
         );
       }
@@ -797,7 +879,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       if (!mounted) return;
       _applyClearedFieldsLocally();
       FocusScope.of(context).requestFocus(_callsignFocusNode);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showLoggedSnackBar(
         SnackBar(
           content: Text(context.l10n.enteredFieldsCleared),
           duration: const Duration(seconds: 2),
@@ -805,7 +887,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showLoggedSnackBar(
           SnackBar(content: Text(context.l10n.operationFailed('$error'))),
         );
       }
@@ -997,7 +1079,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       }
       if (!mounted) return;
       _syncSharedDraft(collaboration);
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(
           content: Text(
             disposition == LiveDraftCommitDisposition.committed
@@ -1029,7 +1111,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
     _resetForm();
 
-    messenger.showSnackBar(
+    messenger.showLoggedSnackBar(
       SnackBar(
         content: Text(l10n.recordAdded),
         duration: const Duration(seconds: 2),
@@ -1733,33 +1815,38 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         FocusNode fieldFocusNode,
         VoidCallback onFieldSubmitted,
       ) {
-        return TextFormField(
+        return AppAutocompleteKeyboardSubmit(
           controller: fieldController,
-          focusNode: fieldFocusNode,
-          enabled: enabled,
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hintText,
-            isDense: true,
-            suffixIcon: _inlineAiPending.contains(draftField)
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : null,
-            contentPadding: EdgeInsets.symmetric(
-                horizontal: 12, vertical: isCompact ? 10 : 14),
+          onSubmitted: onFieldSubmitted,
+          child: TextFormField(
+            controller: fieldController,
+            focusNode: fieldFocusNode,
+            enabled: enabled,
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hintText,
+              isDense: true,
+              suffixIcon: _inlineAiPending.contains(draftField)
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : null,
+              contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12, vertical: isCompact ? 10 : 14),
+            ),
+            onChanged: (value) {
+              onChanged?.call(value);
+            },
+            onFieldSubmitted: (_) => onFieldSubmitted(),
+            textInputAction: textInputAction ?? TextInputAction.next,
+            textCapitalization: textCapitalization,
+            inputFormatters: inputFormatters,
+            onTapOutside: (_) => fieldFocusNode.unfocus(),
           ),
-          onChanged: (value) {
-            onChanged?.call(value);
-          },
-          textInputAction: textInputAction ?? TextInputAction.next,
-          textCapitalization: textCapitalization,
-          inputFormatters: inputFormatters,
-          onTapOutside: (_) => fieldFocusNode.unfocus(),
         );
       },
       optionsViewBuilder: (
@@ -1768,6 +1855,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         Iterable<_FormSuggestion> options,
       ) {
         final theme = Theme.of(context);
+        final optionList = options.toList(growable: false);
+        final highlightedIndex = AutocompleteHighlightedOption.of(context);
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
@@ -1775,12 +1864,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
             borderRadius: BorderRadius.circular(8),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260, maxWidth: 320),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (BuildContext context, int index) {
-                  final item = options.elementAt(index);
+              child: AppAutocompleteOptionsList<_FormSuggestion>(
+                options: optionList,
+                highlightedIndex: highlightedIndex,
+                onSelected: onSelected,
+                optionBuilder: (context, item) {
                   return ListTile(
                     key: item.isAi
                         ? Key('inline-ai-suggestion-$draftField')
@@ -1817,7 +1905,6 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                                 overflow: TextOverflow.ellipsis,
                               )
                             : null,
-                    onTap: () => onSelected(item),
                   );
                 },
               ),

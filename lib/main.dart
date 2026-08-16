@@ -10,7 +10,6 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/ai_recognition_settings_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/providers/app_info_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
@@ -38,18 +37,48 @@ import 'package:path/path.dart' as p;
 /// 会被丢弃，动态读取将拿不到。
 late final ({bool isController, String? sessionId}) controllerTabRoute;
 
-Future<void> main(List<String> args) async {
+void main(List<String> args) {
+  runZonedGuarded<Future<void>>(
+    () => _bootstrap(args),
+    (error, stackTrace) {
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Uncaught asynchronous error',
+        source: 'Zone',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    },
+  );
+}
+
+Future<void> _bootstrap(List<String> args) async {
   // 先于 usePathUrlStrategy 捕获主控屏标签页参数。
   controllerTabRoute = web_bridge.controllerTabRouteSnapshot();
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
-  await AppLogger.instance.init();
+  final isControllerChild =
+      ControllerWindowService.isControllerChildArguments(args);
+  await AppLogger.instance.init(trackRunState: !isControllerChild);
+  AppLogger.instance.installDebugPrintCapture();
   FlutterError.onError = (details) {
-    AppLogger.instance.error('Flutter error', details.exception, details.stack);
+    AppLogger.instance.log(
+      AppLogLevel.error,
+      'Flutter framework error',
+      source: details.library ?? 'Flutter',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
     FlutterError.presentError(details);
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    AppLogger.instance.error('Platform error', error, stack);
+    AppLogger.instance.log(
+      AppLogLevel.error,
+      'Uncaught platform error',
+      source: 'PlatformDispatcher',
+      error: error,
+      stackTrace: stack,
+    );
     FlutterError.reportError(FlutterErrorDetails(
       exception: error,
       stack: stack,
@@ -59,8 +88,14 @@ Future<void> main(List<String> args) async {
   };
   try {
     await loadAppFonts();
-  } catch (e) {
-    debugPrint('Failed to load app fonts, falling back to system fonts: $e');
+  } catch (error, stackTrace) {
+    AppLogger.instance.log(
+      AppLogLevel.warning,
+      'Failed to load bundled fonts; using system fonts',
+      source: 'Bootstrap',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
   // 桌面子窗口只渲染主控屏，不初始化 Rust、本地数据库或主应用 Provider。
@@ -69,7 +104,9 @@ Future<void> main(List<String> args) async {
   if (controllerWindow != null) {
     runApp(
       WindowsAccessibilityCrashGuard(
-        child: ControllerDisplayWindowApp(session: controllerWindow),
+        child: _ApplicationLifecycleLogger(
+          child: ControllerDisplayWindowApp(session: controllerWindow),
+        ),
       ),
     );
     return;
@@ -94,8 +131,14 @@ Future<void> main(List<String> args) async {
   }
   try {
     await RustApi.init(dbPath: dbPath);
-  } catch (e) {
-    debugPrint('Rust DB init: $e');
+  } catch (error, stackTrace) {
+    AppLogger.instance.log(
+      AppLogLevel.error,
+      'Rust database initialization failed',
+      source: 'Bootstrap',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
   // Web：把 localStorage（SharedPreferences）旧数据一次性拷贝到 IndexedDB。
@@ -109,10 +152,13 @@ Future<void> main(List<String> args) async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()..loadAppInfo()),
-        ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => AiRecognitionSettingsProvider()),
-        ChangeNotifierProvider(create: (_) => SessionProvider()),
+        ChangeNotifierProvider(
+          create: (_) => SessionProvider(
+            enableAutomaticInactivityClose: true,
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => ServerProvider()),
         ChangeNotifierProvider(create: (_) => DictionaryProvider()),
         ChangeNotifierProvider(create: (_) => LogProvider()),
@@ -143,9 +189,56 @@ Future<void> main(List<String> args) async {
                 ),
         ),
       ],
-      child: const WindowsAccessibilityCrashGuard(child: MyApp()),
+      child: const WindowsAccessibilityCrashGuard(
+        child: _ApplicationLifecycleLogger(child: MyApp()),
+      ),
     ),
   );
+}
+
+class _ApplicationLifecycleLogger extends StatefulWidget {
+  const _ApplicationLifecycleLogger({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ApplicationLifecycleLogger> createState() =>
+      _ApplicationLifecycleLoggerState();
+}
+
+class _ApplicationLifecycleLoggerState
+    extends State<_ApplicationLifecycleLogger> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    AppLogger.instance.log(
+      AppLogLevel.info,
+      'Application UI started',
+      source: 'Lifecycle',
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    AppLogger.instance.log(
+      AppLogLevel.info,
+      'Lifecycle changed to ${state.name}',
+      source: 'Lifecycle',
+    );
+    if (state == AppLifecycleState.detached) {
+      unawaited(AppLogger.instance.markCleanShutdown());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class MyApp extends StatelessWidget {

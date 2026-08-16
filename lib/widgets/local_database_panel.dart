@@ -10,7 +10,6 @@ import 'package:openlogtool/models/database_backup_summary.dart';
 import 'package:openlogtool/models/database_status.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
@@ -53,71 +52,10 @@ class LocalDatabasePanel extends StatelessWidget {
             onViewDatabaseLog: () => _showDatabaseLogDialog(context),
             onExportDatabase: () => _exportDatabase(context),
             onImportDatabase: () => _importDatabase(context),
-            onViewSnackbarLog: () => _showSnackbarLogDialog(context),
             onClearAllData: () => _showClearDataConfirmation(context),
           ),
         ],
       );
-
-  Future<void> _showSnackbarLogDialog(BuildContext context) async {
-    final entries = context.read<SnackbarLogProvider>().entries;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        insetPadding: _dialogInsetPadding(dialogContext),
-        title: Text(dialogContext.l10n.snackbarLogTitle),
-        content: SizedBox(
-          width: AppDimensions.dialogWidth,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 480),
-            child: entries.isEmpty
-                ? Text(dialogContext.l10n.snackbarLogEmpty)
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: entries.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: AppSpace.md),
-                    itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      final time =
-                          '${entry.createdAt.hour.toString().padLeft(2, '0')}:'
-                          '${entry.createdAt.minute.toString().padLeft(2, '0')}:'
-                          '${entry.createdAt.second.toString().padLeft(2, '0')}';
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SelectableText(
-                            entry.message,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: AppSpace.xxs),
-                          Text(
-                            '$time · ${entry.type} · ${entry.source}',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(dialogContext.l10n.close),
-          ),
-        ],
-      ),
-    );
-  }
 
   Future<void> _showClearDataConfirmation(BuildContext context) async {
     final phrase = context.l10n.databaseClearConfirmationPhrase;

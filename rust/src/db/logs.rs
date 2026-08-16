@@ -2,6 +2,26 @@ use crate::get_db;
 use crate::models::log_entry::{LogEntry, LogStats};
 use sqlx::{Sqlite, Transaction};
 
+async fn touch_session_activity_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    session_id: &str,
+    occurred_at: &str,
+) -> anyhow::Result<()> {
+    let result = sqlx::query(
+        "UPDATE sessions
+         SET updated_at = ?
+         WHERE session_id = ? AND status = 'active' AND deleted_at IS NULL",
+    )
+    .bind(occurred_at)
+    .bind(session_id)
+    .execute(&mut **tx)
+    .await?;
+    if result.rows_affected() != 1 {
+        anyhow::bail!("SESSION_NOT_ACTIVE");
+    }
+    Ok(())
+}
+
 async fn get_log_by_sync_id_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
     sync_id: &str,
@@ -38,6 +58,7 @@ pub async fn insert_log(entry: &LogEntry) -> anyhow::Result<LogEntry> {
     let pool = get_db()?;
     let mut tx = pool.begin().await?;
     ensure_active_session_in_tx(&mut tx, &entry.session_id).await?;
+    let activity_at = chrono::Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO logs (sync_id, session_id, time, controller, callsign,
          rst_sent, rst_rcvd, qth, device, power, antenna, height, remarks,
@@ -62,6 +83,7 @@ pub async fn insert_log(entry: &LogEntry) -> anyhow::Result<LogEntry> {
     .bind(&entry.source_device_id)
     .execute(&mut *tx)
     .await?;
+    touch_session_activity_in_tx(&mut tx, &entry.session_id, &activity_at).await?;
     let inserted = get_log_by_sync_id_in_tx(&mut tx, &entry.sync_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Failed to read back log"))?;
@@ -198,6 +220,7 @@ pub async fn update_log(
     if result.rows_affected() == 0 {
         return Err(anyhow::anyhow!("Log not found or already deleted"));
     }
+    touch_session_activity_in_tx(&mut tx, &before.session_id, &now).await?;
     let updated = get_log_by_sync_id_in_tx(&mut tx, sync_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Updated log not found"))?;
@@ -224,6 +247,8 @@ pub async fn soft_delete_log(sync_id: &str) -> anyhow::Result<()> {
             .bind(sync_id)
             .execute(&mut *tx)
             .await?;
+        let now = chrono::Utc::now().to_rfc3339();
+        touch_session_activity_in_tx(&mut tx, &entry.session_id, &now).await?;
         tx.commit().await?;
         return Ok(());
     }
@@ -234,6 +259,7 @@ pub async fn soft_delete_log(sync_id: &str) -> anyhow::Result<()> {
         .bind(sync_id)
         .execute(&mut *tx)
         .await?;
+    touch_session_activity_in_tx(&mut tx, &entry.session_id, &now).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -281,6 +307,8 @@ pub async fn undo_last_log(session_id: &str) -> anyhow::Result<()> {
                 .bind(&entry.sync_id)
                 .execute(&mut *tx)
                 .await?;
+            let now = chrono::Utc::now().to_rfc3339();
+            touch_session_activity_in_tx(&mut tx, session_id, &now).await?;
             tx.commit().await?;
             return Ok(());
         }
@@ -291,6 +319,7 @@ pub async fn undo_last_log(session_id: &str) -> anyhow::Result<()> {
             .bind(&entry.sync_id)
             .execute(&mut *tx)
             .await?;
+        touch_session_activity_in_tx(&mut tx, session_id, &now).await?;
     }
     tx.commit().await?;
     Ok(())
@@ -312,6 +341,7 @@ pub async fn restore_log(sync_id: &str) -> anyhow::Result<LogEntry> {
         .bind(sync_id)
         .execute(&mut *tx)
         .await?;
+    touch_session_activity_in_tx(&mut tx, &entry.session_id, &entry.updated_at).await?;
     let restored = get_log_by_sync_id_in_tx(&mut tx, sync_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Restored log not found"))?;

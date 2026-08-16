@@ -20,6 +20,7 @@ import 'package:openlogtool/services/server_api.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/log_time.dart';
 import 'package:openlogtool/services/key_value_store.dart';
+import 'package:openlogtool/services/app_logger.dart';
 
 enum CollaborationState {
   localOnly,
@@ -3702,15 +3703,37 @@ class CollaborationProvider with ChangeNotifier {
     _safeNotify();
     try {
       await operation(context);
-    } on ServerApiException catch (error) {
+      AppLogger.instance.log(
+        AppLogLevel.debug,
+        'Collaboration operation completed for session '
+        '${context.sessionId ?? '(none)'}',
+        source: 'CollaborationProvider',
+      );
+    } on ServerApiException catch (error, stackTrace) {
       if (_isOperationCurrent(context)) {
         _setError(error.code, error.message);
       }
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Collaboration operation failed with ${error.code} for session '
+        '${context.sessionId ?? '(none)'}',
+        source: 'CollaborationProvider',
+        error: error,
+        stackTrace: stackTrace,
+      );
       rethrow;
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (_isOperationCurrent(context)) {
         _setError(_localErrorCode(error), error.toString());
       }
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Local collaboration operation failed for session '
+        '${context.sessionId ?? '(none)'}',
+        source: 'CollaborationProvider',
+        error: error,
+        stackTrace: stackTrace,
+      );
       rethrow;
     } finally {
       _operationInProgress = false;
@@ -5152,6 +5175,12 @@ class CollaborationProvider with ChangeNotifier {
       sessionId: binding.sessionId,
       deviceId: deviceId,
     );
+    AppLogger.instance.log(
+      AppLogLevel.info,
+      'Starting collaboration synchronization for session '
+      '${binding.sessionId} as ${membership.role.name}',
+      source: 'CollaborationProvider',
+    );
     late final CollaborationSyncCoordinator coordinator;
     Future<void> reloadReplicaProjection() async {
       if (!_isSyncCurrent(generation, identity, coordinator)) return;
@@ -5181,6 +5210,8 @@ class CollaborationProvider with ChangeNotifier {
         final previousRole = _syncState?.role ?? _membership?.role;
         final previousConflictCount = _syncState?.conflictCount;
         final previousTransport = _syncState?.transportPhase;
+        final previousReplica = _syncState?.replicaPhase;
+        final previousErrorCode = _syncState?.lastErrorCode;
         _syncState = state;
         switch (state.replicaPhase) {
           case CollaborationReplicaPhase.catchingUp:
@@ -5201,6 +5232,32 @@ class CollaborationProvider with ChangeNotifier {
             _state = CollaborationState.localOnly;
         }
         logs.setCollaborationReadOnly(binding.sessionId, !state.canEdit);
+        if (previousTransport != state.transportPhase ||
+            previousReplica != state.replicaPhase ||
+            previousErrorCode != state.lastErrorCode) {
+          final level = state.replicaPhase ==
+                      CollaborationReplicaPhase.failed ||
+                  state.transportPhase ==
+                      CollaborationTransportPhase.incompatible
+              ? AppLogLevel.error
+              : state.transportPhase ==
+                          CollaborationTransportPhase.backingOff ||
+                      state.transportPhase ==
+                          CollaborationTransportPhase.authRequired ||
+                      state.replicaPhase == CollaborationReplicaPhase.revoked
+                  ? AppLogLevel.warning
+                  : AppLogLevel.info;
+          AppLogger.instance.log(
+            level,
+            'Sync state session=${binding.sessionId} '
+            'transport=${state.transportPhase.name} '
+            'replica=${state.replicaPhase.name} '
+            'cursor=${state.lastAppliedSeq}/${state.serverHeadSeq} '
+            'pending=${state.pendingCount} conflicts=${state.conflictCount}'
+            '${state.lastErrorCode == null ? '' : ' error=${state.lastErrorCode}'}',
+            source: 'CollaborationSync',
+          );
+        }
         _safeNotify();
         if (state.conflictCount == 0) {
           if (_openConflicts.isNotEmpty ||

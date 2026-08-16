@@ -16,6 +16,7 @@ import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/utils/personal_cloud_merge.dart';
 import 'package:openlogtool/utils/server_url.dart';
 import 'package:openlogtool/services/key_value_store.dart';
+import 'package:openlogtool/services/app_logger.dart';
 
 enum PersonalCloudSyncState {
   signedOut,
@@ -463,8 +464,13 @@ class PersonalCloudProvider with ChangeNotifier {
         () => _reconcile(automatic: true),
         automatic: true,
       ).catchError((Object error, StackTrace stackTrace) {
-        debugPrint(
-            '[PersonalCloud] automatic sync failed: $error\n$stackTrace');
+        AppLogger.instance.log(
+          AppLogLevel.error,
+          'Automatic personal-cloud synchronization failed',
+          source: 'PersonalCloud',
+          error: error,
+          stackTrace: stackTrace,
+        );
       });
     });
   }
@@ -509,7 +515,12 @@ class PersonalCloudProvider with ChangeNotifier {
     try {
       await running;
       _automaticConflictRetries = 0;
-    } catch (error) {
+      AppLogger.instance.log(
+        AppLogLevel.debug,
+        'Personal-cloud synchronization completed',
+        source: 'PersonalCloud',
+      );
+    } catch (error, stackTrace) {
       if (_scope != operationScope || _disposed) rethrow;
       if (_requiresDecision(error)) {
         if (automatic &&
@@ -526,11 +537,25 @@ class PersonalCloudProvider with ChangeNotifier {
         _lastError = null;
         _state = PersonalCloudSyncState.decisionRequired;
         _safeNotify();
+        AppLogger.instance.log(
+          AppLogLevel.warning,
+          'Personal-cloud synchronization requires a conflict decision',
+          source: 'PersonalCloud',
+          error: error,
+          stackTrace: stackTrace,
+        );
         rethrow;
       }
       _lastError = error.toString();
       _state = PersonalCloudSyncState.error;
       _safeNotify();
+      AppLogger.instance.log(
+        AppLogLevel.error,
+        'Personal-cloud synchronization failed',
+        source: 'PersonalCloud',
+        error: error,
+        stackTrace: stackTrace,
+      );
       rethrow;
     } finally {
       if (identical(_activeOperation, running)) _activeOperation = null;

@@ -9,6 +9,7 @@ import 'package:openlogtool/services/deployed_config_stub.dart'
     as deployed;
 import 'package:openlogtool/utils/server_url.dart';
 import 'package:openlogtool/services/key_value_store.dart';
+import 'package:openlogtool/services/app_logger.dart';
 
 typedef ServerApiFactory = ServerApi Function({
   required Uri baseUri,
@@ -30,17 +31,29 @@ class ServerProvider with ChangeNotifier {
       _startup = Future.microtask(() async {
         try {
           await loadSettings();
-        } catch (e) {
-          debugPrint('[ServerProvider] loadSettings error: $e');
+        } catch (error, stackTrace) {
+          AppLogger.instance.log(
+            AppLogLevel.error,
+            'Could not load server settings',
+            source: 'ServerProvider',
+            error: error,
+            stackTrace: stackTrace,
+          );
           return;
         }
         if (_disposed || _serverUrl.isEmpty) return;
         try {
           await checkServer();
-        } catch (e) {
+        } catch (error, stackTrace) {
           // Server discovery is best-effort. Authentication was restored before
           // this public request and must remain usable while the server is down.
-          debugPrint('[ServerProvider] startup server check error: $e');
+          AppLogger.instance.log(
+            AppLogLevel.warning,
+            'Startup server availability check failed',
+            source: 'ServerProvider',
+            error: error,
+            stackTrace: stackTrace,
+          );
         }
       });
     }
@@ -67,6 +80,8 @@ class ServerProvider with ChangeNotifier {
   String? _serverCheckUrl;
   int _serverChecksInProgress = 0;
   String? _lastErrorCode;
+  String? _authenticationNoticeCode;
+  int _authenticationNoticeRevision = 0;
   TokenStorageStatus _tokenStorageStatus = const TokenStorageStatus(
     backend: TokenStorageBackend.platformSecure,
   );
@@ -87,6 +102,8 @@ class ServerProvider with ChangeNotifier {
   List<DeviceSessionDto> get deviceSessions => _deviceSessions;
   String? get deviceId => _deviceId;
   String? get lastErrorCode => _lastErrorCode;
+  String? get authenticationNoticeCode => _authenticationNoticeCode;
+  int get authenticationNoticeRevision => _authenticationNoticeRevision;
   TokenStorageStatus get tokenStorageStatus => _tokenStorageStatus;
   ServerInfoDto? get serverInfo => _serverInfo;
   bool get isServerReachable => _isServerReachable;
@@ -125,13 +142,14 @@ class ServerProvider with ChangeNotifier {
       final installedTokenStore = _tokenStore;
       await _tokenStoreScopes.clearRetired(oldTokenStore);
       if (_contextRevision != startedAtRevision ||
-          _serverUrl != storedServerUrl ||
+          _serverUrl != effectiveServerUrl ||
           !identical(_tokenStore, installedTokenStore)) {
         return;
       }
       _serverInfo = null;
       _isServerReachable = false;
       _lastErrorCode = null;
+      _authenticationNoticeCode = null;
       _user = null;
       _account = null;
       _passwordChangeChallenge = null;
@@ -154,6 +172,13 @@ class ServerProvider with ChangeNotifier {
                 !identical(_tokenStore, restoreStore)) {
               return;
             }
+            _lastErrorCode = 'AUTH_EXPIRED';
+            _raiseAuthenticationNotice('AUTH_EXPIRED');
+            AppLogger.instance.log(
+              AppLogLevel.warning,
+              'Stored server sign-in expired and was cleared',
+              source: 'Authentication',
+            );
           } else {
             _user = session.user;
             _account = null;
@@ -163,11 +188,18 @@ class ServerProvider with ChangeNotifier {
             _contextRevision += 1;
           }
         }
-      } catch (error) {
+      } catch (error, stackTrace) {
         if (_contextRevision == restoreRevision &&
             identical(_tokenStore, restoreStore)) {
           _lastErrorCode = 'TOKEN_STORAGE_UNAVAILABLE';
-          debugPrint('[ServerProvider] restore authentication error: $error');
+          _raiseAuthenticationNotice('TOKEN_STORAGE_UNAVAILABLE');
+          AppLogger.instance.log(
+            AppLogLevel.error,
+            'Could not restore persistent server sign-in',
+            source: 'Authentication',
+            error: error,
+            stackTrace: stackTrace,
+          );
         }
       }
     }
@@ -182,6 +214,7 @@ class ServerProvider with ChangeNotifier {
     _serverInfo = null;
     _isServerReachable = false;
     _lastErrorCode = null;
+    _authenticationNoticeCode = null;
     _user = null;
     _account = null;
     _passwordChangeChallenge = null;
@@ -362,6 +395,12 @@ class ServerProvider with ChangeNotifier {
     _passwordChangeChallenge = null;
     _deviceSessions = const [];
     _lastErrorCode = null;
+    _authenticationNoticeCode = null;
+    AppLogger.instance.log(
+      AppLogLevel.info,
+      'Server sign-in established',
+      source: 'Authentication',
+    );
     notifyListeners();
   }
 
@@ -506,8 +545,14 @@ class ServerProvider with ChangeNotifier {
     if (_user != null) {
       try {
         sessionToRevoke = await requestedStore.read();
-      } catch (error) {
-        debugPrint('[ServerProvider] read session for logout error: $error');
+      } catch (error, stackTrace) {
+        AppLogger.instance.log(
+          AppLogLevel.warning,
+          'Could not read the current session while signing out',
+          source: 'Authentication',
+          error: error,
+          stackTrace: stackTrace,
+        );
       }
     }
     if (_contextRevision != requestedAtRevision ||
@@ -524,7 +569,13 @@ class ServerProvider with ChangeNotifier {
     _passwordChangeChallenge = null;
     _deviceSessions = const [];
     _lastErrorCode = null;
+    _authenticationNoticeCode = null;
     _contextRevision += 1;
+    AppLogger.instance.log(
+      AppLogLevel.info,
+      'User requested server sign-out',
+      source: 'Authentication',
+    );
     notifyListeners();
     final clearRetiredSession = _tokenStoreScopes.clearRetired(oldTokenStore);
     try {
@@ -618,7 +669,13 @@ class ServerProvider with ChangeNotifier {
     _account = null;
     _deviceSessions = const [];
     _lastErrorCode = 'AUTH_REQUIRED';
+    _raiseAuthenticationNotice('AUTH_REQUIRED');
     _contextRevision += 1;
+    AppLogger.instance.log(
+      AppLogLevel.warning,
+      'Server invalidated the current sign-in; user interaction is required',
+      source: 'Authentication',
+    );
     notifyListeners();
   }
 
@@ -630,6 +687,11 @@ class ServerProvider with ChangeNotifier {
     return oldTokenStore;
   }
 
+  void _raiseAuthenticationNotice(String code) {
+    _authenticationNoticeCode = code;
+    _authenticationNoticeRevision += 1;
+  }
+
   ({int revision, TokenStore oldTokenStore}) _beginAuthentication() {
     final oldTokenStore = _replaceAuthContext();
     _user = null;
@@ -637,6 +699,7 @@ class ServerProvider with ChangeNotifier {
     _passwordChangeChallenge = null;
     _deviceSessions = const [];
     _lastErrorCode = null;
+    _authenticationNoticeCode = null;
     _contextRevision += 1;
     final revision = _contextRevision;
     notifyListeners();
@@ -679,6 +742,7 @@ class ServerProvider with ChangeNotifier {
     _passwordChangeChallenge = null;
     _deviceSessions = const [];
     _lastErrorCode = null;
+    _authenticationNoticeCode = null;
     _contextRevision += 1;
     notifyListeners();
     await _tokenStoreScopes.clearRetired(oldTokenStore);

@@ -11,7 +11,6 @@ import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/providers/server_provider.dart';
 import 'package:openlogtool/providers/session_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
-import 'package:openlogtool/providers/snackbar_log_provider.dart';
 import 'package:openlogtool/screens/home_screen.dart';
 import 'package:openlogtool/src/bridge/models/session.dart';
 import 'package:openlogtool/widgets/log_form.dart';
@@ -137,7 +136,6 @@ class _HomeScreenTestApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppInfoProvider()),
-        ChangeNotifierProvider(create: (_) => SnackbarLogProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => AiRecognitionSettingsProvider()),
         ChangeNotifierProvider<SessionProvider>(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
@@ -277,10 +278,10 @@ class CollaborationLocalSessionAction extends StatelessWidget {
     try {
       await action();
       if (!messenger.mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(success)));
+      messenger.showLoggedSnackBar(SnackBar(content: Text(success)));
     } catch (error) {
       if (!messenger.mounted) return;
-      messenger.showSnackBar(
+      messenger.showLoggedSnackBar(
         SnackBar(content: Text(localCollaborationActionErrorText(l10n, error))),
       );
     }

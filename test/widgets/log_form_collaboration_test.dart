@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/collaboration_dto.dart';
 import 'package:openlogtool/models/live_draft.dart';
+import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/providers/collaboration_provider.dart';
 import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -188,6 +189,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(collaboration.commitCalls, 1);
+  });
+
+  testWidgets('disabled save shortcut does not submit a kept-alive form',
+      (tester) async {
+    final collaboration = _RecordingCollaborationProvider(
+      initialFields: const {
+        'time': '',
+        'controller': 'BG5CRL',
+        'callsign': 'BA4AAA',
+        'rstSent': '59',
+        'rstRcvd': '59',
+      },
+    );
+    addTearDown(collaboration.dispose);
+
+    await tester.pumpWidget(
+      _LogFormTestApp(
+        collaboration: collaboration,
+        saveShortcutEnabled: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _sendSaveShortcut(tester, LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(collaboration.committedFields, isNull);
   });
 
   testWidgets(
@@ -475,6 +502,67 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    },
+  );
+
+  testWidgets(
+    'idle duplicate warning also clears a collaboration draft atomically',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(
+        <String, Object>{'duplicateCallsignWarningEnabled': true},
+      );
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': '',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      final logProvider = _DuplicateLogProvider([
+        LogEntry(
+          id: 'existing-log',
+          sessionId: 'session-1',
+          time: '2026-07-13T12:00:00Z',
+          controller: 'BG5CRL',
+          callsign: 'BA4AAA',
+          report: '59',
+          rstRcvd: '59',
+          qth: 'Hangzhou',
+          device: 'IC-7300',
+          power: '50W',
+          antenna: 'DP',
+          height: '10m',
+        ),
+      ]);
+      addTearDown(collaboration.dispose);
+      addTearDown(logProvider.dispose);
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          logProvider: logProvider,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final callsignField = find.descendant(
+        of: find.byType(CallsignHistoryField),
+        matching: find.byType(TextFormField),
+      );
+      await tester.tap(callsignField);
+      await tester.enterText(callsignField, 'BA4AAA');
+      await tester.pump(const Duration(milliseconds: 700));
+
+      expect(
+          find.byKey(const Key('duplicate-continue-cancel')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('duplicate-continue-cancel')));
+      await tester.pumpAndSettle();
+
+      expect(collaboration.atomicUpdates, isNotEmpty);
+      expect(collaboration.atomicUpdates.last, const {'callsign': ''});
+      expect(collaboration.liveDraftFields['callsign'], isEmpty);
     },
   );
 
@@ -956,14 +1044,18 @@ Future<void> _sendSaveShortcut(
 class _LogFormTestApp extends StatelessWidget {
   const _LogFormTestApp({
     required this.collaboration,
+    this.logProvider,
     this.logFormKey,
     this.readOnly = false,
+    this.saveShortcutEnabled = true,
     this.locale = const Locale('en', 'US'),
   });
 
   final CollaborationProvider collaboration;
+  final LogProvider? logProvider;
   final Key? logFormKey;
   final bool readOnly;
+  final bool saveShortcutEnabled;
   final Locale locale;
 
   @override
@@ -975,12 +1067,15 @@ class _LogFormTestApp extends StatelessWidget {
           ChangeNotifierProvider<DictionaryProvider>(
             create: (_) => _NoopDictionaryProvider(),
           ),
-          ChangeNotifierProvider(
-            create: (_) => LogProvider(
-              sessionListLoader: () async => [],
-              sessionLogPageLoader: (_, __, ___) async => [],
+          if (logProvider != null)
+            ChangeNotifierProvider<LogProvider>.value(value: logProvider!)
+          else
+            ChangeNotifierProvider(
+              create: (_) => LogProvider(
+                sessionListLoader: () async => [],
+                sessionLogPageLoader: (_, __, ___) async => [],
+              ),
             ),
-          ),
           ChangeNotifierProvider(create: (_) => SessionProvider()),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ],
@@ -993,7 +1088,11 @@ class _LogFormTestApp extends StatelessWidget {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    child: LogForm(key: logFormKey, readOnly: readOnly),
+                    child: LogForm(
+                      key: logFormKey,
+                      readOnly: readOnly,
+                      saveShortcutEnabled: saveShortcutEnabled,
+                    ),
                   ),
                 ),
                 Container(
@@ -1301,6 +1400,15 @@ class _LocalOnlyCollaborationProvider extends CollaborationProvider {
 
   @override
   LiveDraftSnapshotDto? get liveDraftSnapshot => null;
+}
+
+class _DuplicateLogProvider extends LogProvider {
+  _DuplicateLogProvider(this._visibleLogs);
+
+  final List<LogEntry> _visibleLogs;
+
+  @override
+  List<LogEntry> get logs => _visibleLogs;
 }
 
 class _NoopDictionaryProvider extends DictionaryProvider {

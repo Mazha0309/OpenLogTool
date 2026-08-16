@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:openlogtool/utils/app_snack_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -439,7 +440,7 @@ class _AiRecognitionControlState extends State<AiRecognitionControl> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showLoggedSnackBar(
       SnackBar(content: Text(message)),
     );
   }
@@ -764,7 +765,7 @@ class _AiRecognitionReviewPanelState extends State<_AiRecognitionReviewPanel> {
                     ClipboardData(text: widget.result.transcription.text),
                   );
                   if (context.mounted) {
-                    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                    ScaffoldMessenger.maybeOf(context)?.showLoggedSnackBar(
                       SnackBar(content: Text(context.l10n.aiTranscriptCopied)),
                     );
                   }

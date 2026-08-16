@@ -1813,7 +1813,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get logsTitle => '日志';
 
   @override
-  String get logsView => '查看日志';
+  String get logsView => '查看持久化诊断日志、错误与应用内消息';
 
   @override
   String get logsEmpty => '（暂无日志）';
@@ -1828,13 +1828,48 @@ class AppLocalizationsZh extends AppLocalizations {
   String get logsCopied => '日志已复制';
 
   @override
-  String get snackbarLogTitle => '底部消息日志';
+  String logsCount(int count) {
+    return '共 $count 条持久化日志';
+  }
 
   @override
-  String get snackbarLogHint => '查看本次运行期间显示过的底部消息';
+  String get logsSearchHint => '搜索消息、来源、错误或堆栈';
 
   @override
-  String get snackbarLogEmpty => '本次运行尚未记录底部消息';
+  String get logsLevelAll => '全部';
+
+  @override
+  String get logsLevelDebug => '调试';
+
+  @override
+  String get logsLevelInfo => '信息';
+
+  @override
+  String get logsLevelWarning => '警告';
+
+  @override
+  String get logsLevelError => '错误';
+
+  @override
+  String get logsClear => '清空';
+
+  @override
+  String get logsClearTitle => '清空诊断日志';
+
+  @override
+  String get logsClearConfirmation => '将删除本机保存的全部诊断日志。此操作不会影响点名记录，确定继续吗？';
+
+  @override
+  String get logsCleared => '诊断日志已清空';
+
+  @override
+  String get logsNoFilterResults => '没有符合当前筛选条件的日志';
+
+  @override
+  String get authSessionExpiredNotice => '服务器登录状态已失效，请重新登录。本机数据和服务器地址均已保留。';
+
+  @override
+  String get authStorageUnavailableNotice => '无法读取持久登录凭据，请检查系统凭据存储后重新登录。';
 
   @override
   String get resetSettingsTitle => '恢复默认设置';

@@ -25,6 +25,23 @@ bridge.LogEntry _historyRecord() => const bridge.LogEntry(
       updatedAt: '2026-07-12T08:15:00Z',
     );
 
+List<bridge.LogEntry> _historyRecords(int count) => List.generate(
+      count,
+      (index) => bridge.LogEntry(
+        syncId: 'history-$index',
+        sessionId: 'session-1',
+        time: '2026-07-${(10 + index).toString().padLeft(2, '0')}T08:15:00Z',
+        controller: 'BG5CRL',
+        callsign: 'BA4AAA',
+        qth: 'QTH$index',
+        device: 'RADIO$index',
+        createdAt:
+            '2026-07-${(10 + index).toString().padLeft(2, '0')}T08:15:00Z',
+        updatedAt:
+            '2026-07-${(10 + index).toString().padLeft(2, '0')}T08:15:00Z',
+      ),
+    );
+
 Widget _localizedApp(Widget child) => MaterialApp(
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -379,6 +396,7 @@ void main() {
   testWidgets('arrow keys navigate history and enter fills the highlight',
       (tester) async {
     final controllers = List.generate(6, (_) => TextEditingController());
+    final records = _historyRecords(8);
     addTearDown(() {
       for (final controller in controllers) {
         controller.dispose();
@@ -396,25 +414,7 @@ void main() {
           heightController: controllers[5],
           label: 'Callsign',
           hintText: 'BA4AAA',
-          historyLoader: (_, __) async => [
-            _historyRecord(),
-            const bridge.LogEntry(
-              syncId: 'history-2',
-              sessionId: 'session-1',
-              time: '2026-07-11T08:15:00Z',
-              controller: 'BG5CRL',
-              callsign: 'BA4BBB',
-              rstSent: '57',
-              rstRcvd: '46',
-              qth: '杭州',
-              device: 'FT-991A',
-              power: '50W',
-              antenna: 'GP',
-              height: '8m',
-              createdAt: '2026-07-11T08:15:00Z',
-              updatedAt: '2026-07-11T08:15:00Z',
-            ),
-          ],
+          historyLoader: (_, __) async => records,
         ),
       ),
     );
@@ -424,14 +424,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+    for (var index = 0; index < 7; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    final historyList = tester.widget<ListView>(
+      find.byKey(const Key('callsign-history-list')),
+    );
+    expect(historyList.controller!.position.pixels, greaterThan(0));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
     expect(controllers[0].text, 'BA4AAA');
-    expect(controllers[1].text, 'FT-991A');
-    expect(controllers[3].text, '杭州');
+    expect(controllers[1].text, 'RADIO6');
+    expect(controllers[3].text, 'QTH6');
   });
 
   testWidgets('escape closes the history overlay and keeps focus',
@@ -485,19 +494,8 @@ void main() {
       }
     });
 
-    final manyRecords = List.generate(
-      8,
-      (i) => bridge.LogEntry(
-        syncId: 'history-$i',
-        sessionId: 'session-1',
-        time: '2026-07-1${i % 9}T08:15:00Z',
-        controller: 'BG5CRL',
-        callsign: 'BA4AAA',
-        qth: 'QTH$i',
-        createdAt: '2026-07-1${i % 9}T08:15:00Z',
-        updatedAt: '2026-07-1${i % 9}T08:15:00Z',
-      ),
-    );
+    final manyRecords = _historyRecords(8);
+    int? requestedLimit;
 
     await tester.pumpWidget(
       _localizedApp(
@@ -514,7 +512,10 @@ void main() {
               heightController: controllers[5],
               label: 'Callsign',
               hintText: 'BA4AAA',
-              historyLoader: (_, __) async => manyRecords,
+              historyLoader: (_, limit) async {
+                requestedLimit = limit;
+                return manyRecords;
+              },
             ),
           ),
         ),
@@ -527,6 +528,7 @@ void main() {
 
     final overlayFinder = find.byKey(const Key('callsign-history-overlay'));
     expect(overlayFinder, findsOneWidget);
+    expect(requestedLimit, 10);
     final scrollableFinder = find.descendant(
       of: overlayFinder,
       matching: find.byType(Scrollable),
@@ -550,5 +552,9 @@ void main() {
           .pixels,
       greaterThan(0),
     );
+    await tester.tap(find.textContaining('QTH7'));
+    await tester.pumpAndSettle();
+    expect(controllers[3].text, 'QTH7');
+    expect(overlayFinder, findsNothing);
   });
 }

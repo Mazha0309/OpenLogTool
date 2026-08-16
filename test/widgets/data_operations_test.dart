@@ -24,7 +24,6 @@ void main() {
               onViewDatabaseLog: () async {},
               onExportDatabase: () => exportCompleter.future,
               onImportDatabase: () async => importCalls += 1,
-              onViewSnackbarLog: () async {},
               onClearAllData: () async {},
             ),
           ),

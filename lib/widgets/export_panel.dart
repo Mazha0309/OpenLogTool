@@ -1238,13 +1238,13 @@ class _ExportPanelState extends State<ExportPanel> {
 
       await logProvider.importLogs(importResult.logs,
           sessionId: sessionProvider.currentSessionId);
-      scaffoldMessenger.showSnackBar(
+      scaffoldMessenger.showLoggedSnackBar(
         SnackBar(
           content: Text(l10n.importSucceeded(importResult.logs.length)),
         ),
       );
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
+      scaffoldMessenger.showLoggedSnackBar(
         SnackBar(
           content: Text(l10n.importFailed('$e')),
           backgroundColor: Colors.red,
@@ -1285,7 +1285,7 @@ class _ExportPanelState extends State<ExportPanel> {
       final client = aiSettings.createTextAssistantClient(
         timeout: const Duration(seconds: 60),
       );
-      scaffoldMessenger.showSnackBar(
+      scaffoldMessenger.showLoggedSnackBar(
         SnackBar(
           content: Text(l10n.excelImportLlmProcessing),
           duration: const Duration(seconds: 5),
@@ -1371,13 +1371,13 @@ class _ExportPanelState extends State<ExportPanel> {
         logs,
         sessionId: sessionProvider.currentSessionId,
       );
-      scaffoldMessenger.showSnackBar(
+      scaffoldMessenger.showLoggedSnackBar(
         SnackBar(
           content: Text(l10n.excelImportSuccess(logs.length)),
         ),
       );
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
+      scaffoldMessenger.showLoggedSnackBar(
         SnackBar(
           content: Text(l10n.excelImportFailed('$e')),
           backgroundColor: Colors.red,
@@ -1425,7 +1425,7 @@ class _ExportPanelState extends State<ExportPanel> {
                   icon: const Icon(Icons.copy, size: 20),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: path));
-                    messenger.showSnackBar(
+                    messenger.showLoggedSnackBar(
                       SnackBar(content: Text(context.l10n.pathCopied)),
                     );
                   },

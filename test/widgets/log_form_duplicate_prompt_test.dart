@@ -54,6 +54,25 @@ void main() {
     );
   });
 
+  testWidgets('idle duplicate callsign is checked after 700 milliseconds',
+      (tester) async {
+    final logProvider = _StaticLogProvider([_oldLog()]);
+    addTearDown(logProvider.dispose);
+    await tester.pumpWidget(_app(logProvider));
+    await tester.pumpAndSettle();
+
+    await _enterCallsign(tester, 'BA4AAA');
+    await tester.pump(const Duration(milliseconds: 699));
+    expect(find.byKey(const Key('duplicate-continue-add')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const Key('duplicate-continue-add')), findsOneWidget);
+    expect(find.text('BA4AAA 已在第 1 位记录过，继续添加吗？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('duplicate-continue-add')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
+  });
+
   testWidgets('saving a duplicate asks update or add, update keeps time',
       (tester) async {
     final logProvider = _StaticLogProvider([_oldLog()]);
@@ -157,7 +176,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(logProvider.addCalls, 1);
-    expect(logProvider.addedLog!.power, '50 W');
+    expect(logProvider.addedLog!.power, '50W');
 
     // 已带单位的功率原样保存。
     await tester.enterText(find.widgetWithText(TextFormField, '功率'), '5kW');

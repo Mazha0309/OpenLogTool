@@ -16,7 +16,7 @@ abstract final class AppSpace {
 abstract final class AppRadius {
   static const double small = 8;
   static const double control = 12;
-  static const double surface = 14;
+  static const double surface = 16;
   static const double hero = 20;
   static const double dialog = 28;
   static const double pill = 999;
@@ -176,6 +176,9 @@ ThemeData buildAppTheme({
     useMaterial3: true,
     colorScheme: colorScheme,
     extensions: [semanticColors],
+    focusColor: colorScheme.primary.withValues(alpha: 0.12),
+    hoverColor: colorScheme.primary.withValues(alpha: 0.08),
+    highlightColor: colorScheme.primary.withValues(alpha: 0.10),
     scaffoldBackgroundColor: colorScheme.surface,
     appBarTheme: AppBarThemeData(
       backgroundColor: colorScheme.surface,
@@ -225,6 +228,12 @@ ThemeData buildAppTheme({
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.dialog),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.xs,
+        AppSpace.lg,
+        AppSpace.lg,
+      ),
     ),
     dividerTheme: DividerThemeData(
       color: colorScheme.outlineVariant,
@@ -249,6 +258,14 @@ ThemeData buildAppTheme({
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
         borderSide: BorderSide(color: colorScheme.primary, width: 1.6),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: BorderSide(color: colorScheme.error, width: 1.8),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: BorderSide(color: colorScheme.error),
       ),
       disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
@@ -343,6 +360,55 @@ ThemeData buildAppTheme({
       labelStyle: const TextStyle(fontWeight: FontWeight.w700),
       unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
       indicatorSize: TabBarIndicatorSize.label,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      elevation: 3,
+      backgroundColor: colorScheme.inverseSurface,
+      contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: colorScheme.surfaceContainerHigh,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: colorScheme.surfaceContainerLow,
+      modalBackgroundColor: colorScheme.surfaceContainerLow,
+      surfaceTintColor: Colors.transparent,
+      elevation: 1,
+      modalElevation: 3,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.dialog),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+    ),
+    tooltipTheme: TooltipThemeData(
+      waitDuration: const Duration(milliseconds: 450),
+      showDuration: const Duration(seconds: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.sm,
+        vertical: AppSpace.xs,
+      ),
+      decoration: ShapeDecoration(
+        color: colorScheme.inverseSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.small),
+        ),
+      ),
+      textStyle: TextStyle(
+        color: colorScheme.onInverseSurface,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
     ),
   );
 }

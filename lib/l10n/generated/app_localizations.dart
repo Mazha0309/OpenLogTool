@@ -3291,7 +3291,7 @@ abstract class AppLocalizations {
   /// No description provided for @logsView.
   ///
   /// In zh, this message translates to:
-  /// **'查看日志'**
+  /// **'查看持久化诊断日志、错误与应用内消息'**
   String get logsView;
 
   /// No description provided for @logsEmpty.
@@ -3318,23 +3318,89 @@ abstract class AppLocalizations {
   /// **'日志已复制'**
   String get logsCopied;
 
-  /// No description provided for @snackbarLogTitle.
+  /// No description provided for @logsCount.
   ///
   /// In zh, this message translates to:
-  /// **'底部消息日志'**
-  String get snackbarLogTitle;
+  /// **'共 {count} 条持久化日志'**
+  String logsCount(int count);
 
-  /// No description provided for @snackbarLogHint.
+  /// No description provided for @logsSearchHint.
   ///
   /// In zh, this message translates to:
-  /// **'查看本次运行期间显示过的底部消息'**
-  String get snackbarLogHint;
+  /// **'搜索消息、来源、错误或堆栈'**
+  String get logsSearchHint;
 
-  /// No description provided for @snackbarLogEmpty.
+  /// No description provided for @logsLevelAll.
   ///
   /// In zh, this message translates to:
-  /// **'本次运行尚未记录底部消息'**
-  String get snackbarLogEmpty;
+  /// **'全部'**
+  String get logsLevelAll;
+
+  /// No description provided for @logsLevelDebug.
+  ///
+  /// In zh, this message translates to:
+  /// **'调试'**
+  String get logsLevelDebug;
+
+  /// No description provided for @logsLevelInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'信息'**
+  String get logsLevelInfo;
+
+  /// No description provided for @logsLevelWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'警告'**
+  String get logsLevelWarning;
+
+  /// No description provided for @logsLevelError.
+  ///
+  /// In zh, this message translates to:
+  /// **'错误'**
+  String get logsLevelError;
+
+  /// No description provided for @logsClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空'**
+  String get logsClear;
+
+  /// No description provided for @logsClearTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空诊断日志'**
+  String get logsClearTitle;
+
+  /// No description provided for @logsClearConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'将删除本机保存的全部诊断日志。此操作不会影响点名记录，确定继续吗？'**
+  String get logsClearConfirmation;
+
+  /// No description provided for @logsCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'诊断日志已清空'**
+  String get logsCleared;
+
+  /// No description provided for @logsNoFilterResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有符合当前筛选条件的日志'**
+  String get logsNoFilterResults;
+
+  /// No description provided for @authSessionExpiredNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器登录状态已失效，请重新登录。本机数据和服务器地址均已保留。'**
+  String get authSessionExpiredNotice;
+
+  /// No description provided for @authStorageUnavailableNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取持久登录凭据，请检查系统凭据存储后重新登录。'**
+  String get authStorageUnavailableNotice;
 
   /// No description provided for @resetSettingsTitle.
   ///
