@@ -35,7 +35,7 @@ abstract final class AppDimensions {
   static const double sectionIcon = 36;
   static const double actionIcon = 32;
   static const double standardContentWidth = 1120;
-  static const double wideContentWidth = 1440;
+  static const double wideContentWidth = 1520;
   static const double dialogWidth = 560;
 }
 

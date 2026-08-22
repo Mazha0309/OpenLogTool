@@ -32,10 +32,12 @@ class LocalDatabasePanel extends StatelessWidget {
     super.key,
     this.isNarrow = false,
     this.cardPadding = AppSpace.md,
+    required this.onOpenPersonalCloudConflicts,
   });
 
   final bool isNarrow;
   final double cardPadding;
+  final VoidCallback onOpenPersonalCloudConflicts;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -44,6 +46,7 @@ class LocalDatabasePanel extends StatelessWidget {
           PersonalCloudPanel(
             isNarrow: isNarrow,
             cardPadding: cardPadding,
+            onOpenConflicts: onOpenPersonalCloudConflicts,
           ),
           const SizedBox(height: AppSpace.md),
           DataOperations(

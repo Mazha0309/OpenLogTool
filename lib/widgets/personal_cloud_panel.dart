@@ -4,7 +4,6 @@ import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/utils/app_snack_bar.dart';
 import 'package:openlogtool/utils/personal_cloud_merge.dart';
-import 'package:openlogtool/widgets/personal_cloud_conflict_dialog.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -13,10 +12,12 @@ class PersonalCloudPanel extends StatelessWidget {
     super.key,
     this.isNarrow = false,
     this.cardPadding = AppSpace.md,
+    required this.onOpenConflicts,
   });
 
   final bool isNarrow;
   final double cardPadding;
+  final VoidCallback onOpenConflicts;
 
   @override
   Widget build(BuildContext context) {
@@ -131,9 +132,7 @@ class PersonalCloudPanel extends StatelessWidget {
                     ),
                     OutlinedButton.icon(
                       key: const Key('personal-cloud-conflicts-one-by-one'),
-                      onPressed: cloud.isBusy
-                          ? null
-                          : () => _resolveConflictsOneByOne(context, cloud),
+                      onPressed: cloud.isBusy ? null : onOpenConflicts,
                       icon: const Icon(Icons.tune_outlined),
                       label: Text(context.l10n.personalCloudResolveOneByOne),
                     ),
@@ -232,27 +231,6 @@ class PersonalCloudPanel extends StatelessWidget {
   ) async {
     try {
       await cloud.syncNow();
-    } catch (error) {
-      if (!context.mounted) return;
-      context.showLoggedSnackBar(
-        SnackBar(content: Text(context.l10n.personalCloudError('$error'))),
-      );
-    }
-  }
-
-  static Future<void> _resolveConflictsOneByOne(
-    BuildContext context,
-    PersonalCloudProvider cloud,
-  ) async {
-    final choices = await showDialog<Map<String, PersonalCloudConflictChoice>>(
-      context: context,
-      builder: (_) => PersonalCloudConflictDialog(
-        conflicts: cloud.conflicts,
-      ),
-    );
-    if (choices == null || choices.isEmpty) return;
-    try {
-      await cloud.resolvePendingConflicts(choices);
     } catch (error) {
       if (!context.mounted) return;
       context.showLoggedSnackBar(

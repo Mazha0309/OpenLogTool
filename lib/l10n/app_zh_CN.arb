@@ -204,7 +204,7 @@
   "collapseSidebar": "收起侧边栏",
   "expandSidebar": "展开侧边栏",
   "limitWorkbenchWidthSetting": "限制点名台内容宽度",
-  "limitWorkbenchWidthHint": "宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。",
+  "limitWorkbenchWidthHint": "宽屏时将点名台内容居中并限制在 1520 像素内，避免字段过度拉伸。",
   "serverConnectionFailed": "连接失败：{detail}",
   "serverNetworkError": "服务器 {url} 没有响应。请检查地址和端口，并确认服务端或反向代理正在运行。",
   "serverWebMixedContentError": "当前 WebClient 使用 HTTPS，浏览器不允许连接 HTTP 服务器 {url}。请为服务器启用 HTTPS。",

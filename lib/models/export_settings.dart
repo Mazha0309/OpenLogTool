@@ -18,8 +18,8 @@ class ExportSettings {
 
   ExportSettings({
     this.headerText = '{yyyy}-{MM}-{dd}日点名记录',
-    this.useSessionTitleAsHeader = false,
-    this.useSessionTitleAsFileName = false,
+    this.useSessionTitleAsHeader = true,
+    this.useSessionTitleAsFileName = true,
     this.headerDateFormat = 'yyyy-MM-dd',
     this.headerBackgroundColor = const Color(0xFF1E84D2),
     this.headerRowBackgroundColor = const Color(0xFFCFE7FF),
@@ -63,8 +63,12 @@ class ExportSettings {
 
     return ExportSettings(
       headerText: json['headerText'] ?? '{yyyy}-{MM}-{dd}日点名记录',
-      useSessionTitleAsHeader: json['useSessionTitleAsHeader'] == true,
-      useSessionTitleAsFileName: json['useSessionTitleAsFileName'] == true,
+      useSessionTitleAsHeader: json.containsKey('useSessionTitleAsHeader')
+          ? json['useSessionTitleAsHeader'] == true
+          : true,
+      useSessionTitleAsFileName: json.containsKey('useSessionTitleAsFileName')
+          ? json['useSessionTitleAsFileName'] == true
+          : true,
       headerDateFormat: json['headerDateFormat'] ?? 'yyyy-MM-dd',
       headerBackgroundColor:
           parseColor(json['headerBackgroundColor'], 0xFF1E84D2),

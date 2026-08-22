@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:openlogtool/models/log_entry.dart';
@@ -175,8 +177,14 @@ void main() {
         '天线',
         '高度',
         '备注',
-        '操作',
       ],
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('desktop-log-actions-column')),
+        matching: find.text('操作'),
+      ),
+      findsOneWidget,
     );
     expect(
       table.rows.first.cells
@@ -195,17 +203,15 @@ void main() {
         'ANTENNA_CELL',
         'HEIGHT_CELL',
         'REMARKS_CELL',
-        '',
       ],
     );
     expect(_textOf(tester, table.rows.last.cells[4].child), 'OLD_SENT');
     expect(_textOf(tester, table.rows.last.cells[5].child), 'OLD_RCVD');
 
-    final actionCell = table.rows.first.cells[12].child;
     final editButton = tester.widget<IconButton>(
       find
           .descendant(
-            of: find.byWidget(actionCell),
+            of: find.byKey(const Key('desktop-log-actions-new')),
             matching: find.byType(IconButton),
           )
           .first,
@@ -224,7 +230,7 @@ void main() {
     final saveButton = tester.widget<IconButton>(
       find
           .descendant(
-            of: find.byWidget(table.rows.first.cells[12].child),
+            of: find.byKey(const Key('desktop-log-actions-new')),
             matching: find.byType(IconButton),
           )
           .first,
@@ -276,6 +282,52 @@ void main() {
 
     final table = tester.widget<DataTable>(find.byType(DataTable));
     expect(_textOf(tester, table.rows.single.cells[1].child), '20:30');
+  });
+
+  testWidgets('desktop actions stay pinned and Shift-wheel scrolls the data',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final logProvider = _StaticLogProvider([
+      _log(id: 'pinned-log', time: '20:30', report: '59', rstRcvd: '59'),
+    ]);
+    await _pumpLogTable(tester, logProvider);
+
+    expect(
+      find.byKey(const Key('log-table-horizontal-scroll-hint')),
+      findsOneWidget,
+    );
+    final action = find.byKey(const Key('desktop-log-actions-pinned-log'));
+    final actionX = tester.getTopLeft(action).dx;
+    final surface = find.byKey(const Key('log-table-surface'));
+    final horizontalView = tester
+        .widgetList<SingleChildScrollView>(
+          find.descendant(
+              of: surface, matching: find.byType(SingleChildScrollView)),
+        )
+        .singleWhere((view) => view.scrollDirection == Axis.horizontal);
+    final horizontalScrollable = find.descendant(
+      of: find.byWidget(horizontalView),
+      matching: find.byType(Scrollable),
+    );
+    final position =
+        tester.state<ScrollableState>(horizontalScrollable).position;
+    expect(position.pixels, 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    final location = tester.getCenter(find.byType(DataTable));
+    await tester.sendEventToBinding(pointer.hover(location));
+    await tester.sendEventToBinding(
+      pointer.scroll(const Offset(0, 240)),
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+
+    expect(position.pixels, greaterThan(0));
+    expect(tester.getTopLeft(action).dx, actionX);
   });
 
   testWidgets('default pagination keeps ten newest RST records on first page',
@@ -522,18 +574,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final table = tester.widget<DataTable>(find.byType(DataTable));
-    final otherActions = table.rows.first.cells[12].child;
+    final otherActions = find.byKey(
+      const Key('desktop-log-actions-other-log'),
+    );
     expect(
       find.descendant(
-        of: find.byWidget(otherActions),
+        of: otherActions,
         matching: find.byType(IconButton),
       ),
       findsNothing,
     );
     final tooltip = tester.widget<Tooltip>(
       find.descendant(
-        of: find.byWidget(otherActions),
+        of: otherActions,
         matching: find.byType(Tooltip),
       ),
     );
@@ -542,10 +595,10 @@ void main() {
       'You can change or delete only records that you created.',
     );
 
-    final ownActions = table.rows.last.cells[12].child;
+    final ownActions = find.byKey(const Key('desktop-log-actions-own-log'));
     expect(
       find.descendant(
-        of: find.byWidget(ownActions),
+        of: ownActions,
         matching: find.byType(IconButton),
       ),
       findsNWidgets(2),
@@ -642,11 +695,12 @@ void main() {
     ]);
     await _pumpLogTable(tester, logProvider, dialogEditor: true);
 
-    final table = tester.widget<DataTable>(find.byType(DataTable));
     final editButton = tester
         .widgetList<IconButton>(
           find.descendant(
-            of: find.byWidget(table.rows.single.cells[12].child),
+            of: find.byKey(
+              const Key('desktop-log-actions-dialog-edit-log'),
+            ),
             matching: find.byType(IconButton),
           ),
         )
@@ -741,8 +795,14 @@ void main() {
         'Antenna',
         'Height',
         'Remarks',
-        'Actions',
       ],
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('desktop-log-actions-column')),
+        matching: find.text('Actions'),
+      ),
+      findsOneWidget,
     );
     expect(find.byTooltip('Edit record'), findsOneWidget);
     expect(find.byTooltip('Delete record'), findsOneWidget);
@@ -811,7 +871,9 @@ void main() {
     final editButton = tester.widget<IconButton>(
       find
           .descendant(
-            of: find.byWidget(table.rows.single.cells[12].child),
+            of: find.byKey(
+              const Key('desktop-log-actions-save-failure'),
+            ),
             matching: find.byType(IconButton),
           )
           .first,
@@ -825,7 +887,9 @@ void main() {
     final saveButton = tester.widget<IconButton>(
       find
           .descendant(
-            of: find.byWidget(table.rows.single.cells[12].child),
+            of: find.byKey(
+              const Key('desktop-log-actions-save-failure'),
+            ),
             matching: find.byType(IconButton),
           )
           .first,
@@ -974,11 +1038,10 @@ Future<void> _pumpLogTable(
 }
 
 void _openDeleteDialog(WidgetTester tester) {
-  final table = tester.widget<DataTable>(find.byType(DataTable));
   final deleteButton = tester
       .widgetList<IconButton>(
         find.descendant(
-          of: find.byWidget(table.rows.single.cells[12].child),
+          of: find.byKey(const Key('desktop-log-actions-column')),
           matching: find.byType(IconButton),
         ),
       )

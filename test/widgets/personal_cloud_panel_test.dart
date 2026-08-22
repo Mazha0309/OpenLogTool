@@ -17,12 +17,14 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: cloud,
-        child: const MaterialApp(
-          locale: Locale('en', 'US'),
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: SingleChildScrollView(child: PersonalCloudPanel()),
+            body: SingleChildScrollView(
+              child: PersonalCloudPanel(onOpenConflicts: () {}),
+            ),
           ),
         ),
       ),

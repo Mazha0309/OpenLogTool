@@ -12,6 +12,8 @@ class SettingsProvider with ChangeNotifier {
   static const String _isDarkModeKey = 'isDarkMode';
   static const String _fontFamilyKey = 'fontFamily';
   static const String _exportSettingsKey = 'exportSettings';
+  static const String _sessionTitleExportDefaultsV1Key =
+      'sessionTitleExportDefaultsV1';
   static const String _callSignQthLinkKey = 'callSignQthLinkEnabled';
   static const String _paginationEnabledKey = 'paginationEnabled';
   static const String _duplicateCallsignWarningKey =
@@ -102,6 +104,20 @@ class SettingsProvider with ChangeNotifier {
       } catch (_) {
         _exportSettings = ExportSettings();
       }
+    }
+    if (!await prefs.getBool(_sessionTitleExportDefaultsV1Key)) {
+      // Earlier releases persisted both switches as false by default. Apply
+      // the new default once to existing installations; later explicit
+      // opt-outs remain untouched because the migration marker is retained.
+      _exportSettings = _exportSettings.copyWith(
+        useSessionTitleAsHeader: true,
+        useSessionTitleAsFileName: true,
+      );
+      await prefs.setString(
+        _exportSettingsKey,
+        json.encode(_exportSettings.toJson()),
+      );
+      await prefs.setBool(_sessionTitleExportDefaultsV1Key, true);
     }
 
     _callSignQthLinkEnabled =
@@ -303,6 +319,7 @@ class SettingsProvider with ChangeNotifier {
     await prefs.remove(_isDarkModeKey);
     await prefs.remove(_fontFamilyKey);
     await prefs.remove(_exportSettingsKey);
+    await prefs.setBool(_sessionTitleExportDefaultsV1Key, true);
     await prefs.remove(_callSignQthLinkKey);
     await prefs.remove(_paginationEnabledKey);
     await prefs.remove(_controllerDeviceModeEnabledKey);

@@ -14,10 +14,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('data workspace exposes three embedded destinations',
+  testWidgets('data workspace exposes four embedded destinations',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(900, 900);
+    tester.view.physicalSize = const Size(1300, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -71,5 +71,10 @@ void main() {
     await tester.tap(find.text('Local database'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('database-operation-status')), findsOneWidget);
+
+    await tester.tap(find.text('Sync conflicts'));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const Key('personal-cloud-no-conflicts')), findsOneWidget);
   });
 }

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openlogtool/models/export_settings.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -95,6 +97,37 @@ void main() {
       (await SharedPreferences.getInstance()).containsKey('autoAppendPowerW'),
       isFalse,
     );
+    restored.dispose();
+  });
+
+  test('migrates old session-title export defaults only once', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'exportSettings': json.encode(<String, Object>{
+        'useSessionTitleAsHeader': false,
+        'useSessionTitleAsFileName': false,
+      }),
+    });
+    final settings = SettingsProvider();
+    await _waitForInitialLoad(settings);
+
+    expect(settings.exportSettings.useSessionTitleAsHeader, isTrue);
+    expect(settings.exportSettings.useSessionTitleAsFileName, isTrue);
+    expect(
+      (await SharedPreferences.getInstance())
+          .getBool('sessionTitleExportDefaultsV1'),
+      isTrue,
+    );
+
+    await settings.updateExportSettings(ExportSettings(
+      useSessionTitleAsHeader: false,
+      useSessionTitleAsFileName: false,
+    ));
+    settings.dispose();
+
+    final restored = SettingsProvider();
+    await _waitForInitialLoad(restored);
+    expect(restored.exportSettings.useSessionTitleAsHeader, isFalse);
+    expect(restored.exportSettings.useSessionTitleAsFileName, isFalse);
     restored.dispose();
   });
 }

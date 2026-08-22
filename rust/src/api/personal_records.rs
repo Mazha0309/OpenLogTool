@@ -331,7 +331,11 @@ fn validate_snapshot(snapshot: &PersonalRecordsSnapshot) -> anyhow::Result<()> {
     for log in &snapshot.logs {
         validate_stable_id("logs.sync_id", &log.sync_id)?;
         validate_stable_id("logs.session_id", &log.session_id)?;
-        validate_string_length("logs.controller", &log.controller, 1, 32)?;
+        // Legacy/imported local records may have been saved before a net
+        // controller was known. Personal-cloud snapshots must preserve those
+        // incomplete records losslessly; collaboration publication keeps its
+        // separate non-empty controller requirement.
+        validate_string_length("logs.controller", &log.controller, 0, 32)?;
         validate_string_length("logs.callsign", &log.callsign, 1, 32)?;
         validate_optional_string_length("logs.rst_sent", log.rst_sent.as_deref(), 0, 16)?;
         validate_optional_string_length("logs.rst_rcvd", log.rst_rcvd.as_deref(), 0, 16)?;
@@ -876,6 +880,7 @@ mod tests {
         parse_snapshot(&maximum.to_string()).unwrap();
 
         let mut empty_optional = valid_snapshot();
+        empty_optional["logs"][0]["controller"] = json!("");
         for field in [
             "rst_sent", "rst_rcvd", "qth", "device", "power", "antenna", "height", "remarks",
         ] {
@@ -895,7 +900,6 @@ mod tests {
             ("/sessions/0/title", json!("t".repeat(501))),
             ("/logs/0/sync_id", json!("_invalid-first-character")),
             ("/logs/0/sync_id", json!(format!("l{}", "b".repeat(128)))),
-            ("/logs/0/controller", json!("")),
             ("/logs/0/controller", json!("c".repeat(33))),
             ("/logs/0/callsign", json!("")),
             ("/logs/0/callsign", json!("x".repeat(33))),

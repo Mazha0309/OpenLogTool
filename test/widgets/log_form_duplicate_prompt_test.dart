@@ -193,6 +193,56 @@ void main() {
     expect(logProvider.addedLog!.power, '5kW');
   });
 
+  testWidgets('plain numeric power and height expose local format candidates',
+      (tester) async {
+    final logProvider = _StaticLogProvider(const []);
+    addTearDown(logProvider.dispose);
+    await tester.pumpWidget(_app(logProvider));
+    await tester.pumpAndSettle();
+
+    final power = find.widgetWithText(TextFormField, '功率');
+    await tester.tap(power);
+    await tester.enterText(power, '15');
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const Key('format-suggestion-power-15W')), findsOneWidget);
+    expect(find.byKey(const Key('format-suggestion-power-15')), findsOneWidget);
+
+    final height = find.widgetWithText(TextFormField, '高度');
+    await tester.tap(height);
+    await tester.enterText(height, '5');
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const Key('format-suggestion-height-5楼')), findsOneWidget);
+    expect(
+        find.byKey(const Key('format-suggestion-height-5米')), findsOneWidget);
+
+    await tester.enterText(height, 'dm');
+    await tester.pumpAndSettle();
+    expect(find.text('地面'), findsOneWidget);
+    expect(find.text('DM · dimian'), findsOneWidget);
+
+    await tester.enterText(height, 'gaojia');
+    await tester.pumpAndSettle();
+    expect(find.text('高架'), findsOneWidget);
+    expect(find.text('GJ · gaojia'), findsOneWidget);
+
+    for (final value in const ['地面', '高架']) {
+      await tester.enterText(height, value);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-autocomplete-options')), findsNothing);
+    }
+
+    await tester.tap(power);
+    for (final value in const ['中功率', '高功率']) {
+      await tester.enterText(power, value);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-autocomplete-options')), findsNothing);
+    }
+  });
+
   testWidgets('saving a duplicate as new record adds without touching old',
       (tester) async {
     final logProvider = _StaticLogProvider([_oldLog()]);

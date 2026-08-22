@@ -462,7 +462,10 @@ class ExportService {
       sheet.setColumnWidth(i, colWidths[i]);
     }
 
-    final saved = excel.save();
+    // `Excel.save()` starts a browser download by itself and uses the package
+    // default name (`FlutterExcel.xlsx`). The app owns saving so it can apply
+    // the configured session filename on every platform; encode only here.
+    final saved = excel.encode();
     return saved != null ? Uint8List.fromList(saved) : null;
   }
 
