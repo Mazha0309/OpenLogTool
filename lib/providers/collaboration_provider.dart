@@ -4626,66 +4626,35 @@ class CollaborationProvider with ChangeNotifier {
     final sentValue = local[field];
     final sentRevision =
         beforeBaseRevisions[field] ?? snapshot.draft.fieldRevisions[field] ?? 0;
-    final lock = await _acquireLiveDraftFieldInternal(field, context);
-    _assertLiveDraftContextCurrent(context);
-    Future<LiveDraftPatchResultDto> send(int clientSeq) =>
-        context.api.updateLiveDraft(
+    try {
+      // Use the same lease lifecycle as a multi-field patch. In particular,
+      // an implicit write such as an auto-generated time must release the
+      // temporary lock it acquired instead of leaving other devices blocked.
+      final execution = await executeLiveDraftAtomicPatch(
+        values: {field: sentValue},
+        expectedRevisions: {field: sentRevision},
+        ownedLocks: Map<String, LiveDraftLockDto>.of(_ownedLiveDraftLocks),
+        nextClientSeq: _liveDraftClientSeq + 1,
+        acquireLock: (field) => _acquireLiveDraftFieldInternal(field, context),
+        sendPatch: (clientSeq, updates) => context.api.updateLiveDraft(
           sessionId: context.binding.sessionId,
           deviceId: context.deviceId,
           clientSeq: clientSeq,
-          updates: [
-            LiveDraftPatchUpdateDto(
-              field: field,
-              value: sentValue,
-              expectedRevision: sentRevision,
-              leaseId: lock.leaseId,
-            ),
-          ],
-        );
-    try {
-      late LiveDraftPatchResultDto result;
-      var clientSeq = _liveDraftClientSeq + 1;
-      try {
-        _assertLiveDraftContextCurrent(context);
-        result = await send(clientSeq);
-        _assertLiveDraftContextCurrent(context);
-      } on ServerApiException catch (error) {
-        _assertLiveDraftContextCurrent(context);
-        if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_GAP') {
-          final expected = _expectedLiveDraftClientSeq(error);
-          if (expected == null) rethrow;
-          _liveDraftClientSeq = expected - 1;
-          clientSeq = expected;
-          _assertLiveDraftContextCurrent(context);
-          result = await send(clientSeq);
-          _assertLiveDraftContextCurrent(context);
-        } else if (error.code == 'LIVE_DRAFT_CLIENT_SEQ_REUSED') {
-          // A reused response proves this sequence was already accepted for a
-          // different payload (typically an earlier response was lost). Move
-          // the acknowledged baseline once, then submit the current value as
-          // the next serial update.
-          _liveDraftClientSeq = clientSeq;
-          clientSeq += 1;
-          _assertLiveDraftContextCurrent(context);
-          result = await send(clientSeq);
-          _assertLiveDraftContextCurrent(context);
-        } else {
-          rethrow;
-        }
-      }
-      if (result.appliedClientSeq != clientSeq) {
-        throw const FormatException(
-          'live draft response acknowledged another clientSeq',
-        );
-      }
-      _liveDraftClientSeq = result.appliedClientSeq;
+          updates: updates,
+        ),
+        releaseLock: (field, lock) =>
+            _releaseTemporaryLiveDraftField(field, lock, context),
+        onClientSeqChanged: (value) => _liveDraftClientSeq = value,
+        assertCurrent: () => _assertLiveDraftContextCurrent(context),
+      );
+      _assertLiveDraftContextCurrent(context);
       final currentSnapshot = _liveDraftSnapshot;
       final currentLocal = _localLiveDraftFields;
       if (currentSnapshot == null || currentLocal == null) return;
       final currentDraft = currentSnapshot.draft;
       final canonicalDraft = selectLiveDraftCanonicalAfterAtomicPatch(
         current: currentDraft,
-        accepted: result.draft,
+        accepted: execution.result.draft,
       );
       final merged = mergeAcceptedLiveDraftAtomicPatch(
         targetFields: {field},
@@ -5132,13 +5101,6 @@ class CollaborationProvider with ChangeNotifier {
     _liveDraftErrorCode = code;
     _liveDraftErrorMessage = message;
     _safeNotify();
-  }
-
-  int? _expectedLiveDraftClientSeq(ServerApiException error) {
-    final details = error.details;
-    if (details is! Map) return null;
-    final expected = details['expectedClientSeq'];
-    return expected is int && expected > 0 ? expected : null;
   }
 
   void _clearLiveDraftError() {

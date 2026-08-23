@@ -1145,7 +1145,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get limitWorkbenchWidthSetting => '限制点名台内容宽度';
 
   @override
-  String get limitWorkbenchWidthHint => '宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。';
+  String get limitWorkbenchWidthHint => '宽屏时将点名台内容居中并限制在 1520 像素内，避免字段过度拉伸。';
 
   @override
   String serverConnectionFailed(String detail) {
@@ -1979,7 +1979,72 @@ class AppLocalizationsZh extends AppLocalizations {
   String get personalCloudConflictDialogTitle => '逐项处理冲突';
 
   @override
+  String get personalCloudConflictPageTitle => '个人云同步冲突';
+
+  @override
+  String get personalCloudConflictPageHint =>
+      '逐项比较本机、云端和共同基线。每个冲突都必须由你明确选择后才会合并；协作会话冲突仍在会话页处理。';
+
+  @override
+  String get personalCloudConflictSelectAllLocal => '全部选本机';
+
+  @override
+  String get personalCloudConflictSelectAllRemote => '全部选云端';
+
+  @override
+  String personalCloudConflictSelectionProgress(int selected, int total) {
+    return '已选择 $selected/$total 项；全部选择后才能应用。';
+  }
+
+  @override
   String get personalCloudConflictApply => '应用选择';
+
+  @override
+  String get personalCloudConflictApplySucceeded => '冲突选择已应用并完成同步';
+
+  @override
+  String get personalCloudConflictNoneTitle => '当前没有同步冲突';
+
+  @override
+  String get personalCloudConflictNoneHint =>
+      '个人记录和词库没有需要人工选择的冲突。同步状态与手动同步入口位于本地数据库页面。';
+
+  @override
+  String get personalCloudConflictConfirmationPendingTitle =>
+      '没有字段冲突，但仍需确认首次合并';
+
+  @override
+  String get personalCloudConflictConfirmationPendingHint =>
+      '返回本地数据库页面核对本机与云端数量，再确认安全合并。';
+
+  @override
+  String get personalCloudConflictRecordsDataset => '个人记录';
+
+  @override
+  String get personalCloudConflictDictionaryDataset => '个人词库';
+
+  @override
+  String personalCloudConflictEntityReference(String dataset, String id) {
+    return '$dataset · 标识 $id';
+  }
+
+  @override
+  String get personalCloudConflictBaseline => '共同基线';
+
+  @override
+  String get personalCloudConflictValueAbsent => '不存在（选择此侧将删除该项）';
+
+  @override
+  String get personalCloudConflictValueEmpty => '空值';
+
+  @override
+  String get personalCloudConflictLifecycleField => '会话状态';
+
+  @override
+  String get personalCloudConflictDeletionField => '删除状态';
+
+  @override
+  String get personalCloudConflictDictionaryStateField => '词库状态';
 
   @override
   String personalCloudFieldConflictTitle(String field) {
@@ -1996,6 +2061,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get personalCloudEntityLog => '记录';
+
+  @override
+  String get personalCloudEntityDictionaryItem => '词库项';
 
   @override
   String get personalCloudKeepLocal => '保留本机';
@@ -2698,6 +2766,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dataLocalDatabaseTab => '本地数据库';
 
   @override
+  String get dataSyncConflictsTab => '同步冲突';
+
+  @override
   String get settingsCategoryAi => 'AI 辅助';
 
   @override
@@ -3114,6 +3185,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDictionaryApplySelected => '应用所选建议';
+
+  @override
+  String get fieldFormatSuggestionLabel => '格式候选';
+
+  @override
+  String get logTableHorizontalScrollHint => 'Shift + 滚轮横向滚动';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -3722,7 +3799,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get limitWorkbenchWidthSetting => '限制点名台内容宽度';
 
   @override
-  String get limitWorkbenchWidthHint => '宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。';
+  String get limitWorkbenchWidthHint => '宽屏时将点名台内容居中并限制在 1520 像素内，避免字段过度拉伸。';
 
   @override
   String serverConnectionFailed(String detail) {

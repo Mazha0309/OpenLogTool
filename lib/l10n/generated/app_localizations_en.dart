@@ -1198,7 +1198,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get limitWorkbenchWidthHint =>
-      'Center Net Desk content and limit it to 1440 pixels on wide screens to keep fields from stretching too far.';
+      'Center Net Desk content and limit it to 1520 pixels on wide screens to keep fields from stretching too far.';
 
   @override
   String serverConnectionFailed(String detail) {
@@ -2081,7 +2081,74 @@ class AppLocalizationsEn extends AppLocalizations {
   String get personalCloudConflictDialogTitle => 'Resolve conflicts';
 
   @override
+  String get personalCloudConflictPageTitle => 'Personal cloud conflicts';
+
+  @override
+  String get personalCloudConflictPageHint =>
+      'Compare the device, cloud, and common baseline one item at a time. Every conflict requires your explicit choice before merging. Collaboration conflicts remain in Sessions.';
+
+  @override
+  String get personalCloudConflictSelectAllLocal => 'Select all device';
+
+  @override
+  String get personalCloudConflictSelectAllRemote => 'Select all cloud';
+
+  @override
+  String personalCloudConflictSelectionProgress(int selected, int total) {
+    return 'Selected $selected of $total; choose every item before applying.';
+  }
+
+  @override
   String get personalCloudConflictApply => 'Apply choices';
+
+  @override
+  String get personalCloudConflictApplySucceeded =>
+      'Conflict choices applied and synchronized';
+
+  @override
+  String get personalCloudConflictNoneTitle => 'No synchronization conflicts';
+
+  @override
+  String get personalCloudConflictNoneHint =>
+      'No personal record or dictionary conflict needs a decision. Synchronization status and manual sync are available under Local database.';
+
+  @override
+  String get personalCloudConflictConfirmationPendingTitle =>
+      'No field conflicts, but first-merge confirmation is pending';
+
+  @override
+  String get personalCloudConflictConfirmationPendingHint =>
+      'Return to Local database, review the device and cloud counts, then confirm the safe merge.';
+
+  @override
+  String get personalCloudConflictRecordsDataset => 'Personal records';
+
+  @override
+  String get personalCloudConflictDictionaryDataset => 'Personal dictionary';
+
+  @override
+  String personalCloudConflictEntityReference(String dataset, String id) {
+    return '$dataset · ID $id';
+  }
+
+  @override
+  String get personalCloudConflictBaseline => 'Common baseline';
+
+  @override
+  String get personalCloudConflictValueAbsent =>
+      'Does not exist (choosing this side deletes the item)';
+
+  @override
+  String get personalCloudConflictValueEmpty => 'Empty value';
+
+  @override
+  String get personalCloudConflictLifecycleField => 'Session state';
+
+  @override
+  String get personalCloudConflictDeletionField => 'Deletion state';
+
+  @override
+  String get personalCloudConflictDictionaryStateField => 'Dictionary state';
 
   @override
   String personalCloudFieldConflictTitle(String field) {
@@ -2098,6 +2165,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get personalCloudEntityLog => 'Record';
+
+  @override
+  String get personalCloudEntityDictionaryItem => 'Dictionary item';
 
   @override
   String get personalCloudKeepLocal => 'Keep device';
@@ -2838,6 +2908,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dataLocalDatabaseTab => 'Local database';
 
   @override
+  String get dataSyncConflictsTab => 'Sync conflicts';
+
+  @override
   String get settingsCategoryAi => 'AI assistance';
 
   @override
@@ -3279,6 +3352,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDictionaryApplySelected => 'Apply selected suggestions';
+
+  @override
+  String get fieldFormatSuggestionLabel => 'Format option';
+
+  @override
+  String get logTableHorizontalScrollHint =>
+      'Shift + wheel to scroll horizontally';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -3907,7 +3987,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get limitWorkbenchWidthHint =>
-      'Center Net Desk content and limit it to 1440 pixels on wide screens to keep fields from stretching too far.';
+      'Center Net Desk content and limit it to 1520 pixels on wide screens to keep fields from stretching too far.';
 
   @override
   String serverConnectionFailed(String detail) {

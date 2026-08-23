@@ -252,7 +252,8 @@ class ExportService {
         settings.controllerBackgroundColor.toARGB32());
     final alternateColor =
         excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
-    const whiteColor = excel_lib.ExcelColor.white;
+    final tableColor =
+        excel_lib.ExcelColor.fromInt(settings.tableBackgroundColor.toARGB32());
 
     final borderStyle = excel_lib.Border(
       borderStyle: excel_lib.BorderStyle.Thin,
@@ -372,7 +373,7 @@ class ExportService {
 
       final rowColor = settings.useAlternateColors && blockRowColorIndex.isOdd
           ? alternateColor
-          : whiteColor;
+          : tableColor;
       blockRowColorIndex++;
 
       final displayTime = formatLogTimeForDisplay(log.time);
@@ -462,7 +463,10 @@ class ExportService {
       sheet.setColumnWidth(i, colWidths[i]);
     }
 
-    final saved = excel.save();
+    // `Excel.save()` starts a browser download by itself and uses the package
+    // default name (`FlutterExcel.xlsx`). The app owns saving so it can apply
+    // the configured session filename on every platform; encode only here.
+    final saved = excel.encode();
     return saved != null ? Uint8List.fromList(saved) : null;
   }
 

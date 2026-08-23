@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 import 'package:openlogtool/providers/log_provider.dart';
@@ -24,6 +26,7 @@ class LogTable extends StatefulWidget {
 
 class _LogTableState extends State<LogTable> {
   static const double _mobileBreakpoint = 680;
+  static const double _desktopActionsWidth = 128;
   int? _editingIndex;
   late Map<String, TextEditingController> _controllers;
   int _currentPage = 0;
@@ -353,7 +356,7 @@ class _LogTableState extends State<LogTable> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            searchField,
+            _buildDesktopToolbar(context),
             if (sourceEntries.isEmpty && _searchQuery.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
@@ -379,140 +382,44 @@ class _LogTableState extends State<LogTable> {
                       border: Border.all(color: colors.outlineVariant),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (notification) => true,
-                      child: Scrollbar(
-                        controller: horizontalController,
-                        thumbVisibility: true,
-                        trackVisibility: true,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          controller: horizontalController,
-                          child: ConstrainedBox(
-                            constraints:
-                                BoxConstraints(minWidth: constraints.maxWidth),
-                            child: SingleChildScrollView(
-                              physics: enableInnerVerticalScroll
-                                  ? const ClampingScrollPhysics()
-                                  : const NeverScrollableScrollPhysics(),
-                              child: DataTable(
-                                // LogProvider replaces its visible projection
-                                // after every durable add/update/delete or
-                                // collaboration reconciliation. Give that
-                                // projection its own element identity so Flutter
-                                // cannot retain stale row render state across a
-                                // synchronous provider refresh.
-                                key: ObjectKey(logProvider.logs),
-                                columnSpacing: 16,
-                                horizontalMargin: 16,
-                                headingRowHeight: 48,
-                                dataRowMinHeight: 56,
-                                dataRowMaxHeight: 56,
-                                headingRowColor: WidgetStatePropertyAll(
-                                  colors.surfaceContainerHighest,
-                                ),
-                                headingTextStyle: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: colors.onSurface,
-                                  fontSize: 13,
-                                ),
-                                dataTextStyle: TextStyle(
-                                  color: colors.onSurface,
-                                  fontSize: 13,
-                                ),
-                                dividerThickness: 1,
-                                border: TableBorder(
-                                  horizontalInside: BorderSide(
-                                    color: colors.outlineVariant,
-                                  ),
-                                ),
-                                columns: [
-                                  DataColumn(
-                                    label:
-                                        _buildCenteredCell(const Text('#'), 60),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldTime),
-                                      100,
+                    child: SingleChildScrollView(
+                      physics: enableInnerVerticalScroll
+                          ? const ClampingScrollPhysics()
+                          : const NeverScrollableScrollPhysics(),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Listener(
+                              onPointerSignal: _handleTablePointerSignal,
+                              child: Scrollbar(
+                                controller: horizontalController,
+                                thumbVisibility: true,
+                                trackVisibility: true,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  controller: horizontalController,
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      minWidth: constraints.maxWidth -
+                                          _desktopActionsWidth,
+                                    ),
+                                    child: _buildDesktopDataTable(
+                                      context,
+                                      logProvider,
+                                      displayEntries,
                                     ),
                                   ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldController),
-                                      120,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldCallsign),
-                                      120,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldRstSent),
-                                      60,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldRstRcvd),
-                                      60,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldQth),
-                                      150,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldDevice),
-                                      150,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldPower),
-                                      80,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldAntenna),
-                                      150,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldHeight),
-                                      80,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldRemarks),
-                                      120,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: _buildCenteredCell(
-                                      Text(context.l10n.fieldActions),
-                                      120,
-                                    ),
-                                  ),
-                                ],
-                                rows: _buildTableRows(
-                                  context,
-                                  logProvider,
-                                  displayEntries,
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                          _buildDesktopActionsColumn(
+                            context,
+                            logProvider,
+                            displayEntries,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -604,11 +511,14 @@ class _LogTableState extends State<LogTable> {
     return SizedBox(height: maxHeight, child: child);
   }
 
-  Widget _buildSearchField(BuildContext context) {
+  Widget _buildSearchField(
+    BuildContext context, {
+    bool includeBottomPadding = true,
+  }) {
     final l10n = context.l10n;
     final colors = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: includeBottomPadding ? 10 : 0),
       child: TextField(
         key: const Key('log-table-search'),
         controller: _searchController,
@@ -645,6 +555,273 @@ class _LogTableState extends State<LogTable> {
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
       ),
+    );
+  }
+
+  Widget _buildDesktopToolbar(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSearchField(
+              context,
+              includeBottomPadding: false,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            key: const Key('log-table-horizontal-scroll-hint'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colors.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.swipe_outlined,
+                  size: 18,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  context.l10n.logTableHorizontalScrollHint,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleTablePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        !HardwareKeyboard.instance.isShiftPressed ||
+        !_horizontalController.hasClients) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(event, (signal) {
+      final position = _horizontalController.position;
+      final pointer = signal as PointerScrollEvent;
+      final delta = pointer.scrollDelta.dy != 0
+          ? pointer.scrollDelta.dy
+          : pointer.scrollDelta.dx;
+      _horizontalController.jumpTo(
+        (position.pixels + delta).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+    });
+  }
+
+  DataTable _buildDesktopDataTable(
+    BuildContext context,
+    LogProvider logProvider,
+    List<MapEntry<int, LogEntry>> displayEntries,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    return DataTable(
+      // LogProvider replaces its visible projection after every durable
+      // mutation or collaboration reconciliation. Key the projection so stale
+      // row render state cannot survive a synchronous refresh.
+      key: ObjectKey(logProvider.logs),
+      columnSpacing: 16,
+      horizontalMargin: 16,
+      headingRowHeight: 48,
+      dataRowMinHeight: 56,
+      dataRowMaxHeight: 56,
+      headingRowColor: WidgetStatePropertyAll(
+        colors.surfaceContainerHighest,
+      ),
+      headingTextStyle: TextStyle(
+        fontWeight: FontWeight.w700,
+        color: colors.onSurface,
+        fontSize: 13,
+      ),
+      dataTextStyle: TextStyle(color: colors.onSurface, fontSize: 13),
+      dividerThickness: 1,
+      border: TableBorder(
+        horizontalInside: BorderSide(color: colors.outlineVariant),
+      ),
+      columns: [
+        DataColumn(label: _buildCenteredCell(const Text('#'), 60)),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldTime), 100),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldController), 120),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldCallsign), 120),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldRstSent), 60),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldRstRcvd), 60),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldQth), 150),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldDevice), 150),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldPower), 80),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldAntenna), 150),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldHeight), 80),
+        ),
+        DataColumn(
+          label: _buildCenteredCell(Text(context.l10n.fieldRemarks), 120),
+        ),
+      ],
+      rows: _buildTableRows(context, displayEntries),
+    );
+  }
+
+  Widget _buildDesktopActionsColumn(
+    BuildContext context,
+    LogProvider logProvider,
+    List<MapEntry<int, LogEntry>> displayEntries,
+  ) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      key: const Key('desktop-log-actions-column'),
+      width: _desktopActionsWidth,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(left: BorderSide(color: colors.outlineVariant)),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(-3, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 48,
+            child: ColoredBox(
+              color: colors.surfaceContainerHighest,
+              child: Center(
+                child: Text(
+                  context.l10n.fieldActions,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          for (final entry in displayEntries.asMap().entries)
+            _buildDesktopActionRow(
+              context,
+              logProvider,
+              entry.value,
+              visualIndex: entry.key,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopActionRow(
+    BuildContext context,
+    LogProvider logProvider,
+    MapEntry<int, LogEntry> indexedLog, {
+    required int visualIndex,
+  }) {
+    final originalIndex = indexedLog.key;
+    final log = indexedLog.value;
+    final isEditing = _editingIndex == originalIndex;
+    final isConflicted = widget.conflictedLogIds.contains(log.id);
+    final mutationBlockReason = widget.readOnly
+        ? 'COLLABORATION_SESSION_READ_ONLY'
+        : logProvider.mutationBlockReason(log);
+    final canMutate = mutationBlockReason == null && !isConflicted;
+    final mutationHint = isConflicted
+        ? context.l10n.logConflictReadOnlyHint
+        : mutationBlockReason == null
+            ? ''
+            : _mutationBlockLabel(context, mutationBlockReason);
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      key: Key('desktop-log-actions-${log.id}'),
+      height: 56,
+      decoration: BoxDecoration(
+        color: isEditing
+            ? colors.primaryContainer.withValues(alpha: 0.22)
+            : visualIndex.isOdd
+                ? colors.surfaceContainerLowest
+                : colors.surface,
+        border: Border(top: BorderSide(color: colors.outlineVariant)),
+      ),
+      alignment: Alignment.center,
+      child: isEditing
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.filledTonal(
+                  icon: _editingSaveInProgress
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check, size: 20),
+                  onPressed: !canMutate || _editingSaveInProgress
+                      ? null
+                      : _saveEditing,
+                  tooltip: !canMutate ? mutationHint : context.l10n.save,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: _editingSaveInProgress ? null : _cancelEditing,
+                  tooltip: context.l10n.cancel,
+                ),
+              ],
+            )
+          : !canMutate
+              ? Tooltip(
+                  message: mutationHint,
+                  child: Icon(
+                    Icons.lock_outline,
+                    color: colors.onSurfaceVariant,
+                  ),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton.filledTonal(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      onPressed: () => _startEditing(originalIndex, log),
+                      tooltip: context.l10n.editRecord,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      color: colors.error,
+                      onPressed: () => _showDeleteConfirmation(context, log),
+                      tooltip: context.l10n.deleteRecord,
+                    ),
+                  ],
+                ),
     );
   }
 
@@ -1157,23 +1334,12 @@ class _LogTableState extends State<LogTable> {
 
   List<DataRow> _buildTableRows(
     BuildContext context,
-    LogProvider logProvider,
     List<MapEntry<int, LogEntry>> displayEntries,
   ) {
     return displayEntries.asMap().entries.map((entry) {
       final originalIndex = entry.value.key;
       final log = entry.value.value;
       final isEditing = _editingIndex == originalIndex;
-      final isConflicted = widget.conflictedLogIds.contains(log.id);
-      final mutationBlockReason = widget.readOnly
-          ? 'COLLABORATION_SESSION_READ_ONLY'
-          : logProvider.mutationBlockReason(log);
-      final canMutate = mutationBlockReason == null && !isConflicted;
-      final mutationHint = isConflicted
-          ? context.l10n.logConflictReadOnlyHint
-          : mutationBlockReason == null
-              ? ''
-              : _mutationBlockLabel(context, mutationBlockReason);
       // 倒序序号：最新的记录显示最大序号
       final reverseIndex = originalIndex + 1;
 
@@ -1382,92 +1548,6 @@ class _LogTableState extends State<LogTable> {
                     )
                   : Text(log.remarks),
               110,
-            ),
-          ),
-          DataCell(
-            _buildCenteredCell(
-              isEditing
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: _editingSaveInProgress
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.check, size: 20),
-                          onPressed: !canMutate || _editingSaveInProgress
-                              ? null
-                              : _saveEditing,
-                          tooltip:
-                              !canMutate ? mutationHint : context.l10n.save,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withValues(alpha: 0.1),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          onPressed:
-                              _editingSaveInProgress ? null : _cancelEditing,
-                          tooltip: context.l10n.cancel,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withValues(alpha: 0.1),
-                          ),
-                        ),
-                      ],
-                    )
-                  : !canMutate
-                      ? Tooltip(
-                          message: mutationHint,
-                          child: Icon(
-                            Icons.lock_outline,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        )
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 20),
-                              onPressed: () =>
-                                  _startEditing(originalIndex, log),
-                              tooltip: context.l10n.editRecord,
-                              style: IconButton.styleFrom(
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.1),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.delete, size: 20),
-                              onPressed: () => _showDeleteConfirmation(
-                                context,
-                                log,
-                              ),
-                              tooltip: context.l10n.deleteRecord,
-                              style: IconButton.styleFrom(
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .error
-                                    .withValues(alpha: 0.1),
-                              ),
-                            ),
-                          ],
-                        ),
-              120,
             ),
           ),
         ],

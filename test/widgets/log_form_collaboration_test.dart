@@ -567,6 +567,78 @@ void main() {
   );
 
   testWidgets(
+    'a remotely synced duplicate callsign never prompts this device',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(
+        <String, Object>{'duplicateCallsignWarningEnabled': true},
+      );
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': '',
+          'rstSent': '59',
+          'rstRcvd': '59',
+        },
+      );
+      final logProvider = _DuplicateLogProvider([
+        LogEntry(
+          id: 'remote-log',
+          sessionId: 'session-1',
+          time: '2026-07-13T12:00:00Z',
+          controller: 'BG5CRL',
+          callsign: 'BA4AAA',
+          report: '59',
+          rstRcvd: '59',
+          qth: 'Hangzhou',
+          device: 'IC-7300',
+          power: '50W',
+          antenna: 'DP',
+          height: '10m',
+        ),
+      ]);
+      addTearDown(collaboration.dispose);
+      addTearDown(logProvider.dispose);
+
+      await tester.pumpWidget(
+        _LogFormTestApp(
+          collaboration: collaboration,
+          logProvider: logProvider,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final callsignField = find.descendant(
+        of: find.byType(CallsignHistoryField),
+        matching: find.byType(TextFormField),
+      );
+
+      // Another operator typed the callsign into the shared draft while this
+      // device already synchronized the committed record into its table.
+      collaboration.replaceDraftField('callsign', 'BA4AAA');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 900));
+
+      expect(
+        tester.widget<TextFormField>(callsignField).controller!.text,
+        'BA4AAA',
+      );
+      expect(find.byKey(const Key('duplicate-continue-add')), findsNothing);
+
+      // Focusing and leaving a field this device never typed into must not
+      // prompt, and must never wipe the shared callsign.
+      await tester.tap(callsignField);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('outside-log-form')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('duplicate-continue-add')), findsNothing);
+      expect(collaboration.atomicUpdates, isEmpty);
+      expect(collaboration.liveDraftFields['callsign'], 'BA4AAA');
+    },
+  );
+
+  testWidgets(
     'saving a blank time records it without prefilling the next record',
     (tester) async {
       final collaboration = _RecordingCollaborationProvider(

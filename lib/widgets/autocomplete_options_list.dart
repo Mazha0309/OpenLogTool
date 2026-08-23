@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -109,34 +110,56 @@ class _AppAutocompleteOptionsListState<T extends Object>
   }
 
   @override
-  Widget build(BuildContext context) => Scrollbar(
-        controller: _scrollController,
-        child: ListView.builder(
-          key: const Key('app-autocomplete-options'),
-          controller: _scrollController,
-          primary: false,
-          physics: const ClampingScrollPhysics(),
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          itemCount: widget.options.length,
-          itemBuilder: (context, index) {
-            final option = widget.options[index];
-            final highlighted = index == widget.highlightedIndex;
-            return Semantics(
-              selected: highlighted,
-              button: true,
-              child: InkWell(
-                key: GlobalObjectKey(option),
-                onTap: () => widget.onSelected(option),
-                child: ColoredBox(
-                  color: highlighted
-                      ? Theme.of(context).focusColor
-                      : Colors.transparent,
-                  child: widget.optionBuilder(context, option),
-                ),
-              ),
-            );
-          },
+  Widget build(BuildContext context) => TextFieldTapRegion(
+        // The autocomplete overlay lives outside the text field subtree.
+        // Treating it as part of the field prevents a touch drag from firing
+        // TextField.onTapOutside and closing the menu before it can scroll.
+        child: ScrollConfiguration(
+          behavior: const _AutocompleteScrollBehavior(),
+          child: Scrollbar(
+            controller: _scrollController,
+            child: ListView.builder(
+              key: const Key('app-autocomplete-options'),
+              controller: _scrollController,
+              primary: false,
+              physics: const ClampingScrollPhysics(),
+              dragStartBehavior: DragStartBehavior.start,
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: widget.options.length,
+              itemBuilder: (context, index) {
+                final option = widget.options[index];
+                final highlighted = index == widget.highlightedIndex;
+                return Semantics(
+                  selected: highlighted,
+                  button: true,
+                  child: InkWell(
+                    key: GlobalObjectKey(option),
+                    onTap: () => widget.onSelected(option),
+                    child: ColoredBox(
+                      color: highlighted
+                          ? Theme.of(context).focusColor
+                          : Colors.transparent,
+                      child: widget.optionBuilder(context, option),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       );
+}
+
+class _AutocompleteScrollBehavior extends MaterialScrollBehavior {
+  const _AutocompleteScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const <PointerDeviceKind>{
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+        PointerDeviceKind.trackpad,
+      };
 }

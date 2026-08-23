@@ -159,6 +159,10 @@ async fn personal_snapshot_replace_and_merge_are_atomic_and_collaboration_safe()
         .execute(get_db().unwrap())
         .await
         .unwrap();
+    sqlx::query("UPDATE logs SET controller = '' WHERE sync_id = 'personal-log'")
+        .execute(get_db().unwrap())
+        .await
+        .unwrap();
     install_protected_fixture().await;
     let protected_before = protected_state().await;
 
@@ -169,6 +173,7 @@ async fn personal_snapshot_replace_and_merge_are_atomic_and_collaboration_safe()
     assert_eq!(exported["logs"].as_array().unwrap().len(), 1);
     assert_eq!(exported["sessions"][0]["session_id"], "personal-session");
     assert_eq!(exported["logs"][0]["sync_id"], "personal-log");
+    assert_eq!(exported["logs"][0]["controller"], "");
     assert_eq!(exported["logs"][0]["source_device_id"], "personal-device");
     assert_eq!(exported["logs"][0]["deleted_at"], UPDATED);
     assert!(exported["sessions"][0].get("share_code").is_none());

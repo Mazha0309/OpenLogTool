@@ -129,8 +129,13 @@ class DictionaryAutocompleteField extends StatelessWidget {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
-            elevation: 4.0,
-            borderRadius: BorderRadius.circular(8),
+            elevation: 3,
+            color: theme.colorScheme.surfaceContainer,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260, maxWidth: 320),
               child: AppAutocompleteOptionsList<_DictionaryOption>(

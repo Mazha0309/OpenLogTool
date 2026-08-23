@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/providers/personal_cloud_provider.dart';
 import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/widgets/dictionary_manager.dart';
 import 'package:openlogtool/widgets/export_panel.dart';
 import 'package:openlogtool/widgets/local_database_panel.dart';
+import 'package:openlogtool/widgets/personal_cloud_conflict_page.dart';
 import 'package:openlogtool/widgets/settings/settings_ui.dart';
+import 'package:provider/provider.dart';
 
-enum _DataWorkspaceView { records, libraries, database }
+enum _DataWorkspaceView { records, libraries, database, syncConflicts }
 
 /// The single home for record transfer, lookup libraries, and device data.
 class DataWorkspacePage extends StatefulWidget {
@@ -21,11 +24,14 @@ class _DataWorkspacePageState extends State<DataWorkspacePage> {
 
   @override
   Widget build(BuildContext context) {
+    final conflictCount = context.select<PersonalCloudProvider, int>(
+      (cloud) => cloud.conflicts.length,
+    );
     return Column(
       key: const PageStorageKey('data-workspace-page'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildNavigation(context),
+        _buildNavigation(context, conflictCount),
         Expanded(
           child: IndexedStack(
             index: _selected.index,
@@ -40,7 +46,15 @@ class _DataWorkspacePageState extends State<DataWorkspacePage> {
                 child: LayoutBuilder(
                   builder: (context, constraints) => LocalDatabasePanel(
                     isNarrow: constraints.maxWidth < AppBreakpoints.compact,
+                    onOpenPersonalCloudConflicts: () => setState(
+                      () => _selected = _DataWorkspaceView.syncConflicts,
+                    ),
                   ),
+                ),
+              ),
+              PersonalCloudConflictPage(
+                onOpenDatabase: () => setState(
+                  () => _selected = _DataWorkspaceView.database,
                 ),
               ),
             ],
@@ -50,7 +64,7 @@ class _DataWorkspacePageState extends State<DataWorkspacePage> {
     );
   }
 
-  Widget _buildNavigation(BuildContext context) {
+  Widget _buildNavigation(BuildContext context, int conflictCount) {
     final colors = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -87,6 +101,16 @@ class _DataWorkspacePageState extends State<DataWorkspacePage> {
                     value: _DataWorkspaceView.database,
                     icon: const Icon(Icons.storage_outlined),
                     label: Text(context.l10n.dataLocalDatabaseTab),
+                  ),
+                  ButtonSegment(
+                    value: _DataWorkspaceView.syncConflicts,
+                    icon: const Icon(Icons.rule_folder_outlined),
+                    label: Text(
+                      conflictCount == 0
+                          ? context.l10n.dataSyncConflictsTab
+                          : '${context.l10n.dataSyncConflictsTab} '
+                              '($conflictCount)',
+                    ),
                   ),
                 ],
                 selected: {_selected},

@@ -19,7 +19,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('wide workbench limit is 1440 and can be disabled',
+  testWidgets('wide workbench limit is 1520 and can be disabled',
       (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1;
@@ -67,7 +67,7 @@ void main() {
     expect(find.byKey(const Key('saved-records-section')), findsOneWidget);
     final limited = find.byKey(const Key('workbench-width-limit'));
     expect(limited, findsOneWidget);
-    expect(tester.getSize(limited).width, 1440);
+    expect(tester.getSize(limited).width, 1520);
     expect(_workbenchScrollWidth(tester), 1600);
     for (final key in const [
       'workbench-status-bar',

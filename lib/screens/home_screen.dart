@@ -12,6 +12,7 @@ import 'package:openlogtool/screens/session_hub_page.dart';
 import 'package:openlogtool/services/controller_window_service.dart';
 import 'package:openlogtool/services/collaboration_sync.dart';
 import 'package:openlogtool/services/url_sync.dart';
+import 'package:openlogtool/theme/app_theme.dart';
 import 'package:openlogtool/widgets/log_form.dart';
 import 'package:openlogtool/widgets/log_table.dart';
 import 'package:openlogtool/widgets/settings_panel.dart';
@@ -854,7 +855,9 @@ class AddRecordPage extends StatelessWidget {
             ? Center(
                 child: ConstrainedBox(
                   key: const Key('workbench-width-limit'),
-                  constraints: const BoxConstraints(maxWidth: 1440),
+                  constraints: const BoxConstraints(
+                    maxWidth: AppDimensions.wideContentWidth,
+                  ),
                   child: stackedContent,
                 ),
               )

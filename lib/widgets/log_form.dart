@@ -13,6 +13,7 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/utils/field_format_suggestions.dart';
 import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
 import 'package:openlogtool/utils/log_time.dart';
 import 'package:openlogtool/utils/power_normalizer.dart';
@@ -55,6 +56,24 @@ class LogForm extends StatefulWidget {
 }
 
 class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
+  static final List<DictionaryItem> _heightPresetOptions =
+      List<DictionaryItem>.unmodifiable(<DictionaryItem>[
+    DictionaryItem(
+      raw: '地面',
+      pinyin: 'dimian',
+      abbreviation: 'DM',
+      type: 'height',
+      origin: 'builtin',
+    ),
+    DictionaryItem(
+      raw: '高架',
+      pinyin: 'gaojia',
+      abbreviation: 'GJ',
+      type: 'height',
+      origin: 'builtin',
+    ),
+  ]);
+
   static const _upperCaseDraftFields = {'controller', 'callsign'};
   static const _clearableDraftFields = <String>{
     'time',
@@ -90,6 +109,20 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   Timer? _duplicateCallsignDebounce;
   bool _duplicatePromptInProgress = false;
   String? _lastDuplicatePromptedCallsign;
+
+  /// The last callsign an operator typed into *this* device's form.
+  ///
+  /// A shared draft also receives callsigns from collaborators and from the
+  /// reset draft the server publishes after a commit. Those values are not
+  /// input on this device, and the record they duplicate is frequently the one
+  /// the draft itself just created, so they must never raise the duplicate
+  /// prompt here.
+  String? _locallyTypedCallsign;
+
+  /// Callsign text this state last observed. A [TextEditingController] also
+  /// notifies for selection and composing changes, so authorship may only be
+  /// reassigned when the text itself actually changed.
+  String _observedCallsign = '';
   late final Map<String, TextEditingController> _draftControllers;
   late final Map<String, FocusNode> _draftFocusNodes;
   late final Map<String, VoidCallback> _draftControllerListeners;
@@ -318,6 +351,16 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
       if (_lastDuplicatePromptedCallsign != callsign) {
         _lastDuplicatePromptedCallsign = null;
       }
+      // Selection, focus, and composing updates also notify this listener.
+      // Authorship may only change when the text itself changed.
+      final textChanged = callsign != _observedCallsign;
+      _observedCallsign = callsign;
+      if (textChanged) {
+        // A collaborator's keystroke or a post-commit reset draft arrives
+        // through _applyingSharedDraft. It is not input on this device, so the
+        // record it duplicates must not raise the prompt here.
+        _locallyTypedCallsign = _applyingSharedDraft ? null : callsign;
+      }
     }
     if (_aiFieldRevisions.containsKey(field)) {
       _aiFieldRevisions[field] = _aiFieldRevisions[field]! + 1;
@@ -361,6 +404,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     if (!(_draftFocusNodes[field]?.hasFocus ?? false) ||
         value.isEmpty ||
         _acceptedInlineAiValues[field] == value) {
+      _clearInlineAiSuggestion(field);
+      return;
+    }
+    if ((field == 'power' || field == 'height') && containsCjkText(value)) {
+      // Descriptive values such as 地面 / 高架 / 中功率 are already useful as
+      // entered and should not be interrupted by a formatting suggestion.
       _clearInlineAiSuggestion(field);
       return;
     }
@@ -563,6 +612,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     final callsign = _callsignController.text.trim().toUpperCase();
     if (callsign.isEmpty ||
         (expectedCallsign != null && callsign != expectedCallsign) ||
+        // Only a callsign this operator typed can be a duplicate *entry*. A
+        // collaborator's value or a post-commit reset draft must not prompt.
+        _locallyTypedCallsign != callsign ||
         _lastDuplicatePromptedCallsign == callsign) {
       return;
     }
@@ -1474,7 +1526,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                         hintText: context.l10n.inputFieldHint(
                           context.l10n.fieldHeight,
                         ),
-                        options: const <DictionaryItem>[],
+                        options: _heightPresetOptions,
                         upperCase: false,
                         isCompact: isNarrow,
                         textInputAction: TextInputAction.next,
@@ -1761,6 +1813,14 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<_FormSuggestion>.empty();
         }
+        if ((draftField == 'power' || draftField == 'height') &&
+            containsCjkText(textEditingValue.text)) {
+          return const Iterable<_FormSuggestion>.empty();
+        }
+        final formatValues = fieldFormatSuggestions(
+          draftField,
+          textEditingValue.text,
+        );
         final query = textEditingValue.text.toLowerCase();
         final scored = <_ScoredOption>[];
         for (final option in options) {
@@ -1791,10 +1851,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           return a.option.raw.compareTo(b.option.raw);
         });
         return <_FormSuggestion>[
+          for (final value in formatValues) _FormSuggestion.format(value),
           for (final scoredOption in scored.take(20))
-            _FormSuggestion.local(scoredOption.option),
+            if (!formatValues.contains(scoredOption.option.raw))
+              _FormSuggestion.local(scoredOption.option),
           if (aiSuggestion != null &&
               aiSuggestion.isNotEmpty &&
+              !formatValues.contains(aiSuggestion) &&
               !scored.any((item) => item.option.raw == aiSuggestion))
             _FormSuggestion.ai(aiSuggestion),
         ];
@@ -1860,8 +1923,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
-            elevation: 4.0,
-            borderRadius: BorderRadius.circular(8),
+            elevation: 3,
+            color: theme.colorScheme.surfaceContainer,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260, maxWidth: 320),
               child: AppAutocompleteOptionsList<_FormSuggestion>(
@@ -1872,7 +1940,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                   return ListTile(
                     key: item.isAi
                         ? Key('inline-ai-suggestion-$draftField')
-                        : null,
+                        : item.isFormat
+                            ? Key(
+                                'format-suggestion-$draftField-${item.value}',
+                              )
+                            : null,
                     dense: true,
                     leading: item.isAi
                         ? Icon(
@@ -1880,7 +1952,13 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                             size: 18,
                             color: theme.colorScheme.primary,
                           )
-                        : null,
+                        : item.isFormat
+                            ? Icon(
+                                Icons.straighten_outlined,
+                                size: 18,
+                                color: theme.colorScheme.secondary,
+                              )
+                            : null,
                     title: Text(item.value),
                     subtitle: item.isAi
                         ? Text(
@@ -1889,22 +1967,29 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                               color: theme.colorScheme.primary,
                             ),
                           )
-                        : item.item!.abbreviation.isNotEmpty ||
-                                item.item!.pinyin.isNotEmpty
+                        : item.isFormat
                             ? Text(
-                                [
-                                  if (item.item!.abbreviation.isNotEmpty)
-                                    item.item!.abbreviation,
-                                  if (item.item!.pinyin.isNotEmpty)
-                                    item.item!.pinyin,
-                                ].join(' · '),
+                                context.l10n.fieldFormatSuggestionLabel,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               )
-                            : null,
+                            : item.item!.abbreviation.isNotEmpty ||
+                                    item.item!.pinyin.isNotEmpty
+                                ? Text(
+                                    [
+                                      if (item.item!.abbreviation.isNotEmpty)
+                                        item.item!.abbreviation,
+                                      if (item.item!.pinyin.isNotEmpty)
+                                        item.item!.pinyin,
+                                    ].join(' · '),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                : null,
                   );
                 },
               ),
@@ -1944,17 +2029,26 @@ class _ScoredOption {
 
 class _FormSuggestion {
   factory _FormSuggestion.local(DictionaryItem item) =>
-      _FormSuggestion._(item, item.raw, false);
+      _FormSuggestion._(item, item.raw, _FormSuggestionKind.local);
 
   const _FormSuggestion.ai(this.value)
       : item = null,
-        isAi = true;
+        kind = _FormSuggestionKind.ai;
 
-  const _FormSuggestion._(this.item, this.value, this.isAi);
+  const _FormSuggestion.format(this.value)
+      : item = null,
+        kind = _FormSuggestionKind.format;
+
+  const _FormSuggestion._(this.item, this.value, this.kind);
 
   final DictionaryItem? item;
   final String value;
-  final bool isAi;
+  final _FormSuggestionKind kind;
+
+  bool get isAi => kind == _FormSuggestionKind.ai;
+  bool get isFormat => kind == _FormSuggestionKind.format;
 }
+
+enum _FormSuggestionKind { local, format, ai }
 
 enum _DuplicateAction { add, update, cancel }

@@ -2132,7 +2132,7 @@ abstract class AppLocalizations {
   /// No description provided for @limitWorkbenchWidthHint.
   ///
   /// In zh, this message translates to:
-  /// **'宽屏时将点名台内容居中并限制在 1440 像素内，避免字段过度拉伸。'**
+  /// **'宽屏时将点名台内容居中并限制在 1520 像素内，避免字段过度拉伸。'**
   String get limitWorkbenchWidthHint;
 
   /// No description provided for @serverConnectionFailed.
@@ -3583,11 +3583,125 @@ abstract class AppLocalizations {
   /// **'逐项处理冲突'**
   String get personalCloudConflictDialogTitle;
 
+  /// No description provided for @personalCloudConflictPageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人云同步冲突'**
+  String get personalCloudConflictPageTitle;
+
+  /// No description provided for @personalCloudConflictPageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐项比较本机、云端和共同基线。每个冲突都必须由你明确选择后才会合并；协作会话冲突仍在会话页处理。'**
+  String get personalCloudConflictPageHint;
+
+  /// No description provided for @personalCloudConflictSelectAllLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部选本机'**
+  String get personalCloudConflictSelectAllLocal;
+
+  /// No description provided for @personalCloudConflictSelectAllRemote.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部选云端'**
+  String get personalCloudConflictSelectAllRemote;
+
+  /// No description provided for @personalCloudConflictSelectionProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选择 {selected}/{total} 项；全部选择后才能应用。'**
+  String personalCloudConflictSelectionProgress(int selected, int total);
+
   /// No description provided for @personalCloudConflictApply.
   ///
   /// In zh, this message translates to:
   /// **'应用选择'**
   String get personalCloudConflictApply;
+
+  /// No description provided for @personalCloudConflictApplySucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'冲突选择已应用并完成同步'**
+  String get personalCloudConflictApplySucceeded;
+
+  /// No description provided for @personalCloudConflictNoneTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有同步冲突'**
+  String get personalCloudConflictNoneTitle;
+
+  /// No description provided for @personalCloudConflictNoneHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人记录和词库没有需要人工选择的冲突。同步状态与手动同步入口位于本地数据库页面。'**
+  String get personalCloudConflictNoneHint;
+
+  /// No description provided for @personalCloudConflictConfirmationPendingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有字段冲突，但仍需确认首次合并'**
+  String get personalCloudConflictConfirmationPendingTitle;
+
+  /// No description provided for @personalCloudConflictConfirmationPendingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回本地数据库页面核对本机与云端数量，再确认安全合并。'**
+  String get personalCloudConflictConfirmationPendingHint;
+
+  /// No description provided for @personalCloudConflictRecordsDataset.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人记录'**
+  String get personalCloudConflictRecordsDataset;
+
+  /// No description provided for @personalCloudConflictDictionaryDataset.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人词库'**
+  String get personalCloudConflictDictionaryDataset;
+
+  /// No description provided for @personalCloudConflictEntityReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'{dataset} · 标识 {id}'**
+  String personalCloudConflictEntityReference(String dataset, String id);
+
+  /// No description provided for @personalCloudConflictBaseline.
+  ///
+  /// In zh, this message translates to:
+  /// **'共同基线'**
+  String get personalCloudConflictBaseline;
+
+  /// No description provided for @personalCloudConflictValueAbsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'不存在（选择此侧将删除该项）'**
+  String get personalCloudConflictValueAbsent;
+
+  /// No description provided for @personalCloudConflictValueEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'空值'**
+  String get personalCloudConflictValueEmpty;
+
+  /// No description provided for @personalCloudConflictLifecycleField.
+  ///
+  /// In zh, this message translates to:
+  /// **'会话状态'**
+  String get personalCloudConflictLifecycleField;
+
+  /// No description provided for @personalCloudConflictDeletionField.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除状态'**
+  String get personalCloudConflictDeletionField;
+
+  /// No description provided for @personalCloudConflictDictionaryStateField.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库状态'**
+  String get personalCloudConflictDictionaryStateField;
 
   /// No description provided for @personalCloudFieldConflictTitle.
   ///
@@ -3612,6 +3726,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'记录'**
   String get personalCloudEntityLog;
+
+  /// No description provided for @personalCloudEntityDictionaryItem.
+  ///
+  /// In zh, this message translates to:
+  /// **'词库项'**
+  String get personalCloudEntityDictionaryItem;
 
   /// No description provided for @personalCloudKeepLocal.
   ///
@@ -4835,6 +4955,12 @@ abstract class AppLocalizations {
   /// **'本地数据库'**
   String get dataLocalDatabaseTab;
 
+  /// No description provided for @dataSyncConflictsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步冲突'**
+  String get dataSyncConflictsTab;
+
   /// No description provided for @settingsCategoryAi.
   ///
   /// In zh, this message translates to:
@@ -5596,6 +5722,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'应用所选建议'**
   String get aiDictionaryApplySelected;
+
+  /// No description provided for @fieldFormatSuggestionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'格式候选'**
+  String get fieldFormatSuggestionLabel;
+
+  /// No description provided for @logTableHorizontalScrollHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'Shift + 滚轮横向滚动'**
+  String get logTableHorizontalScrollHint;
 }
 
 class _AppLocalizationsDelegate
