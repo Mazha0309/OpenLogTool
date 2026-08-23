@@ -252,7 +252,8 @@ class ExportService {
         settings.controllerBackgroundColor.toARGB32());
     final alternateColor =
         excel_lib.ExcelColor.fromInt(settings.alternateRowColor.toARGB32());
-    const whiteColor = excel_lib.ExcelColor.white;
+    final tableColor =
+        excel_lib.ExcelColor.fromInt(settings.tableBackgroundColor.toARGB32());
 
     final borderStyle = excel_lib.Border(
       borderStyle: excel_lib.BorderStyle.Thin,
@@ -372,7 +373,7 @@ class ExportService {
 
       final rowColor = settings.useAlternateColors && blockRowColorIndex.isOdd
           ? alternateColor
-          : whiteColor;
+          : tableColor;
       blockRowColorIndex++;
 
       final displayTime = formatLogTimeForDisplay(log.time);

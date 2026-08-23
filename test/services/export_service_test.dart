@@ -1,6 +1,10 @@
 import 'dart:typed_data';
 
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openlogtool/models/export_settings.dart';
+import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/services/export_service.dart';
 
 void main() {
@@ -111,5 +115,36 @@ void main() {
       );
       expect(meta.filename, '点名记录.xlsx');
     });
+  });
+
+  test('Excel data rows use the configured table background color', () {
+    final bytes = ExportService.generateExcelBytes(
+      [
+        LogEntry(
+          id: 'log-1',
+          time: '20:01',
+          controller: 'BG5CTRL',
+          callsign: 'BG5CRL',
+          report: '59',
+          rstRcvd: '59',
+          qth: '杭州',
+          device: 'FT-991A',
+          power: '15W',
+          antenna: '八木',
+          height: '5米',
+        ),
+      ],
+      ExportSettings(
+        tableBackgroundColor: const Color(0xFF123456),
+        useAlternateColors: false,
+        showFooter: false,
+      ),
+      DateTime(2026, 8, 23),
+    );
+
+    expect(bytes, isNotNull);
+    final workbook = excel_lib.Excel.decodeBytes(bytes!);
+    final cell = workbook['点名记录'].cell(excel_lib.CellIndex.indexByString('A4'));
+    expect(cell.cellStyle?.backgroundColor.colorHex, 'FF123456');
   });
 }
