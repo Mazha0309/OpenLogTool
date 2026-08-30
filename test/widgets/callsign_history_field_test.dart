@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/widgets/callsign_history_field.dart';
 
@@ -41,6 +42,34 @@ List<bridge.LogEntry> _historyRecords(int count) => List.generate(
             '2026-07-${(10 + index).toString().padLeft(2, '0')}T08:15:00Z',
       ),
     );
+
+LiveDraftHistoryPreviewDto _remotePreview({
+  required DateTime expiresAt,
+  String previewId = 'preview-1',
+}) {
+  return LiveDraftHistoryPreviewDto(
+    previewId: previewId,
+    draftId: 'draft-1',
+    deviceId: 'remote-device',
+    callsign: 'BA4AAA',
+    actor: const LiveDraftActorDto(
+      userId: 'remote-user',
+      username: 'Remote scribe',
+    ),
+    expiresAt: expiresAt,
+    candidates: const [
+      LiveDraftHistoryCandidateDto(
+        candidateId: 'remote-history-1',
+        sourceTime: '2026-07-12T08:15:00Z',
+        qth: '上海',
+        device: 'IC-7300',
+        power: '100W',
+        antenna: 'DP',
+        height: '12m',
+      ),
+    ],
+  );
+}
 
 Widget _localizedApp(Widget child) => MaterialApp(
       localizationsDelegates: const [
@@ -556,5 +585,191 @@ void main() {
     await tester.pumpAndSettle();
     expect(controllers[3].text, 'QTH7');
     expect(overlayFinder, findsNothing);
+  });
+
+  testWidgets(
+      'local candidates stay immediately usable when async publication fails',
+      (tester) async {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    var reuseCalls = 0;
+    var closeCalls = 0;
+    String? publishedCallsign;
+    List<bridge.LogEntry>? publishedCandidates;
+    addTearDown(() {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    await tester.pumpWidget(
+      _localizedApp(
+        CallsignHistoryField(
+          callsignController: controllers[0],
+          deviceController: controllers[1],
+          antennaController: controllers[2],
+          qthController: controllers[3],
+          powerController: controllers[4],
+          heightController: controllers[5],
+          label: 'Callsign',
+          hintText: 'BA4AAA',
+          historyLoader: (_, __) async => [_historyRecord()],
+          onLocalCandidatesLoaded: (callsign, candidates) async {
+            publishedCallsign = callsign;
+            publishedCandidates = candidates;
+            throw StateError('offline');
+          },
+          onLocalPreviewClosed: () => closeCalls += 1,
+          onReuseRecord: (_) async => reuseCalls += 1,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextFormField));
+    await tester.enterText(find.byType(TextFormField), 'BA4AAA');
+    await tester.pumpAndSettle();
+
+    expect(publishedCallsign, 'BA4AAA');
+    expect(publishedCandidates, hasLength(1));
+    expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
+    expect(find.text('上海 · IC-7300 · 100W · DP · 12m'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('callsign-history-local-row-0')));
+    await tester.pump();
+
+    expect(reuseCalls, 1);
+    expect(closeCalls, 0);
+    expect(find.byKey(const Key('callsign-history-overlay')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('input changes and focus loss close only an open local preview',
+      (tester) async {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    var publishCalls = 0;
+    var closeCalls = 0;
+    addTearDown(() {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    await tester.pumpWidget(
+      _localizedApp(
+        Column(
+          children: [
+            CallsignHistoryField(
+              callsignController: controllers[0],
+              deviceController: controllers[1],
+              antennaController: controllers[2],
+              qthController: controllers[3],
+              powerController: controllers[4],
+              heightController: controllers[5],
+              label: 'Callsign',
+              hintText: 'BA4AAA',
+              historyLoader: (callsign, _) async =>
+                  callsign == 'BA4AAA' ? [_historyRecord()] : [],
+              onLocalCandidatesLoaded: (_, __) async => publishCalls += 1,
+              onLocalPreviewClosed: () => closeCalls += 1,
+            ),
+            Expanded(
+              child: GestureDetector(
+                key: const Key('outside-history-field'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextFormField));
+    await tester.enterText(find.byType(TextFormField), 'BA4AAA');
+    await tester.pumpAndSettle();
+    expect(publishCalls, 1);
+
+    await tester.enterText(find.byType(TextFormField), 'BA4AAB');
+    await tester.pumpAndSettle();
+    expect(closeCalls, 1);
+
+    await tester.enterText(find.byType(TextFormField), 'BA4AAA');
+    await tester.pumpAndSettle();
+    expect(publishCalls, 2);
+    await tester.tap(find.byKey(const Key('outside-history-field')));
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(closeCalls, 1);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(closeCalls, 2);
+  });
+
+  testWidgets(
+      'remote candidates are read-only when disabled and disappear at expiry',
+      (tester) async {
+    final controllers = List.generate(
+      6,
+      (index) => TextEditingController(text: index == 0 ? 'BA4AAA' : ''),
+    );
+    var reuseCalls = 0;
+    var closeCalls = 0;
+    addTearDown(() {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+
+    Widget app(LiveDraftHistoryPreviewDto preview) => _localizedApp(
+          CallsignHistoryField(
+            callsignController: controllers[0],
+            deviceController: controllers[1],
+            antennaController: controllers[2],
+            qthController: controllers[3],
+            powerController: controllers[4],
+            heightController: controllers[5],
+            label: 'Callsign',
+            hintText: 'BA4AAA',
+            enabled: false,
+            remotePreview: preview,
+            onLocalPreviewClosed: () => closeCalls += 1,
+            onReuseRecord: (_) async => reuseCalls += 1,
+          ),
+        );
+
+    await tester.pumpWidget(
+      app(_remotePreview(
+          expiresAt: DateTime.now().add(const Duration(seconds: 20)))),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
+    expect(find.text('上海 · IC-7300 · 100W · DP · 12m'), findsOneWidget);
+    final remoteRow = tester.widget<InkWell>(
+      find.byKey(const Key('callsign-history-remote-row-0')),
+    );
+    expect(remoteRow.onTap, isNull);
+    expect(tester.widget<TextFormField>(find.byType(TextFormField)).enabled,
+        isFalse);
+
+    await tester.pumpWidget(
+      app(
+        _remotePreview(
+          previewId: 'preview-2',
+          expiresAt: DateTime.now().add(const Duration(seconds: 20)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
+    expect(closeCalls, 0);
+    expect(reuseCalls, 0);
+    expect(controllers.skip(1).map((controller) => controller.text),
+        everyElement(isEmpty));
+
+    await tester.pump(const Duration(seconds: 19));
+    expect(find.byKey(const Key('callsign-history-overlay')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byKey(const Key('callsign-history-overlay')), findsNothing);
+    expect(closeCalls, 0);
+    expect(reuseCalls, 0);
   });
 }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:openlogtool/l10n/l10n.dart';
+import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/src/bridge/rust_api.dart';
 import 'package:openlogtool/src/bridge/models/log_entry.dart' as bridge;
 import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
@@ -17,6 +18,13 @@ typedef CallsignHistoryLoader = Future<List<bridge.LogEntry>> Function(
 typedef CallsignHistoryReuseCallback = Future<void> Function(
   bridge.LogEntry record,
 );
+
+typedef CallsignHistoryCandidatesCallback = Future<void> Function(
+  String callsign,
+  List<bridge.LogEntry> candidates,
+);
+
+typedef CallsignHistoryPreviewClosedCallback = FutureOr<void> Function();
 
 class CallsignHistoryField extends StatefulWidget {
   final TextEditingController callsignController;
@@ -39,6 +47,9 @@ class CallsignHistoryField extends StatefulWidget {
   final CallsignHistoryLoader? historyLoader;
   final bool Function(String field)? canFillField;
   final CallsignHistoryReuseCallback? onReuseRecord;
+  final LiveDraftHistoryPreviewDto? remotePreview;
+  final CallsignHistoryCandidatesCallback? onLocalCandidatesLoaded;
+  final CallsignHistoryPreviewClosedCallback? onLocalPreviewClosed;
 
   const CallsignHistoryField({
     super.key,
@@ -62,6 +73,9 @@ class CallsignHistoryField extends StatefulWidget {
     this.historyLoader,
     this.canFillField,
     this.onReuseRecord,
+    this.remotePreview,
+    this.onLocalCandidatesLoaded,
+    this.onLocalPreviewClosed,
   });
 
   @override
@@ -81,23 +95,42 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
   FocusNode? _keyHandlerNode;
   FocusOnKeyEventCallback? _previousKeyHandler;
   Timer? _focusLossTimer;
+  Timer? _remotePreviewExpiryTimer;
+  String? _expiredRemotePreviewId;
   bool _isSelecting = false;
   int _historyRequestGeneration = 0;
   int _highlightIndex = -1;
   final ScrollController _listController = ScrollController();
   List<GlobalKey> _historyItemKeys = const [];
+  _HistoryOverlayMode? _overlayMode;
+  bool _localPreviewOpen = false;
+  String? _localPreviewKey;
+  late String _observedCallsignText;
 
   FocusNode get _effFocus => widget.focusNode ?? _ownFocusNode;
-  bool get _canUseHistory => widget.enabled && widget.historyEnabled;
+  bool get _canUseLocalHistory => widget.enabled && widget.historyEnabled;
+
+  LiveDraftHistoryPreviewDto? get _activeRemotePreview {
+    final preview = widget.remotePreview;
+    if (preview == null ||
+        preview.previewId == _expiredRemotePreviewId ||
+        preview.candidates.isEmpty ||
+        !preview.expiresAt.isAfter(DateTime.now())) {
+      return null;
+    }
+    return preview;
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _historyKeyHandler = _handleKeyEvent;
+    _observedCallsignText = widget.callsignController.text;
     _attachKeyHandler(_effFocus);
     _effFocus.addListener(_onFocusChanged);
     widget.callsignController.addListener(_onCallsignChanged);
+    _scheduleRemotePreviewRefresh();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -105,6 +138,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
     if (!isKeyPress ||
         !node.hasFocus ||
         _overlayEntry == null ||
+        _overlayMode != _HistoryOverlayMode.local ||
         _history.isEmpty ||
         _isSelecting) {
       return _previousKeyHandler?.call(node, event) ?? KeyEventResult.ignored;
@@ -161,13 +195,18 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
     if (oldWidget.callsignController != widget.callsignController) {
       oldWidget.callsignController.removeListener(_onCallsignChanged);
       widget.callsignController.addListener(_onCallsignChanged);
-      _invalidateHistory();
+      _observedCallsignText = widget.callsignController.text;
+      _invalidateLocalHistory(notifyClosed: true);
     }
     final wasUsable = oldWidget.enabled && oldWidget.historyEnabled;
-    if (wasUsable && !_canUseHistory) {
-      _invalidateHistory();
-    } else if (!wasUsable && _canUseHistory) {
+    if (wasUsable && !_canUseLocalHistory) {
+      _invalidateLocalHistory(notifyClosed: true);
+    } else if (!wasUsable && _canUseLocalHistory) {
       _loadHistory();
+    }
+    if (!identical(oldWidget.remotePreview, widget.remotePreview)) {
+      if (_overlayMode == _HistoryOverlayMode.remote) _hideOverlay();
+      _scheduleRemotePreviewRefresh();
     }
   }
 
@@ -175,6 +214,8 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _focusLossTimer?.cancel();
+    _remotePreviewExpiryTimer?.cancel();
+    _notifyLocalPreviewClosed();
     _detachKeyHandler();
     _listController.dispose();
     _hideOverlay();
@@ -240,76 +281,88 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
   }
 
   void _onCallsignChanged() {
-    if (!_canUseHistory) {
-      _invalidateHistory();
+    final textChanged = widget.callsignController.text != _observedCallsignText;
+    _observedCallsignText = widget.callsignController.text;
+    if (textChanged) {
+      _invalidateLocalHistory(notifyClosed: true);
+    }
+    if (!_canUseLocalHistory) {
+      _refreshOverlayForCurrentState();
       return;
     }
     if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
       widget.callsignController.value,
     )) {
-      _invalidateHistory();
+      _invalidateLocalHistory(notifyClosed: true);
       return;
     }
     _loadHistory();
-    if (_overlayEntry != null) _hideOverlay();
+    if (_overlayMode == _HistoryOverlayMode.local) _hideOverlay();
+    _refreshOverlayForCurrentState();
   }
 
   void _onFocusChanged() {
     _focusLossTimer?.cancel();
     _focusLossTimer = null;
-    if (!_canUseHistory) {
-      _hideOverlay();
+    if (!_canUseLocalHistory) {
+      _refreshOverlayForCurrentState();
       return;
     }
     if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
       widget.callsignController.value,
     )) {
-      _invalidateHistory();
+      _invalidateLocalHistory(notifyClosed: !_effFocus.hasFocus);
       return;
     }
     final callsign = widget.callsignController.text.trim().toUpperCase();
     if (callsign.length < 2) {
       if (mounted) setState(() => _history = []);
-      _hideOverlay();
+      _invalidateLocalHistory(notifyClosed: true);
+      _refreshOverlayForCurrentState();
       return;
     }
     if (_effFocus.hasFocus &&
         _history.isNotEmpty &&
         _history.first.callsign.trim().toUpperCase() == callsign) {
-      _showOverlay();
+      _showLocalOverlay();
     } else if (!_effFocus.hasFocus) {
       _focusLossTimer = Timer(const Duration(milliseconds: 300), () {
         _focusLossTimer = null;
         if (!mounted) return;
-        if (!_effFocus.hasFocus && !_isSelecting) _hideOverlay();
+        if (!_effFocus.hasFocus && !_isSelecting) {
+          _notifyLocalPreviewClosed();
+          if (_overlayMode == _HistoryOverlayMode.local) _hideOverlay();
+          _refreshOverlayForCurrentState();
+        }
       });
     }
   }
 
   Future<void> _loadHistory() async {
     final requestGeneration = ++_historyRequestGeneration;
-    if (!_canUseHistory) return;
+    if (!_canUseLocalHistory) return;
     if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
       widget.callsignController.value,
     )) {
-      _invalidateHistory();
+      _invalidateLocalHistory(notifyClosed: true);
       return;
     }
     final callsign = widget.callsignController.text.trim().toUpperCase();
     if (callsign.length < 2) {
       if (mounted) setState(() => _history = []);
-      _hideOverlay();
+      _invalidateLocalHistory(notifyClosed: true);
+      _refreshOverlayForCurrentState();
       return;
     }
     try {
       final loader = widget.historyLoader ?? _loadHistoryFromDatabase;
       final rows = await loader(callsign, _historyLimit);
-      if (!mounted || !_canUseHistory) return;
+      if (!mounted || !_canUseLocalHistory) return;
       if (requestGeneration != _historyRequestGeneration) return;
       if (ImeSafeUpperCaseTextFormatter.hasActiveComposition(
         widget.callsignController.value,
       )) {
-        _invalidateHistory();
+        _invalidateLocalHistory(notifyClosed: true);
         return;
       }
       final current = widget.callsignController.text.trim().toUpperCase();
@@ -321,10 +374,12 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
       if (_effFocus.hasFocus &&
           _history.isNotEmpty &&
           _history.first.callsign.trim().toUpperCase() == current &&
-          _overlayEntry == null) {
-        _showOverlay();
+          _activeRemotePreview == null) {
+        _showLocalOverlay();
       } else if (_history.isEmpty) {
-        _hideOverlay();
+        _notifyLocalPreviewClosed();
+        if (_overlayMode == _HistoryOverlayMode.local) _hideOverlay();
+        _refreshOverlayForCurrentState();
       }
     } catch (_) {}
   }
@@ -335,16 +390,18 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
   ) =>
       RustApi.getRecentByCallsign(callsign: callsign, limit: limit);
 
-  void _invalidateHistory() {
+  void _invalidateLocalHistory({bool notifyClosed = false}) {
     _historyRequestGeneration += 1;
     _history = const [];
-    _hideOverlay();
+    if (notifyClosed) _notifyLocalPreviewClosed();
+    if (_overlayMode == _HistoryOverlayMode.local) _hideOverlay();
   }
 
   bool _canFill(String field) => widget.canFillField?.call(field) ?? true;
 
   Future<void> _fillFromRecord(bridge.LogEntry log) async {
     _isSelecting = true;
+    _forgetLocalPreviewWithoutClosing();
     _hideOverlay();
     try {
       final onReuseRecord = widget.onReuseRecord;
@@ -377,12 +434,139 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
     }
   }
 
-  void _showOverlay() {
+  Future<void> _enqueueLocalPreviewOperation(
+    FutureOr<void> Function() operation,
+  ) async {
+    try {
+      await operation();
+    } catch (_) {
+      // Preview publication is best-effort. Local history must stay usable
+      // when a high-latency collaboration request fails. Close callbacks also
+      // run independently so a slow publish cannot keep a stale preview open.
+    }
+  }
+
+  void _openLocalPreview() {
+    final callback = widget.onLocalCandidatesLoaded;
+    if (callback == null || _history.isEmpty) return;
+    final callsign = widget.callsignController.text.trim().toUpperCase();
+    final key = '$callsign:${_history.map((row) => row.syncId).join(',')}';
+    if (_localPreviewOpen && _localPreviewKey == key) return;
+    if (_localPreviewOpen) _notifyLocalPreviewClosed();
+    _localPreviewOpen = true;
+    _localPreviewKey = key;
+    final candidates = List<bridge.LogEntry>.unmodifiable(_history);
+    unawaited(
+      _enqueueLocalPreviewOperation(
+        () => callback(callsign, candidates),
+      ),
+    );
+  }
+
+  void _notifyLocalPreviewClosed() {
+    if (!_localPreviewOpen) return;
+    _localPreviewOpen = false;
+    _localPreviewKey = null;
+    final callback = widget.onLocalPreviewClosed;
+    if (callback != null) {
+      unawaited(_enqueueLocalPreviewOperation(callback));
+    }
+  }
+
+  void _forgetLocalPreviewWithoutClosing() {
+    _localPreviewOpen = false;
+    _localPreviewKey = null;
+  }
+
+  void _scheduleRemotePreviewRefresh() {
+    _remotePreviewExpiryTimer?.cancel();
+    _remotePreviewExpiryTimer = null;
+    _expiredRemotePreviewId = null;
+    final preview = _activeRemotePreview;
+    if (preview != null) {
+      _remotePreviewExpiryTimer = Timer(
+        preview.expiresAt.difference(DateTime.now()),
+        () {
+          _remotePreviewExpiryTimer = null;
+          if (!mounted) return;
+          _expiredRemotePreviewId = preview.previewId;
+          if (_overlayMode == _HistoryOverlayMode.remote) _hideOverlay();
+          setState(() {});
+          _refreshOverlayForCurrentState();
+        },
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refreshOverlayForCurrentState();
+    });
+  }
+
+  bool _remotePreviewMatchesCurrentCallsign(
+    LiveDraftHistoryPreviewDto preview,
+  ) {
+    return widget.callsignController.text.trim().toUpperCase() ==
+        preview.callsign;
+  }
+
+  void _refreshOverlayForCurrentState() {
+    final remote = _activeRemotePreview;
+    if (remote != null && _remotePreviewMatchesCurrentCallsign(remote)) {
+      if (_overlayMode != _HistoryOverlayMode.remote) {
+        _showRemoteOverlay(remote);
+      }
+      return;
+    }
+    if (_overlayMode == _HistoryOverlayMode.remote) _hideOverlay();
+    final callsign = widget.callsignController.text.trim().toUpperCase();
+    if (_canUseLocalHistory &&
+        _effFocus.hasFocus &&
+        _history.isNotEmpty &&
+        _history.first.callsign.trim().toUpperCase() == callsign) {
+      _showLocalOverlay();
+    }
+  }
+
+  void _showLocalOverlay() {
+    final items =
+        _history.map(_HistoryOverlayItem.fromLocal).toList(growable: false);
+    if (items.isEmpty) return;
+    _showOverlay(
+      mode: _HistoryOverlayMode.local,
+      items: items,
+    );
+    // Publish only after the local overlay is visible. Do not await this call:
+    // the operator can select a row immediately even on a slow connection.
+    _openLocalPreview();
+  }
+
+  void _showRemoteOverlay(LiveDraftHistoryPreviewDto preview) {
+    final items = preview.candidates
+        .map(_HistoryOverlayItem.fromRemote)
+        .toList(growable: false);
+    if (items.isEmpty) return;
+    // A server-owned remote preview supersedes any local preview state. Forget
+    // it without invoking the owner's close callback, which would otherwise
+    // dismiss the remote scribe's dropdown.
+    _forgetLocalPreviewWithoutClosing();
+    _showOverlay(
+      mode: _HistoryOverlayMode.remote,
+      items: items,
+    );
+  }
+
+  void _showOverlay({
+    required _HistoryOverlayMode mode,
+    required List<_HistoryOverlayItem> items,
+  }) {
     _hideOverlay();
-    if (!_canUseHistory || _history.isEmpty) return;
-    _highlightIndex = 0;
+    if (items.isEmpty ||
+        (mode == _HistoryOverlayMode.local && !_canUseLocalHistory)) {
+      return;
+    }
+    _overlayMode = mode;
+    _highlightIndex = mode == _HistoryOverlayMode.local ? 0 : -1;
     final overlay = Overlay.of(context);
-    final list = List<bridge.LogEntry>.unmodifiable(_history);
+    final list = List<_HistoryOverlayItem>.unmodifiable(items);
     _historyItemKeys = List<GlobalKey>.generate(
       list.length,
       (index) => GlobalKey(debugLabel: 'callsign-history-item-$index'),
@@ -518,30 +702,42 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
                             shrinkWrap: true,
                             itemCount: list.length,
                             itemBuilder: (_, i) {
-                              final log = list[i];
+                              final item = list[i];
                               final details = [
-                                if (log.qth != null && log.qth!.isNotEmpty)
-                                  log.qth,
-                                if (log.device != null &&
-                                    log.device!.isNotEmpty)
-                                  log.device,
-                                if (log.antenna != null &&
-                                    log.antenna!.isNotEmpty)
-                                  log.antenna,
-                              ].join(' · ');
-                              final selected = i == _highlightIndex;
+                                item.qth,
+                                item.device,
+                                item.power,
+                                item.antenna,
+                                item.height,
+                              ].where((value) => value.isNotEmpty).join(' · ');
+                              final readOnly =
+                                  mode == _HistoryOverlayMode.remote;
+                              final selected =
+                                  !readOnly && i == _highlightIndex;
                               return Semantics(
                                 key: _historyItemKeys[i],
                                 selected: selected,
-                                button: true,
+                                button: !readOnly,
+                                enabled: !readOnly,
                                 child: InkWell(
-                                  onTap: () => unawaited(_fillFromRecord(log)),
-                                  onHover: (hovered) {
-                                    if (hovered && _highlightIndex != i) {
-                                      _highlightIndex = i;
-                                      _overlayEntry?.markNeedsBuild();
-                                    }
-                                  },
+                                  key: Key(
+                                    readOnly
+                                        ? 'callsign-history-remote-row-$i'
+                                        : 'callsign-history-local-row-$i',
+                                  ),
+                                  onTap: readOnly || item.localRecord == null
+                                      ? null
+                                      : () => unawaited(
+                                            _fillFromRecord(item.localRecord!),
+                                          ),
+                                  onHover: readOnly
+                                      ? null
+                                      : (hovered) {
+                                          if (hovered && _highlightIndex != i) {
+                                            _highlightIndex = i;
+                                            _overlayEntry?.markNeedsBuild();
+                                          }
+                                        },
                                   child: Container(
                                     constraints:
                                         const BoxConstraints(minHeight: 58),
@@ -570,7 +766,9 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
                                     child: Row(
                                       children: [
                                         Icon(
-                                          Icons.history,
+                                          readOnly
+                                              ? Icons.visibility_outlined
+                                              : Icons.history,
                                           size: 14,
                                           color:
                                               Theme.of(ctx).colorScheme.primary,
@@ -582,7 +780,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                _formatTime(log.time),
+                                                _formatTime(item.sourceTime),
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w500,
@@ -614,7 +812,9 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
                                           ),
                                         ),
                                         Icon(
-                                          Icons.chevron_right,
+                                          readOnly
+                                              ? Icons.lock_outline
+                                              : Icons.chevron_right,
                                           size: 16,
                                           color: Theme.of(ctx)
                                               .colorScheme
@@ -644,6 +844,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
   void _hideOverlay() {
     final entry = _overlayEntry;
     _overlayEntry = null;
+    _overlayMode = null;
     _historyItemKeys = const [];
     if (entry == null) return;
     try {
@@ -666,7 +867,7 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
           isDense: true,
           contentPadding: EdgeInsets.symmetric(
               horizontal: 12, vertical: widget.isCompact ? 10 : 14),
-          suffixIcon: _canUseHistory
+          suffixIcon: (_canUseLocalHistory || _activeRemotePreview != null)
               ? Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Icon(
@@ -703,4 +904,51 @@ class _CallsignHistoryFieldState extends State<CallsignHistoryField>
 
 String _formatTime(String time) {
   return formatLogTimeForDisplay(time, includeDate: true);
+}
+
+enum _HistoryOverlayMode { local, remote }
+
+final class _HistoryOverlayItem {
+  const _HistoryOverlayItem({
+    required this.sourceTime,
+    required this.qth,
+    required this.device,
+    required this.power,
+    required this.antenna,
+    required this.height,
+    this.localRecord,
+  });
+
+  factory _HistoryOverlayItem.fromLocal(bridge.LogEntry record) {
+    return _HistoryOverlayItem(
+      sourceTime: record.time,
+      qth: record.qth ?? '',
+      device: record.device ?? '',
+      power: record.power ?? '',
+      antenna: record.antenna ?? '',
+      height: record.height ?? '',
+      localRecord: record,
+    );
+  }
+
+  factory _HistoryOverlayItem.fromRemote(
+    LiveDraftHistoryCandidateDto candidate,
+  ) {
+    return _HistoryOverlayItem(
+      sourceTime: candidate.sourceTime,
+      qth: candidate.qth,
+      device: candidate.device,
+      power: candidate.power,
+      antenna: candidate.antenna,
+      height: candidate.height,
+    );
+  }
+
+  final String sourceTime;
+  final String qth;
+  final String device;
+  final String power;
+  final String antenna;
+  final String height;
+  final bridge.LogEntry? localRecord;
 }

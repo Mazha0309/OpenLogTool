@@ -845,14 +845,74 @@ void main() {
               'field': 'callsign',
               'deviceId': 'device-1',
             });
-            return _jsonResponse({'lock': lock}, 201);
+            return _jsonResponse({
+              'lock': lock,
+              'draft': _liveDraftJson(version: 2),
+            }, 201);
           case 'POST /api/v1/sessions/session-1/live-draft/locks/lease-1/renew':
             expect(jsonDecode(request.body), {'deviceId': 'device-1'});
             return _jsonResponse({'lock': lock});
           case 'DELETE /api/v1/sessions/session-1/live-draft/locks/lease-1':
             expect(jsonDecode(request.body), {'deviceId': 'device-1'});
             return _jsonResponse({'released': true});
+          case 'PUT /api/v1/sessions/session-1/live-draft/history-preview':
+            expect(jsonDecode(request.body), {
+              'deviceId': 'device-1',
+              'leaseId': 'lease-1',
+              'draftId': 'draft-1',
+              'callsign': 'K1ABC',
+              'candidates': [
+                {
+                  'candidateId': 'history-1',
+                  'sourceTime': _now,
+                  'qth': 'Hangzhou',
+                  'device': '',
+                  'power': '5W',
+                  'antenna': '',
+                  'height': '',
+                },
+              ],
+            });
+            return _jsonResponse({
+              'historyPreview': _historyPreviewJson(),
+              'draft': _liveDraftJson(),
+              'locks': [lock],
+            });
+          case 'DELETE /api/v1/sessions/session-1/live-draft/history-preview':
+            expect(jsonDecode(request.body), {
+              'deviceId': 'device-1',
+              'previewId': 'preview-1',
+            });
+            return _jsonResponse({
+              'cleared': true,
+              'historyPreview': null,
+            });
+          case 'POST /api/v1/sessions/session-1/live-draft/history-preview/preview-1/select':
+            expect(request.headers['idempotency-key'], 'reuse-1');
+            expect(jsonDecode(request.body), {
+              'deviceId': 'device-1',
+              'leaseId': 'lease-1',
+              'candidateId': 'history-1',
+            });
+            return _jsonResponse({
+              'draft': _liveDraftJson(version: 2),
+              'updatedFields': ['qth', 'power'],
+              'releasedLeases': [
+                {'field': 'qth', 'leaseId': 'lease-qth'},
+              ],
+              'locks': [lock],
+              'historyPreview': null,
+              'historyReuse': {
+                'previewId': 'preview-1',
+                'candidateId': 'history-1',
+                'affectedFields': ['qth', 'power'],
+              },
+            });
           case 'PATCH /api/v1/sessions/session-1/live-draft':
+            expect(
+              request.headers['prefer'],
+              'openlogtool-consume-live-draft-leases',
+            );
             expect(jsonDecode(request.body), {
               'deviceId': 'device-1',
               'clientSeq': 7,
@@ -869,6 +929,9 @@ void main() {
               'draft': _liveDraftJson(version: 2),
               'appliedClientSeq': 7,
               'replayed': false,
+              'releasedLeases': [
+                {'field': 'callsign', 'leaseId': 'lease-1'},
+              ],
             });
           case 'POST /api/v1/sessions/session-1/live-draft/commit':
             expect(request.headers['idempotency-key'], 'commit-1');
@@ -907,15 +970,13 @@ void main() {
       final snapshot = await api.getLiveDraft('session-1');
       expect(snapshot.draft.createdAt, DateTime.parse(_now));
       expect(snapshot.locks.single.sessionId, 'session-1');
-      expect(
-        (await api.acquireLiveDraftLock(
-          sessionId: 'session-1',
-          field: 'callsign',
-          deviceId: 'device-1',
-        ))
-            .leaseId,
-        'lease-1',
+      final acquisition = await api.acquireLiveDraftLockWithDraft(
+        sessionId: 'session-1',
+        field: 'callsign',
+        deviceId: 'device-1',
       );
+      expect(acquisition.lock.leaseId, 'lease-1');
+      expect(acquisition.draft?.version, 2);
       await api.renewLiveDraftLock(
         sessionId: 'session-1',
         leaseId: 'lease-1',
@@ -925,6 +986,40 @@ void main() {
         sessionId: 'session-1',
         leaseId: 'lease-1',
         deviceId: 'device-1',
+      );
+      final preview = await api.publishLiveDraftHistoryPreview(
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        leaseId: 'lease-1',
+        draftId: 'draft-1',
+        callsign: 'K1ABC',
+        candidates: const [
+          LiveDraftHistoryCandidateDto(
+            candidateId: 'history-1',
+            sourceTime: _now,
+            qth: 'Hangzhou',
+            device: '',
+            power: '5W',
+            antenna: '',
+            height: '',
+          ),
+        ],
+      );
+      expect(preview.historyPreview.actor.username, 'alice');
+      final reuse = await api.selectLiveDraftHistoryCandidate(
+        sessionId: 'session-1',
+        previewId: 'preview-1',
+        deviceId: 'device-1',
+        leaseId: 'lease-1',
+        candidateId: 'history-1',
+        idempotencyKey: 'reuse-1',
+      );
+      expect(reuse.updatedFields, {'qth', 'power'});
+      expect(reuse.releasedLeases.single.field, 'qth');
+      await api.clearLiveDraftHistoryPreview(
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        previewId: 'preview-1',
       );
       final patched = await api.updateLiveDraft(
         sessionId: 'session-1',
@@ -940,6 +1035,7 @@ void main() {
         ],
       );
       expect(patched.appliedClientSeq, 7);
+      expect(patched.releasedLeases.single.leaseId, 'lease-1');
       final committed = await api.commitLiveDraft(
         sessionId: 'session-1',
         deviceId: 'device-1',
@@ -1263,6 +1359,26 @@ Map<String, Object?> _liveDraftJson({
       'lastUpdatedBy': {'userId': 'user-1', 'username': 'alice'},
       'createdAt': _now,
       'lastUpdatedAt': _now,
+    };
+
+Map<String, Object?> _historyPreviewJson() => {
+      'previewId': 'preview-1',
+      'draftId': 'draft-1',
+      'deviceId': 'device-1',
+      'callsign': 'K1ABC',
+      'actor': {'userId': 'user-1', 'username': 'alice'},
+      'expiresAt': '2026-07-13T08:00:20.000Z',
+      'candidates': [
+        {
+          'candidateId': 'history-1',
+          'sourceTime': _now,
+          'qth': 'Hangzhou',
+          'device': null,
+          'power': '5W',
+          'antenna': null,
+          'height': null,
+        },
+      ],
     };
 
 ServerApi _api({

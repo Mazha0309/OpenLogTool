@@ -13,6 +13,7 @@ import 'package:openlogtool/providers/dictionary_provider.dart';
 import 'package:openlogtool/providers/settings_provider.dart';
 import 'package:openlogtool/models/log_entry.dart';
 import 'package:openlogtool/models/dictionary_item.dart';
+import 'package:openlogtool/models/live_draft.dart';
 import 'package:openlogtool/utils/field_format_suggestions.dart';
 import 'package:openlogtool/utils/ime_safe_upper_case_formatter.dart';
 import 'package:openlogtool/utils/log_time.dart';
@@ -128,6 +129,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   late final Map<String, VoidCallback> _draftControllerListeners;
   late final Map<String, VoidCallback> _draftFocusListeners;
   final Set<String> _focusedDraftFields = <String>{};
+  final Set<String> _acquiringDraftFields = <String>{};
+  bool _disposing = false;
+  CollaborationProvider? _collaborationProvider;
   Timer? _lockExpiryTimer;
   bool _applyingSharedDraft = false;
   bool _historyReuseInProgress = false;
@@ -137,6 +141,11 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   String? _lastSharedDraftId;
   bool _sharedDraftSyncScheduled = false;
   final Set<String> _deferredSharedDraftFields = <String>{};
+  final Set<String> _suppressFocusFlushFields = <String>{};
+  Future<LiveDraftHistoryPreviewDto?>? _historyPreviewPublish;
+  String? _historyPreviewPublishCallsign;
+  int _historyPreviewGeneration = 0;
+  int _lastHistoryReuseEpoch = 0;
   late final Map<String, int> _aiFieldRevisions;
   int _aiRecordEpoch = 0;
   static const Set<String> _inlineAiFields = <String>{
@@ -201,6 +210,12 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _collaborationProvider = context.read<CollaborationProvider>();
+  }
+
   bool _handleGlobalShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.enter &&
@@ -237,6 +252,8 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
   @override
   void dispose() {
+    _disposing = true;
+    _historyPreviewGeneration += 1;
     HardwareKeyboard.instance.removeHandler(_handleGlobalShortcut);
     _lockExpiryTimer?.cancel();
     _duplicateCallsignDebounce?.cancel();
@@ -248,6 +265,17 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
     for (final timer in _draftDebounce.values) {
       timer.cancel();
+    }
+    final collaboration = _collaborationProvider;
+    if (collaboration != null) {
+      if (collaboration.liveDraftHistoryPreviewOwnedHere) {
+        unawaited(
+          collaboration.clearLiveDraftHistoryPreview().catchError((_) {}),
+        );
+      }
+      for (final field in collaboration.ownedLiveDraftLocks.keys) {
+        unawaited(collaboration.releaseLiveDraftField(field));
+      }
     }
     for (final entry in _draftControllers.entries) {
       entry.value.removeListener(_draftControllerListeners[entry.key]!);
@@ -274,16 +302,22 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
   void _syncSharedDraft(CollaborationProvider collaboration) {
     final snapshot = collaboration.liveDraftSnapshot;
     final fields = collaboration.liveDraftDisplayFields;
+    final historyReuseEpoch = collaboration.liveDraftHistoryReuseEpoch;
+    final forcedHistoryFields = historyReuseEpoch == _lastHistoryReuseEpoch
+        ? const <String>{}
+        : collaboration.liveDraftHistoryReuseAffectedFields;
     if (snapshot == null || fields == null) {
       _lastSharedDraftId = null;
       _lastSharedDraftSignature = null;
       _deferredSharedDraftFields.clear();
+      _lastHistoryReuseEpoch = historyReuseEpoch;
       return;
     }
     final signature = '${snapshot.draft.draftId}:${snapshot.draft.version}:'
         '${fields.toJson()}';
     if (_lastSharedDraftSignature == signature &&
-        _deferredSharedDraftFields.isEmpty) {
+        _deferredSharedDraftFields.isEmpty &&
+        forcedHistoryFields.isEmpty) {
       return;
     }
     final draftChanged = _lastSharedDraftId != snapshot.draft.draftId;
@@ -293,12 +327,32 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
     _lastSharedDraftId = snapshot.draft.draftId;
     _lastSharedDraftSignature = signature;
+    _lastHistoryReuseEpoch = historyReuseEpoch;
     _applyingSharedDraft = true;
     try {
       for (final entry in _draftControllers.entries) {
         final rawValue = fields[entry.key];
         final value =
             entry.key == 'time' ? _displayLiveDraftTime(rawValue) : rawValue;
+        if (forcedHistoryFields.contains(entry.key)) {
+          _draftDebounce.remove(entry.key)?.cancel();
+          _deferredSharedDraftFields.remove(entry.key);
+          final focusNode = _draftFocusNodes[entry.key];
+          if (focusNode?.hasFocus ?? false) {
+            _suppressFocusFlushFields.add(entry.key);
+            focusNode!.unfocus();
+            _focusedDraftFields.remove(entry.key);
+          }
+          if (entry.value.text != value ||
+              !entry.value.value.composing.isCollapsed) {
+            entry.value.value = TextEditingValue(
+              text: value,
+              selection: TextSelection.collapsed(offset: value.length),
+            );
+          }
+          _suppressFocusFlushFields.remove(entry.key);
+          continue;
+        }
         if (_hasActiveUpperCaseComposition(entry.key)) {
           if (entry.value.text != value) {
             _deferredSharedDraftFields.add(entry.key);
@@ -307,7 +361,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
           }
           continue;
         }
-        if (!draftChanged && _focusedDraftFields.contains(entry.key)) {
+        if (!draftChanged &&
+            _focusedDraftFields.contains(entry.key) &&
+            collaboration.isLiveDraftFieldDirty(entry.key)) {
           if (entry.value.text != value) {
             _deferredSharedDraftFields.add(entry.key);
           } else {
@@ -382,15 +438,40 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         !collaboration.canEditLiveDraft) {
       return;
     }
+    collaboration.stageLiveDraftField(
+      field,
+      _draftControllers[field]!.text,
+    );
+    if (collaboration.isLiveDraftFieldDirty(field) &&
+        !collaboration.ownedLiveDraftLocks.containsKey(field)) {
+      unawaited(_acquireDraftField(field, collaboration));
+    }
     _draftDebounce.remove(field)?.cancel();
     _draftDebounce[field] = Timer(const Duration(milliseconds: 250), () {
       _draftDebounce.remove(field);
       if (!mounted) return;
-      unawaited(
-        collaboration
-            .updateLiveDraftField(field, _draftControllers[field]!.text)
-            .catchError((Object _) {}),
-      );
+      final value = _draftControllers[field]!.text;
+      unawaited(() async {
+        try {
+          final flushedLeaseId =
+              collaboration.ownedLiveDraftLocks[field]?.leaseId;
+          await collaboration.flushLiveDraftField(field);
+          if (!mounted ||
+              _draftControllers[field]!.text != value ||
+              collaboration.isLiveDraftFieldDirty(field)) {
+            return;
+          }
+          // Keep the lease only while an edit is crossing the network. An
+          // idle cursor must not block another scribe from saving the record;
+          // a later keystroke acquires a fresh lease.
+          await collaboration.releaseLiveDraftFieldIfClean(
+            field,
+            expectedLeaseId: flushedLeaseId,
+          );
+        } catch (_) {
+          // The provider retains the dirty value and exposes the final error.
+        }
+      }());
     });
   }
 
@@ -571,11 +652,9 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     focused
         ? _focusedDraftFields.add(field)
         : _focusedDraftFields.remove(field);
-    if (focused && collaboration.canEditLiveDraft) {
-      unawaited(_acquireDraftField(field, collaboration));
-      return;
+    if (!focused && !_suppressFocusFlushFields.remove(field)) {
+      unawaited(_flushAndReleaseDraftField(field, collaboration));
     }
-    if (!focused) unawaited(_flushAndReleaseDraftField(field, collaboration));
   }
 
   void _scheduleDuplicateCallsignCheck() {
@@ -733,14 +812,26 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     String field,
     CollaborationProvider collaboration,
   ) async {
+    if (!_acquiringDraftFields.add(field)) return;
     try {
-      await collaboration.acquireLiveDraftField(field);
+      final acquired = await collaboration.acquireLiveDraftField(field);
+      if (_disposing ||
+          !mounted ||
+          !collaboration.isLiveDraftFieldDirty(field)) {
+        await collaboration.releaseLiveDraftFieldIfClean(
+          field,
+          expectedLeaseId: acquired.leaseId,
+        );
+      }
     } catch (_) {
+      if (_disposing || !mounted) return;
       // Refreshing exposes the holder and disables the field after a lock race.
       try {
         await collaboration.refreshLiveDraft();
       } catch (_) {}
       if (mounted) setState(() {});
+    } finally {
+      _acquiringDraftFields.remove(field);
     }
   }
 
@@ -760,7 +851,7 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
         // The provider exposes the protocol error and retains the local value.
       }
     }
-    await collaboration.releaseLiveDraftField(field);
+    await collaboration.releaseLiveDraftFieldIfClean(field);
     if (mounted && _deferredSharedDraftFields.contains(field)) {
       _syncSharedDraft(collaboration);
     }
@@ -798,6 +889,99 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  Future<void> _publishHistoryPreview(
+    String callsign,
+    List<bridge.LogEntry> records,
+  ) async {
+    if (!mounted || records.isEmpty) return;
+    final collaboration = context.read<CollaborationProvider>();
+    final normalizedCallsign = callsign.trim().toUpperCase();
+    if (normalizedCallsign.isEmpty ||
+        collaboration.liveDraftSnapshot == null ||
+        !collaboration.canEditLiveDraft ||
+        !_callsignFocusNode.hasFocus ||
+        _callsignController.text.trim().toUpperCase() != normalizedCallsign) {
+      return;
+    }
+    final candidates = <LiveDraftHistoryCandidateDto>[];
+    final seenIds = <String>{};
+    for (final record in records) {
+      final sourceTime = DateTime.tryParse(record.time)?.toUtc();
+      if (sourceTime == null ||
+          record.syncId.isEmpty ||
+          !seenIds.add(record.syncId)) {
+        continue;
+      }
+      final candidate = LiveDraftHistoryCandidateDto(
+        candidateId: record.syncId,
+        sourceTime: sourceTime.toIso8601String(),
+        qth: record.qth?.trim() ?? '',
+        device: record.device?.trim() ?? '',
+        power: record.power?.trim() ?? '',
+        antenna: record.antenna?.trim() ?? '',
+        height: record.height?.trim() ?? '',
+      );
+      if (candidate.reusableValues.isEmpty) continue;
+      candidates.add(candidate);
+      if (candidates.length == 10) break;
+    }
+    if (candidates.isEmpty) return;
+
+    final generation = ++_historyPreviewGeneration;
+    _historyPreviewPublishCallsign = normalizedCallsign;
+    late final Future<LiveDraftHistoryPreviewDto?> operation;
+    operation = () async {
+      try {
+        // History lookup may finish before the normal 250 ms PATCH debounce.
+        // Commit the callsign first, then publish under a freshly held lease.
+        _draftDebounce.remove('callsign')?.cancel();
+        await collaboration.flushLiveDraftField('callsign');
+        if (!mounted ||
+            generation != _historyPreviewGeneration ||
+            !_callsignFocusNode.hasFocus ||
+            _callsignController.text.trim().toUpperCase() !=
+                normalizedCallsign) {
+          return null;
+        }
+        final preview = await collaboration.publishLiveDraftHistoryPreview(
+          callsign: normalizedCallsign,
+          candidates: candidates,
+        );
+        if (!mounted || generation != _historyPreviewGeneration) {
+          if (preview != null) {
+            await collaboration.clearLiveDraftHistoryPreview(
+              expectedPreviewId: preview.previewId,
+            );
+          }
+          return null;
+        }
+        return preview;
+      } catch (_) {
+        // Cross-device preview is an enhancement. Local history reuse remains
+        // available when the server is old, offline, or temporarily slow.
+        return null;
+      }
+    }();
+    _historyPreviewPublish = operation;
+    await operation;
+    if (identical(_historyPreviewPublish, operation)) {
+      _historyPreviewPublish = null;
+      _historyPreviewPublishCallsign = null;
+    }
+  }
+
+  Future<void> _dismissHistoryPreview() async {
+    _historyPreviewGeneration += 1;
+    final collaboration = _collaborationProvider;
+    if (collaboration != null) {
+      try {
+        await collaboration.clearLiveDraftHistoryPreview();
+      } catch (_) {
+        // The preview expires server-side and must never block local input.
+      }
+    }
+  }
+
   Future<void> _reuseHistoryRecord(bridge.LogEntry record) async {
     final values = <String, String>{
       if (record.device?.isNotEmpty ?? false) 'device': record.device!,
@@ -810,25 +994,53 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
 
     final collaboration = context.read<CollaborationProvider>();
     if (collaboration.liveDraftSnapshot != null) {
-      for (final field in values.keys) {
-        final holder = collaboration.lockForField(field);
-        if (holder != null &&
-            holder.expiresAt.isAfter(DateTime.now()) &&
-            collaboration.fieldLockedByAnotherUser(field)) {
-          ScaffoldMessenger.of(context).showLoggedSnackBar(
-            SnackBar(
-                content: Text(context.l10n.fieldLockedBy(holder.username))),
-          );
-          return;
-        }
-      }
-
-      for (final field in values.keys) {
-        _draftDebounce.remove(field)?.cancel();
-      }
-      _unfocusDraftFields();
       setState(() => _historyReuseInProgress = true);
       try {
+        final pendingPreview = _historyPreviewPublishCallsign ==
+                _callsignController.text.trim().toUpperCase()
+            ? _historyPreviewPublish
+            : null;
+        if (pendingPreview != null) await pendingPreview;
+        if (!mounted) return;
+        final preview = collaboration.liveDraftHistoryPreview;
+        if (preview != null &&
+            collaboration.liveDraftHistoryPreviewOwnedHere &&
+            preview.candidates.any(
+              (candidate) => candidate.candidateId == record.syncId,
+            )) {
+          final selected = await collaboration.selectLiveDraftHistoryCandidate(
+            previewId: preview.previewId,
+            candidateId: record.syncId,
+          );
+          if (selected) {
+            _callsignFocusNode.unfocus();
+            await collaboration.releaseLiveDraftFieldIfClean('callsign');
+            return;
+          }
+        }
+        if (!mounted) return;
+
+        // Compatibility path for servers without shared history previews.
+        // Unlike the canonical select route, a legacy atomic PATCH may not
+        // override fields actively leased by another member.
+        for (final field in values.keys) {
+          final holder = collaboration.lockForField(field);
+          if (holder != null &&
+              holder.expiresAt.isAfter(DateTime.now()) &&
+              collaboration.fieldLockedByAnotherUser(field)) {
+            ScaffoldMessenger.of(context).showLoggedSnackBar(
+              SnackBar(
+                content: Text(context.l10n.fieldLockedBy(holder.username)),
+              ),
+            );
+            return;
+          }
+        }
+
+        for (final field in values.keys) {
+          _draftDebounce.remove(field)?.cancel();
+        }
+        _unfocusDraftFields();
         await collaboration.updateLiveDraftFieldsOptimistically(values);
       } catch (error) {
         if (mounted) {
@@ -1446,6 +1658,18 @@ class _LogFormState extends State<LogForm> with AutomaticKeepAliveClientMixin {
                         enabled: fieldEnabled('callsign'),
                         historyEnabled: settingsProvider.callSignQthLinkEnabled,
                         onReuseRecord: _reuseHistoryRecord,
+                        remotePreview: sharedDraft &&
+                                !collaboration.liveDraftHistoryPreviewOwnedHere
+                            ? collaboration.liveDraftHistoryPreview
+                            : null,
+                        onLocalCandidatesLoaded:
+                            sharedDraft && collaboration.canEditLiveDraft
+                                ? _publishHistoryPreview
+                                : null,
+                        onLocalPreviewClosed:
+                            sharedDraft && collaboration.canEditLiveDraft
+                                ? _dismissHistoryPreview
+                                : null,
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return context.l10n.callsignRequired;

@@ -163,6 +163,32 @@ final class LiveDraftLockDto {
       };
 }
 
+/// Result of acquiring a field lease.
+///
+/// Servers predating the high-latency live-draft protocol enhancement only
+/// return [lock]. Newer servers also include the canonical [draft] captured
+/// when the lease was granted, allowing the client to rebase without another
+/// network round trip.
+final class LiveDraftLockAcquisitionDto {
+  const LiveDraftLockAcquisitionDto({
+    required this.lock,
+    required this.draft,
+  });
+
+  factory LiveDraftLockAcquisitionDto.fromJson(Object? json) {
+    final object = _object(json, 'liveDraftLockResult');
+    return LiveDraftLockAcquisitionDto(
+      lock: LiveDraftLockDto.fromJson(object['lock']),
+      draft: object['draft'] == null
+          ? null
+          : LiveDraftDto.fromJson(object['draft']),
+    );
+  }
+
+  final LiveDraftLockDto lock;
+  final LiveDraftDto? draft;
+}
+
 final class LiveDraftSnapshotDto {
   const LiveDraftSnapshotDto({
     required this.draft,
@@ -170,6 +196,7 @@ final class LiveDraftSnapshotDto {
     required this.currentOrdinal,
     required this.totalRecords,
     required this.previousRecord,
+    this.historyPreview,
   });
 
   factory LiveDraftSnapshotDto.fromJson(Object? json) {
@@ -186,6 +213,9 @@ final class LiveDraftSnapshotDto {
       previousRecord: object['previousRecord'] == null
           ? null
           : CollaborationLogDto.fromJson(object['previousRecord']),
+      historyPreview: object['historyPreview'] == null
+          ? null
+          : LiveDraftHistoryPreviewDto.fromJson(object['historyPreview']),
     );
   }
 
@@ -194,6 +224,7 @@ final class LiveDraftSnapshotDto {
   final int currentOrdinal;
   final int totalRecords;
   final CollaborationLogDto? previousRecord;
+  final LiveDraftHistoryPreviewDto? historyPreview;
 
   JsonObject toJson() => {
         'draft': draft.toJson(),
@@ -230,11 +261,276 @@ final class LiveDraftPatchUpdateDto {
       };
 }
 
+final class LiveDraftReleasedLeaseDto {
+  const LiveDraftReleasedLeaseDto({
+    required this.field,
+    required this.leaseId,
+  });
+
+  factory LiveDraftReleasedLeaseDto.fromJson(Object? json) {
+    final object = _object(json, 'releasedLease');
+    final field = _string(object, 'field');
+    if (!liveDraftFieldNames.contains(field)) {
+      throw FormatException('releasedLease.field is unsupported: $field');
+    }
+    return LiveDraftReleasedLeaseDto(
+      field: field,
+      leaseId: _string(object, 'leaseId'),
+    );
+  }
+
+  final String field;
+  final String leaseId;
+
+  JsonObject toJson() => {'field': field, 'leaseId': leaseId};
+}
+
+const Set<String> liveDraftHistoryReusableFieldNames = <String>{
+  'qth',
+  'device',
+  'power',
+  'antenna',
+  'height',
+};
+
+/// One local-history row that may be previewed to the other scribes.
+///
+/// [sourceTime] is provenance only. Applying a candidate never writes it into
+/// the shared draft's `time` field.
+final class LiveDraftHistoryCandidateDto {
+  const LiveDraftHistoryCandidateDto({
+    required this.candidateId,
+    required this.sourceTime,
+    required this.qth,
+    required this.device,
+    required this.power,
+    required this.antenna,
+    required this.height,
+  });
+
+  factory LiveDraftHistoryCandidateDto.fromJson(Object? json) {
+    final object = _object(json, 'liveDraftHistoryCandidate');
+    return LiveDraftHistoryCandidateDto(
+      candidateId: _string(object, 'candidateId'),
+      sourceTime: _string(object, 'sourceTime'),
+      qth: _nullableText(object['qth'], 'qth'),
+      device: _nullableText(object['device'], 'device'),
+      power: _nullableText(object['power'], 'power'),
+      antenna: _nullableText(object['antenna'], 'antenna'),
+      height: _nullableText(object['height'], 'height'),
+    );
+  }
+
+  final String candidateId;
+  final String sourceTime;
+  final String qth;
+  final String device;
+  final String power;
+  final String antenna;
+  final String height;
+
+  Map<String, String> get reusableValues => <String, String>{
+        if (qth.isNotEmpty) 'qth': qth,
+        if (device.isNotEmpty) 'device': device,
+        if (power.isNotEmpty) 'power': power,
+        if (antenna.isNotEmpty) 'antenna': antenna,
+        if (height.isNotEmpty) 'height': height,
+      };
+
+  JsonObject toJson() => {
+        'candidateId': candidateId,
+        'sourceTime': sourceTime,
+        'qth': qth,
+        'device': device,
+        'power': power,
+        'antenna': antenna,
+        'height': height,
+      };
+}
+
+/// Ephemeral history dropdown owned by the device editing `callsign`.
+final class LiveDraftHistoryPreviewDto {
+  const LiveDraftHistoryPreviewDto({
+    required this.previewId,
+    required this.draftId,
+    required this.deviceId,
+    required this.callsign,
+    required this.actor,
+    required this.expiresAt,
+    required this.candidates,
+  });
+
+  factory LiveDraftHistoryPreviewDto.fromJson(Object? json) {
+    final object = _object(json, 'liveDraftHistoryPreview');
+    final candidateValues = object['candidates'];
+    if (candidateValues is! List) {
+      throw const FormatException('historyPreview.candidates must be an array');
+    }
+    return LiveDraftHistoryPreviewDto(
+      previewId: _string(object, 'previewId'),
+      draftId: _string(object, 'draftId'),
+      deviceId: _string(object, 'deviceId'),
+      callsign: _string(object, 'callsign').trim().toUpperCase(),
+      actor: LiveDraftActorDto.fromJson(object['actor']),
+      expiresAt: _dateTime(object, 'expiresAt'),
+      candidates: List<LiveDraftHistoryCandidateDto>.unmodifiable(
+        candidateValues.map(LiveDraftHistoryCandidateDto.fromJson),
+      ),
+    );
+  }
+
+  final String previewId;
+  final String draftId;
+  final String deviceId;
+  final String callsign;
+  final LiveDraftActorDto actor;
+  final DateTime expiresAt;
+  final List<LiveDraftHistoryCandidateDto> candidates;
+
+  JsonObject toJson() => {
+        'previewId': previewId,
+        'draftId': draftId,
+        'deviceId': deviceId,
+        'callsign': callsign,
+        'actor': actor.toJson(),
+        'expiresAt': expiresAt.toUtc().toIso8601String(),
+        'candidates': candidates
+            .map((candidate) => candidate.toJson())
+            .toList(growable: false),
+      };
+}
+
+/// Metadata proving that a canonical update came from an explicit history
+/// candidate selection, rather than ordinary remote typing.
+final class LiveDraftHistoryReuseDto {
+  const LiveDraftHistoryReuseDto({
+    required this.previewId,
+    required this.candidateId,
+    required this.affectedFields,
+  });
+
+  factory LiveDraftHistoryReuseDto.fromJson(Object? json) {
+    final object = _object(json, 'liveDraftHistoryReuse');
+    final fieldValues = object['affectedFields'];
+    if (fieldValues is! List || fieldValues.any((value) => value is! String)) {
+      throw const FormatException(
+          'historyReuse.affectedFields must be an array');
+    }
+    final fields = fieldValues.cast<String>().toSet();
+    if (!liveDraftHistoryReusableFieldNames.containsAll(fields)) {
+      throw const FormatException('historyReuse contains an unsupported field');
+    }
+    return LiveDraftHistoryReuseDto(
+      previewId: _string(object, 'previewId'),
+      candidateId: _string(object, 'candidateId'),
+      affectedFields: Set<String>.unmodifiable(fields),
+    );
+  }
+
+  final String previewId;
+  final String candidateId;
+  final Set<String> affectedFields;
+
+  JsonObject toJson() => {
+        'previewId': previewId,
+        'candidateId': candidateId,
+        'affectedFields': affectedFields.toList(growable: false),
+      };
+}
+
+final class LiveDraftHistoryPreviewResultDto {
+  const LiveDraftHistoryPreviewResultDto({
+    required this.historyPreview,
+    required this.draft,
+    required this.locks,
+  });
+
+  factory LiveDraftHistoryPreviewResultDto.fromJson(Object? json) {
+    final object = _object(json, 'liveDraftHistoryPreviewResult');
+    final lockValues = object['locks'];
+    if (lockValues is! List) {
+      throw const FormatException('history preview locks must be an array');
+    }
+    return LiveDraftHistoryPreviewResultDto(
+      historyPreview:
+          LiveDraftHistoryPreviewDto.fromJson(object['historyPreview']),
+      draft: LiveDraftDto.fromJson(object['draft']),
+      locks: List<LiveDraftLockDto>.unmodifiable(
+        lockValues.map(LiveDraftLockDto.fromJson),
+      ),
+    );
+  }
+
+  final LiveDraftHistoryPreviewDto historyPreview;
+  final LiveDraftDto draft;
+  final List<LiveDraftLockDto> locks;
+}
+
+final class LiveDraftHistoryReuseResultDto {
+  const LiveDraftHistoryReuseResultDto({
+    required this.draft,
+    required this.updatedFields,
+    required this.releasedLeases,
+    required this.historyReuse,
+    required this.locks,
+  });
+
+  factory LiveDraftHistoryReuseResultDto.fromJson(Object? json) {
+    final object = _object(json, 'liveDraftHistoryReuseResult');
+    final lockValues = object['locks'];
+    final updatedFieldValues = object['updatedFields'];
+    if (updatedFieldValues is! List ||
+        updatedFieldValues.any((value) => value is! String)) {
+      throw const FormatException(
+        'history reuse updatedFields must be an array',
+      );
+    }
+    final updatedFields = updatedFieldValues.cast<String>().toSet();
+    if (!liveDraftHistoryReusableFieldNames.containsAll(updatedFields)) {
+      throw const FormatException(
+        'history reuse updatedFields contains an unsupported field',
+      );
+    }
+    if (lockValues is! List) {
+      throw const FormatException('history reuse locks must be an array');
+    }
+    final historyReuse =
+        LiveDraftHistoryReuseDto.fromJson(object['historyReuse']);
+    if (updatedFields.length != historyReuse.affectedFields.length ||
+        !updatedFields.containsAll(historyReuse.affectedFields)) {
+      throw const FormatException(
+        'history reuse updatedFields do not match affectedFields',
+      );
+    }
+    if (object['historyPreview'] != null) {
+      throw const FormatException(
+        'history reuse must clear the active history preview',
+      );
+    }
+    return LiveDraftHistoryReuseResultDto(
+      draft: LiveDraftDto.fromJson(object['draft']),
+      updatedFields: Set<String>.unmodifiable(updatedFields),
+      releasedLeases: _optionalReleasedLeases(object['releasedLeases']),
+      historyReuse: historyReuse,
+      locks: List<LiveDraftLockDto>.unmodifiable(
+        lockValues.map(LiveDraftLockDto.fromJson),
+      ),
+    );
+  }
+
+  final LiveDraftDto draft;
+  final Set<String> updatedFields;
+  final List<LiveDraftReleasedLeaseDto> releasedLeases;
+  final LiveDraftHistoryReuseDto historyReuse;
+  final List<LiveDraftLockDto> locks;
+}
+
 final class LiveDraftPatchResultDto {
   const LiveDraftPatchResultDto({
     required this.draft,
     required this.appliedClientSeq,
     required this.replayed,
+    this.releasedLeases = const <LiveDraftReleasedLeaseDto>[],
   });
 
   factory LiveDraftPatchResultDto.fromJson(Object? json) {
@@ -244,12 +540,14 @@ final class LiveDraftPatchResultDto {
       appliedClientSeq:
           _nonNegativeInteger(object, 'appliedClientSeq', minimum: 1),
       replayed: _boolean(object, 'replayed'),
+      releasedLeases: _optionalReleasedLeases(object['releasedLeases']),
     );
   }
 
   final LiveDraftDto draft;
   final int appliedClientSeq;
   final bool replayed;
+  final List<LiveDraftReleasedLeaseDto> releasedLeases;
 }
 
 final class LiveDraftCommitResultDto {
@@ -416,6 +714,16 @@ bool _boolean(JsonObject object, String field) {
   final value = object[field];
   if (value is bool) return value;
   throw FormatException('$field must be a boolean');
+}
+
+List<LiveDraftReleasedLeaseDto> _optionalReleasedLeases(Object? value) {
+  if (value == null) return const <LiveDraftReleasedLeaseDto>[];
+  if (value is! List) {
+    throw const FormatException('releasedLeases must be an array');
+  }
+  return List<LiveDraftReleasedLeaseDto>.unmodifiable(
+    value.map(LiveDraftReleasedLeaseDto.fromJson),
+  );
 }
 
 DateTime _dateTime(JsonObject object, String field) {
