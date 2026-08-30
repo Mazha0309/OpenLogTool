@@ -51,6 +51,126 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test('lock acquisition accepts both legacy and canonical-draft responses',
+      () {
+    final lockJson = {
+      'leaseId': 'lease-1',
+      'sessionId': 'session-1',
+      'field': 'callsign',
+      'userId': 'user-1',
+      'username': 'scribe',
+      'deviceId': 'device-1',
+      'expiresAt': '2026-07-13T08:00:30.000Z',
+    };
+    final legacy = LiveDraftLockAcquisitionDto.fromJson({'lock': lockJson});
+    final enhanced = LiveDraftLockAcquisitionDto.fromJson({
+      'lock': lockJson,
+      'draft': _draftJson(version: 3),
+    });
+
+    expect(legacy.lock.leaseId, 'lease-1');
+    expect(legacy.draft, isNull);
+    expect(enhanced.draft?.version, 3);
+  });
+
+  test('patch response accepts optional consumed lease objects', () {
+    final legacy = LiveDraftPatchResultDto.fromJson({
+      'draft': _draftJson(version: 2),
+      'appliedClientSeq': 1,
+      'replayed': false,
+    });
+    final consumed = LiveDraftPatchResultDto.fromJson({
+      'draft': _draftJson(version: 2),
+      'appliedClientSeq': 1,
+      'replayed': false,
+      'releasedLeases': [
+        {'field': 'callsign', 'leaseId': 'lease-1'},
+      ],
+    });
+
+    expect(legacy.releasedLeases, isEmpty);
+    expect(consumed.releasedLeases.single.field, 'callsign');
+    expect(consumed.releasedLeases.single.leaseId, 'lease-1');
+    expect(
+      () => LiveDraftPatchResultDto.fromJson({
+        'draft': _draftJson(version: 2),
+        'appliedClientSeq': 1,
+        'replayed': false,
+        'releasedLeases': [
+          {'field': 'not-a-field', 'leaseId': 'lease-1'},
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('history preview is ephemeral and reuse only carries station fields',
+      () {
+    final previewJson = {
+      'previewId': 'preview-1',
+      'draftId': 'draft-1',
+      'deviceId': 'device-1',
+      'callsign': 'bg0test',
+      'actor': {'userId': 'user-1', 'username': 'scribe'},
+      'expiresAt': '2026-07-13T08:00:20.000Z',
+      'candidates': [
+        {
+          'candidateId': 'history-1',
+          'sourceTime': '2026-07-12T08:00:00.000Z',
+          'qth': '杭州',
+          'device': null,
+          'power': '5W',
+          'antenna': 'DP',
+          'height': null,
+        },
+      ],
+    };
+    final snapshot = LiveDraftSnapshotDto.fromJson({
+      'draft': _draftJson(),
+      'locks': const [],
+      'currentOrdinal': 1,
+      'totalRecords': 0,
+      'previousRecord': null,
+      'historyPreview': previewJson,
+    });
+
+    expect(snapshot.historyPreview?.callsign, 'BG0TEST');
+    expect(snapshot.historyPreview?.candidates.single.reusableValues, {
+      'qth': '杭州',
+      'power': '5W',
+      'antenna': 'DP',
+    });
+    // A preview expires after seconds and must never be persisted in the Rust
+    // live-draft recovery cache.
+    expect(snapshot.toJson(), isNot(contains('historyPreview')));
+
+    final result = LiveDraftHistoryReuseResultDto.fromJson({
+      'draft': _draftJson(version: 2),
+      'updatedFields': ['qth', 'power'],
+      'releasedLeases': [
+        {'field': 'qth', 'leaseId': 'lease-qth'},
+      ],
+      'locks': const [],
+      'historyPreview': null,
+      'historyReuse': {
+        'previewId': 'preview-1',
+        'candidateId': 'history-1',
+        'affectedFields': ['qth', 'power'],
+      },
+    });
+    expect(result.updatedFields, {'qth', 'power'});
+    expect(result.historyReuse.affectedFields, {'qth', 'power'});
+    expect(result.releasedLeases.single.leaseId, 'lease-qth');
+    expect(
+      () => LiveDraftHistoryReuseDto.fromJson({
+        'previewId': 'preview-1',
+        'candidateId': 'history-1',
+        'affectedFields': ['time'],
+      }),
+      throwsFormatException,
+    );
+  });
 }
 
 Map<String, Object?> _draftJson({

@@ -257,6 +257,7 @@ void main() {
         () async {
       final acquireStarted = Completer<void>();
       final acquireResult = Completer<LiveDraftLockDto>();
+      final released = <String>[];
       var current = true;
       var patchCount = 0;
 
@@ -273,7 +274,7 @@ void main() {
           patchCount += 1;
           return _patchResult(1);
         },
-        releaseLock: (_, __) async {},
+        releaseLock: (field, _) async => released.add(field),
         onClientSeqChanged: (_) {},
         assertCurrent: () {
           if (!current) throw StateError('LIVE_DRAFT_CONTEXT_CHANGED');
@@ -295,6 +296,75 @@ void main() {
         ),
       );
       expect(patchCount, 0);
+      expect(released, ['callsign']);
+    });
+
+    test('server-consumed leases skip redundant DELETE round trips', () async {
+      final released = <String>[];
+
+      final execution = await executeLiveDraftAtomicPatch(
+        values: const {'device': 'IC-705', 'antenna': 'Yagi'},
+        expectedRevisions: const {'device': 0, 'antenna': 0},
+        ownedLocks: const {},
+        nextClientSeq: 1,
+        acquireLock: (field) async => _lock(field, 'new-$field'),
+        sendPatch: (clientSeq, _) async => _patchResult(
+          clientSeq,
+          releasedLeases: const [
+            LiveDraftReleasedLeaseDto(
+              field: 'device',
+              leaseId: 'new-device',
+            ),
+            LiveDraftReleasedLeaseDto(
+              field: 'antenna',
+              leaseId: 'new-antenna',
+            ),
+          ],
+        ),
+        releaseLock: (field, _) async => released.add(field),
+        onClientSeqChanged: (_) {},
+      );
+
+      expect(execution.result.releasedLeases, hasLength(2));
+      expect(released, isEmpty);
+    });
+
+    test('a later dirty value reacquires after the prior lease was consumed',
+        () async {
+      final acquired = <String>[];
+      final released = <String>[];
+      var seq = 0;
+
+      Future<void> patch(String value) async {
+        await executeLiveDraftAtomicPatch(
+          values: {'qth': value},
+          expectedRevisions: {'qth': seq},
+          ownedLocks: const {},
+          nextClientSeq: seq + 1,
+          acquireLock: (field) async {
+            acquired.add(field);
+            return _lock(field, 'lease-${seq + 1}');
+          },
+          sendPatch: (clientSeq, _) async => _patchResult(
+            clientSeq,
+            releasedLeases: [
+              LiveDraftReleasedLeaseDto(
+                field: 'qth',
+                leaseId: 'lease-$clientSeq',
+              ),
+            ],
+          ),
+          releaseLock: (field, _) async => released.add(field),
+          onClientSeqChanged: (value) => seq = value,
+        );
+      }
+
+      await patch('A');
+      await patch('B');
+
+      expect(acquired, ['qth', 'qth']);
+      expect(seq, 2);
+      expect(released, isEmpty);
     });
 
     test('a PATCH failure releases every lock acquired by the batch', () async {
@@ -648,7 +718,102 @@ void main() {
       );
     });
 
-    test('field and version conflicts rebase and retry exactly once', () async {
+    test('lock acquisition rebases only the acquired dirty field', () {
+      final current = _draft(
+        version: 4,
+        values: const {
+          'callsign': 'BA4AAA',
+          'qth': 'old-remote-qth',
+          'remarks': 'old-remote-remarks',
+        },
+        revisions: const {'callsign': 2, 'qth': 7, 'remarks': 3},
+      );
+      final incoming = _draft(
+        version: 5,
+        values: const {
+          'callsign': 'BA4BBB',
+          'qth': 'new-remote-qth',
+          'remarks': 'new-remote-remarks',
+        },
+        revisions: const {'callsign': 3, 'qth': 8, 'remarks': 4},
+      );
+
+      final projection = projectLiveDraftLockAcquisition(
+        acquiredField: 'qth',
+        currentDraft: current,
+        incomingDraft: incoming,
+        localFields: current.fields
+            .withField('qth', 'local-qth')
+            .withField('remarks', 'local-remarks'),
+        dirtyFields: const {'qth', 'remarks'},
+        baseRevisions: const {'qth': 7, 'remarks': 3},
+      );
+
+      expect(projection.canonicalDraft, same(incoming));
+      expect(projection.localFields['callsign'], 'BA4BBB');
+      expect(projection.localFields['qth'], 'local-qth');
+      expect(projection.localFields['remarks'], 'local-remarks');
+      expect(projection.dirtyFields, {'qth', 'remarks'});
+      expect(projection.baseRevisions, {'qth': 7, 'remarks': 3});
+      expect(projection.conflictedFields, {'qth'});
+      expect(projection.generationChanged, isFalse);
+    });
+
+    test('lock acquisition drops old local state after a generation change',
+        () {
+      final current = _draft(version: 4);
+      final incoming = _draft(
+        draftId: 'draft-2',
+        version: 1,
+        values: const {'callsign': 'BA4NEW'},
+      );
+
+      final projection = projectLiveDraftLockAcquisition(
+        acquiredField: 'callsign',
+        currentDraft: current,
+        incomingDraft: incoming,
+        localFields: current.fields.withField('callsign', 'BA4LOCAL'),
+        dirtyFields: const {'callsign'},
+        baseRevisions: const {'callsign': 2},
+      );
+
+      expect(projection.canonicalDraft, same(incoming));
+      expect(projection.localFields['callsign'], 'BA4NEW');
+      expect(projection.dirtyFields, isEmpty);
+      expect(projection.baseRevisions, isEmpty);
+      expect(projection.conflictedFields, isEmpty);
+      expect(projection.generationChanged, isTrue);
+    });
+
+    test('idle release is rejected after a new edit or lease replacement', () {
+      final lock = _lock('qth', 'lease-old');
+      expect(
+        canReleaseIdleLiveDraftLease(
+          fieldDirty: false,
+          currentLock: lock,
+          expectedLeaseId: 'lease-old',
+        ),
+        isTrue,
+      );
+      expect(
+        canReleaseIdleLiveDraftLease(
+          fieldDirty: true,
+          currentLock: lock,
+          expectedLeaseId: 'lease-old',
+        ),
+        isFalse,
+      );
+      expect(
+        canReleaseIdleLiveDraftLease(
+          fieldDirty: false,
+          currentLock: _lock('qth', 'lease-new'),
+          expectedLeaseId: 'lease-old',
+        ),
+        isFalse,
+      );
+    });
+
+    test('field and version conflicts recover after one rebase', () async {
       for (final code in const [
         'LIVE_DRAFT_FIELD_CONFLICT',
         'LIVE_DRAFT_VERSION_CONFLICT',
@@ -661,7 +826,7 @@ void main() {
             if (attempts == 1) throw _serverError(code);
             return 7;
           },
-          rebase: () async => rebases += 1,
+          rebase: (_) async => rebases += 1,
         );
 
         expect(result, 7, reason: code);
@@ -670,8 +835,7 @@ void main() {
       }
     });
 
-    test('a second atomic conflict is returned without a third attempt',
-        () async {
+    test('atomic conflicts retry to the bounded attempt limit', () async {
       var attempts = 0;
       var rebases = 0;
 
@@ -681,7 +845,7 @@ void main() {
             attempts += 1;
             throw _serverError('LIVE_DRAFT_FIELD_CONFLICT');
           },
-          rebase: () async => rebases += 1,
+          rebase: (_) async => rebases += 1,
         ),
         throwsA(
           isA<ServerApiException>().having(
@@ -692,8 +856,120 @@ void main() {
         ),
       );
 
-      expect(attempts, 2);
-      expect(rebases, 1);
+      expect(attempts, 4);
+      expect(rebases, 3);
+    });
+
+    test('uses the canonical draft embedded in a field conflict', () {
+      final canonical = _draft(
+        version: 9,
+        values: const {'callsign': 'BG5CRL'},
+        revisions: const {'callsign': 8},
+      );
+      final extracted = liveDraftCanonicalFromConflict(
+        _serverError(
+          'LIVE_DRAFT_FIELD_CONFLICT',
+          details: {'draft': canonical.toJson()},
+        ),
+        sessionId: 'session-1',
+      );
+
+      expect(extracted?.version, 9);
+      expect(extracted?.fieldRevisions['callsign'], 8);
+      expect(
+        liveDraftCanonicalFromConflict(
+          _serverError(
+            'LIVE_DRAFT_FIELD_CONFLICT',
+            details: {
+              'draft': _draft(
+                version: 9,
+                sessionId: 'another-session',
+              ).toJson(),
+            },
+          ),
+          sessionId: 'session-1',
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('live-draft commit race recovery', () {
+    test('recovers version and busy races before the fourth attempt', () async {
+      final attempts = <int>[];
+      final recoveries = <({String code, int attempt})>[];
+
+      final result = await executeLiveDraftCommitWithRaceRecovery<int>(
+        attempt: (attempt) async {
+          attempts.add(attempt);
+          if (attempt == 1) {
+            throw _serverError('LIVE_DRAFT_VERSION_CONFLICT');
+          }
+          if (attempt == 2) throw _serverError('LIVE_DRAFT_BUSY');
+          return 17;
+        },
+        recover: (error, attempt) async {
+          recoveries.add((code: error.code, attempt: attempt));
+        },
+      );
+
+      expect(result, 17);
+      expect(attempts, [1, 2, 3]);
+      expect(recoveries, [
+        (code: 'LIVE_DRAFT_VERSION_CONFLICT', attempt: 1),
+        (code: 'LIVE_DRAFT_BUSY', attempt: 2),
+      ]);
+    });
+
+    test('returns the fourth recoverable conflict without another recovery',
+        () async {
+      var attempts = 0;
+      var recoveries = 0;
+
+      await expectLater(
+        executeLiveDraftCommitWithRaceRecovery<void>(
+          attempt: (_) async {
+            attempts += 1;
+            throw _serverError('LIVE_DRAFT_BUSY');
+          },
+          recover: (_, __) async => recoveries += 1,
+        ),
+        throwsA(
+          isA<ServerApiException>().having(
+            (error) => error.code,
+            'code',
+            'LIVE_DRAFT_BUSY',
+          ),
+        ),
+      );
+
+      expect(attempts, 4);
+      expect(recoveries, 3);
+    });
+
+    test('does not retry a non-recoverable commit rejection', () async {
+      var attempts = 0;
+      var recoveries = 0;
+
+      await expectLater(
+        executeLiveDraftCommitWithRaceRecovery<void>(
+          attempt: (_) async {
+            attempts += 1;
+            throw _serverError('LIVE_DRAFT_INCOMPLETE');
+          },
+          recover: (_, __) async => recoveries += 1,
+        ),
+        throwsA(
+          isA<ServerApiException>().having(
+            (error) => error.code,
+            'code',
+            'LIVE_DRAFT_INCOMPLETE',
+          ),
+        ),
+      );
+
+      expect(attempts, 1);
+      expect(recoveries, 0);
     });
   });
 
@@ -907,6 +1183,171 @@ void main() {
   });
 
   group('live-draft realtime controls', () {
+    test('self acknowledgement values mirror server normalization', () {
+      expect(
+        canonicalLiveDraftPatchAckValue('callsign', ' bg5crl '),
+        'BG5CRL',
+      );
+      expect(
+        canonicalLiveDraftPatchAckValue('controller', ' bg5ctrl '),
+        'BG5CTRL',
+      );
+      expect(
+        canonicalLiveDraftPatchAckValue('device', ' IC-705 '),
+        'IC-705',
+      );
+      expect(canonicalLiveDraftPatchAckValue('qth', '   '), '');
+      expect(canonicalLiveDraftPatchAckValue('remarks', null), '');
+    });
+
+    test('generation recovery keeps only input absent from accepted state', () {
+      final current = _draft(
+        version: 4,
+        values: const {'callsign': '', 'qth': '杭州'},
+      );
+
+      expect(
+        hasUnpreservedLiveDraftChanges(
+          currentDraft: current,
+          localFields: current.fields.withField('qth', '杭州'),
+          dirtyFields: const {'qth'},
+        ),
+        isFalse,
+      );
+      expect(
+        hasUnpreservedLiveDraftChanges(
+          currentDraft: current,
+          localFields: current.fields
+              .withField('callsign', ' bg5crl ')
+              .withField('qth', '萧山'),
+          dirtyFields: const {'callsign', 'qth'},
+          acceptedFields: LiveDraftFieldsDto.empty()
+              .withField('callsign', 'BG5CRL')
+              .withField('qth', '杭州'),
+        ),
+        isTrue,
+        reason: 'QTH is still absent even though the callsign was accepted',
+      );
+      expect(
+        hasUnpreservedLiveDraftChanges(
+          currentDraft: current,
+          localFields: current.fields.withField('callsign', ' bg5crl '),
+          dirtyFields: const {'callsign'},
+          acceptedFields:
+              LiveDraftFieldsDto.empty().withField('callsign', 'BG5CRL'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('own updated control precisely acknowledges a lost HTTP response', () {
+      final incoming = _draft(
+        version: 5,
+        values: const {'qth': '杭州'},
+        revisions: const {'qth': 8},
+      );
+      final acknowledgement = matchLiveDraftPatchControlAck(
+        message: {
+          'type': 'liveDraft.updated',
+          'sessionId': 'session-1',
+          'deviceId': 'device-1',
+          'clientSeq': 12,
+          'updatedFields': ['qth'],
+          'releasedLeases': [
+            {'field': 'qth', 'leaseId': 'lease-qth'},
+          ],
+          'draft': incoming.toJson(),
+        },
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        clientSeq: 12,
+        draftId: 'draft-1',
+        expectedValues: const {'qth': '杭州'},
+        expectedRevisions: const {'qth': 7},
+      );
+
+      expect(acknowledgement?.draft.toJson(), incoming.toJson());
+      expect(acknowledgement?.releasedLeases.single.field, 'qth');
+      expect(
+        acknowledgement?.releasedLeases.single.leaseId,
+        'lease-qth',
+      );
+    });
+
+    test('self acknowledgement rejects the wrong fields, value, or sequence',
+        () {
+      final baseMessage = <String, Object?>{
+        'type': 'liveDraft.updated',
+        'sessionId': 'session-1',
+        'deviceId': 'device-1',
+        'clientSeq': 12,
+        'updatedFields': ['callsign'],
+        'draft': _draft(
+          version: 5,
+          values: const {'qth': '杭州'},
+          revisions: const {'qth': 8},
+        ).toJson(),
+      };
+
+      LiveDraftPatchControlAcknowledgement? match(
+        Map<String, Object?> message,
+      ) =>
+          matchLiveDraftPatchControlAck(
+            message: message,
+            sessionId: 'session-1',
+            deviceId: 'device-1',
+            clientSeq: 12,
+            draftId: 'draft-1',
+            expectedValues: const {'qth': '杭州'},
+            expectedRevisions: const {'qth': 7},
+          );
+
+      expect(match(baseMessage), isNull, reason: 'field list must match');
+      expect(
+        match({...baseMessage, 'clientSeq': 11}),
+        isNull,
+        reason: 'client sequence must match',
+      );
+      expect(
+        match({
+          ...baseMessage,
+          'updatedFields': ['qth'],
+          'draft': _draft(
+            version: 5,
+            values: const {'qth': '宁波'},
+            revisions: const {'qth': 8},
+          ).toJson(),
+        }),
+        isNull,
+        reason: 'canonical value must match',
+      );
+    });
+
+    test('legacy own control can acknowledge by exact value and revision', () {
+      final acknowledgement = matchLiveDraftPatchControlAck(
+        message: {
+          'type': 'liveDraft.updated',
+          'sessionId': 'session-1',
+          'deviceId': 'device-1',
+          'clientSeq': 2,
+          'draft': _draft(
+            version: 2,
+            values: const {'callsign': 'BG5CRL'},
+            revisions: const {'callsign': 1},
+          ).toJson(),
+        },
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        clientSeq: 2,
+        draftId: 'draft-1',
+        expectedValues: const {'callsign': 'BG5CRL'},
+        expectedRevisions: const {'callsign': 0},
+      );
+
+      expect(acknowledgement, isNotNull);
+      expect(acknowledgement!.releasedLeases, isEmpty);
+    });
+
     test('updated payload projects every supported field without a GET', () {
       final current = _snapshot(draft: _draft(version: 1));
       final values = {
@@ -1012,6 +1453,68 @@ void main() {
       expect(projection.localFields['callsign'], 'BA4BBB');
       expect(projection.dirtyFields, {'qth'});
       expect(projection.baseRevisions, {'qth': 7});
+    });
+
+    test('history reuse replaces only affected dirty station fields', () {
+      final current = _snapshot(
+        draft: _draft(
+          version: 4,
+          values: const {
+            'callsign': 'BA4AAA',
+            'qth': 'old-qth',
+            'device': 'old-device',
+            'remarks': 'old-remarks',
+          },
+          revisions: const {'callsign': 2, 'qth': 7, 'device': 2},
+        ),
+        locks: [_lock('device', 'device-lock')],
+      );
+      final local = LiveDraftFieldsDto({
+        for (final field in liveDraftFieldNames)
+          field: current.draft.fields[field],
+        'qth': 'uncommitted-qth',
+        'device': 'uncommitted-device',
+        'remarks': 'keep-my-remarks',
+      });
+      final canonical = _draft(
+        version: 5,
+        values: const {
+          'callsign': 'BA4AAA',
+          'qth': 'history-qth',
+          'device': 'history-device',
+          'remarks': 'remote-remarks',
+        },
+        revisions: const {'callsign': 2, 'qth': 8, 'device': 3},
+      );
+      final ordinary = applyLiveDraftControlMessage(
+        currentSnapshot: current,
+        currentLocalFields: local,
+        currentDirtyFields: const {'qth', 'device', 'remarks'},
+        currentBaseRevisions: const {'qth': 7, 'device': 2, 'remarks': 0},
+        message: {
+          'type': 'liveDraft.updated',
+          'sessionId': 'session-1',
+          'draft': canonical.toJson(),
+          'locks': const <Object?>[],
+        },
+      );
+      final reused = applyLiveDraftHistoryReuseProjection(
+        projection: ordinary,
+        canonicalDraft: canonical,
+        historyReuse: const LiveDraftHistoryReuseDto(
+          previewId: 'preview-1',
+          candidateId: 'history-1',
+          affectedFields: {'qth', 'device'},
+        ),
+        locks: const [],
+      );
+
+      expect(reused.localFields['qth'], 'history-qth');
+      expect(reused.localFields['device'], 'history-device');
+      expect(reused.localFields['remarks'], 'keep-my-remarks');
+      expect(reused.dirtyFields, {'remarks'});
+      expect(reused.baseRevisions, {'remarks': 0});
+      expect(reused.snapshot.locks, isEmpty);
     });
 
     test('cleared and committed controls replace the draft generation', () {
@@ -1454,11 +1957,15 @@ LiveDraftLockDto _lock(
       expiresAt: expiresAt ?? DateTime.utc(2026, 7, 14),
     );
 
-LiveDraftPatchResultDto _patchResult(int clientSeq) {
+LiveDraftPatchResultDto _patchResult(
+  int clientSeq, {
+  List<LiveDraftReleasedLeaseDto> releasedLeases = const [],
+}) {
   return LiveDraftPatchResultDto(
     draft: _draft(version: 2),
     appliedClientSeq: clientSeq,
     replayed: false,
+    releasedLeases: releasedLeases,
   );
 }
 
@@ -1467,13 +1974,14 @@ LiveDraftFieldsDto _fields(Map<String, String> values) =>
 
 LiveDraftDto _draft({
   String draftId = 'draft-1',
+  String sessionId = 'session-1',
   required int version,
   Map<String, String> values = const {},
   Map<String, int> revisions = const {},
 }) =>
     LiveDraftDto(
       draftId: draftId,
-      sessionId: 'session-1',
+      sessionId: sessionId,
       version: version,
       fields: _fields(values),
       fieldRevisions: {

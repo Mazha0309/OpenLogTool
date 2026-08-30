@@ -512,6 +512,18 @@ final class ServerApi {
     required String sessionId,
     required String field,
     required String deviceId,
+  }) async =>
+      (await acquireLiveDraftLockWithDraft(
+        sessionId: sessionId,
+        field: field,
+        deviceId: deviceId,
+      ))
+          .lock;
+
+  Future<LiveDraftLockAcquisitionDto> acquireLiveDraftLockWithDraft({
+    required String sessionId,
+    required String field,
+    required String deviceId,
   }) async {
     if (!liveDraftFieldNames.contains(field)) {
       throw ArgumentError.value(field, 'field', 'unknown live draft field');
@@ -521,12 +533,11 @@ final class ServerApi {
       '/sessions/${_segment(sessionId)}/live-draft/locks',
       body: {'field': field, 'deviceId': deviceId},
     );
-    final lock = _parseResponse(
+    final result = _parseResponse(
       response,
-      (json) => LiveDraftLockDto.fromJson(
-        _jsonObject(json, 'liveDraftLockResult')['lock'],
-      ),
+      LiveDraftLockAcquisitionDto.fromJson,
     );
+    final lock = result.lock;
     if (lock.sessionId != sessionId) {
       throw _clientException(
         code: 'INVALID_RESPONSE',
@@ -534,7 +545,14 @@ final class ServerApi {
         statusCode: response.statusCode,
       );
     }
-    return lock;
+    if (result.draft != null && result.draft!.sessionId != sessionId) {
+      throw _clientException(
+        code: 'INVALID_RESPONSE',
+        message: 'The live draft snapshot belongs to another Session',
+        statusCode: response.statusCode,
+      );
+    }
+    return result;
   }
 
   Future<LiveDraftLockDto> renewLiveDraftLock({
@@ -611,8 +629,107 @@ final class ServerApi {
         'clientSeq': clientSeq,
         'updates': updates.map((update) => update.toJson()).toList(),
       },
+      headers: const {
+        'Prefer': 'openlogtool-consume-live-draft-leases',
+      },
     );
     return _parseResponse(response, LiveDraftPatchResultDto.fromJson);
+  }
+
+  Future<LiveDraftHistoryPreviewResultDto> publishLiveDraftHistoryPreview({
+    required String sessionId,
+    required String deviceId,
+    required String leaseId,
+    required String draftId,
+    required String callsign,
+    required List<LiveDraftHistoryCandidateDto> candidates,
+  }) async {
+    if (candidates.isEmpty || candidates.length > 10) {
+      throw ArgumentError.value(
+        candidates,
+        'candidates',
+        'must contain between 1 and 10 items',
+      );
+    }
+    final response = await _authorizedRequest(
+      'PUT',
+      '/sessions/${_segment(sessionId)}/live-draft/history-preview',
+      body: {
+        'deviceId': deviceId,
+        'leaseId': leaseId,
+        'draftId': draftId,
+        'callsign': callsign,
+        'candidates': candidates
+            .map((candidate) => candidate.toJson())
+            .toList(growable: false),
+      },
+    );
+    final result =
+        _parseResponse(response, LiveDraftHistoryPreviewResultDto.fromJson);
+    if (result.draft.sessionId != sessionId ||
+        result.draft.draftId != draftId ||
+        result.historyPreview.draftId != draftId ||
+        result.historyPreview.deviceId != deviceId) {
+      throw _clientException(
+        code: 'INVALID_RESPONSE',
+        message: 'The live draft history preview does not match the request',
+        statusCode: response.statusCode,
+      );
+    }
+    return result;
+  }
+
+  Future<void> clearLiveDraftHistoryPreview({
+    required String sessionId,
+    required String deviceId,
+    required String previewId,
+  }) async {
+    final response = await _authorizedRequest(
+      'DELETE',
+      '/sessions/${_segment(sessionId)}/live-draft/history-preview',
+      body: {'deviceId': deviceId, 'previewId': previewId},
+    );
+    _parseResponse(response, (json) {
+      final result = _jsonObject(json, 'liveDraftHistoryPreviewClearResult');
+      if (result['cleared'] != true || result['historyPreview'] != null) {
+        throw const FormatException(
+          'history preview clear response is invalid',
+        );
+      }
+    });
+  }
+
+  Future<LiveDraftHistoryReuseResultDto> selectLiveDraftHistoryCandidate({
+    required String sessionId,
+    required String previewId,
+    required String deviceId,
+    required String leaseId,
+    required String candidateId,
+    required String idempotencyKey,
+  }) async {
+    final response = await _authorizedRequest(
+      'POST',
+      '/sessions/${_segment(sessionId)}/live-draft/history-preview/'
+          '${_segment(previewId)}/select',
+      body: {
+        'deviceId': deviceId,
+        'leaseId': leaseId,
+        'candidateId': candidateId,
+      },
+      headers: _idempotencyHeaders(idempotencyKey),
+    );
+    final result =
+        _parseResponse(response, LiveDraftHistoryReuseResultDto.fromJson);
+    if (result.draft.sessionId != sessionId ||
+        result.historyReuse.previewId != previewId ||
+        result.historyReuse.candidateId != candidateId) {
+      throw _clientException(
+        code: 'INVALID_RESPONSE',
+        message: 'The selected live draft history candidate is invalid',
+        statusCode: response.statusCode,
+      );
+    }
+    return result;
   }
 
   Future<LiveDraftCommitResultDto> commitLiveDraft({
@@ -1043,14 +1160,28 @@ final class ServerApi {
         return http.Response.fromStream(streamed);
       })()
           .timeout(timeout);
-      final level = response.statusCode >= 500
-          ? AppLogLevel.error
-          : response.statusCode >= 400
-              ? AppLogLevel.warning
-              : AppLogLevel.debug;
       final errorCode = response.statusCode >= 400
           ? _apiErrorFromResponse(response)?.code ?? 'HTTP_ERROR'
           : null;
+      final recoverableLiveDraftRace = (method == 'PATCH' &&
+              path.endsWith('/live-draft') &&
+              const {
+                'LIVE_DRAFT_FIELD_CONFLICT',
+                'LIVE_DRAFT_VERSION_CONFLICT',
+                'LIVE_DRAFT_CLIENT_SEQ_GAP',
+                'LIVE_DRAFT_CLIENT_SEQ_REUSED',
+              }.contains(errorCode)) ||
+          (method == 'POST' &&
+              path.endsWith('/live-draft/commit') &&
+              const {
+                'LIVE_DRAFT_VERSION_CONFLICT',
+                'LIVE_DRAFT_BUSY',
+              }.contains(errorCode));
+      final level = response.statusCode >= 500
+          ? AppLogLevel.error
+          : response.statusCode >= 400 && !recoverableLiveDraftRace
+              ? AppLogLevel.warning
+              : AppLogLevel.debug;
       AppLogger.instance.log(
         level,
         '$method $path -> ${response.statusCode} '

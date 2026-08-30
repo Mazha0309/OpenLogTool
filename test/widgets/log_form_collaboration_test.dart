@@ -485,6 +485,10 @@ void main() {
             tester.widget<EditableText>(callsignEditableFinder);
         await tester.tap(callsignEditableFinder);
         await tester.pump();
+        expect(collaboration.acquiredFields, isEmpty);
+
+        await tester.enterText(callsignEditableFinder, 'BA4AAA');
+        await tester.pump();
         expect(collaboration.acquiredFields, ['callsign']);
 
         final outside = tester.getCenter(
@@ -504,6 +508,118 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'history candidates flush callsign before the 250ms debounce and publish no record time',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider();
+      collaboration.historyPreviewSupported = true;
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+
+      final callsignField = tester
+          .widget<CallsignHistoryField>(find.byType(CallsignHistoryField));
+      final editable = find.descendant(
+        of: find.byType(CallsignHistoryField),
+        matching: find.byType(EditableText),
+      );
+      await tester.tap(editable);
+      await tester.enterText(editable, 'BA4AAA');
+      await tester.pump(const Duration(milliseconds: 20));
+
+      await callsignField.onLocalCandidatesLoaded!('BA4AAA', [_historyRecord]);
+      await tester.pump();
+
+      expect(
+        collaboration.historyPreviewEvents.take(2),
+        orderedEquals(['flush:callsign', 'publish:BA4AAA']),
+      );
+      final candidate = collaboration.publishedHistoryCandidates.single;
+      expect(candidate.candidateId, 'history-1');
+      expect(candidate.sourceTime, '2026-07-12T08:15:00.000Z');
+      expect(candidate.reusableValues, {
+        'qth': 'Shanghai',
+        'device': 'IC-7300',
+        'power': '100W',
+        'antenna': 'DP',
+        'height': '12m',
+      });
+      expect(candidate.toJson(), isNot(contains('time')));
+    },
+  );
+
+  testWidgets(
+    'explicit remote history reuse cancels only the affected focused edit',
+    (tester) async {
+      final collaboration = _RecordingCollaborationProvider(
+        initialFields: const {
+          'time': '',
+          'controller': 'BG5CRL',
+          'callsign': 'BA4AAA',
+          'rstSent': '59',
+          'rstRcvd': '59',
+          'qth': 'old-qth',
+          'remarks': 'keep-remarks',
+        },
+      );
+      addTearDown(collaboration.dispose);
+
+      await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+      await tester.pumpAndSettle();
+      final qthFieldFinder = find.ancestor(
+        of: find.text('QTH'),
+        matching: find.byType(TextFormField),
+      );
+      final qthEditable = tester.widget<EditableText>(
+        find.descendant(
+          of: qthFieldFinder,
+          matching: find.byType(EditableText),
+        ),
+      );
+
+      await tester.tap(qthFieldFinder);
+      await tester.enterText(qthFieldFinder, 'uncommitted-qth');
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(qthEditable.focusNode.hasFocus, isTrue);
+
+      collaboration.applyRemoteHistoryReuse(const {'qth': 'history-qth'});
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(qthEditable.controller.text, 'history-qth');
+      expect(qthEditable.focusNode.hasFocus, isFalse);
+      expect(collaboration.liveDraftFields['qth'], 'history-qth');
+      expect(collaboration.liveDraftFields['remarks'], 'keep-remarks');
+    },
+  );
+
+  testWidgets('disposing the form releases a lease acquired by a dirty field',
+      (tester) async {
+    final collaboration = _RecordingCollaborationProvider();
+    addTearDown(collaboration.dispose);
+
+    await tester.pumpWidget(_LogFormTestApp(collaboration: collaboration));
+    await tester.pumpAndSettle();
+    final callsign = find.descendant(
+      of: find.byType(CallsignHistoryField),
+      matching: find.byType(EditableText),
+    );
+    await tester.tap(callsign);
+    await tester.enterText(callsign, 'BA4AAA');
+    await tester.pump();
+
+    expect(collaboration.acquiredFields, ['callsign']);
+    expect(collaboration.ownedLiveDraftLocks, contains('callsign'));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    expect(collaboration.releasedFields, contains('callsign'));
+    expect(collaboration.ownedLiveDraftLocks, isNot(contains('callsign')));
+  });
 
   testWidgets(
     'idle duplicate warning also clears a collaboration draft atomically',
@@ -1215,7 +1331,14 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   final List<Map<String, String>> atomicUpdates = [];
   final List<String> acquiredFields = [];
   final List<String> releasedFields = [];
+  final List<String> historyPreviewEvents = [];
+  List<LiveDraftHistoryCandidateDto> publishedHistoryCandidates = const [];
   final Map<String, LiveDraftLockDto> _ownedLocks = {};
+  LiveDraftHistoryPreviewDto? _historyPreview;
+  int _historyReuseEpoch = 0;
+  Set<String> _historyReuseAffectedFields = const {};
+  bool historyPreviewSupported = false;
+  bool historySelectionSucceeds = false;
   Map<String, String>? committedFields;
   Completer<void>? atomicGate;
   Completer<void>? commitGate;
@@ -1309,6 +1432,20 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   List<LiveDraftLockDto> get liveDraftLocks => const [];
 
   @override
+  LiveDraftHistoryPreviewDto? get liveDraftHistoryPreview => _historyPreview;
+
+  @override
+  bool get liveDraftHistoryPreviewOwnedHere =>
+      _historyPreview?.deviceId == 'device-1';
+
+  @override
+  int get liveDraftHistoryReuseEpoch => _historyReuseEpoch;
+
+  @override
+  Set<String> get liveDraftHistoryReuseAffectedFields =>
+      _historyReuseAffectedFields;
+
+  @override
   Map<String, LiveDraftLockDto> get ownedLiveDraftLocks =>
       Map.unmodifiable(_ownedLocks);
 
@@ -1341,10 +1478,140 @@ class _RecordingCollaborationProvider extends CollaborationProvider {
   }
 
   @override
+  Future<void> releaseLiveDraftFieldIfClean(
+    String field, {
+    String? expectedLeaseId,
+  }) async {
+    final lock = _ownedLocks[field];
+    if (lock == null ||
+        (expectedLeaseId != null && lock.leaseId != expectedLeaseId)) {
+      return;
+    }
+    releasedFields.add(field);
+    _ownedLocks.remove(field);
+  }
+
+  @override
   Future<void> updateLiveDraftField(String field, String value) async {
     final error = fieldUpdateError;
     if (error != null) throw error;
     replaceDraftField(field, value);
+  }
+
+  @override
+  Future<void> flushLiveDraftField(String field) async {
+    historyPreviewEvents.add('flush:$field');
+  }
+
+  @override
+  Future<LiveDraftHistoryPreviewDto?> publishLiveDraftHistoryPreview({
+    required String callsign,
+    required List<LiveDraftHistoryCandidateDto> candidates,
+  }) async {
+    historyPreviewEvents.add('publish:$callsign');
+    publishedHistoryCandidates = List.unmodifiable(candidates);
+    if (!historyPreviewSupported) return null;
+    _historyPreview = LiveDraftHistoryPreviewDto(
+      previewId: 'preview-1',
+      draftId: _snapshot.draft.draftId,
+      deviceId: 'device-1',
+      callsign: callsign,
+      actor: const LiveDraftActorDto(
+        userId: 'user-1',
+        username: 'tester',
+      ),
+      expiresAt: DateTime.now().add(const Duration(seconds: 20)),
+      candidates: List.unmodifiable(candidates),
+    );
+    notifyListeners();
+    return _historyPreview;
+  }
+
+  @override
+  Future<void> clearLiveDraftHistoryPreview({String? expectedPreviewId}) async {
+    historyPreviewEvents.add('clear');
+    if (expectedPreviewId == null ||
+        _historyPreview?.previewId == expectedPreviewId) {
+      _historyPreview = null;
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<bool> selectLiveDraftHistoryCandidate({
+    required String previewId,
+    required String candidateId,
+  }) async {
+    historyPreviewEvents.add('select:$candidateId');
+    final preview = _historyPreview;
+    if (!historySelectionSucceeds ||
+        preview == null ||
+        preview.previewId != previewId) {
+      return false;
+    }
+    final candidate = preview.candidates.singleWhere(
+      (item) => item.candidateId == candidateId,
+    );
+    final affected = candidate.reusableValues.keys.toSet();
+    final previous = _snapshot.draft;
+    _snapshot = LiveDraftSnapshotDto(
+      draft: LiveDraftDto(
+        draftId: previous.draftId,
+        sessionId: previous.sessionId,
+        version: previous.version + 1,
+        fields: LiveDraftFieldsDto({
+          ...previous.fields.values,
+          ...candidate.reusableValues,
+        }),
+        fieldRevisions: {
+          for (final field in liveDraftFieldNames)
+            field: (previous.fieldRevisions[field] ?? 0) +
+                (affected.contains(field) ? 1 : 0),
+        },
+        lastUpdatedBy: previous.lastUpdatedBy,
+        createdAt: previous.createdAt,
+        lastUpdatedAt: DateTime.now().toUtc(),
+      ),
+      locks: const [],
+      currentOrdinal: _snapshot.currentOrdinal,
+      totalRecords: _snapshot.totalRecords,
+      previousRecord: _snapshot.previousRecord,
+    );
+    _optimisticFields = null;
+    _historyPreview = null;
+    _historyReuseAffectedFields = Set.unmodifiable(affected);
+    _historyReuseEpoch += 1;
+    notifyListeners();
+    return true;
+  }
+
+  void applyRemoteHistoryReuse(Map<String, String> values) {
+    final previous = _snapshot.draft;
+    final affected = values.keys.toSet();
+    _snapshot = LiveDraftSnapshotDto(
+      draft: LiveDraftDto(
+        draftId: previous.draftId,
+        sessionId: previous.sessionId,
+        version: previous.version + 1,
+        fields: LiveDraftFieldsDto({...previous.fields.values, ...values}),
+        fieldRevisions: {
+          for (final field in liveDraftFieldNames)
+            field: (previous.fieldRevisions[field] ?? 0) +
+                (affected.contains(field) ? 1 : 0),
+        },
+        lastUpdatedBy: previous.lastUpdatedBy,
+        createdAt: previous.createdAt,
+        lastUpdatedAt: DateTime.now().toUtc(),
+      ),
+      locks: const [],
+      currentOrdinal: _snapshot.currentOrdinal,
+      totalRecords: _snapshot.totalRecords,
+      previousRecord: _snapshot.previousRecord,
+    );
+    _optimisticFields = null;
+    _historyReuseAffectedFields = Set.unmodifiable(affected);
+    _historyReuseEpoch += 1;
+    notifyListeners();
   }
 
   @override
